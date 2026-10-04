@@ -13,7 +13,8 @@ images:
   - {label: "Java 21 (glibc)", ref: "eclipse-temurin:21-jre", java: 21}
 java_from: MINECRAFT_VERSION
 startup:
-  command: java -Xms128M -Xmx{{SERVER_MEMORY}}M -jar {{SERVER_JARFILE}} nogui
+  command: java -Xms128M -Xmx{{SERVER_MEMORY}}M {{SERVER_JVM_ARGS}} -jar {{SERVER_JARFILE}} nogui
+  jvm_args: true
   stop: stop
   stop_timeout_seconds: 90
   done: ')! For help, type'

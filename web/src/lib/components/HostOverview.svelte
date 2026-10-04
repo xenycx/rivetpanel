@@ -150,7 +150,7 @@
 				<dt class="eyebrow">Disk</dt>
 				<dd class="mt-1 font-mono text-section font-semibold">{diskPct}%<span class="ml-2 text-small font-normal text-muted">{fmtBytes(last.disk_used_bytes)} of {fmtBytes(last.disk_total_bytes)}</span></dd>
 				<dd class="mt-3.5 h-1.5 overflow-hidden rounded-pill bg-rule-soft" role="meter" aria-label="Disk used" aria-valuemin="0" aria-valuemax="100" aria-valuenow={diskPct}>
-					<div class="h-full rounded-pill {diskPct >= 90 ? 'bg-fail' : diskPct >= 75 ? 'bg-warn' : 'bg-action'}" style="width: {diskPct}%"></div>
+					<div class="h-full rounded-pill {diskPct >= 90 ? 'bg-fail' : diskPct >= 75 ? 'bg-warn' : 'bg-ink/50'}" style="width: {diskPct}%"></div>
 				</dd>
 				<dd class="mt-1 text-small text-muted">{fmtBytes(last.disk_total_bytes - last.disk_used_bytes)} free</dd>
 			</div>
@@ -186,7 +186,7 @@
 		</div>
 		<div class="inline-flex rounded-control border border-rule bg-raised p-0.5" role="group" aria-label="Time range">
 			{#each ranges as r (r.id)}
-				<button class="rounded-inner px-2.5 py-1 text-small font-medium {range === r.id ? 'bg-action text-action-ink' : 'text-muted hover:text-ink'}" aria-pressed={range === r.id} onclick={() => (range = r.id)}>{r.label}</button>
+				<button class="rounded-inner px-2.5 py-1 text-small font-medium {range === r.id ? 'bg-paper-2 text-ink shadow-[inset_0_0_0_1px_var(--color-rule)]' : 'text-muted hover:text-ink'}" aria-pressed={range === r.id} onclick={() => (range = r.id)}>{r.label}</button>
 			{/each}
 		</div>
 	</div>
@@ -236,7 +236,7 @@
 			<h4 class="eyebrow mt-4">Memory breakdown</h4>
 			{#if mem}
 				<div class="mt-2 flex h-2 overflow-hidden rounded-pill bg-rule-soft" role="img" aria-label="Memory: {fmtBytes(mem.used - mem.buffers)} in use by programs, {fmtBytes(mem.buffers + mem.cached)} cache, {fmtBytes(mem.available)} available">
-					<div class="bg-action" style="width: {pct(Math.max(mem.total - mem.available - 0, 0), mem.total)}%"></div>
+					<div class="bg-data" style="width: {pct(Math.max(mem.total - mem.available - 0, 0), mem.total)}%"></div>
 					<div class="bg-run/50" style="width: {pct(mem.buffers + mem.cached, mem.total)}%"></div>
 				</div>
 				<dl class="mt-2 grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1 text-small [&>dd]:text-right [&>dt]:text-muted">

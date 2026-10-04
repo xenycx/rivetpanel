@@ -129,7 +129,8 @@ func ParseUser(u string) (uid, gid int, err error) {
 }
 
 type botState struct {
-	attempts    int       // consecutive failures (crash or setup)
+	attempts    int       // consecutive crashes of the current generation (restart_count)
+	failures    int       // consecutive setup failures (image, install, build, create, start); never counted as crashes
 	nextAt      time.Time // earliest time to retry after a failure
 	retryAt     time.Time // gate for setup failures (image, build, create, start)
 	failGen     int64     // generation the setup failure applies to

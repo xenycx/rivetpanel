@@ -16,8 +16,9 @@
 		running = false,
 		basePath = '',
 		rootLabel = 'workspace',
-		saveNote = ''
-	}: { botId?: string; running?: boolean; basePath?: string; rootLabel?: string; saveNote?: string } = $props();
+		saveNote = '',
+		isGame = false
+	}: { botId?: string; running?: boolean; basePath?: string; rootLabel?: string; saveNote?: string; isGame?: boolean } = $props();
 
 	let cwd = $state('');
 	let entries = $state<FileEntry[] | null>(null);
@@ -194,7 +195,7 @@
 			etag = await putText(`${base(botId)}/content?path=${q(path)}`, text, { ifMatch: force ? null : etag });
 			saved = text;
 			dirty = editor?.getText() !== saved;
-			toast(saveNote ? `Saved ${path}. ${saveNote}` : running ? `Saved ${path}. Restart the bot to use it.` : `Saved ${path}`);
+			toast(saveNote ? `Saved ${path}. ${saveNote}` : running ? `Saved ${path}. Restart the ${isGame ? 'server' : 'bot'} to use it.` : `Saved ${path}`);
 			return true;
 		} catch (e) {
 			if (e instanceof ApiError && e.status === 412) return await conflict(path, text);
@@ -208,7 +209,7 @@
 	async function conflict(path: string, mine: string): Promise<boolean> {
 		const choice = await chooseDialog({
 			title: 'This file changed',
-			body: `${path} was changed after you opened it, by SFTP, a deployment or another editor. Your version is still in the editor.`,
+			body: `${path} was changed after you opened it, by SFTP, ${isGame ? 'the server' : 'a deployment'} or another editor. Your version is still in the editor.`,
 			cancelLabel: 'Keep editing',
 			choices: [
 				{ value: 'download', label: 'Download my version' },
@@ -386,7 +387,7 @@
 								<span class="min-w-0 flex-1 truncate">{u.name}</span>
 								{#if u.error}<span class="text-fail">{u.error}</span>{:else if u.progress < 1}<button class="text-action underline" onclick={() => u.ctrl.abort()}>Cancel</button>{:else}<Icon name="check" size={13} class="text-run" />{/if}
 							</div>
-							{#if !u.error}<div class="mt-1 h-1 overflow-hidden rounded-pill bg-paper-2"><div class="h-1 bg-action" style="width: {Math.round(u.progress * 100)}%"></div></div>{/if}
+							{#if !u.error}<div class="mt-1 h-1 overflow-hidden rounded-pill bg-paper-2"><div class="h-1 bg-ink/50" style="width: {Math.round(u.progress * 100)}%"></div></div>{/if}
 						</li>
 					{/each}
 					{#if uploads.every((u) => u.error || u.progress >= 1)}<li><button class="text-action underline" onclick={() => (uploads = [])}>Clear</button></li>{/if}
@@ -427,7 +428,7 @@
 						</li>
 					{:else}
 						<li class="px-2 py-5 text-muted">
-							{#if filter}No names match “{filter}”.{:else if listError && entries === null}Nothing to show until the folder can be listed.{:else}This folder is empty. Upload your code, create a file, or deploy a repository under Deployments.{/if}
+							{#if filter}No names match “{filter}”.{:else if listError && entries === null}Nothing to show until the folder can be listed.{:else}{isGame ? 'This folder is empty. Upload files, create one, or connect with SFTP.' : 'This folder is empty. Upload your code, create a file, or deploy a repository under Deployments.'}{/if}
 						</li>
 					{/each}
 				{/if}
@@ -463,7 +464,7 @@
 					<div>
 						<Icon name="code" size={28} class="mx-auto text-rule" />
 						<p class="mt-3">Choose a file to edit it here.</p>
-						<p class="mt-1 text-small">Press <kbd class="copyable">Ctrl</kbd> + <kbd class="copyable">S</kbd> to save{#if saveNote}. {saveNote}{:else}; changes apply the next time the bot starts.{/if}</p>
+						<p class="mt-1 text-small">Press <kbd class="copyable">Ctrl</kbd> + <kbd class="copyable">S</kbd> to save{#if saveNote}. {saveNote}{:else}; changes apply the next time the {isGame ? 'server' : 'bot'} starts.{/if}</p>
 					</div>
 				</div>
 			{/if}

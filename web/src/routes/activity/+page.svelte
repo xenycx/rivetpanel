@@ -95,21 +95,21 @@
 <svelte:head><title>Activity · RivetPanel</title></svelte:head>
 
 <h1 class="text-page">Activity</h1>
-<p class="mt-0.5 max-w-prose text-muted">What happened on the bots you can see: long-running work, and who changed what.</p>
+<p class="mt-0.5 max-w-prose text-muted">What happened on the bots and servers you can see: long-running work, and who changed what.</p>
 
 <div class="mt-5 flex flex-wrap items-center gap-2">
 	<div class="inline-flex rounded-control border border-rule bg-raised p-0.5" role="group" aria-label="Show">
 		<button class="rounded-inner px-3 py-1 font-medium {view === 'work' ? 'bg-ink text-paper' : 'text-ink/75 hover:bg-paper'}" aria-pressed={view === 'work'} onclick={() => (view = 'work')}>Work</button>
 		<button class="rounded-inner px-3 py-1 font-medium {view === 'changes' ? 'bg-ink text-paper' : 'text-ink/75 hover:bg-paper'}" aria-pressed={view === 'changes'} onclick={() => (view = 'changes')}>Changes</button>
 	</div>
-	<select class="field w-auto" bind:value={botF} aria-label="Bot">
-		<option value="">All bots</option>
+	<select class="field w-auto" bind:value={botF} aria-label="Bot or server">
+		<option value="">All bots and servers</option>
 		{#each bots as b (b.id)}<option value={b.id}>{b.name}</option>{/each}
 	</select>
 	{#if view === 'work'}
 	<select class="field w-auto" bind:value={kind} aria-label="Kind">
 		<option value="">Everything</option>
-		<option value="build">Builds</option>
+		<option value="build">Builds and installations</option>
 		<option value="deploy">Deployments</option>
 		<option value="backup">Backups</option>
 		<option value="restore">Restores</option>
@@ -123,7 +123,7 @@
 		{#if changes === null}
 			<Skeleton rows={5} label="Loading changes" />
 		{:else if changes.length === 0}
-			<EmptyState title="No changes recorded yet" compact><p>Starting and stopping bots, editing files and variables, sharing and account changes are recorded here, without any values.</p></EmptyState>
+			<EmptyState title="No changes recorded yet" compact><p>Starting and stopping bots and servers, editing files and variables, sharing and account changes are recorded here, without any values.</p></EmptyState>
 		{:else}
 			<ChangeList events={changes} showBot={!botF} {now} />
 			{#if nextChange}<div class="mt-3"><button class="btn" onclick={() => loadChanges(nextChange)}>Show older</button></div>{/if}
@@ -133,7 +133,7 @@
 		<Skeleton rows={5} label="Loading activity" />
 	{:else if ops.length === 0}
 		<EmptyState title="Nothing here yet" compact>
-			<p>Starting a bot runs its build; deployments, backups and restores are recorded as they happen.</p>
+			<p>Starting a bot runs its build and a new server its installation; deployments, backups and restores are recorded as they happen.</p>
 		</EmptyState>
 	{:else}
 		<ul class="list-card">

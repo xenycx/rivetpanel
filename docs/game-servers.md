@@ -140,15 +140,41 @@ Game servers → New server: choose the type, the version, memory and CPU, and
 accept the Minecraft EULA (required for every Minecraft type except the proxy;
 the acceptance is stored with the server and written to `eula.txt`).
 
+### Connecting
+
+The **Connect** block at the top of a server's Manage side column shows the
+address players type into the game, with a copy button and a one-line hint
+for the game. The host is resolved in this order: the primary allocation's
+alias (Administration → Allocations), the IP the allocation is bound to,
+the node's **Public address** (Administration → Nodes; the local node has
+one too), and finally the host name the panel was opened on. When the
+result is `localhost`, a loopback or a private/LAN address, the block says
+that only this machine or the local network can use it. The port is left
+out when it is the game's default (25565 for Minecraft Java); copying always
+gives `host:port`. Games with a separate query port (Valheim, Rust) also show
+it. The servers list and the header strip use the same address.
+`GET /api/v1/game-hosts` exposes only the nodes' public addresses.
+
 The first start **installs** the server:
 
 1. The panel resolves the version with the provider and downloads the server
    software into the server's files. The download streams into a temporary
    file and is committed only when its size and published checksum match.
-2. **Automatic Java**: unless you picked a Java image yourself, the panel looks
-   up the Java version the Minecraft release needs (Mojang's version metadata)
-   and picks the matching image, for example Java 17 for 1.20.1 and Java 25 for
-   26.x.
+2. **Automatic Java**: unless you picked a Java image yourself, the panel picks
+   the image with the lowest Java version that runs the server. The
+   requirement is the highest of three sources: the provider's declared
+   minimum (PaperMC's Fill API publishes one per version, for example Java 25
+   for Velocity 4.x and Paper 26.x), the Minecraft release's own requirement
+   (Mojang's version metadata, used through `java_from`, for example Java 17
+   for 1.20.1) and the class-file version of the downloaded jar itself
+   (read while it streams in; `META-INF/` entries of multi-release jars are
+   ignored). A Java image chosen earlier, by hand or by an older automatic
+   pick, that is too old for the downloaded version is replaced by a new
+   enough one at installation (it would only fail with
+   `UnsupportedClassVersionError`); the build output says so. A server that
+   already crashed this way starts after **Reinstall**.
+   Velocity is started with `--port {{SERVER_PORT}}` so it listens on the
+   blueprint's fixed container port (25577) whatever `velocity.toml` says.
 3. Forge and NeoForge then run their installer in a container (the server's
    own Java image, as the unprivileged server user, with internet access).
 4. The installation is recorded as a `build` operation with its output, shown
@@ -176,6 +202,63 @@ without a leading slash.
 (80% for Velocity). The rest is left for the JVM itself, threads and native
 memory, so the container limit is not exceeded by a correctly sized heap.
 
+## JVM arguments
+
+Java server types (every Minecraft type, including Velocity) have a **JVM
+arguments** box on the Startup page. The options are passed to `java` right
+after the heap size, through the panel-provided variable `SERVER_JVM_ARGS`:
+
+```
+java -Xms128M -Xmx${SERVER_MEMORY}M ${SERVER_JVM_ARGS} … -jar server.jar nogui
+```
+
+* **Presets** fill the box with one click and can be edited afterwards:
+  *Aikar's flags* (the widely used G1 tuning for Minecraft servers; for a
+  heap above 12 GB the documented large-heap values `G1NewSizePercent=40`,
+  `G1MaxNewSizePercent=50`, `G1HeapRegionSize=16M`, `G1ReservePercent=15`,
+  `InitiatingHeapOccupancyPercent=20` are used), *ZGC (Java 21+, large
+  heaps)* (generational ZGC; `-XX:+ZGenerational` is added on Java 21-23
+  only, because it is the only ZGC mode from Java 24) and *None*. The page
+  shows the server's Java version (from its Java image) and warns when a
+  preset needs a newer Java than the image provides; choose a newer Java
+  image under "Java and installation" in that case. Aikar's guidance also
+  sets `-Xms` equal to `-Xmx`; the panel keeps `-Xms128M` and manages the
+  heap from the memory limit.
+* **Validation** (enforced by the panel when the options are saved, and
+  again before every start): at most 2 KiB; whitespace-separated options,
+  each one of `-XX:+Name`, `-XX:-Name`, `-XX:Name=value`, `-X…` (such as
+  `-Xss1M`, `-Xlog:gc:file=gc.log`), `-Dname[=value]`,
+  `--add-opens=`/`--add-exports=`/`--add-reads=`/`--add-modules=`/`--enable-native-access=`,
+  `--enable-preview`, `-ea`/`-da`, `-server`, `-verbose:gc|class|module|jni`
+  and `-javaagent:<jar>[=options]` with a jar inside the server's files.
+  Only letters, digits and `. _ : + = , / @ % -` are allowed, so no quotes,
+  `$`, backticks, `;`, `&`, `|`, redirects, globs or line breaks can reach
+  the shell. Refused with an explanation: `-Xmx`, `-Xms` and the `-XX` heap
+  sizing options (`MaxHeapSize`, `MaxRAMPercentage`, …; the heap follows the
+  memory limit), anything that changes the jar, class path or module path
+  (`-jar`, `-cp`, `--module-path`, `-Xbootclasspath`), native agents
+  (`-agentlib`, `-agentpath`), `-XX:OnError`/`-XX:OnOutOfMemoryError` (they
+  run commands) and option files (`@file`, `-XX:Flags`, `-XX:VMOptionsFile`).
+  RivetPanel does not check that the options suit the server's Java
+  version; options the JVM does not recognise stop the server at start (the
+  console shows the JVM's message).
+* **Applying**: the options can be changed while the server runs and apply
+  the next time it starts. A running server shows **Restart to apply** (and
+  a Restart now button for people with the start/stop permission) until it
+  is restarted.
+* **Permission and audit**: the same permission as the server's settings
+  (environment). Every change is recorded as `game.jvm_args` with the preset
+  name or "custom options" (never the options themselves).
+* **Existing servers** keep the server-type revision they were created with,
+  which has no JVM-arguments box. Press **Update** on their Startup page
+  (stopped server, full control) to move to the new revision. Velocity used
+  to have `-XX:+UseG1GC` in its command line; the new revision moves it into
+  the JVM arguments, and servers created from or updated to it start with
+  that value so a ZGC preset does not conflict with it.
+* **Custom and imported types** opt in with `startup.jvm_args: true` and an
+  unquoted `{{SERVER_JVM_ARGS}}` in `startup.command` (both are required
+  together), optionally with `startup.jvm_args_default`.
+
 ## Allocations and ports
 
 An allocation is an IP:port reservation on a node. Each server has a
@@ -188,8 +271,32 @@ maps.
   at the type's default (25565 for Minecraft, 25577 for Velocity), that is not
   used by another allocation, a published bot port, or any other program on
   the host, and adds it to the pool.
+* Ports that any running Docker container on the node publishes (another
+  panel with its own database, any other tool) are skipped, pool ports
+  included, even when Docker publishes them only with firewall rules so that
+  a bind test would pass. The panel asks the Docker API on its own node and
+  the agent (port probe) on remote nodes. When no free port is left the
+  request is refused with a message.
 * Administrators add ranges (`25565-25600, 19132`), set the address players
-  see (for example `play.example.com`), and delete free ports.
+  see (for example `play.example.com`), and delete free ports. Ports that are
+  already in use on the host are skipped and listed with the container that
+  holds them; adding only busy ports is refused.
+* **Port conflicts are not crashes.** Starting a server whose port another
+  container holds is refused with “Port 25565 is already used by another
+  container on this host. Choose another port in Network, or ask an
+  administrator to free it.” The container can belong to another account, so
+  its name is shown only to administrators (accounts with
+  `allocations.manage`, `nodes.manage` or `system.view`) when they start the
+  server, in the allocation lists and in the panel log; it is never stored in
+  the server's error. If the port is
+  taken in the meantime, the runner records the same message (also when
+  Docker answers “port is already allocated” or “address already in use”):
+  the server shows **Port in use**, is not restarted automatically, does not
+  add to the crash count and sends no crash notification. **Pick a free
+  port** on the Manage tab (owner or full control) moves the primary
+  allocation to the next free port of the node, returns the busy one to the
+  pool and starts the server again if it was meant to run; **Start again**
+  retries the same port.
 * Server owners add ports, choose the primary one and remove extras on the
   server's Network tab, while it is stopped.
 * RivetPanel does not configure your router or firewall: forward the primary
@@ -247,6 +354,17 @@ creator's current permission.
 
 ## Status
 
+A game server has no Health tab: its health is the process state in the
+header plus the game query below. There is no SDK heartbeat and no active
+TCP/HTTP probe (the API refuses a probe for a game server and ignores a
+heartbeat rule). Who is told about crashes (including failed installations and
+starts) and failed backups is chosen under **Settings → Notifications**; the
+messages go to the owner's account (the bell, email when alert emails are on,
+and the Discord channel the owner connected), never to players. A crash
+message is sent at most once per 10 minutes per server. “Crashes in a row”
+counts only exits of the running server: it clears after a minute of stable
+running and on Start/Restart, and installation or start retries never count.
+
 While a server runs, the panel asks it for its status every 10–15 seconds and
 shows players, the version and the message of the day: Minecraft types answer
 the standard server-list ping, Steam types the Steam A2S_INFO query (players,
@@ -284,6 +402,8 @@ startup:
   stop_signal: ""        # or SIGINT/SIGTERM/SIGQUIT/SIGHUP instead of a command
   stop_timeout_seconds: 60
   done: 'Done ('         # console text meaning "started" (informational)
+  jvm_args: false        # true: offer "JVM arguments"; needs {{SERVER_JVM_ARGS}} in command
+  jvm_args_default: ""   # options new servers start with (validated like user input)
 variables:
   - env: SERVER_JARFILE
     name: Server jar
@@ -321,7 +441,7 @@ addons: {source: modrinth, kind: plugin, loaders: [paper, spigot, bukkit], dir: 
 `{{VAR}}` in the startup command becomes the shell expansion `${VAR}`: values
 reach the server through its environment and are never re-parsed as shell
 code. The panel provides `SERVER_MEMORY`, `SERVER_PORT`, `SERVER_IP`,
-`SERVER_ID` and `SERVER_PORT_1` … `SERVER_PORT_10` (the additional
+`SERVER_ID`, `SERVER_JVM_ARGS` (blueprints with `startup.jvm_args`) and `SERVER_PORT_1` … `SERVER_PORT_10` (the additional
 allocations in ascending port order); blueprints cannot declare those or any
 `RIVET_` name. `ports.contiguous` asks automatic allocation for consecutive
 ports (for games that derive a query port from the game port); ports people
@@ -336,6 +456,7 @@ stay inside the server's files. Providers are `minecraft-vanilla`, `papermc`
 
 * **Application level**: blueprint validation, variable rules, the EULA
   requirement, allocation ownership and conflicts, stopped-only changes,
+  JVM-argument validation (on save and again before each start),
   checksum verification of downloads and every permission check.
 * **Docker runtime level**: memory, CPU and PID limits, the non-root user,
   dropped capabilities, `no-new-privileges` and the read-only root file system
@@ -365,6 +486,7 @@ stay inside the server's files. Providers are `minecraft-vanilla`, `papermc`
 | `POST /api/v1/games` | Create: `name`, `blueprint`, `variables`, `image`, `memory_bytes`, `nano_cpus`, `agreements`, `workspace_id` |
 | `GET /api/v1/bots/{id}/game` | Server type, variables with values, startup command, update availability |
 | `PUT /api/v1/bots/{id}/game/variables` | Change settings (stopped servers) |
+| `PUT /api/v1/bots/{id}/game/jvm-args` | Set `args` (extra JVM options, `""` = none); applies at the next start; returns `bot` and `jvm` (also in `GET …/game`: `supported`, `args`, `java`, `heap_mib`, `presets`, `pending_restart`) |
 | `POST /api/v1/bots/{id}/game/reinstall` | Install again on the next start |
 | `PUT /api/v1/bots/{id}/game/image` | Choose a Java image (`""` = automatic) |
 | `POST /api/v1/bots/{id}/game/upgrade` | Move to the type's newest revision |
@@ -374,10 +496,26 @@ stay inside the server's files. Providers are `minecraft-vanilla`, `papermc`
 | `GET /api/v1/bots/{id}/game/addons/{project}/versions` | Fitting versions of a project |
 | `POST /api/v1/bots/{id}/game/addons` | Install `project` (newest fitting) or a `version` |
 | `POST/DELETE /api/v1/bots/{id}/allocations[/{aid}]`, `PUT …/{aid}/primary` | Manage the server's ports |
-| `GET/POST /api/v1/admin/allocations`, `PATCH/DELETE …/{aid}` | Allocation pool (administrators) |
+| `POST /api/v1/bots/{id}/allocations/pick-free` | Move the primary allocation to the next free port (stopped, or waiting after a port conflict) |
+| `GET/POST /api/v1/admin/allocations`, `PATCH/DELETE …/{aid}` | Allocation pool (administrators); `POST` also returns `skipped: [{port, reason}]` for ports in use |
 | `POST /api/v1/admin/blueprints`, `GET …/{slug}/export`, `…/revisions`, `PATCH/DELETE …/{id}` | Server types (administrators) |
 | `POST /api/v1/admin/blueprints/egg-preview` | Convert `egg` (Pterodactyl egg JSON text) into a draft: `yaml`, `warnings`, `error`; stores nothing |
 
 Game servers appear in `GET /api/v1/bots` with `"kind": "game"`; power, files,
 console, backups and schedules use the same `/api/v1/bots/{id}/…` routes as
 bots.
+
+## Game icons
+
+The web app bundles a few game icons from
+[Dashboard Icons](https://dashboardicons.com) by Homarr Labs
+(`homarr-labs/dashboard-icons`, Apache License 2.0): Minecraft, Fabric,
+Valheim and Steam; and Paper, Folia, Velocity and Purpur from
+[selfh.st/icons](https://selfh.st/icons) (also listed on dashboardicons.com,
+Creative Commons Attribution 4.0). They are kept in
+`web/src/lib/assets/games/` together with both licence texts and a `NOTICE`
+that lists each file's source. Neither set has icons for Forge, NeoForge,
+Rust (the game) or Project Zomboid, so those use the Minecraft or Steam icon
+of their family, and other or imported types show a drawn gamepad. The mapping
+is by server-type slug in `web/src/lib/gameIcons.ts`. Game names and logos
+belong to their owners and are used only to identify the games.

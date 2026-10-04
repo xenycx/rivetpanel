@@ -1,8 +1,7 @@
 # AI assistant (AI operator)
 
 RivetPanel’s AI assistant is one private chat for the whole panel. It opens from
-the **Ask AI** button at the bottom right of every page and from the sparkle
-button in the header (`Ctrl+.`). It uses administrator-configured
+the **Ask AI** (sparkle) button in the top bar of every page or with `Ctrl+.`. It uses administrator-configured
 OpenAI-compatible Chat Completions providers (DeepSeek is the first preset) and
 never disables normal hosting when no provider is configured.
 
@@ -84,6 +83,24 @@ a tool error asking it to summarize and stop.
 | Retained output | 2 MiB | Stored tool output; a result that crosses it is truncated and later tools fail |
 
 The limits are stored with each run and shown on the Auto envelope card.
+
+A read-only tool (`list_targets`, `target_status`, `read_logs`,
+`build_output`, `list_files`, `read_file`, `search_files`,
+`environment_names`, `web_search`, `web_fetch`) is stopped after 90 seconds,
+for example when a remote node does not answer; the model and the person get
+a "did not finish in time" tool error and the run continues. Tools that wait
+for an approval are bounded by the wall time. When a run fails, is cancelled
+or is interrupted by a restart, its open tool calls are closed as failed (or
+cancelled when they were waiting for approval); they are never shown as
+running afterwards.
+
+Before every provider request the chat history is normalized for
+OpenAI-compatible providers, including strict ones such as DeepSeek: every
+message carries `content` (an empty string for an assistant turn that only
+calls tools), an empty tool result is sent as "(the tool returned no
+output)", every tool call has an id and exactly one result directly after it
+(a synthesized failure when it never produced one), and orphan tool results
+and empty turns are dropped.
 
 ### Audit
 

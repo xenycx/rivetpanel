@@ -54,7 +54,11 @@
 			error = msg(e);
 		}
 	}
-	onMount(load);
+	onMount(() => {
+		load();
+		// Opened from the "New" menu: start with the invitation form.
+		if (manage && new URLSearchParams(location.search).get('invite') === '1') inviteOpen = true;
+	});
 
 	const shown = $derived((users ?? []).filter((u) => !q || u.email.toLowerCase().includes(q.toLowerCase())));
 	const admins = $derived((users ?? []).filter((u) => u.role === 'admin' && !u.disabled).length);

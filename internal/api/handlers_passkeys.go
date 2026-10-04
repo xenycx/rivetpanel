@@ -15,7 +15,7 @@ import (
 // without a password, or instead of a code as the second step.
 
 func (s *panel) passkeyPublicRoutes(v1 fiber.Router) {
-	lim := limiter.New(limiter.Config{
+	lim := newLimiter(limiter.Config{
 		Max: 20, Expiration: time.Minute,
 		KeyGenerator: func(c fiber.Ctx) string { return "passkey:" + c.IP() },
 		LimitReached: func(c fiber.Ctx) error {

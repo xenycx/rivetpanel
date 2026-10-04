@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, untrack } from 'svelte';
 	import { api, ApiError } from '$lib/api/client';
 	import { registerDirty } from '$lib/ui/guard.svelte';
 	import { toast } from '$lib/ui/toast.svelte';
@@ -9,14 +9,32 @@
 
 	let { bot, stopped, owner, onSaved }: { bot: Bot; stopped: boolean; owner: boolean; onSaved: (b: Bot) => void } = $props();
 
-	let outbound = $state(bot.network_enabled);
-	let bandwidth = $state(bot.bandwidth_kbps ?? 0);
-	let ports = $state<Port[]>(bot.ports.map((p) => ({ ...p })));
+	// The form is a draft of the saved settings: it starts from them and
+	// follows later changes of the bot while it has no unsaved edits.
+	const fromBot = (b: Bot) => ({ outbound: b.network_enabled, bandwidth: b.bandwidth_kbps ?? 0, ports: b.ports.map((p) => ({ ...p })) });
+	const saved = $derived(fromBot(bot));
+	const start = (() => fromBot(bot))();
+
+	let outbound = $state(start.outbound);
+	let bandwidth = $state(start.bandwidth);
+	let ports = $state<Port[]>(start.ports);
 	let error = $state('');
 	let range = $state({ min: 20000, max: 29999, publicBind: false });
 	const snapshot = () => JSON.stringify([outbound, bandwidth, ports]);
 	let base = $state(snapshot());
 	const dirty = $derived(snapshot() !== base);
+	let syncedFrom = JSON.stringify(start);
+	$effect.pre(() => {
+		const s = saved;
+		const key = JSON.stringify(s);
+		untrack(() => {
+			if (key === syncedFrom) return;
+			syncedFrom = key;
+			if (dirty) return; // keep unsaved edits
+			({ outbound, bandwidth, ports } = s);
+			base = snapshot();
+		});
+	});
 	onMount(() => {
 		api<{ limits: { port_min: number; port_max: number; port_public_bind: boolean } }>('GET', '/runtimes')
 			.then((r) => (range = { min: r.limits.port_min, max: r.limits.port_max, publicBind: r.limits.port_public_bind }))

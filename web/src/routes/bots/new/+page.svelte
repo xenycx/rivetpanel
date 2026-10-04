@@ -324,7 +324,7 @@
 				}
 			}
 			toast(source === 'github' ? `Created ${b.name}; the first deployment is running` : `Created ${b.name}`);
-			await goto(`/bots/${b.id}?tab=overview`);
+			await goto(`/bots/${b.id}?tab=manage`);
 		} catch (e) {
 			// Keep everything the user entered so they can correct it.
 			submitError = e instanceof ApiError ? e.message : 'The bot could not be created. Check your connection and try again.';
@@ -341,7 +341,7 @@
 <svelte:head><title>New bot · RivetPanel</title></svelte:head>
 
 <div class="mx-auto max-w-3xl">
-	<a href="/dashboard" class="inline-flex items-center gap-1 text-muted hover:text-ink"><Icon name="chevronLeft" size={14} />Bots</a>
+	<a href="/bots" class="inline-flex items-center gap-1 text-muted hover:text-ink"><Icon name="chevronLeft" size={14} />Bots</a>
 	<h1 class="mt-1 text-page">New bot</h1>
 
 	<ol class="mt-5 hidden grid-cols-4 gap-2 sm:grid" aria-label="Steps">
@@ -696,14 +696,13 @@
 		{/if}
 	</section>
 
-	<div class="sticky bottom-0 mt-8 flex items-center gap-2 border-t border-rule-soft bg-paper/95 py-3 backdrop-blur-sm">
+	<div class="wizard-foot">
 		{#if step > 0}<button class="btn" onclick={() => go(step - 1)}><Icon name="chevronLeft" size={14} />Back</button>{/if}
-		<a href="/dashboard" class="btn btn-quiet">Cancel</a>
-		<span class="flex-1"></span>
+		<a href="/bots" class="btn btn-quiet">Cancel</a>
 		{#if step < 3}
-			<button class="btn btn-primary" onclick={() => go(step + 1)}>Continue<Icon name="chevronRight" size={14} /></button>
+			<button class="btn btn-primary wizard-next" onclick={() => go(step + 1)}>Continue<Icon name="chevronRight" size={14} /></button>
 		{:else}
-			<button class="btn btn-primary" onclick={create} disabled={busy}>{busy ? 'Creating…' : startNow && canStart ? (source === 'github' ? 'Create, deploy and start' : 'Create and start') : 'Create bot'}</button>
+			<button class="btn btn-primary wizard-next" onclick={create} disabled={busy}>{busy ? 'Creating…' : startNow && canStart ? (source === 'github' ? 'Create, deploy and start' : 'Create and start') : 'Create bot'}</button>
 		{/if}
 	</div>
 </div>

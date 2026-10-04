@@ -1,13 +1,13 @@
 package api
 
 import (
-	"regexp"
 	"strings"
 	"time"
 
 	"github.com/gofiber/fiber/v3"
 
 	"github.com/xenycx/rivetpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/lazyre"
 	"github.com/xenycx/rivetpanel/internal/service"
 )
 
@@ -94,7 +94,7 @@ func (s *panel) createBackup(c fiber.Ctx) error {
 	return c.Status(fiber.StatusAccepted).JSON(toBackup(b))
 }
 
-var unsafeFile = regexp.MustCompile(`[^A-Za-z0-9._-]+`)
+var unsafeFile = lazyre.New(`[^A-Za-z0-9._-]+`)
 
 // downloadBackup streams the archive as an attachment. It is served as opaque
 // gzip data, never as something a browser would render.

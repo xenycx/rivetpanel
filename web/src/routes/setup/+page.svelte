@@ -103,14 +103,13 @@
 	<div class="mx-auto max-w-5xl">
 		<div class="flex items-center gap-2.5">
 			<img src="/favicon.svg" alt="" width="34" height="34" class="rounded-tile" />
-			<span class="font-semibold tracking-[0.08em] uppercase">RivetPanel</span>
-			<span class="pill ml-2">First-run setup</span>
+			<span class="font-semibold">RivetPanel</span>
+			<span class="pill ml-1">First-run setup</span>
 		</div>
 
 		{#if done}
-			<section class="card card-glow mt-8 max-w-xl p-8">
-				<p class="eyebrow">Setup</p>
-				<h1 class="mt-2 text-page">This panel is already set up<span class="text-action">.</span></h1>
+			<section class="card mt-8 max-w-xl p-8">
+				<h1 class="text-page font-semibold">This panel is already set up</h1>
 				<p class="mt-2 text-muted">Sign in with the administrator account. Settings live under Administration → Panel settings.</p>
 				<a class="btn btn-primary mt-5" href="/login">Sign in</a>
 			</section>
@@ -118,19 +117,18 @@
 			<div class="mt-8 grid gap-8 lg:grid-cols-[15rem_minmax(0,1fr)]">
 				<ol class="flex gap-2 overflow-x-auto lg:flex-col lg:gap-1" aria-label="Setup steps">
 					{#each steps as s, i (s)}
-						<li class="flex shrink-0 items-center gap-3 rounded-tile px-3 py-2 {i === step ? 'bg-panel font-medium' : 'text-muted'}" aria-current={i === step ? 'step' : undefined}>
-							<span class="grid size-6 place-items-center rounded-pill font-mono text-[11px] {i < step ? 'bg-run text-white' : i === step ? 'bg-action text-white' : 'border border-rule'}">{#if i < step}<Icon name="check" size={12} />{:else}{i + 1}{/if}</span>
+						<li class="flex shrink-0 items-center gap-3 rounded-tile px-3 py-2 {i === step ? 'bg-panel font-medium text-ink shadow-[inset_0_0_0_1px_var(--color-rule-soft)]' : 'text-muted'}" aria-current={i === step ? 'step' : undefined}>
+							<span class="grid size-6 place-items-center rounded-pill font-mono text-[11px] {i < step ? 'bg-run/15 text-run' : i === step ? 'bg-action text-action-ink' : 'border border-rule'}">{#if i < step}<Icon name="check" size={12} />{:else}{i + 1}{/if}</span>
 							{s}
 						</li>
 					{/each}
 				</ol>
 
-				<section class="card card-glow p-6 sm:p-8" aria-live="polite">
+				<section class="card p-6 sm:p-8" aria-live="polite">
 					<form onsubmit={next} class="grid gap-5">
 						{#if step === 0}
 							<div>
-								<p class="eyebrow">Welcome</p>
-								<h1 class="mt-2 text-page">Let's set up your panel<span class="text-action">.</span></h1>
+								<h1 class="text-page font-semibold">Let's set up your panel</h1>
 								<p class="mt-2 max-w-prose text-muted">A few minutes: an administrator account, the address people use to reach this panel, and (optionally) GitHub and Discord sign-in and an AI operator provider. You can change everything later.</p>
 							</div>
 							<label class="block max-w-md">
@@ -140,8 +138,7 @@
 							</label>
 						{:else if step === 1}
 							<div>
-								<p class="eyebrow">Step 2</p>
-								<h2 class="mt-2 text-section">The administrator account</h2>
+								<h2 class="text-section">The administrator account</h2>
 								<p class="mt-1 text-muted">Administrators manage users, the host and these settings. You can add more people later.</p>
 							</div>
 							<label class="block max-w-md"><span class="label">Email</span><input class="field" type="email" autocomplete="username" required bind:value={email} /></label>
@@ -151,8 +148,7 @@
 							</div>
 						{:else if step === 2}
 							<div>
-								<p class="eyebrow">Step 3</p>
-								<h2 class="mt-2 text-section">Where people reach this panel</h2>
+								<h2 class="text-section">Where people reach this panel</h2>
 								<p class="mt-1 max-w-prose text-muted">The address in the browser bar, without a path. GitHub and Discord send people back to it after they sign in, and bots use it to send statistics.</p>
 							</div>
 							<label class="block max-w-md">
@@ -163,8 +159,7 @@
 						{:else if step === 3}
 							<div class="flex flex-wrap items-start justify-between gap-3">
 								<div>
-									<p class="eyebrow">Step 4 · optional</p>
-									<h2 class="mt-2 flex items-center gap-2 text-section"><Icon name="github" size={20} />GitHub sign-in and deployments</h2>
+									<h2 class="flex items-center gap-2 text-section"><Icon name="github" size={20} />GitHub sign-in and deployments<span class="opt">Optional</span></h2>
 									<p class="mt-1 max-w-prose text-muted">Lets people sign in with GitHub and deploy bots straight from their repositories, with automatic deploys on push.</p>
 								</div>
 								<label class="flex items-center gap-2 font-medium"><input type="checkbox" bind:checked={useGitHub} />Set up GitHub</label>
@@ -177,8 +172,7 @@
 						{:else if step === 4}
 							<div class="flex flex-wrap items-start justify-between gap-3">
 								<div>
-									<p class="eyebrow">Step 5 · optional</p>
-									<h2 class="mt-2 flex items-center gap-2 text-section"><Icon name="discord" size={20} />Discord sign-in and notifications</h2>
+									<h2 class="flex items-center gap-2 text-section"><Icon name="discord" size={20} />Discord sign-in and notifications<span class="opt">Optional</span></h2>
 									<p class="mt-1 max-w-prose text-muted">Lets people sign in with Discord and receive crash, deployment and heartbeat alerts in a channel they choose.</p>
 								</div>
 								<label class="flex items-center gap-2 font-medium"><input type="checkbox" bind:checked={useDiscord} />Set up Discord</label>
@@ -197,8 +191,7 @@
 						{:else if step === 5}
 							<div class="flex flex-wrap items-start justify-between gap-3">
 								<div>
-									<p class="eyebrow">Step 6 · optional</p>
-									<h2 class="mt-2 flex items-center gap-2 text-section"><Icon name="bolt" size={20} />AI operator</h2>
+									<h2 class="flex items-center gap-2 text-section"><Icon name="bolt" size={20} />AI operator<span class="opt">Optional</span></h2>
 									<p class="mt-1 max-w-prose text-muted">An incident assistant inside each bot and site. It needs an OpenAI-compatible provider (DeepSeek is filled in). Hosting works without it, and you can add or change providers later under Administration → Panel settings.</p>
 								</div>
 								<label class="flex items-center gap-2 font-medium"><input type="checkbox" bind:checked={useAI} />Set up the AI operator</label>
@@ -213,8 +206,7 @@
 							{/if}
 						{:else}
 							<div>
-								<p class="eyebrow">Ready</p>
-								<h2 class="mt-2 text-section">Review and finish</h2>
+								<h2 class="text-section">Review and finish</h2>
 							</div>
 							<dl class="grid max-w-2xl grid-cols-[auto_minmax(0,1fr)] gap-x-6 gap-y-2 rounded-overlay border border-rule-soft bg-paper p-4">
 								<dt class="text-muted">Administrator</dt><dd class="truncate">{email}</dd>

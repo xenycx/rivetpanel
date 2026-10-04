@@ -7,7 +7,6 @@ import (
 	"errors"
 	"math"
 	"net/url"
-	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -15,6 +14,7 @@ import (
 
 	"github.com/xenycx/rivetpanel/internal/auth"
 	"github.com/xenycx/rivetpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/lazyre"
 	"github.com/xenycx/rivetpanel/internal/store/sqlite"
 )
 
@@ -50,7 +50,7 @@ const (
 	maxSeriesRows       = 6000
 )
 
-var telemetryName = regexp.MustCompile(`^[A-Za-z0-9_.:\- ]{1,64}$`)
+var telemetryName = lazyre.New(`^[A-Za-z0-9_.:\- ]{1,64}$`)
 
 // TelemetryPayload is what a bot pushes.
 type TelemetryPayload struct {
@@ -336,7 +336,7 @@ func (a *Analytics) Ingest(ctx context.Context, botID string, p TelemetryPayload
 	return len(rows) + len(widgets) + len(keys), nil
 }
 
-var discordID = regexp.MustCompile(`^[0-9]{15,24}$`)
+var discordID = lazyre.New(`^[0-9]{15,24}$`)
 
 func validDiscordIdentity(id, username, avatarURL string) bool {
 	if !discordID.MatchString(id) || len(strings.TrimSpace(username)) < 1 || len(username) > 80 || len(avatarURL) > 512 {

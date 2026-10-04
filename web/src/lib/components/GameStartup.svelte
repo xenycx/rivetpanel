@@ -2,8 +2,8 @@
 	import { onMount } from 'svelte';
 	import { api, ApiError } from '$lib/api/client';
 	import { can, Perm, type Bot } from '$lib/api/types';
-	import type { GameDetail, Version } from '$lib/api/games';
-	import { checkVariable } from '$lib/api/games';
+	import type { GameDetail, GameJVM, JVMPreset, Version } from '$lib/api/games';
+	import { checkJVMArgs, checkVariable } from '$lib/api/games';
 	import { confirmDialog } from '$lib/ui/dialogs.svelte';
 	import { registerDirty } from '$lib/ui/guard.svelte';
 	import { toast } from '$lib/ui/toast.svelte';
@@ -25,9 +25,59 @@
 	const canEdit = $derived(can(bot, Perm.env));
 	const admin = $derived(can(bot, Perm.admin));
 
+	// JVM arguments (Java server types): saved separately from the settings,
+	// editable while the server runs, applied at the next start.
+	let jvmArgs = $state('');
+	let jvmError = $state('');
+	let jvmBusy = $state(false);
+	const jvm = $derived(detail?.jvm);
+	const normArgs = (s: string) => s.trim().split(/\s+/).filter(Boolean).join(' ');
+	const jvmDirty = $derived(!!jvm?.supported && normArgs(jvmArgs) !== jvm.args);
+	const jvmProblem = $derived(jvm?.supported ? checkJVMArgs(normArgs(jvmArgs), jvm.max_length) : '');
+	// Saved options apply to a container of a later generation; the running
+	// one predates them until Start/Restart advances the generation.
+	const jvmPending = $derived(
+		!!jvm?.supported && jvm.set && bot.observed_state === 'running' && bot.observed_generation <= jvm.saved_generation
+	);
+	const activePreset = $derived(jvm?.presets.find((p) => p.args === normArgs(jvmArgs)));
+	const presetTooNew = (p: JVMPreset) => !!(jvm && p.min_java && jvm.java && jvm.java < p.min_java);
+
+	async function saveJVM(e?: SubmitEvent): Promise<boolean> {
+		e?.preventDefault();
+		if (!jvm?.supported || jvmProblem) return false;
+		jvmBusy = true;
+		jvmError = '';
+		try {
+			const r = await api<{ bot: Bot; jvm: GameJVM }>('PUT', `/bots/${bot.id}/game/jvm-args`, { args: normArgs(jvmArgs) });
+			onSaved(r.bot);
+			if (detail) detail.jvm = r.jvm;
+			jvmArgs = r.jvm.args;
+			toast(stopped ? 'JVM arguments saved. They apply on the next start.' : 'JVM arguments saved. Restart the server to apply them.');
+			return true;
+		} catch (err) {
+			jvmError = msg(err);
+			return false;
+		} finally {
+			jvmBusy = false;
+		}
+	}
+
+	async function restartNow() {
+		jvmBusy = true;
+		try {
+			onSaved(await api<Bot>('POST', `/bots/${bot.id}/restart`));
+			toast('Restarting with the new JVM arguments.');
+		} catch (err) {
+			jvmError = msg(err);
+		} finally {
+			jvmBusy = false;
+		}
+	}
+
 	async function load() {
 		try {
 			detail = await api<GameDetail>('GET', `/bots/${bot.id}/game`);
+			jvmArgs = detail.jvm?.args ?? '';
 			values = Object.fromEntries(detail.variables.map((v) => [v.env, v.value]));
 			base = JSON.stringify(values);
 			image = bot.image_choice ?? '';
@@ -44,7 +94,12 @@
 	}
 	onMount(() => {
 		load();
-		return registerDirty({ label: 'Server settings', isDirty: () => dirty, save: async () => await save() });
+		const a = registerDirty({ label: 'Server settings', isDirty: () => dirty, save: async () => await save() });
+		const b = registerDirty({ label: 'JVM arguments', isDirty: () => jvmDirty, save: async () => await saveJVM() });
+		return () => {
+			a();
+			b();
+		};
 	});
 
 	const dirty = $derived(!!detail && JSON.stringify(values) !== base);
@@ -86,6 +141,8 @@
 		try {
 			const b = await api<Bot>('PUT', `/bots/${bot.id}/game/image`, { image });
 			onSaved(b);
+			const im = detail?.spec.images.find((i) => i.label === image);
+			if (detail?.jvm && im?.java) detail.jvm.java = im.java;
 			toast(image ? `The server now uses ${image}.` : 'The Java version is chosen automatically at the next installation.');
 		} catch (err) {
 			error = msg(err);
@@ -129,8 +186,8 @@
 {#if !detail}
 	{#if error}<Notice tone="fail">{error}</Notice>{:else}<Skeleton rows={4} label="Loading server settings" />{/if}
 {:else}
-	<div class="grid max-w-3xl gap-6">
-		<section class="card grid gap-3 p-5">
+	<div class="grid max-w-3xl grid-cols-[minmax(0,1fr)] gap-6">
+		<section class="card grid grid-cols-[minmax(0,1fr)] gap-3 p-5">
 			<div class="flex flex-wrap items-start justify-between gap-3">
 				<div>
 					<p class="eyebrow">Server type</p>
@@ -188,6 +245,79 @@
 				</div>
 			{/if}
 		</form>
+
+		{#if jvm?.supported}
+			<form class="card grid gap-4 p-5" onsubmit={saveJVM} aria-labelledby="jvm-title">
+				<div class="flex flex-wrap items-start justify-between gap-3">
+					<div>
+						<h2 id="jvm-title" class="text-section font-semibold">JVM arguments</h2>
+						<p class="mt-1 text-small text-muted">
+							Extra options passed to <code>java</code> as <code>$&#123;SERVER_JVM_ARGS&#125;</code>, after the heap size. The heap
+							(<code>-Xmx{jvm.heap_mib}M</code>) follows the memory limit and cannot be set here.
+						</p>
+					</div>
+					<div class="flex flex-wrap items-center gap-2">
+						<span class="pill" title="The Java version of the server's image">{jvm.java ? `Java ${jvm.java}` : 'Java chosen at installation'}</span>
+						{#if jvmPending}<span class="pill" data-tone="warn">Restart to apply</span>{/if}
+					</div>
+				</div>
+				<fieldset class="grid gap-3" disabled={!canEdit || jvmBusy}>
+					<div class="flex flex-wrap items-center gap-2" role="group" aria-label="Presets">
+						<span class="text-small text-muted">Presets</span>
+						{#each jvm.presets as p (p.id)}
+							<button
+								type="button"
+								class="btn btn-sm"
+								aria-pressed={activePreset?.id === p.id}
+								title={p.note ?? ''}
+								onclick={() => {
+									jvmArgs = p.args;
+									jvmError = '';
+								}}>{p.name}</button
+							>
+						{/each}
+					</div>
+					{#if activePreset?.note}<p class="help -mt-1">{activePreset.note}</p>{/if}
+					{#if activePreset && presetTooNew(activePreset)}
+						<Notice tone="warn">{activePreset.name} needs Java {activePreset.min_java} or newer; this server uses Java {jvm.java}. Choose a newer Java image below, or the server will not start.</Notice>
+					{:else if activePreset?.min_java && !jvm.java && activePreset.min_java > 8}
+						<Notice tone="info">{activePreset.name} needs Java {activePreset.min_java} or newer. The Java version is chosen at installation; choose a Java image below if you need to be sure.</Notice>
+					{/if}
+					<label class="block">
+						<span class="label">Options <code class="ml-1 text-[11px] font-normal text-muted">SERVER_JVM_ARGS</code></span>
+						<textarea
+							class="field min-h-24 font-mono text-small"
+							rows="4"
+							spellcheck="false"
+							autocomplete="off"
+							bind:value={jvmArgs}
+							oninput={() => (jvmError = '')}
+							placeholder="None"
+							aria-invalid={jvmProblem || jvmError ? 'true' : undefined}
+							aria-describedby="jvm-help"
+						></textarea>
+						<span id="jvm-help" class="help {jvmProblem ? 'text-fail' : ''}"
+							>{jvmProblem ||
+								`Separate options with spaces. Allowed: -XX:…, -X…, -D…, --add-opens=…, --add-modules=…, --enable-preview and -javaagent: with a jar in the server's files.${jvm.default ? ` Server type default: ${jvm.default}.` : ''}`}</span
+						>
+					</label>
+				</fieldset>
+				{#if jvmError}<Notice tone="fail" live>{jvmError}</Notice>{/if}
+				{#if canEdit}
+					<div class="flex flex-wrap items-center gap-2">
+						<button class="btn btn-primary" disabled={!jvmDirty || jvmBusy || !!jvmProblem}>Save JVM arguments</button>
+						{#if jvmPending}
+							<span class="text-small text-warn">The server is running with its previous JVM arguments.</span>
+							{#if can(bot, Perm.power)}<button type="button" class="btn btn-sm" disabled={jvmBusy} onclick={restartNow}><Icon name="restart" size={13} />Restart now</button>{/if}
+						{:else}
+							<span class="text-small text-muted">Applies the next time the server starts.</span>
+						{/if}
+					</div>
+				{/if}
+			</form>
+		{:else if isJava && detail.update_available && admin}
+			<Notice tone="info" title="JVM arguments">Update this server to the newest server-type definition (above) to set extra JVM arguments such as Aikar's flags.</Notice>
+		{/if}
 
 		{#if admin}
 			<section class="card grid gap-4 p-5">

@@ -252,6 +252,22 @@ sites down). Remove the domain to stop serving it.
 
 ## Publishing
 
+* **Site templates**: when creating a site, pick a built-in starter instead of
+  starting empty. The template's files, with the site name filled in, become
+  the first release; edit them afterwards in the draft editor or replace them
+  with an upload. Built-in templates (written for RivetPanel, embedded in the
+  binary, a few KiB each): *Landing page*, *Docs and blog* (several linked
+  pages and a shared stylesheet), *Portfolio*, *Coming soon* and *Game server
+  community*. The community page has a status section that reads this
+  panel's public status page (`GET /api/v1/status`, which allows any origin
+  to read it); it shows live state only when the status page is enabled and
+  the panel is reachable over HTTPS from visitors (the sites CSP allows
+  `https:` connections), and otherwise falls back to a link. Templates need
+  `sites.create` like any new site and count against the site size limit.
+  Administrators cannot add their own templates yet. Pick one in **Sites →
+  New site → Start from**, or browse them with previews under **Templates →
+  Sites** (also "New site from …" in Go to); both ask for the same name,
+  address and workspace.
 * **Site files**: use the private draft editor, then publish it. Each publish
   is a new immutable release; partial edits never reach visitors.
 * **ZIP upload** (drag and drop on the site page, or
@@ -289,7 +305,9 @@ Uploaded content is not scanned for malware. These are listed in
 | --- | --- |
 | `GET /sites-info` | whether hosting is on, how addresses look, and the sites domains new sites can use (`domains`) |
 | `GET /bots/{bot}/site`, `POST /bots/{bot}/site` `{slug?, domain_id?}` | get or create a bot's integrated site |
-| `GET /sites`, `POST /sites` `{name, slug?, domain_id?, workspace_id?, spa?}` | list and create standalone sites (`domain_id`: a sites domain id or name; default the primary) |
+| `GET /sites`, `POST /sites` `{name, slug?, domain_id?, workspace_id?, spa?, template_id?}` | list and create standalone sites (`domain_id`: a sites domain id or name; default the primary; `template_id` publishes a site template as the first release) |
+| `GET /site-templates` | built-in site templates: `{templates:[{id, name, description, tags, accent, theme, status_widget, spa, pages, files, bytes, preview_url}]}` |
+| `GET /site-templates/{id}/preview?page=` | one page of a template as a sandboxed, script-free HTML document (stylesheets inlined) that the panel may frame |
 | `GET /sites/{id}` | site, role, domains with DNS records, releases, GitHub deploy state |
 | `PATCH /sites/{id}` | address (`slug`, `domain_id`), site, generated-page, privacy, mode and repository settings |
 | `DELETE /sites/{id}` | delete with every release and domain (workspace admin) |

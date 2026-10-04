@@ -2,8 +2,9 @@ package mail
 
 import (
 	"html"
-	"regexp"
 	"strings"
+
+	"github.com/xenycx/rivetpanel/internal/lazyre"
 )
 
 // MaxAnnouncementHTML bounds the HTML an administrator can send, before the
@@ -12,14 +13,14 @@ const MaxAnnouncementHTML = 80 << 10
 
 var (
 	// Elements that have no place in an email and that some clients act on.
-	dangerousBlock = regexp.MustCompile(`(?is)<\s*(script|iframe|object|embed|form|template|noscript)\b[^>]*>.*?<\s*/\s*(script|iframe|object|embed|form|template|noscript)\s*>`)
-	dangerousTag   = regexp.MustCompile(`(?is)<\s*/?\s*(script|iframe|object|embed|form|input|button|textarea|select|link|meta|base|frame|frameset|applet)\b[^>]*>`)
-	eventAttr      = regexp.MustCompile(`(?is)\s+on[a-z]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)`)
-	scriptURL      = regexp.MustCompile(`(?is)(href|src|action|formaction|xlink:href)\s*=\s*("|')?\s*(javascript|vbscript|data)\s*:`)
-	tagRe          = regexp.MustCompile(`(?s)<[^>]*>`)
-	breakRe        = regexp.MustCompile(`(?i)<\s*(br\s*/?|/p|/div|/h[1-6]|/li|/tr)\s*>`)
-	styleBlock     = regexp.MustCompile(`(?is)<\s*(style|head|title)\b[^>]*>.*?<\s*/\s*(style|head|title)\s*>`)
-	blankLines     = regexp.MustCompile(`\n{3,}`)
+	dangerousBlock = lazyre.New(`(?is)<\s*(script|iframe|object|embed|form|template|noscript)\b[^>]*>.*?<\s*/\s*(script|iframe|object|embed|form|template|noscript)\s*>`)
+	dangerousTag   = lazyre.New(`(?is)<\s*/?\s*(script|iframe|object|embed|form|input|button|textarea|select|link|meta|base|frame|frameset|applet)\b[^>]*>`)
+	eventAttr      = lazyre.New(`(?is)\s+on[a-z]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)`)
+	scriptURL      = lazyre.New(`(?is)(href|src|action|formaction|xlink:href)\s*=\s*("|')?\s*(javascript|vbscript|data)\s*:`)
+	tagRe          = lazyre.New(`(?s)<[^>]*>`)
+	breakRe        = lazyre.New(`(?i)<\s*(br\s*/?|/p|/div|/h[1-6]|/li|/tr)\s*>`)
+	styleBlock     = lazyre.New(`(?is)<\s*(style|head|title)\b[^>]*>.*?<\s*/\s*(style|head|title)\s*>`)
+	blankLines     = lazyre.New(`\n{3,}`)
 )
 
 // SanitizeHTML removes scripts, embedded frames, forms, event-handler

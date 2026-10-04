@@ -12,7 +12,7 @@
 	import DialogHost from '$lib/components/ui/DialogHost.svelte';
 	import ToastRegion from '$lib/components/ui/ToastRegion.svelte';
 	import Icon, { type IconName } from '$lib/components/ui/Icon.svelte';
-	import Menu from '$lib/components/ui/Menu.svelte';
+	import Menu, { type MenuItem } from '$lib/components/ui/Menu.svelte';
 	import OperationShelf from '$lib/components/OperationShelf.svelte';
 	import CommandPalette from '$lib/components/CommandPalette.svelte';
 	import AIChat from '$lib/components/AIChat.svelte';
@@ -21,6 +21,7 @@
 	import { describe } from '$lib/status';
 	import WorkspaceSwitcher from '$lib/components/WorkspaceSwitcher.svelte';
 	import NotificationBell from '$lib/components/NotificationBell.svelte';
+	import NewMenu from '$lib/components/NewMenu.svelte';
 	import { loadWorkspaces } from '$lib/workspaces.svelte';
 	import { resourceHref } from '$lib/api/games';
 
@@ -109,36 +110,55 @@
 			loadWorkspaces();
 		}
 	});
+	// The public status page is linked only when this panel publishes one.
+	let statusPage = $state(false);
+	$effect(() => {
+		if (session.user && !statusPage)
+			api('GET', '/status')
+				.then(() => (statusPage = true))
+				.catch(() => {});
+	});
 
 	const path = $derived(page.url.pathname);
 	const adminHome = $derived(session.user && canAdminister() ? (adminLinks()[0]?.href ?? '') : '');
 	const withheld = $derived(session.verification.withheld ?? []);
 	type NavItem = { href: string; label: string; icon: IconName; active: boolean };
 	const nav = $derived<NavItem[]>([
-		{ href: '/dashboard', label: 'Bots', icon: 'home', active: path === '/dashboard' || (path.startsWith('/bots') && path !== '/bots/new') },
+		{ href: '/dashboard', label: 'Overview', icon: 'home', active: path === '/dashboard' },
 		...(session.features.games ? [{ href: '/servers', label: 'Game servers', icon: 'gamepad' as IconName, active: path.startsWith('/servers') }] : []),
-		{ href: '/templates', label: 'Templates', icon: 'layers', active: path.startsWith('/templates') || path === '/bots/new' },
+		{ href: '/bots', label: 'Bots', icon: 'box', active: path.startsWith('/bots') },
 		...(session.features.sites ? [{ href: '/sites', label: 'Sites', icon: 'globe' as IconName, active: path.startsWith('/sites') }] : []),
+		{ href: '/templates', label: 'Templates', icon: 'layers', active: path.startsWith('/templates') },
 		{ href: '/activity', label: 'Activity', icon: 'activity', active: path.startsWith('/activity') },
 		...(can('tickets.create') || can('tickets.view_all') || can('tickets.manage')
 			? [{ href: '/support', label: 'Support', icon: 'lifebuoy' as IconName, active: path.startsWith('/support') }]
-			: []),
+			: [])
+	]);
+	// Account and installation settings sit apart, below the work areas.
+	const navEnd = $derived<NavItem[]>([
 		{ href: '/settings/connected-accounts', label: 'Settings', icon: 'gear', active: path.startsWith('/settings') },
 		...(adminHome ? [{ href: adminHome, label: 'Administration', icon: 'shield' as IconName, active: path.startsWith('/admin') }] : [])
 	]);
-	const resources = $derived([
-		{ href: '/docs', label: 'Documentation', icon: 'book' as IconName, external: false },
-		{ href: '/help', label: 'Help center', icon: 'lifebuoy' as IconName, external: false },
-		{ href: '/api/v1/automation/openapi.yaml', label: 'Automation API', icon: 'code' as IconName, external: true },
-		{ href: '/', label: 'What RivetPanel does', icon: 'info' as IconName, external: false },
-		...(can('system.view') ? [{ href: '/admin/diagnostics', label: 'Status', icon: 'chart' as IconName, external: false }] : [])
+	// Secondary links share one "Help & resources" menu instead of a list.
+	const open = (href: string, external = false) => (external ? window.open(href, '_blank', 'noopener') : goto(href));
+	const resources = $derived<MenuItem[]>([
+		{ label: 'Documentation', onselect: () => open('/docs') },
+		{ label: 'Help center', onselect: () => open('/help') },
+		...(statusPage ? [{ label: 'Status page', onselect: () => open('/status') }] : []),
+		'separator',
+		{ label: 'Automation API', hint: 'OpenAPI description, opens in a new tab', onselect: () => open('/api/v1/automation/openapi.yaml', true) },
+		...(can('system.view') ? [{ label: 'Diagnostics', onselect: () => open('/admin/diagnostics') }] : []),
+		{ label: 'What RivetPanel does', onselect: () => open('/') },
+		{ label: 'Keyboard: Go to', hint: 'Ctrl+K', onselect: () => (palette = true) },
+		...(session.features.ai ? [{ label: 'Keyboard: Ask AI', hint: 'Ctrl+.', onselect: () => chat.show() }] : [])
 	]);
+	const helpActive = $derived(path.startsWith('/docs') || path.startsWith('/help') || path === '/admin/diagnostics');
 	const bare = $derived((PUBLIC.includes(path) && path !== '/docs') || (!session.user && session.loaded));
 	const who = $derived(session.user?.display_name || session.user?.email.split('@')[0] || '');
 	const initials = $derived(who.slice(0, 2).toUpperCase());
 	const themeLabel = $derived(theme.pref === 'system' ? `System theme (${theme.dark ? 'dark' : 'light'})` : theme.pref === 'dark' ? 'Dark theme' : 'Light theme');
 	const accountItems = $derived([
-		{ label: session.user?.email ?? '', disabled: true, onselect: () => {} },
+		{ heading: session.user?.email ?? '' },
 		'separator' as const,
 		{ label: 'Profile', onselect: () => goto('/settings/profile') },
 		{ label: 'Settings', onselect: () => goto('/settings/appearance') },
@@ -150,11 +170,23 @@
 <svelte:window onbeforeunload={beforeUnload} />
 <svelte:head><title>RivetPanel</title></svelte:head>
 
+{#snippet navList(items: NavItem[], compact: boolean)}
+	<ul class="grid gap-0.5">
+		{#each items as n (n.href)}
+			<li>
+				<a href={n.href} class="side-link {compact ? 'justify-center px-0' : ''}" data-active={n.active} aria-current={n.active ? 'page' : undefined} aria-label={compact ? n.label : undefined} title={compact ? n.label : undefined}>
+					<Icon name={n.icon} class="side-icon" />{#if !compact}<span>{n.label}</span>{/if}
+				</a>
+			</li>
+		{/each}
+	</ul>
+{/snippet}
+
 {#snippet sidebar(compact = false, collapsible = false)}
 	<div class="flex items-center {compact ? 'flex-col justify-center gap-2' : 'gap-2'} px-1">
-		<a href="/dashboard" class="flex min-w-0 items-center gap-2.5 {compact ? 'justify-center' : 'px-2'} py-1" aria-label="RivetPanel dashboard" title={compact ? 'RivetPanel dashboard' : undefined}>
-			<img src="/favicon.svg" alt="" width="30" height="30" class="shrink-0 rounded-tile" />
-			{#if !compact}<span class="truncate font-semibold tracking-[0.08em] uppercase">RivetPanel</span>{/if}
+		<a href="/dashboard" class="flex min-w-0 items-center gap-2.5 {compact ? 'justify-center' : 'px-2'} py-1" aria-label="RivetPanel overview" title={compact ? 'RivetPanel overview' : undefined}>
+			<img src="/favicon.svg" alt="" width="26" height="26" class="shrink-0 rounded-control" />
+			{#if !compact}<span class="truncate font-semibold">RivetPanel</span>{/if}
 		</a>
 		{#if collapsible}
 			<button class="tb-btn {compact ? '' : 'ml-auto'} shrink-0" onclick={toggleSidebar} aria-label={compact ? 'Expand sidebar' : 'Collapse sidebar'} title={compact ? 'Expand sidebar' : 'Collapse sidebar'}>
@@ -162,78 +194,70 @@
 			</button>
 		{/if}
 	</div>
-	<div class="mt-5 {compact ? 'flex justify-center' : 'px-1'}"><WorkspaceSwitcher {compact} /></div>
+	<div class="mt-4 {compact ? 'flex justify-center' : 'px-1'}"><WorkspaceSwitcher {compact} /></div>
 	<nav class="mt-4" aria-label="Main">
-		<ul class="grid gap-0.5">
-			{#each nav as n (n.href)}
-				<li>
-					<a href={n.href} class="side-link {compact ? 'justify-center px-0' : ''}" data-active={n.active} aria-current={n.active ? 'page' : undefined} aria-label={compact ? n.label : undefined} title={compact ? n.label : undefined}>
-						<Icon name={n.icon} class="side-icon" />{#if !compact}<span>{n.label}</span>{/if}
-					</a>
-				</li>
-			{/each}
-		</ul>
+		{@render navList(nav, compact)}
 	</nav>
-	<div class="my-5 border-t border-rule-soft"></div>
-	<div>
-		{#if !compact}<p class="eyebrow flex items-center justify-between px-3">Favorites <a href="/dashboard" class="text-muted hover:text-ink" aria-label="Star bots on the overview"><Icon name="plus" size={14} /></a></p>{/if}
-		<ul class="mt-2 grid gap-0.5">
-			{#each favorites as b (b.id)}
-				{@const d = describe(b)}
-				<li>
-					<a href={resourceHref(b)} class="side-link {compact ? 'justify-center px-0' : ''}" data-active={path === resourceHref(b)} aria-label={compact ? b.name : undefined} title={compact ? b.name : undefined}>
-						{#if b.logo_url}<img src={b.logo_url} alt="" class="size-6 shrink-0 rounded-pill object-cover" referrerpolicy="no-referrer" />{:else}<span class="side-dot" data-tone={d.tone}></span>{/if}{#if !compact}<span class="truncate">{b.name}</span>{/if}
-					</a>
-				</li>
-			{:else}
-				{#if !compact}<li class="px-3 text-small text-muted">Star a bot to pin it here.</li>{/if}
-			{/each}
-		</ul>
-	</div>
-	<div class="my-5 border-t border-rule-soft"></div>
-	<div>
-		{#if !compact}<p class="eyebrow px-3">Resources</p>{/if}
-		<ul class="mt-2 grid gap-0.5">
-			{#each resources as r (r.href)}
-				<li>
-					<a href={r.href} class="side-link group {compact ? 'justify-center px-0' : ''}" target={r.external ? '_blank' : undefined} rel={r.external ? 'noopener' : undefined} aria-label={compact ? r.label : undefined} title={compact ? r.label : undefined}>
-						<Icon name={r.icon} class="side-icon" />{#if !compact}<span class="flex-1">{r.label}</span>{/if}
-						{#if r.external && !compact}<Icon name="external" size={13} class="text-muted opacity-60 group-hover:opacity-100" />{/if}
-					</a>
-				</li>
-			{/each}
-		</ul>
+	{#if favorites.length}
+		<div class="mt-5">
+			{#if !compact}<p class="eyebrow px-3">Favorites</p>{/if}
+			<ul class="mt-1.5 grid gap-0.5">
+				{#each favorites as b (b.id)}
+					{@const d = describe(b)}
+					<li>
+						<a href={resourceHref(b)} class="side-link {compact ? 'justify-center px-0' : ''}" data-active={path === resourceHref(b)} aria-label={compact ? b.name : undefined} title={compact ? b.name : undefined}>
+							{#if b.logo_url}<img src={b.logo_url} alt="" class="size-5 shrink-0 rounded-pill object-cover" referrerpolicy="no-referrer" />{:else}<span class="side-dot" data-tone={d.tone}></span>{/if}{#if !compact}<span class="truncate">{b.name}</span>{/if}
+						</a>
+					</li>
+				{/each}
+			</ul>
+		</div>
+	{/if}
+	<div class="mt-auto grid gap-0.5 border-t border-rule-soft pt-3">
+		{@render navList(navEnd, compact)}
+		<Menu
+			label="Help and resources"
+			items={resources}
+			fixed
+			side={compact}
+			align="start"
+			block
+			triggerClass="side-link {compact ? 'justify-center px-0' : ''} {helpActive ? 'text-ink' : ''}"
+		>
+			{#snippet trigger()}<Icon name="book" class="side-icon" />{#if !compact}<span class="flex-1">Help &amp; resources</span><Icon name="chevronDown" size={13} class="text-muted" />{/if}{/snippet}
+		</Menu>
 	</div>
 {/snippet}
 
 {#if session.user && !bare}
 	<a href="#main" class="sr-only z-50 bg-raised px-3 py-2 focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:rounded-control focus:shadow-overlay">Skip to content</a>
-	<div class="lg:grid {sidebarCollapsed ? 'lg:grid-cols-[72px_minmax(0,1fr)]' : 'lg:grid-cols-[16.5rem_minmax(0,1fr)]'} lg:transition-[grid-template-columns] lg:duration-200">
-		<aside class="sidebar sticky top-0 z-40 hidden h-dvh flex-col overflow-y-auto border-r border-rule-soft px-3 py-5 lg:flex" aria-label="Sidebar">
+	<div class="lg:grid {sidebarCollapsed ? 'lg:grid-cols-[68px_minmax(0,1fr)]' : 'lg:grid-cols-[15rem_minmax(0,1fr)]'} lg:transition-[grid-template-columns] lg:duration-200">
+		<aside class="sidebar sticky top-0 z-40 hidden h-dvh flex-col overflow-y-auto border-r border-rule-soft px-3 py-4 lg:flex" aria-label="Sidebar">
 			{@render sidebar(sidebarCollapsed, true)}
 		</aside>
 		<div class="min-w-0">
 			<header class="topbar sticky top-0 z-30 border-b border-rule-soft backdrop-blur-md">
-				<div class="flex h-16 items-center gap-2 px-4 sm:px-6 lg:px-10">
+				<div class="flex h-14 items-center gap-2 px-4 sm:px-6 lg:px-8">
 					<button class="btn btn-quiet btn-icon lg:hidden" aria-label="Open menu" aria-expanded={drawer} onclick={() => (drawer = true)}><Icon name="menu" size={18} /></button>
-					<a href="/dashboard" class="flex items-center gap-2 lg:hidden" aria-label="RivetPanel dashboard"><img src="/favicon.svg" alt="" width="26" height="26" class="rounded-tile" /></a>
-					<p class="hidden truncate text-title text-muted sm:block">Welcome back, <span class="font-semibold text-ink">{who}</span></p>
-					<div class="ml-auto flex items-center gap-1.5">
-						{#if session.features.ai}<button class="tb-btn {chat.open ? 'text-action' : ''}" onclick={() => chat.toggle()} aria-label="Ask AI (Ctrl+.)" aria-pressed={chat.open} title="Ask AI (Ctrl+.)"><Icon name="sparkle" size={17} /></button>{/if}
-						<button class="tb-btn" onclick={() => (palette = true)} aria-label="Go to a bot or page (Ctrl+K)" title="Go to (Ctrl+K)"><Icon name="search" size={17} /></button>
-						<a class="tb-btn hidden sm:grid" href="/activity" aria-label="Activity" title="Activity"><Icon name="history" size={17} /></a>
+					<a href="/dashboard" class="flex items-center gap-2 lg:hidden" aria-label="RivetPanel overview"><img src="/favicon.svg" alt="" width="24" height="24" class="rounded-control" /></a>
+					<button class="hidden h-9 w-full max-w-xs items-center gap-2 rounded-control border border-rule-soft bg-panel px-2.5 text-left text-muted transition-colors hover:border-rule hover:text-ink sm:flex" onclick={() => (palette = true)} aria-label="Go to a bot, server or page (Ctrl+K)">
+						<Icon name="search" size={15} /><span class="flex-1 truncate text-small">Go to…</span><kbd class="rounded-inner border border-rule-soft px-1.5 text-[11px]">Ctrl K</kbd>
+					</button>
+					<div class="ml-auto flex items-center gap-1">
+						<button class="tb-btn sm:hidden" onclick={() => (palette = true)} aria-label="Go to a bot, server or page (Ctrl+K)" title="Go to (Ctrl+K)"><Icon name="search" size={17} /></button>
+						{#if session.features.ai}<button class="tb-btn" onclick={() => chat.toggle()} aria-label="Ask AI (Ctrl+.)" aria-pressed={chat.open} title="Ask AI (Ctrl+.)"><Icon name="sparkle" size={17} /></button>{/if}
 						<NotificationBell />
-						<button class="tb-btn" onclick={cycleTheme} aria-label="{themeLabel}. Switch theme" title="{themeLabel} · click to switch">
+						<button class="tb-btn" onclick={cycleTheme} aria-label="{themeLabel}. Switch theme" title="{themeLabel}, click to switch">
 							<Icon name={theme.pref === 'system' ? 'monitor' : theme.dark ? 'moon' : 'sun'} size={17} />
 						</button>
-						{#if can('bots.create')}<a href="/bots/new" class="btn btn-primary ml-1"><Icon name="plus" />New</a>{/if}
+						{#if path !== '/dashboard'}<NewMenu />{/if}
 						<Menu label="Account" items={accountItems}>
 							{#snippet trigger()}{#if session.user?.avatar_url}<img class="avatar object-cover" src={session.user.avatar_url} alt="" />{:else}<span class="avatar" aria-hidden="true">{initials}</span>{/if}<Icon name="chevronDown" size={14} class="text-muted" />{/snippet}
 						</Menu>
 					</div>
 				</div>
 			</header>
-			<main id="main" tabindex="-1" class="mx-auto max-w-[1400px] px-4 pt-6 pb-24 outline-none sm:px-6 lg:px-10 lg:pt-8">
+			<main id="main" tabindex="-1" class="mx-auto max-w-[1360px] px-4 pt-5 pb-16 outline-none sm:px-6 lg:px-8 lg:pt-6">
 				{#if withheld.length && !path.startsWith('/settings/profile')}
 					<p class="mb-5 rounded-tile border border-warn/30 bg-warn/7 px-3.5 py-2.5 text-small" role="status">
 						Verify your email address to unlock {describePermissions(withheld)}. <a class="link" href="/settings/profile#email">Verify now</a>
@@ -246,12 +270,10 @@
 
 	{#if drawer}
 		<div class="fixed inset-0 z-40 bg-black/50 lg:hidden" role="presentation" onclick={() => (drawer = false)}></div>
-		<aside class="sidebar pb-safe fixed inset-y-0 left-0 z-50 flex w-72 max-w-[85vw] animate-enter flex-col overflow-y-auto border-r border-rule-soft px-3 py-5 shadow-overlay lg:hidden" aria-label="Menu">
-			<button class="btn btn-quiet btn-icon absolute top-4 right-3" aria-label="Close menu" onclick={() => (drawer = false)}><Icon name="x" size={18} /></button>
+		<aside class="sidebar pb-safe fixed inset-y-0 left-0 z-50 flex w-72 max-w-[85vw] animate-enter flex-col overflow-y-auto border-r border-rule-soft px-3 py-4 shadow-overlay lg:hidden" aria-label="Menu">
+			<button class="btn btn-quiet btn-icon absolute top-3 right-3" aria-label="Close menu" onclick={() => (drawer = false)}><Icon name="x" size={18} /></button>
 			{@render sidebar()}
-			<div class="mt-auto pt-6">
-				<button class="side-link w-full" onclick={logout}><Icon name="logout" class="side-icon" />Sign out</button>
-			</div>
+			<button class="side-link mt-0.5" onclick={logout}><Icon name="logout" class="side-icon" />Sign out</button>
 		</aside>
 	{/if}
 

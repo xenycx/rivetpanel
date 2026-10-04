@@ -10,9 +10,9 @@
 
 {#if framed}
 	<div class="min-h-dvh bg-paper">
-		<header class="border-b border-rule-soft">
+		<header class="border-b border-rule-soft bg-panel">
 			<div class="mx-auto flex h-14 max-w-5xl items-center gap-3 px-4 sm:px-6">
-				<a href={session.user ? '/dashboard' : '/'} class="flex items-center gap-2"><img src="/favicon.svg" alt="" width="26" height="26" class="rounded-tile" /><span class="font-semibold tracking-[0.06em] uppercase">{title}</span></a>
+				<a href={session.user ? '/dashboard' : '/'} class="flex items-center gap-2"><img src="/favicon.svg" alt="" width="26" height="26" class="rounded-control" /><span class="font-semibold">{title}</span></a>
 				<nav class="ml-auto flex items-center gap-1 text-small">
 					<a class="btn btn-quiet" href="/help">Help</a>
 					{#if session.user}<a class="btn btn-quiet" href="/dashboard">Open panel</a>{:else}<a class="btn btn-quiet" href="/login">Sign in</a>{/if}

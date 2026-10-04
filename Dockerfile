@@ -31,6 +31,16 @@ ENV RIVET_ENV=production \
     RIVET_DATA_ROOT=/var/lib/rivetpanel/workspaces \
     RIVET_KEY_DIR=/var/lib/rivetpanel/keys \
     RIVET_RUNTIMES_DIR=/opt/rivetpanel/runtimes
+# Everything the panel writes (database, keys, workspaces, add-on data,
+# backups, logs) lives under /var/lib/rivetpanel. Bind-mount a host directory
+# there: the Docker daemon resolves bot bind mounts on the host (and refuses
+# them from named volumes); the panel translates these paths through its own
+# container's mounts at start. Keep the paths above inside /var/lib/rivetpanel.
 VOLUME ["/var/lib/rivetpanel"]
 EXPOSE 8080 2022 8081 8444
+# The panel stays root inside its container: it hands workspaces to the
+# unprivileged bot user (65532:65532), which needs CAP_CHOWN, and it drives the
+# host's Docker socket, which is root-equivalent anyway (see docs/container.md).
+USER root
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 CMD ["rivetpanel", "health"]
 ENTRYPOINT ["rivetpanel"]

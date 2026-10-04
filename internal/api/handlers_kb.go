@@ -84,7 +84,7 @@ func (s *panel) viewer(c fiber.Ctx) (*domain.User, error) {
 
 // publicLimit rate-limits routes anonymous visitors can reach, per client IP.
 func publicLimit(name string, max int) fiber.Handler {
-	return limiter.New(limiter.Config{
+	return newLimiter(limiter.Config{
 		Max: max, Expiration: time.Minute,
 		KeyGenerator: func(c fiber.Ctx) string { return name + ":" + c.IP() },
 		LimitReached: func(c fiber.Ctx) error {

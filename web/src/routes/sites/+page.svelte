@@ -2,13 +2,12 @@
 	// Sites without any logo or favicon answer 404; show the globe instead.
 	let noIcon = $state<Record<string, boolean>>({});
 	import { onMount } from 'svelte';
-	import { goto } from '$app/navigation';
 	import { api, ApiError, fmtBytes } from '$lib/api/client';
-	import type { Site, SitesInfo } from '$lib/api/types';
+	import type { Site, SitesInfo, SiteTemplate } from '$lib/api/types';
 	import { fmtAgo } from '$lib/args';
-	import { session } from '$lib/session.svelte';
-	import { creatable, currentWorkspace, loadWorkspaces, selectWorkspace, workspaceName, workspaces } from '$lib/workspaces.svelte';
-	import Dialog from '$lib/components/ui/Dialog.svelte';
+	import { can, session } from '$lib/session.svelte';
+	import { currentWorkspace, loadWorkspaces, selectWorkspace, workspaceName, workspaces } from '$lib/workspaces.svelte';
+	import NewSiteDialog from '$lib/components/NewSiteDialog.svelte';
 	import EmptyState from '$lib/components/ui/EmptyState.svelte';
 	import Icon from '$lib/components/ui/Icon.svelte';
 	import Notice from '$lib/components/ui/Notice.svelte';
@@ -19,69 +18,63 @@
 	let error = $state('');
 	let q = $state('');
 	let open = $state(false);
-	let form = $state({ name: '', slug: '', domain_id: '', workspace_id: '', spa: false });
-	let slugTouched = $state(false);
-	let formError = $state('');
-	let busy = $state(false);
+	let templates = $state<SiteTemplate[]>([]);
+	let template = $state('');
 	const msg = (e: unknown) => (e instanceof ApiError ? e.message : 'The request failed.');
 
 	async function load() {
 		try {
 			info = await api<SitesInfo>('GET', '/sites-info');
-			if (info.enabled) sites = (await api<{ sites: Site[] }>('GET', '/sites')).sites;
+			if (info.enabled) {
+				sites = (await api<{ sites: Site[] }>('GET', '/sites')).sites;
+				// Templates are optional: "Start from" is simply not offered without them.
+				api<{ templates: SiteTemplate[] }>('GET', '/site-templates')
+					.then((r) => (templates = r.templates))
+					.catch(() => {});
+			}
 			error = '';
 		} catch (e) {
 			error = msg(e);
 		}
 	}
-	onMount(() => {
-		load();
+	onMount(async () => {
 		loadWorkspaces();
+		await load();
+		// Opened from the "New" menu: start with the new-site form
+		// (?template=<id> preselects a site template).
+		const qs = new URLSearchParams(location.search);
+		if (info?.enabled && can('sites.create') && qs.get('new') === '1') {
+			if (qs.get('template'))
+				templates = await api<{ templates: SiteTemplate[] }>('GET', '/site-templates')
+					.then((r) => r.templates)
+					.catch(() => templates);
+			start(qs.get('template') ?? '');
+		}
 	});
 
 	const scoped = $derived((sites ?? []).filter((s) => workspaces.selected === 'all' || s.workspace_id === workspaces.selected));
 	const shown = $derived(scoped.filter((s) => !q.trim() || (s.name + ' ' + s.slug + ' ' + s.url).toLowerCase().includes(q.trim().toLowerCase())));
 	const scope = $derived(currentWorkspace());
 	const multi = $derived(workspaces.list.length > 1 && workspaces.selected === 'all');
-	const suggest = (n: string) => n.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 30);
-	const bases = $derived(info?.domains ?? []);
-	const exampleURL = $derived(bases.find((b) => b.id === form.domain_id)?.example_url ?? info?.example_url ?? '');
-	const preview = $derived(exampleURL.replace('://example.', `://${(slugTouched ? form.slug : suggest(form.name)) || 'your-site'}.`));
-
-	function start() {
-		const ws = workspaces.selected !== 'all' && !workspaces.list.find((w) => w.id === workspaces.selected)?.personal ? workspaces.selected : '';
-		form = { name: '', slug: '', domain_id: bases.find((b) => b.primary)?.id ?? '', workspace_id: ws, spa: false };
-		slugTouched = false;
-		formError = '';
+	function start(id = '') {
+		template = id;
 		open = true;
-	}
-	async function create(e: SubmitEvent) {
-		e.preventDefault();
-		busy = true;
-		formError = '';
-		try {
-			const s = await api<Site>('POST', '/sites', { ...form, slug: slugTouched ? form.slug : '' });
-			open = false;
-			goto(`/sites/${s.id}`);
-		} catch (err) {
-			formError = msg(err);
-		} finally {
-			busy = false;
-		}
 	}
 	const status = (s: Site) => (s.disabled ? { tone: 'fail', label: 'Suspended' } : s.current_release ? { tone: 'run', label: 'Live' } : { tone: undefined, label: 'Empty' });
 </script>
 
 <svelte:head><title>Sites · RivetPanel</title></svelte:head>
 
-<section class="card card-glow grid gap-6 p-6 sm:p-8 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
-	<div>
-		<p class="eyebrow">Static sites{scope ? ` · ${scope.personal ? 'Personal workspace' : scope.name}` : ''}</p>
-		<h1 class="mt-2 text-[2rem] leading-tight font-semibold tracking-tight">Publish a <span class="text-action">website</span>.</h1>
-		<p class="mt-2 max-w-prose text-muted">Host a bot's dashboard, documentation or landing page: upload a ZIP of built files or deploy a GitHub branch, then add your own domain.</p>
-	</div>
-	{#if info?.enabled}<button class="btn btn-primary" onclick={start}><Icon name="plus" />New site</button>{/if}
-</section>
+<header class="page-head">
+	<h1 class="font-semibold">Sites</h1>
+	{#if sites}<p class="text-small text-muted">{scoped.length} {scoped.length === 1 ? 'site' : 'sites'}{scope ? `, ${scope.personal ? 'personal workspace' : scope.name}` : ''}</p>{/if}
+	{#if info?.enabled && can('sites.create')}
+		<div class="ml-auto flex gap-2">
+			<a class="btn" href="/templates?tab=sites"><Icon name="layers" size={14} />Templates</a>
+			<button class="btn btn-primary" onclick={() => start()}><Icon name="plus" />New site</button>
+		</div>
+	{/if}
+</header>
 
 {#if error}<Notice tone="fail" class="mt-4" live>{error}</Notice>{/if}
 
@@ -110,68 +103,41 @@
 		{#if sites === null}
 			<Skeleton rows={3} label="Loading sites" />
 		{:else if scoped.length === 0}
-			<EmptyState title={sites.length ? 'No sites in this workspace yet' : 'Create your first site'}>
-				<p>A site gets its own address at <code>{info.example_url?.replace('://example.', '://your-site.')}</code>. Upload a ZIP of your built site (for example the <code>dist</code> folder) and it is live within seconds.</p>
-				{#snippet actions()}
-					<button class="btn btn-primary" onclick={start}><Icon name="plus" />New site</button>
-					{#if sites?.length}<button class="btn" onclick={() => selectWorkspace('all')}>Show all workspaces</button>{/if}
-				{/snippet}
-			</EmptyState>
+			<div class="rows"><div class="rows-empty">
+				<span>{sites.length ? 'No sites in this workspace yet.' : 'No sites yet.'} A site gets its own address at <code>{info.example_url?.replace('://example.', '://your-site.')}</code>; upload a ZIP of your built files and it is live within seconds{templates.length ? ', or start from one of the ready-made templates' : ''}.</span>
+				{#if templates.length && can('sites.create')}<a class="link" href="/templates?tab=sites">Browse site templates</a>{/if}
+				{#if sites?.length}<button class="link" onclick={() => selectWorkspace('all')}>Show all workspaces</button>{/if}
+			</div></div>
 		{:else}
-			<ul class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+			<div class="rows" role="table" aria-label="Sites">
+				<div class="rows-head hidden grid-cols-[minmax(0,1.4fr)_7rem_minmax(0,1.4fr)_5rem_4.5rem_7rem_2.25rem] items-center gap-x-4 px-4 py-2 md:grid" role="row">
+					<span role="columnheader">Name</span><span role="columnheader">Status</span><span role="columnheader">Address</span><span role="columnheader">Size</span><span role="columnheader">Domains</span><span role="columnheader">Updated</span><span role="columnheader" class="sr-only">Open</span>
+				</div>
 				{#each shown as s (s.id)}
 					{@const st = status(s)}
-					<li class="card flex flex-col p-5">
-						<div class="flex items-start justify-between gap-2">
+					<div class="row-link grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-x-4 px-4 py-2.5 md:grid-cols-[minmax(0,1.4fr)_7rem_minmax(0,1.4fr)_5rem_4.5rem_7rem_2.25rem]" role="row">
+						<div class="flex min-w-0 items-center gap-3" role="cell">
 							{#if !noIcon[s.id]}
-								<img src={s.icon_url} alt="" class="size-10 shrink-0 rounded-tile object-cover" referrerpolicy="no-referrer" onerror={() => (noIcon[s.id] = true)} />
+								<img src={s.icon_url} alt="" class="size-8 shrink-0 rounded-control object-cover" referrerpolicy="no-referrer" onerror={() => (noIcon[s.id] = true)} />
 							{:else}
-								<span class="grid size-10 shrink-0 place-items-center rounded-tile bg-paper-2 text-action" aria-hidden="true"><Icon name="globe" /></span>
+								<span class="grid size-8 shrink-0 place-items-center rounded-control bg-paper-2 text-muted" aria-hidden="true"><Icon name="globe" size={15} /></span>
 							{/if}
-							<span class="pill" data-tone={st.tone}>{st.label}</span>
+							<div class="min-w-0">
+								<a href="/sites/{s.id}" class="block truncate font-medium hover:underline">{s.name}</a>
+								<p class="truncate text-small text-muted">{s.repo_full_name ? 'GitHub' : 'Upload'}{multi && workspaceName(s.workspace_id) ? `, ${workspaceName(s.workspace_id)}` : ''}</p>
+							</div>
 						</div>
-						<a href="/sites/{s.id}" class="mt-4 truncate text-title font-semibold hover:underline">{s.name}</a>
-						<a href={s.url} target="_blank" rel="noopener" class="truncate font-mono text-small text-action hover:underline">{s.url.replace(/^https?:\/\//, '')}</a>
-						<dl class="mt-4 grid grid-cols-3 gap-2 border-t border-rule-soft pt-4">
-							<div><dt class="eyebrow">Size</dt><dd class="mt-0.5 font-mono text-small font-medium">{s.current_release ? fmtBytes(s.release_bytes) : '—'}</dd></div>
-							<div><dt class="eyebrow">Domains</dt><dd class="mt-0.5 font-mono text-small font-medium">{s.domains}</dd></div>
-							<div><dt class="eyebrow">Source</dt><dd class="mt-0.5 truncate text-small font-medium">{s.repo_full_name ? 'GitHub' : 'Upload'}</dd></div>
-						</dl>
-						<p class="mt-3 truncate text-small text-muted">Updated {fmtAgo(s.updated_at_ms)}{multi && workspaceName(s.workspace_id) ? ` · ${workspaceName(s.workspace_id)}` : ''}</p>
-						<div class="mt-auto flex gap-2 pt-4">
-							<a href="/sites/{s.id}" class="btn btn-primary flex-1">Manage</a>
-							<a href={s.url} target="_blank" rel="noopener" class="btn btn-icon" aria-label="Open {s.name}" title="Open site"><Icon name="external" size={14} /></a>
-						</div>
-					</li>
+						<span role="cell"><span class="pill" data-tone={st.tone}>{st.label}</span></span>
+						<a href={s.url} target="_blank" rel="noopener" class="hidden truncate font-mono text-small hover:underline md:block" role="cell">{s.url.replace(/^https?:\/\//, '')}</a>
+						<span class="hidden font-mono text-small md:block" role="cell">{s.current_release ? fmtBytes(s.release_bytes) : '–'}</span>
+						<span class="hidden font-mono text-small md:block" role="cell">{s.domains}</span>
+						<span class="hidden text-small text-muted md:block" role="cell">{fmtAgo(s.updated_at_ms)}</span>
+						<a href={s.url} target="_blank" rel="noopener" class="btn btn-quiet btn-icon btn-sm justify-self-end" aria-label="Open {s.name} in a new tab" title="Open site" role="cell"><Icon name="external" size={14} /></a>
+					</div>
 				{/each}
-			</ul>
+			</div>
 		{/if}
 	</section>
 {/if}
 
-<Dialog bind:open title="New site" size="md">
-	<form id="site-form" class="grid gap-4" onsubmit={create}>
-		<label class="block"><span class="label">Name</span><input class="field" required maxlength="64" bind:value={form.name} placeholder="Bot dashboard" /></label>
-		<label class="block">
-			<span class="label">Address</span>
-			<div class="flex items-stretch">
-				<input class="field min-w-0 font-mono {bases.length > 1 ? 'rounded-r-none' : ''}" maxlength="40" value={slugTouched ? form.slug : suggest(form.name)} oninput={(e) => { slugTouched = true; form.slug = e.currentTarget.value.toLowerCase(); }} placeholder="bot-dashboard" />
-				{#if bases.length > 1}
-					<select class="field w-auto max-w-[55%] rounded-l-none border-l-0 font-mono" bind:value={form.domain_id} aria-label="Sites domain">{#each bases as b (b.id)}<option value={b.id}>.{b.domain}{b.label ? ` (${b.label})` : ''}</option>{/each}</select>
-				{/if}
-			</div>
-			<span class="help">Served at <code class="text-ink">{preview}</code>. Lower-case letters, digits and hyphens. You can change it, or add your own domain, afterwards.</span>
-		</label>
-		{#if creatable().length > 1}
-			<label class="block"><span class="label">Workspace</span>
-				<select class="field" bind:value={form.workspace_id}>{#each creatable() as w (w.id)}<option value={w.personal ? '' : w.id}>{w.personal ? 'Personal' : w.name}</option>{/each}</select>
-			</label>
-		{/if}
-		<label class="flex items-start gap-2.5"><input type="checkbox" class="mt-0.5" bind:checked={form.spa} /><span>Single-page application<span class="help mt-0">Unknown paths serve <code>index.html</code>, for React, Vue or Svelte apps with client-side routing.</span></span></label>
-		{#if formError}<Notice tone="fail" live>{formError}</Notice>{/if}
-	</form>
-	{#snippet footer()}
-		<button class="btn" onclick={() => (open = false)}>Cancel</button>
-		<button class="btn btn-primary" type="submit" form="site-form" disabled={busy || !form.name.trim()}>Create site</button>
-	{/snippet}
-</Dialog>
+{#if info?.enabled}<NewSiteDialog bind:open {info} {templates} {template} />{/if}

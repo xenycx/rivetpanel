@@ -2,6 +2,8 @@ package api
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/base64"
 	"errors"
 	"io"
 	"log/slog"
@@ -116,6 +118,26 @@ func TestStaticAndFallback(t *testing.T) {
 	}
 }
 
+// Files are streamed, not read whole: the body and its length must still be
+// exact, directories are never served, and HEAD sends no body.
+func TestStaticStreamsWholeFiles(t *testing.T) {
+	big := strings.Repeat("0123456789abcdef", 64<<10) // 1 MiB, several stream chunks
+	ui := fstest.MapFS{
+		"index.html":            {Data: []byte("<html>shell</html>")},
+		"_app/immutable/big.js": {Data: []byte(big)},
+	}
+	app := New(Deps{Log: slog.New(slog.NewTextHandler(io.Discard, nil)), DB: fakeDB{}, UI: ui})
+	if code, _, body := do(t, app, "GET", "/_app/immutable/big.js"); code != 200 || body != big {
+		t.Fatalf("big file: code %d, %d bytes (want %d)", code, len(body), len(big))
+	}
+	if code, _, body := do(t, app, "GET", "/_app"); code != 200 || !strings.Contains(body, "shell") {
+		t.Fatalf("directory must fall back to the shell: %d %q", code, body)
+	}
+	if code, _, body := do(t, app, "HEAD", "/_app/immutable/big.js"); code != 200 || body != "" {
+		t.Fatalf("HEAD: %d, %d bytes", code, len(body))
+	}
+}
+
 func TestShellOnlyBuild(t *testing.T) {
 	ui := fstest.MapFS{"200.html": {Data: []byte("<html>spa200</html>")}}
 	app := New(Deps{Log: slog.New(slog.NewTextHandler(io.Discard, nil)), DB: fakeDB{}, UI: ui})
@@ -159,6 +181,58 @@ func TestStaticAssetTypes(t *testing.T) {
 		resp, err := app.Test(httptest.NewRequest("GET", path, nil))
 		if err != nil || resp.StatusCode != 200 || !strings.HasPrefix(resp.Header.Get("Content-Type"), want) {
 			t.Errorf("%s: %v %d %q", path, err, resp.StatusCode, resp.Header.Get("Content-Type"))
+		}
+	}
+}
+
+// The SPA shell's policy allows exactly its own inline scripts by hash, not
+// every inline script.
+func TestHTMLPolicyHashesInlineScripts(t *testing.T) {
+	theme, boot := "\n\t\tdocument.documentElement.dataset.theme = 'dark';\n\t", "{ start(); }"
+	ui := fstest.MapFS{"200.html": {Data: []byte("<html><head><script>" + theme + "</script><script src=\"/_app/x.js\"></script>" +
+		"</head><body><SCRIPT type=\"module\">" + boot + "</SCRIPT></body></html>")}}
+	app := New(Deps{Log: slog.New(slog.NewTextHandler(io.Discard, nil)), DB: fakeDB{}, UI: ui})
+	resp, err := app.Test(httptest.NewRequest("GET", "/bots/1", nil))
+	if err != nil || resp.StatusCode != 200 {
+		t.Fatal(err, resp.StatusCode)
+	}
+	csp := resp.Header.Get("Content-Security-Policy")
+	hash := func(s string) string {
+		sum := sha256.Sum256([]byte(s))
+		return "'sha256-" + base64.StdEncoding.EncodeToString(sum[:]) + "'"
+	}
+	if !strings.Contains(csp, "script-src 'self' "+hash(theme)+" "+hash(boot)+";") || strings.Count(csp, "sha256-") != 2 {
+		t.Fatalf("policy %q lacks the inline script hashes", csp)
+	}
+	if strings.Contains(strings.SplitN(strings.SplitN(csp, "script-src", 2)[1], ";", 2)[0], "unsafe-inline") {
+		t.Fatalf("script-src still allows every inline script: %q", csp)
+	}
+	if !strings.Contains(csp, "frame-ancestors 'none'") || !strings.Contains(csp, "object-src 'none'") {
+		t.Fatalf("policy lost its other directives: %q", csp)
+	}
+}
+
+// Strict-Transport-Security is sent only in production with an https
+// public address, without includeSubDomains.
+func TestHSTSOnlyForHTTPSProduction(t *testing.T) {
+	for _, tc := range []struct {
+		secure bool
+		url    string
+		want   string
+	}{
+		{true, "https://panel.example.com", "max-age=31536000"},
+		{true, "HTTPS://panel.example.com", "max-age=31536000"},
+		{true, "http://panel.example.com", ""},
+		{true, "", ""},
+		{false, "https://panel.example.com", ""},
+	} {
+		app := New(Deps{Log: slog.New(slog.NewTextHandler(io.Discard, nil)), DB: fakeDB{}, SecureCookies: tc.secure, PublicURL: tc.url})
+		resp, err := app.Test(httptest.NewRequest("GET", "/api/v1/healthz", nil))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := resp.Header.Get("Strict-Transport-Security"); got != tc.want {
+			t.Errorf("secure=%v url=%q: HSTS %q, want %q", tc.secure, tc.url, got, tc.want)
 		}
 	}
 }

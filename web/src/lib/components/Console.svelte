@@ -11,7 +11,29 @@
 	import EmptyState from '$lib/components/ui/EmptyState.svelte';
 	import Icon from '$lib/components/ui/Icon.svelte';
 
-	let { bot }: { bot: Bot } = $props();
+	// fill: on wide screens the console takes the rest of the viewport below
+	// it, so the whole terminal is visible without scrolling the page.
+	let { bot, fill = false }: { bot: Bot; fill?: boolean } = $props();
+	let frame: HTMLDivElement | undefined = $state();
+	let fillHeight = $state(0);
+	$effect(() => {
+		if (!fill || !frame) return;
+		const size = () => {
+			if (!frame) return;
+			if (window.innerWidth < 1024) return void (fillHeight = 0);
+			const top = frame.getBoundingClientRect().top + window.scrollY;
+			fillHeight = Math.max(320, Math.floor(window.innerHeight - top - 24));
+		};
+		size();
+		const ro = new ResizeObserver(size);
+		const main = frame.closest('main');
+		if (main) ro.observe(main);
+		window.addEventListener('resize', size);
+		return () => {
+			ro.disconnect();
+			window.removeEventListener('resize', size);
+		};
+	});
 	// Input needs the power permission (the server re-checks it on every line).
 	const canInput = $derived(can(bot, Perm.power));
 	const noun = $derived(bot.kind === 'game' ? 'server' : 'bot');
@@ -225,9 +247,8 @@
 {:else}
 	<!-- A terminal window: title bar with the stream's state and tools, the
 	     output, and the line that goes to the bot's standard input. -->
-	<div class="overflow-hidden rounded-tile border border-rule-soft bg-term text-term-ink">
+	<div bind:this={frame} class="flex flex-col overflow-hidden rounded-tile border border-rule-soft bg-term text-term-ink" style={fillHeight ? `height: ${fillHeight}px` : undefined}>
 		<div class="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-white/8 bg-black/25 px-3.5 py-2">
-			<span class="flex shrink-0 gap-1.5" aria-hidden="true"><i class="size-3 rounded-pill bg-fail/80"></i><i class="size-3 rounded-pill bg-warn/80"></i><i class="size-3 rounded-pill bg-run/80"></i></span>
 			<span class="eyebrow !text-term-ink/65">Console</span>
 			<span class="inline-flex items-center gap-1.5 text-[.72rem] font-medium {linkColor}" aria-live="polite">
 				<span class="size-1.5 rounded-pill bg-current {link === 'live' ? '' : 'animate-pulse'}" aria-hidden="true"></span>{linkText}{#if paused}<span class="text-term-ink/60">, paused</span>{/if}
@@ -243,18 +264,18 @@
 				<button class="btn btn-quiet btn-icon btn-sm !text-term-ink/70 hover:!bg-white/10 hover:!text-term-ink" onclick={() => clearView()} title="Clear this view (the {noun} is not affected)" aria-label="Clear view"><Icon name="trash" size={13} /></button>
 			</div>
 		</div>
-		<div bind:this={host} class="h-[max(20rem,calc(100dvh-30rem))] overflow-hidden p-2" aria-label="Bot output" role="log"></div>
+		<div bind:this={host} class="{fillHeight ? 'min-h-0 flex-1' : 'h-[clamp(18rem,calc(100dvh-27rem),34rem)]'} overflow-hidden p-2" aria-label="{bot.kind === 'game' ? 'Server' : 'Bot'} output" role="log"></div>
 		{#if canInput}
 			<form class="flex items-center gap-2 border-t border-white/8 bg-black/20 px-3.5 py-1.5" onsubmit={send}>
 				<label class="sr-only" for="stdin">{bot.kind === 'game' ? 'Send a console command' : 'Send a line to the bot'}</label>
 				<span class="font-mono text-term-ink/50 select-none" aria-hidden="true">›</span>
-				<input id="stdin" class="min-h-9 min-w-0 flex-1 bg-transparent font-mono text-[.8125rem] text-term-ink outline-none placeholder:text-term-ink/40" placeholder={bot.kind === 'game' ? 'Type a command, for example: say Hello' : 'Send a line to the bot’s standard input'} autocomplete="off" spellcheck="false" bind:value={line} disabled={link !== 'live'} />
+				<input id="stdin" aria-describedby="stdin-help" class="min-h-9 min-w-0 flex-1 bg-transparent font-mono text-[.8125rem] text-term-ink outline-none placeholder:text-term-ink/40" placeholder={bot.kind === 'game' ? 'Type a command, for example: say Hello' : 'Send a line to the bot’s standard input'} autocomplete="off" spellcheck="false" bind:value={line} disabled={link !== 'live'} />
 				<button class="btn btn-quiet btn-icon btn-sm !text-term-ink/70 hover:!bg-white/10 hover:!text-term-ink" disabled={link !== 'live' || line === ''} aria-label="Send" title="Send"><Icon name="send" size={14} /></button>
 			</form>
 		{/if}
 	</div>
 	{#if notice}<p class="mt-2 text-small text-warn" role="status">{notice}</p>{/if}
-	<p class="mt-2 text-small text-muted">
+	<p id="stdin-help" class="{fillHeight ? 'sr-only' : 'mt-2 text-small text-muted'}">
 		{#if canInput}{bot.kind === 'game' ? 'Commands go to the server console, not to a shell (no leading slash needed).' : 'Input goes to the bot process, not to a shell.'} One console at a time can send input.{:else}You can watch the output. Sending input needs the start and stop permission.{/if}
 		Closing this page does not stop the {noun}.
 	</p>

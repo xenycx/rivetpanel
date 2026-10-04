@@ -1,0 +1,6 @@
+id: landing
+name: Landing page
+description: A one-page introduction with a headline, three feature cards and a call to action. Good for a product, a bot or a project.
+tags: [business, one-page, light]
+accent: "#4f46e5"
+theme: light

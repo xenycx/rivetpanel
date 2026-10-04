@@ -21,7 +21,6 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -32,6 +31,7 @@ import (
 
 	"github.com/xenycx/rivetpanel/internal/domain"
 	"github.com/xenycx/rivetpanel/internal/filesystem"
+	"github.com/xenycx/rivetpanel/internal/lazyre"
 )
 
 // Authenticator verifies SFTP credentials (password or API key). The returned
@@ -372,7 +372,7 @@ type handler struct {
 	cache map[string]cacheEntry // bot id -> may still edit files
 }
 
-var unsafeName = regexp.MustCompile(`[^A-Za-z0-9._-]+`)
+var unsafeName = lazyre.New(`[^A-Za-z0-9._-]+`)
 
 // dirName is the directory a bot appears as: readable name plus an id fragment
 // that keeps it unique and stable across renames.

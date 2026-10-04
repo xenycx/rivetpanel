@@ -35,11 +35,17 @@ type Bot struct {
 	Kind string
 	// Game servers: the pinned blueprint revision, the chosen image label
 	// ("" = automatic) and installation state.
-	BlueprintID        string
-	BlueprintRevision  int64
-	ImageChoice        string
-	InstallState       string
-	InstalledVersion   string       // version the last installation resolved
+	BlueprintID       string
+	BlueprintRevision int64
+	ImageChoice       string
+	InstallState      string
+	InstalledVersion  string // version the last installation resolved
+	// JVMArgs are the server's validated extra JVM options (SERVER_JVM_ARGS)
+	// and JVMArgsUpdatedMS when they last changed (0 = never set);
+	// JVMArgsGeneration is the generation they were saved at.
+	JVMArgs            string
+	JVMArgsUpdatedMS   int64
+	JVMArgsGeneration  int64
 	Allocations        []Allocation // game servers; loaded by GetBot only
 	Runtime            string
 	ImageRef           string
@@ -164,6 +170,7 @@ const (
 	ReasonRuntimeMissing = "runtime_missing" // the runtime was removed from the catalog
 	ReasonCleanupFailed  = "cleanup_failed"  // deletion could not finish; retrying
 	ReasonKilled         = "killed"          // stopped with SIGKILL by a user
+	ReasonPortConflict   = "port_conflict"   // a published host port is taken; not retried until the next Start
 )
 
 const (

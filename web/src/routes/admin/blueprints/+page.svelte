@@ -7,6 +7,7 @@
 	import { toast } from '$lib/ui/toast.svelte';
 	import Dialog from '$lib/components/ui/Dialog.svelte';
 	import Icon from '$lib/components/ui/Icon.svelte';
+	import GameIcon from '$lib/components/ui/GameIcon.svelte';
 	import Notice from '$lib/components/ui/Notice.svelte';
 	import Skeleton from '$lib/components/ui/Skeleton.svelte';
 
@@ -82,7 +83,11 @@
 			error = msg(e);
 		}
 	}
-	onMount(load);
+	onMount(() => {
+		load();
+		// From the Templates page: /admin/blueprints?import=egg opens the egg import.
+		if (session.features.games && new URLSearchParams(location.search).get('import') === 'egg') openEgg();
+	});
 
 	async function setEnabled(b: Blueprint, enabled: boolean) {
 		try {
@@ -148,6 +153,8 @@
 	<ul class="list-card mt-5">
 		{#each list as b (b.id)}
 			<li class="flex flex-col gap-3 px-4 py-3.5 sm:flex-row sm:items-center sm:justify-between">
+				<div class="flex min-w-0 items-start gap-3">
+				<GameIcon type={b} size={36} />
 				<div class="min-w-0">
 					<div class="flex flex-wrap items-center gap-2">
 						<h3 class="font-medium">{b.name}</h3>
@@ -157,6 +164,7 @@
 						{#if !b.enabled}<span class="pill" data-tone="fail">Hidden</span>{/if}
 					</div>
 					<p class="mt-1 text-small text-muted">Revision {b.current_revision} · {b.servers} {b.servers === 1 ? 'server' : 'servers'} · {b.spec.images.length} images · {b.spec.variables.length} settings</p>
+				</div>
 				</div>
 				<div class="flex shrink-0 flex-wrap gap-2">
 					<a class="btn btn-sm" href="/api/v1/admin/blueprints/{b.slug}/export" download><Icon name="download" size={14} />Export</a>

@@ -16,11 +16,10 @@
 </script>
 
 {#if session.user && canAdminister()}
-	<header class="border-b border-rule-soft pb-5">
-		<p class="eyebrow">Administration</p>
-		<h1 class="mt-1 text-page">This installation<span class="text-action">.</span></h1>
-		<p class="mt-0.5 text-muted">
-			{#if session.user.role === 'admin'}Accounts, roles, workspaces, hosted sites, game servers, the host and its health.{:else}The parts of the administration your role ({session.user.role_name || 'custom'}) allows.{/if}
+	<header class="page-head border-b border-rule-soft pb-4">
+		<h1 class="font-semibold">Administration</h1>
+		<p class="text-small text-muted">
+			{#if session.user.role === 'admin'}Accounts, roles, workspaces, sites, game servers and the host.{:else}The parts of the administration your role ({session.user.role_name || 'custom'}) allows.{/if}
 		</p>
 	</header>
 	<div class="mt-6 flex flex-col gap-6 md:flex-row md:gap-10">

@@ -10,9 +10,13 @@
 	import SettingsSection from '$lib/components/ui/SettingsSection.svelte';
 	import LogoEditor from '$lib/components/LogoEditor.svelte';
 	import Icon from '$lib/components/ui/Icon.svelte';
+	import Notifications from '$lib/components/Notifications.svelte';
+	import { session } from '$lib/session.svelte';
 	import { creatable, loadWorkspaces, workspaceName } from '$lib/workspaces.svelte';
 
 	let { bot, stopped, onSaved }: { bot: Bot; stopped: boolean; onSaved: (b: Bot) => void } = $props();
+	const isGame = $derived(bot.kind === 'game');
+	const noun = $derived(isGame ? 'server' : 'bot');
 
 	// Form state starts from the bot once; saving replaces the bot and resets it.
 	const initial = () => ({ name: bot.name, memoryMiB: Math.round(bot.memory_bytes / MiB), cpus: bot.nano_cpus / 1e9, pids: bot.pids_limit });
@@ -54,7 +58,7 @@
 			await loadWorkspaces();
 			toast(`Moved to ${workspaceName(b.workspace_id) || 'the workspace'}`, 'success');
 		} catch (err) {
-			toast(err instanceof ApiError ? err.message : 'The bot could not be moved.', 'fail');
+			toast(err instanceof ApiError ? err.message : `The ${noun} could not be moved.`, 'fail');
 		}
 	}
 
@@ -78,7 +82,7 @@
 				rt = r.runtimes.find((x) => x.id === bot.runtime) ?? null;
 			})
 			.catch(() => {});
-		return registerDirty({ label: 'Bot settings', isDirty: () => dirty, save: async () => await save() });
+		return registerDirty({ label: bot.kind === 'game' ? 'Server settings' : 'Bot settings', isDirty: () => dirty, save: async () => await save() });
 	});
 
 	const dirty = $derived(JSON.stringify(form) !== JSON.stringify(base));
@@ -110,8 +114,10 @@
 	async function remove() {
 		const ok = await confirmDialog({
 			title: `Delete ${bot.name}?`,
-			body: 'The container, every file in the workspace, its environment variables, backups and history are removed permanently. This cannot be undone.',
-			confirmLabel: 'Delete bot permanently',
+			body: isGame
+				? 'The container, the world and every other file of the server, its backups and history are removed permanently, and its ports go back to the pool. This cannot be undone.'
+				: 'The container, every file in the workspace, its environment variables, backups and history are removed permanently. This cannot be undone.',
+			confirmLabel: `Delete ${noun} permanently`,
 			tone: 'danger',
 			typeToConfirm: bot.name
 		});
@@ -119,14 +125,14 @@
 		try {
 			await api('DELETE', `/bots/${bot.id}`);
 			toast(`Deleted ${bot.name}`);
-			await goto('/dashboard');
+			await goto(isGame ? '/servers' : '/dashboard');
 		} catch (err) {
-			toast(err instanceof ApiError ? err.message : 'The bot could not be deleted.', 'fail');
+			toast(err instanceof ApiError ? err.message : `The ${noun} could not be deleted.`, 'fail');
 		}
 	}
 </script>
 
-<SettingsSection title="Name and resources" description="The host enforces these limits. A bot that uses more memory than its limit is stopped and restarted according to its restart policy. Changes need a stopped bot.">
+<SettingsSection title="Name and resources" description="The host enforces these limits. A {noun} that uses more memory than its limit is stopped and restarted according to its restart policy. Changes need a stopped {noun}.">
 	<form onsubmit={save}>
 		<fieldset class="grid min-w-0 gap-5" disabled={!stopped}>
 			<label class="block">
@@ -150,7 +156,7 @@
 					<span class="help">1 to 4096 at once</span>
 				</label>
 			</div>
-			{#if rt?.has_build}<p class="text-small text-muted">Builds run separately with up to {fmtBytes(Math.max(rt.build_memory_bytes, form.memoryMiB * MiB))}.</p>{/if}
+			{#if rt?.has_build && !isGame}<p class="text-small text-muted">Builds run separately with up to {fmtBytes(Math.max(rt.build_memory_bytes, form.memoryMiB * MiB))}.</p>{/if}
 		</fieldset>
 		{#if error}<Notice tone="fail" class="mt-4" live>{error}</Notice>{/if}
 		<div class="mt-5 flex flex-wrap items-center gap-3">
@@ -160,15 +166,24 @@
 	</form>
 </SettingsSection>
 
-<SettingsSection title="Logo" description="Shown in the bot list, the sidebar and on the bot's public page. Without a custom logo the bot's Discord avatar is used: it arrives through the telemetry SDK, or you can get it now with the bot's token.">
-	<LogoEditor src={bot.logo_url} custom={bot.custom_logo} fallbackLabel={bot.name.slice(0, 2).toUpperCase()} busy={logoBusy}
-		onUpload={(image) => logo('PUT', { image })} onRemove={() => logo('DELETE')}>
-		<button type="button" class="btn btn-sm" disabled={logoBusy} onclick={() => logo('POST')} title="Uses the bot token stored in this bot's variables"><Icon name="discord" size={14} />Get avatar from Discord</button>
-	</LogoEditor>
-	{#if bot.discord_username}<p class="mt-2 text-small text-muted">Discord user: {bot.discord_username}</p>{/if}
-</SettingsSection>
+{#if session.features.health}<Notifications {bot} />{/if}
 
-<SettingsSection title="Tags" description="Group bots on the Bots page, for example by team, server or environment. Everyone with access sees them.">
+{#if isGame}
+	<SettingsSection title="Logo" description="Shown in the server list, the sidebar and the server's header. Without a custom logo the server type's icon is used.">
+		<LogoEditor src={bot.logo_url} custom={bot.custom_logo} fallbackLabel={bot.name.slice(0, 2).toUpperCase()} busy={logoBusy}
+			onUpload={(image) => logo('PUT', { image })} onRemove={() => logo('DELETE')} />
+	</SettingsSection>
+{:else}
+	<SettingsSection title="Logo" description="Shown in the bot list, the sidebar and on the bot's public page. Without a custom logo the bot's Discord avatar is used: it arrives through the telemetry SDK, or you can get it now with the bot's token.">
+		<LogoEditor src={bot.logo_url} custom={bot.custom_logo} fallbackLabel={bot.name.slice(0, 2).toUpperCase()} busy={logoBusy}
+			onUpload={(image) => logo('PUT', { image })} onRemove={() => logo('DELETE')}>
+			<button type="button" class="btn btn-sm" disabled={logoBusy} onclick={() => logo('POST')} title="Uses the bot token stored in this bot's variables"><Icon name="discord" size={14} />Get avatar from Discord</button>
+		</LogoEditor>
+		{#if bot.discord_username}<p class="mt-2 text-small text-muted">Discord user: {bot.discord_username}</p>{/if}
+	</SettingsSection>
+{/if}
+
+<SettingsSection title="Tags" description={isGame ? 'Group servers on the Servers page, for example by community, game mode or environment. Everyone with access sees them.' : 'Group bots on the Bots page, for example by team, server or environment. Everyone with access sees them.'}>
 	<form class="flex flex-wrap items-start gap-2" onsubmit={saveTags}>
 		<label class="block min-w-0 flex-1 basis-64">
 			<span class="sr-only">Tags</span>
@@ -180,21 +195,21 @@
 </SettingsSection>
 
 {#if (bot.permissions & 16) !== 0 && creatable().length > 1}
-	<SettingsSection title="Workspace" description="Everyone in the workspace can see this bot and act on it according to their role. Moving it changes who has access; per-bot sharing stays.">
+	<SettingsSection title="Workspace" description="Everyone in the workspace can see this {noun} and act on it according to their role. Moving it changes who has access; per-{noun} sharing stays.">
 		<form class="flex flex-wrap items-end gap-2" onsubmit={moveWorkspace}>
 			<label class="block min-w-0 flex-1 basis-64"><span class="sr-only">Workspace</span>
 				<select class="field" bind:value={workspaceId}>{#each creatable() as w (w.id)}<option value={w.id}>{w.personal ? 'Personal' : w.name}</option>{/each}</select>
 			</label>
-			<button class="btn" disabled={workspaceId === bot.workspace_id}>Move bot</button>
+			<button class="btn" disabled={workspaceId === bot.workspace_id}>Move {noun}</button>
 		</form>
 	</SettingsSection>
 {/if}
 
 {#if !bot.shared}
-	<SettingsSection title="Delete this bot" description="Removes the container, all files, environment variables, backups and history.">
+	<SettingsSection title="Delete this {noun}" description={isGame ? 'Removes the container, the world and all other files, backups and history, and releases its ports.' : 'Removes the container, all files, environment variables, backups and history.'}>
 		<div class="flex flex-wrap items-center justify-between gap-3 rounded-tile border border-fail/30 bg-fail/5 px-4 py-3">
 			<p class="min-w-0 flex-1 basis-64 text-small">This cannot be undone. Create and download a backup first if you might need it.</p>
-			<button class="btn btn-danger" onclick={remove}>Delete bot…</button>
+			<button class="btn btn-danger" onclick={remove}>Delete {noun}…</button>
 		</div>
 	</SettingsSection>
 {/if}

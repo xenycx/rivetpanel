@@ -88,6 +88,10 @@ type UsageService struct {
 	LocalNode      string
 	Log            *slog.Logger
 	Now            func() time.Time
+	// Retention returns the analytics retention chosen in the panel; nil
+	// (or a zero value) keeps 3 days of 5-minute, 35 days of hourly and
+	// 400 days of daily rows.
+	Retention func() MetricsRetention
 
 	mu     sync.Mutex
 	bucket int64
@@ -401,13 +405,27 @@ func (s *UsageService) Rollup(ctx context.Context) error {
 // Prune deletes rows past their retention in small batches.
 func (s *UsageService) Prune(ctx context.Context) error {
 	now := s.now()
+	r5m, r1h, r1d := usageRetention5m, usageRetention1h, usageRetention1d
+	if s.Retention != nil {
+		day := 24 * time.Hour
+		m := s.Retention()
+		if m.Usage5mDays > 0 {
+			r5m = time.Duration(m.Usage5mDays) * day
+		}
+		if m.Usage1hDays > 0 {
+			r1h = time.Duration(m.Usage1hDays) * day
+		}
+		if m.Usage1dDays > 0 {
+			r1d = time.Duration(m.Usage1dDays) * day
+		}
+	}
 	for _, t := range []struct {
 		res  int64
 		keep time.Duration
 		node bool
 	}{
-		{domain.UsageRes5m, usageRetention5m, false}, {domain.UsageRes1h, usageRetention1h, false}, {domain.UsageRes1d, usageRetention1d, false},
-		{domain.UsageRes1h, usageRetention1h, true}, {domain.UsageRes1d, usageRetention1d, true},
+		{domain.UsageRes5m, r5m, false}, {domain.UsageRes1h, r1h, false}, {domain.UsageRes1d, r1d, false},
+		{domain.UsageRes1h, r1h, true}, {domain.UsageRes1d, r1d, true},
 	} {
 		before := now.Add(-t.keep).UnixMilli()
 		for range 100 {

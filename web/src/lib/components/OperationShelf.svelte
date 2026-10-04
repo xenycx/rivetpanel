@@ -3,7 +3,7 @@
 	import { page } from '$app/state';
 	import { api } from '$lib/api/client';
 	import type { OpPage, Operation } from '$lib/api/types';
-	import { elapsed, kindNoun, kindVerb, opHref } from '$lib/ops';
+	import { elapsed, opNoun, opVerb, opHref } from '$lib/ops';
 	import { toast } from '$lib/ui/toast.svelte';
 	import Icon from '$lib/components/ui/Icon.svelte';
 
@@ -31,7 +31,7 @@
 			// Finished since the last look: report the outcome.
 			api<Operation>('GET', `/bots/${o.bot_id}/operations/${id}`)
 				.then((f) => {
-					const what = `${kindNoun[f.kind]} of ${f.bot_name}`;
+					const what = `${opNoun(f)} of ${f.bot_name}`;
 					if (f.status === 'succeeded') toast(`${what} finished`, 'success', { label: 'View', href: opHref(f) });
 					else if (f.status === 'failed') toast(`${what} failed${f.message ? `: ${f.message}` : ''}`, 'fail', { label: 'Details', href: opHref(f) });
 					else if (f.status === 'cancelled') toast(`${what} was cancelled`, 'info');
@@ -56,12 +56,12 @@
 	});
 
 	// The bot page already shows its own work prominently; the shelf is for elsewhere.
-	const here = $derived(page.url.pathname.startsWith('/bots/') ? page.url.pathname.split('/')[2] : '');
+	const here = $derived(/^\/(bots|servers)\//.test(page.url.pathname) ? page.url.pathname.split('/')[2] : '');
 	const shown = $derived(ops.filter((o) => o.bot_id !== here));
 </script>
 
 {#if shown.length}
-	<aside class="pb-safe fixed inset-x-0 bottom-0 z-30 border-t border-rule-soft bg-raised/95 shadow-overlay backdrop-blur-sm sm:right-auto sm:bottom-3 sm:left-3 sm:w-96 sm:border sm:pb-0" aria-label="Work in progress">
+	<aside class="pb-safe fixed inset-x-0 bottom-0 z-30 border-t border-rule-soft bg-raised/95 shadow-overlay backdrop-blur-sm sm:right-3 sm:bottom-3 sm:left-auto sm:w-96 sm:border sm:pb-0" aria-label="Work in progress">
 		<button class="flex w-full items-center gap-2 px-3 py-2 text-left" aria-expanded={!collapsed} onclick={() => (collapsed = !collapsed)}>
 			<span class="size-2 bg-warn" aria-hidden="true"></span>
 			<span class="flex-1 font-medium">{shown.length} operation{shown.length === 1 ? '' : 's'} in progress</span>
@@ -72,7 +72,7 @@
 				{#each shown.slice(0, 6) as o (o.id)}
 					<li class="spine border-b border-rule-soft last:border-b-0" data-tone="warn" data-busy="true">
 						<a href={opHref(o)} class="block py-2 pr-3 pl-5 hover:bg-paper">
-							<span class="block truncate">{kindVerb[o.kind]} <span class="font-medium">{o.bot_name}</span></span>
+							<span class="block truncate">{opVerb(o)} <span class="font-medium">{o.bot_name}</span></span>
 							<span class="block truncate text-small text-muted">{o.stage || 'Waiting to start'}, {elapsed(o, now)}</span>
 						</a>
 					</li>

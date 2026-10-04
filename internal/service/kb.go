@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"errors"
-	"regexp"
 	"slices"
 	"sort"
 	"strings"
@@ -14,6 +13,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/xenycx/rivetpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/lazyre"
 )
 
 // Knowledgebase limits.
@@ -270,7 +270,7 @@ func (s *KBService) Search(ctx context.Context, viewer *domain.User, q string, l
 	return hits, nil
 }
 
-var mdNoise = regexp.MustCompile("(?m)^\\s*(#{1,6}|>|[-*]|\\d+\\.)\\s+|[`*_|]|\\[([^\\]]*)\\]\\([^)]*\\)")
+var mdNoise = lazyre.New("(?m)^\\s*(#{1,6}|>|[-*]|\\d+\\.)\\s+|[`*_|]|\\[([^\\]]*)\\]\\([^)]*\\)")
 
 // kbExcerptOf is the start of a Markdown body as plain text.
 func kbExcerptOf(body string) string {
@@ -289,7 +289,7 @@ func kbExcerptOf(body string) string {
 	return t
 }
 
-var fenceRe = regexp.MustCompile("(?s)```.*?(```|$)")
+var fenceRe = lazyre.New("(?s)```.*?(```|$)")
 
 func stripFences(s string) string { return fenceRe.ReplaceAllString(s, " ") }
 
@@ -347,7 +347,7 @@ type KBArticleInput struct {
 	Position   *int
 }
 
-var kbSlugRe = regexp.MustCompile(`^[a-z0-9]+(?:-[a-z0-9]+)*$`)
+var kbSlugRe = lazyre.New(`^[a-z0-9]+(?:-[a-z0-9]+)*$`)
 
 func validKBSlug(s string) bool { return len(s) <= kbSlugMax && kbSlugRe.MatchString(s) }
 
@@ -379,8 +379,8 @@ func kbSlugFrom(title string) string {
 }
 
 var (
-	mdLinkTarget = regexp.MustCompile(`\]\(\s*<?([^)\s>]*)`)
-	mdCodeSpan   = regexp.MustCompile("`[^`\\n]*`")
+	mdLinkTarget = lazyre.New(`\]\(\s*<?([^)\s>]*)`)
+	mdCodeSpan   = lazyre.New("`[^`\\n]*`")
 )
 
 // CheckKBMarkdown is the server-side half of safe rendering. Bodies are

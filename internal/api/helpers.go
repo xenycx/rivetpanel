@@ -126,6 +126,7 @@ type botDTO struct {
 	BlueprintRevision int64      `json:"blueprint_revision,omitempty"`
 	ImageChoice       string     `json:"image_choice,omitempty"`
 	InstallState      string     `json:"install_state,omitempty"`
+	InstalledVersion  string     `json:"installed_version,omitempty"` // what the last installation resolved, e.g. "1.21.11"
 	Allocations       []allocDTO `json:"allocations,omitempty"`
 }
 
@@ -193,7 +194,7 @@ func phaseOf(b domain.Bot, runnerErr error, hasRunner bool) string {
 	switch reason {
 	case domain.ReasonCleanExit:
 		return "exited"
-	case domain.ReasonGaveUp, domain.ReasonExitedNoRetry, domain.ReasonRuntimeMissing:
+	case domain.ReasonGaveUp, domain.ReasonExitedNoRetry, domain.ReasonRuntimeMissing, domain.ReasonPortConflict:
 		return "failed"
 	}
 	if b.ObservedState == "failed" {
@@ -252,7 +253,7 @@ func toBotBase(b domain.Bot) botDTO {
 		Phase:       phaseOf(b, nil, true), StateReason: b.StateReason, RestartCount: b.RestartCount, NextRetryAtMS: b.NextRetryAtMS,
 		LastStartedAtMS: b.LastStartedAtMS, LogoURL: logoURL(b), CustomLogo: b.LogoUpdatedMS > 0,
 		Kind: kindOf(b), BlueprintID: b.BlueprintID, BlueprintRevision: b.BlueprintRevision, ImageChoice: b.ImageChoice,
-		InstallState: installStateOf(b),
+		InstallState: installStateOf(b), InstalledVersion: b.InstalledVersion,
 	}
 }
 

@@ -1,6 +1,6 @@
 # Platform overhaul implementation status
 
-Updated 2026-10-04 for RivetPanel 0.4.0 (see `CHANGELOG.md`). This is the durable checklist for the requested platform
+Updated 2026-10-05 for RivetPanel 0.5.0 (see `CHANGELOG.md`). This is the durable checklist for the requested platform
 overhaul. A checked item is implemented in the current working tree; partial
 items state exactly what remains.
 
@@ -24,6 +24,33 @@ items state exactly what remains.
   refuses a non-empty database without the RivetPanel schema marker before
   creating its migration ledger or modifying tables. Enforcement is in the
   SQLite migration layer. Automatic conversion is intentionally absent.
+- [x] Former-installation detection (`internal/legacy`). At start and in
+  `rivetpanel doctor`, environment variables with the former prefixes, the
+  former data directory, a former database beside `RIVET_DB_PATH` and
+  **running** containers with the former management label are logged as
+  warnings and shown in Diagnostics. Detection only: enforcement is limited
+  to the backup layer, which refuses former backups in `backup-verify` and
+  `restore`; nothing is read beyond existence or changed. Manual clean-up and
+  re-creation steps: `docs/upgrading-from-0.4.md`.
+- [x] Container deployment runs bots (verified end to end with a locally
+  built image, a host-directory data mount at a different host path and a
+  Node.js bot). Enforced by the application at start: in a container the panel
+  inspects its own container through Docker, translates bind-mount sources
+  (workspaces, add-on data, AI scratch) to host paths, and refuses to start
+  when a needed path is on no mount or in a named volume (Docker refuses
+  private bind mounts from its data root). If its own container cannot be
+  identified it only warns and assumes identical paths. `rivet-agent` has no
+  such translation and is supported directly on the node, not in a container.
+  The image runs as root by design (documented in `docs/container.md`) and has
+  a `HEALTHCHECK` (`rivetpanel health`).
+- [x] Agent CA creation moved out of the systemd sandbox: `rivetpanel keygen`
+  (or `keygen --agent-ca`) creates it; the unit keeps `/etc/rivetpanel`
+  read-only (enforced by systemd `ReadOnlyPaths`), and the panel only creates
+  the CA itself where the key directory is writable (development, containers).
+- [x] Container publishing gated on tests: the GitHub workflow's publish job
+  depends on `go vet`, `go test`, version/namespace checks and `npm run
+  check`; tag builds fail unless the tag is `v` + `VERSION`. Enforced by CI
+  configuration only (not verified here, no runner available locally).
 - [x] Applications stay represented as `bots` in storage and `/api/v1/bots`;
   game servers use `kind = game` and the `/servers` UI. This is an intentional
   compatibility decision, not unfinished renaming.
@@ -62,7 +89,9 @@ items state exactly what remains.
   (Paper, Purpur, Vanilla, Fabric, Forge, NeoForge, Folia, Velocity) defined by
   validated YAML blueprints with immutable revisions; provider version lists;
   checksum-verified downloads committed atomically; automatic Java selection
-  from Mojang metadata; install scripts in the hardened build container;
+  from the highest of the provider's declared minimum (PaperMC Fill v3), Mojang
+  metadata and the downloaded jar's class-file version, raising a too-old
+  stored image choice at installation (fixes Velocity 4 on Java 21); install scripts in the hardened build container;
   `server.properties`/`eula.txt` written before each start; graceful stop
   through the console; Server List Ping status; IP:port allocations with a
   pool, automatic port selection and host-port probing; administrator
@@ -77,6 +106,23 @@ items state exactly what remains.
   firewall rules and lifecycle hooks. Remote placement
   works and Modrinth installation works remotely (see below); remote
   allocations are probed by the node's agent (protocol 8, see below).
+- [x] JVM arguments for Java game servers (migration `0053`, schema
+  assertion 54, tables assertion unchanged at 47, no agent protocol change):
+  `startup.jvm_args`/`jvm_args_default` blueprint fields, panel-provided
+  `SERVER_JVM_ARGS` placed unquoted after `-Xmx` in new revisions of all eight
+  Minecraft built-ins (Velocity's `-XX:+UseG1GC` became its default),
+  `bots.jvm_args`, `jvm_args_updated_at_ms`, `jvm_args_generation`,
+  `PUT /api/v1/bots/{id}/game/jvm-args` (environment permission, audited as
+  `game.jvm_args` with a preset name only), presets (Aikar's flags with
+  >12 GB values, ZGC with `ZGenerational` only on Java 21-23, None), Startup
+  page box with Java version, preset Java warnings and "Restart to apply"
+  (running generation not newer than the one the options were saved at).
+  Enforcement: `blueprint.CheckJVMArgs` is application level, applied on save
+  and again by the runner before each start (invalid stored options are
+  dropped); it allows only JVM option shapes and a shell-inert character set
+  because the value is word-split by `/bin/sh`. Whether the JVM accepts an
+  option for its Java version is not checked (the JVM refuses to start).
+  Existing servers get the setting through the blueprint "Update" flow.
 - [x] SteamCMD game servers (no migration, no agent protocol change):
   `install.steamcmd` blueprint step (app id, optional beta-branch template,
   validate, image, `timeout_minutes` 5-240, `max_size_gb` 1-500), run by the
@@ -333,6 +379,33 @@ items state exactly what remains.
   (`TestRemotePortProbe*`, real bind through hub and agent), api
   (`TestRemoteGamePortProbe`), agenthub (`TestHubRefusesPreviousProtocol`)
   and `TestRemoteAgentNode` against real Docker.
+- [x] Docker-published host ports are skipped and port conflicts are not
+  crashes (2026-10-04; no schema or protocol change). Enforcement: the
+  **panel application** lists the ports every running container on its own
+  Docker host publishes (Docker API, so firewall-only publishing is seen)
+  and skips them, together with a bind test, for automatic allocations,
+  pool allocations being handed out (pool ports are now probed too), Pick a
+  free port and administrators' new pool ports (skipped and reported); it
+  refuses Start of a stopped/failed local game server onto such a port,
+  naming the container. The **agent**'s port probe adds the same Docker
+  listing to its bind test (reason text only; protocol stays 8). The
+  **runner** (panel and agents) checks the listing before starting any bot
+  or server container and classifies Docker's "port is already allocated"
+  / "address already in use" start errors as `state_reason =
+  port_conflict`: state failed, no automatic retry, crash count untouched,
+  no crash alert, until a new generation (Start again, a changed port).
+  Still a check, not a reservation: a port taken between the check and the
+  start is caught by Docker's error. Tests: runner
+  (`TestPortConflictIsNotRetriedOrCountedAsCrash`,
+  `TestPortInUseStartErrorIsAConfigurationProblem`, `TestIsPortInUse`), api
+  (`TestDockerPublishedPortsAreSkipped`), agentnode
+  (`TestPortProbeReportsDockerPublishedPorts`), alerts.
+- [x] Crash count ("crashes in a row") fixed (2026-10-04): the runner now
+  writes `restart_count` when a container is seen running (zero for a new
+  generation), clears it after `StableAfter` (1 minute) of stable running,
+  and keeps setup retries (image, install, build, create, start) on a
+  separate backoff counter that is never reported as crashes. Test:
+  `TestCrashStreakClearsAfterStableRunAndExcludesSetupRetries`.
 - [ ] Agents do not self-update, migrate workloads or provide automatic
   capacity scheduling. No privilege-boundary claim is made for Docker
   access.
@@ -590,6 +663,60 @@ items state exactly what remains.
     or older than the 200 kept per bot when analytics first start) are not
     counted.
 
+- [x] Daily log files and log archive job (no migration; settings in
+  `panel_settings`, keys `logs.*` and `metrics.*`). Enforced by the
+  application: `internal/logarchive` writes the panel log (a buffered
+  `io.Writer` beside stderr) and every server's console output (captured every
+  `capture_minutes` with a per-server cursor through Docker's since/until
+  locally and the existing agent console stream remotely; no agent protocol
+  change) to `logs/<scope>/<day>.log`, and `LogArchiveService.Run` gzips ended
+  days into `log-archive/<scope>/<day>.log.gz` (seal by rename, rebuild with
+  a named gzip member, fsync, rename, remove; idempotent and catches up after
+  restarts), then applies age and size retention (the size cap counts live
+  day files too). Live files are bounded by the application: a per-scope
+  per-day cap (`logs.max_day_mb`, default 256 MB; whole lines up to the cap,
+  then one `[rivetpanel] log capped:` marker line, the rest of the day
+  dropped and the day reported as `capped`), and no log line is written and
+  the console capture is skipped while the log filesystem has less free space
+  than `RIVET_MIN_FREE_DISK_BYTES`. Days are defined by the
+  configured archive time and IANA time zone. API: `GET/PUT
+  /api/v1/admin/log-archive`, `POST /api/v1/admin/log-archive/run`
+  (`settings.manage`, audited; `GET` also with `system.view`, read-only),
+  `GET /api/v1/admin/logs/days[/:date]`
+  (`system.view`), `GET /api/v1/bots/:id/logs/days[/:date]` (console
+  access). Graph retention (telemetry hours, analytics 5m/1h/1d days, status
+  days) is configurable within bounds and read live by the samplers and
+  pruners. Tests: `internal/logarchive/store_test.go` (boundary, archive time
+  and time zone, gzip integrity, catch-up, interrupted-pass idempotency, late
+  lines, age/size retention, capture cursor and quiet followed streams, panel
+  sink, day cap and marker across restarts, low-disk refusal, live bytes in
+  the size cap), `internal/api/logarchive_test.go` (settings validation/permission/
+  persistence, run now, bot day authorization and downloads).
+  UI: Administration → Logs and retention (`web/src/routes/admin/logs`;
+  form with client-side bound checks that mirror the server's, usage, last
+  run, Run archival now, panel log days) and Console → Log history on every
+  server (`LogDays.svelte`); the UI only hides what the server refuses.
+  Not done / not enforced: add-on container logs,
+  build output (bounded per operation) and the agent's own log are not
+  archived by day; output Docker rotated away or a container recreated
+  between captures is lost; logs are not part of `rivetpanel backup`.
+- [x] AI provider history fix: every message is sent with `content`, the
+  history is normalized before each request (matched tool results, synthesized
+  failures for missing ones, ids, no empty turns), read-only tools time out
+  after 90 s (`AIService.ToolTimeout`), open tool calls are closed when a run
+  ends and on startup, and the pre-rename deploy manifest is honoured once,
+  removed and protected from the AI. Tests: `internal/ai/provider_test.go`
+  (strict and OpenAI wire rules), `internal/api/ai_history_test.go`,
+  `internal/filesystem` legacy manifest test.
+- [x] Interface clean-up (frontend only, no API or schema change): overview
+  header with one New action, capacity numbers and server/bot tables; new
+  `/bots` list page; sidebar with a single Help & resources menu; Ask AI
+  only from the top bar; warm-grey dark tokens, neutral light tokens, accent
+  limited to primary actions, active indicators, focus and warnings; bot and
+  server pages with power controls in the header, a width-aware tab bar
+  ("More" menu) and a console that fills the window; aligned wizard footers.
+  Visual only: no access-control or enforcement boundary changed.
+
 ## Completed in 0.4.0, 0.3.0 and since 0.2.0
 
 - [x] Hosting larger open-source bots (Unreleased), verified on a real panel
@@ -672,6 +799,34 @@ items state exactly what remains.
 - [x] Static site hosting on a separate listener with ZIP and GitHub
   publishing, five immutable releases and rollback, SPA/clean-URL options and
   custom 404 pages (`docs/sites.md`).
+- [x] Site templates: five built-in static starters (landing, docs and blog,
+  portfolio, coming soon, game server community with a live status section),
+  `GET /api/v1/site-templates`, a sandboxed preview and `template_id` on
+  `POST /api/v1/sites`, which publishes the files as the first release through
+  the normal release path (`sites.create`, size limits, audit). No migration.
+  Enforcement: application level; previews are served with a `sandbox` CSP
+  (opaque origin, no scripts) and template files run only on the Sites
+  origin. Admin-authored site templates are **not** implemented. The public
+  status JSON now allows cross-origin reads (public data only).
+- [x] Game server join address: a Connect block on Manage, in the header
+  strip and the servers list, resolved from allocation alias/IP, the node's
+  public address (existing Administration → Nodes field, local node
+  included) or the panel host, with loopback/LAN warnings;
+  `GET /api/v1/game-hosts`. Enforcement: display only; reachability still
+  depends on the host's firewall and router port forwarding.
+- [x] Server page: Manage merges the former Overview tab (console, status,
+  activity, log history; side column with connect, source/server type,
+  backups, details); `?tab=overview` redirects; "Add-ons" renamed
+  "Databases" in the UI (API unchanged).
+- [x] Unified Templates page (`/templates`): bot templates, game server types
+  (built-in and imported eggs) and site templates with sandboxed previews,
+  one search, Create bot/server/site actions, egg import for administrators,
+  "Start from" on Sites → New site, New menu and Go to entries. Enforcement:
+  the UI only hides what the role or modules would refuse; the server
+  enforces `bots.create`, `sites.create`, `blueprints.manage` and module
+  gates. Preview iframes use `sandbox="allow-same-origin"` (no scripts,
+  forms, popups or top navigation) and the server's `sandbox` CSP keeps the
+  document on an opaque origin.
 - [x] Integrated Bot Sites: one public site per Discord bot, an in-bot Page
   Studio, generated public pages with custom HTML/CSS, explicit safe-widget
   publication, and editable private site drafts that publish as immutable
@@ -769,6 +924,7 @@ Migrations added since 0.2.0 (the schema-version assertion in
 | `0050_knowledgebase.sql` | Additive: `kb_categories` (slug, name, description, position), `kb_articles` (category, slug, title, summary, Markdown body as text, draft/published, public/users/staff visibility, position, author and editor label, times) |
 | `0051_status_page.sql` | Additive: `status_components` (panel/node/bot source, public name and description), `status_incidents` (incident or maintenance, impact, status, window), `status_incident_components`, `status_incident_updates` (timeline), `status_samples` (per component and UTC day counts) |
 | `0052_usage_analytics.sql` | Additive: `bot_usage` (per bot, 5-minute/hourly/daily buckets of sample counts, CPU/memory sums and peaks, network bytes, workspace size, crashes, starts, deployment and backup counts), `node_usage` (hourly/daily rollups of `node_telemetry`), `usage_marks` (rollup watermarks). Retention is applied by the application |
+| `0053_game_jvm_args.sql` | Additive: `bots.jvm_args` (validated extra JVM options of a Java game server), `jvm_args_updated_at_ms` (0 = never set) and `jvm_args_generation` (generation when saved, for "Restart to apply") |
 | `0030_ai_global_chat.sql` | Rebuilds `ai_conversations` so a chat may have no target; `ai_runs.bot_id`/`site_id`, `ai_messages.context_json` (the conversation subtree is stashed and restored, rows preserved) |
 
 Known gaps in this work:
@@ -803,7 +959,12 @@ Known gaps in this work:
   bot/user/path labels.
 - [x] Per-bot TCP/HTTP health probes against published loopback ports, including
   thresholds, startup/readiness grace, persisted state, and a guarded restart
-  on an unhealthy transition.
+  on an unhealthy transition. Bots only: the **panel application** refuses a
+  probe for a game server, never runs a stored one and never evaluates a
+  heartbeat rule for one (game server health = process state + game query;
+  `TestGameServersHaveNoHeartbeatOrProbe`). Notification choices for both
+  kinds moved to Settings → Notifications in the interface; crash alerts
+  still cover game servers.
 
 Migrations added in this release:
 
@@ -812,6 +973,24 @@ Migrations added in this release:
 | `0021_widget_dashboards.sql` | Widget grouping, layout, expiry, and refresh metadata |
 | `0022_bot_discord_identity.sql` | Validated Discord identity and avatar metadata |
 | `0023_health_probes.sql` | Health-probe configuration and state |
+
+## Known limitations
+
+- Dependency advisories **GO-2026-4887** (Moby AuthZ plugin bypass with
+  oversized request bodies) and **GO-2026-4883** (off-by-one in Moby's plugin
+  privilege validation) are reported for `github.com/docker/docker`
+  v28.5.2+incompatible, with no fixed version. Both are flaws of the Docker
+  **daemon** (its AuthZ middleware and plugin installation), not of the API
+  client. The advisories carry no package or symbol list, so `govulncheck`
+  marks every use of the module as reachable (its traces are ordinary client
+  calls such as `client.NewClientWithOpts` and package `init`s). Checked with
+  `go list -deps ./cmd/...`: the panel and `rivet-agent` link only the client
+  side (`client`, `api`, `api/types/...`, `errdefs`, `pkg/jsonmessage`,
+  `pkg/stdcopy`), none of the daemon, `pkg/authorization` or `plugin`
+  packages, and never call the client's plugin endpoints. Not exploitable
+  through RivetPanel; the host's Docker daemon must be patched by its own
+  updates. The client library is not migrated (to `github.com/moby/moby/client`)
+  for now; revisit when a fixed or successor module is adopted.
 
 ## Partially completed
 
@@ -829,6 +1008,23 @@ Migrations added in this release:
   capability drops, `no-new-privileges`, resource caps, and network disablement.
   Dedicated user namespaces, seccomp/AppArmor policy, and optional gVisor/Kata
   isolation are not yet implemented.
+- [x] Workspace ownership default for unprivileged panels: with neither
+  `RIVET_CONTAINER_USER` nor `RIVET_WORKSPACE_OWNER` set and a panel (or
+  `rivet-agent`) that is neither root nor holds `CAP_CHOWN` (probed with a
+  real chown in the data root), containers run as the process's own uid:gid
+  instead of the unusable `65532:65532`; a warning is logged and Diagnostics
+  shows an informational check, plus a warning listing workspaces owned by
+  another user that cannot be repaired. Enforcement: application level
+  (selection) and Docker runtime (the container `User`). The fallback is
+  still non-root inside the container but shares the panel's host uid; it is
+  **not** isolation from the panel process. Root/systemd deployments and
+  explicit settings are unchanged. The automatic fallback is limited to
+  `RIVET_ENV=development`: a production panel refuses to start (and
+  `rivetpanel doctor` reports a failed ownership check) unless
+  `RIVET_ALLOW_SHARED_UID=1` is set, in which case Diagnostics shows a
+  warning; `rivet-agent serve` refuses likewise unless `--allow-shared-uid`
+  / `RIVET_AGENT_ALLOW_SHARED_UID=1` (or `RIVET_ENV=development`). Enforced by
+  the application at startup.
 
 ## Remaining: security and isolation
 

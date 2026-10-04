@@ -5,12 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"regexp"
 	"strings"
 	"time"
 
 	"github.com/xenycx/rivetpanel/internal/domain"
 	"github.com/xenycx/rivetpanel/internal/events"
+	"github.com/xenycx/rivetpanel/internal/lazyre"
 	"github.com/xenycx/rivetpanel/internal/runtimes"
 	"github.com/xenycx/rivetpanel/internal/store/sqlite"
 )
@@ -58,7 +58,9 @@ func (r *Runner) reconcile(ctx context.Context, id string) time.Duration {
 	return 0
 }
 
-func (s *botState) bump() int { s.attempts++; return s.attempts }
+// bump counts a setup or cleanup failure. It is kept apart from the crash
+// counter so install and build retries are never reported as crashes.
+func (s *botState) bump() int { s.failures++; return s.failures }
 
 func (r *Runner) observe(ctx context.Context, bot domain.Bot, o sqlite.Observation) bool {
 	o.BotID, o.Generation, o.NowMS = bot.ID, bot.Generation, r.now().UnixMilli()
@@ -74,7 +76,7 @@ func (r *Runner) observe(ctx context.Context, bot domain.Bot, o sqlite.Observati
 		if o.SettleGeneration {
 			obsGen = bot.Generation
 		}
-		r.bus.Publish(events.Status{BotID: bot.ID, DesiredState: bot.DesiredState, ObservedState: o.State,
+		r.bus.Publish(events.Status{BotID: bot.ID, DesiredState: bot.DesiredState, ObservedState: o.State, Reason: o.Reason,
 			Generation: bot.Generation, ObservedGeneration: obsGen, ExitCode: o.ExitCode, LastError: o.LastError})
 	}
 	return applied
@@ -228,7 +230,7 @@ func (r *Runner) doStop(ctx context.Context, bot domain.Bot) time.Duration {
 			return immediate
 		}
 	}
-	st.attempts, st.nextAt = 0, time.Time{}
+	st.attempts, st.failures, st.nextAt = 0, 0, time.Time{}
 	return 0
 }
 
@@ -245,6 +247,11 @@ func (r *Runner) doRun(ctx context.Context, bot domain.Bot) time.Duration {
 		}
 		return 0
 	}
+	// A host port conflict is a configuration problem: wait for the user
+	// (Start again or a changed port starts a new generation).
+	if portBlocked(bot) {
+		return 0
+	}
 	// Setup failures (image, build, create, start) retry on a bounded backoff,
 	// regardless of how many events or resyncs arrive in between. A new
 	// generation (edit, restart) bypasses the gate.
@@ -258,7 +265,7 @@ func (r *Runner) doRun(ctx context.Context, bot domain.Bot) time.Duration {
 	conts, err := r.listMine(ctx, bot.ID)
 	if err != nil {
 		r.log.Error("list containers", "bot", bot.ID, "err", err)
-		return r.backoff(st.attempts + 1)
+		return r.backoff(st.failures + 1)
 	}
 
 	want := r.wantHash(bot, rt, host)
@@ -287,9 +294,23 @@ func (r *Runner) doRun(ctx context.Context, bot domain.Bot) time.Duration {
 	if run != nil {
 		switch run.State {
 		case "running":
+			st.failures = 0
+			count := r.runningCount(bot, st)
+			// A run that lasted StableAfter ends the crash streak: the count
+			// shown as "crashes in a row" must not outlive a recovery.
+			stableIn := time.Duration(0)
+			if bot.ObservedState == "running" && bot.LastStartedAtMS != nil && (bot.RestartCount != 0 || st.attempts != 0) {
+				if up := r.now().Sub(time.UnixMilli(*bot.LastStartedAtMS)); up >= r.opts.StableAfter {
+					zero := int64(0)
+					count, st.attempts = &zero, 0
+				} else {
+					stableIn = r.opts.StableAfter - up
+				}
+			}
 			if bot.ObservedState != "running" || bot.ObservedGeneration != bot.Generation ||
-				bot.ContainerID == nil || *bot.ContainerID != run.ID || bot.LastError != nil || bot.StateReason != nil || bot.NextRetryAtMS != nil {
-				o := sqlite.Observation{State: "running", SettleGeneration: true, ContainerID: run.ID}
+				bot.ContainerID == nil || *bot.ContainerID != run.ID || bot.LastError != nil || bot.StateReason != nil || bot.NextRetryAtMS != nil ||
+				(count != nil && *count != bot.RestartCount) {
+				o := sqlite.Observation{State: "running", SettleGeneration: true, ContainerID: run.ID, RestartCount: count}
 				if bot.ObservedState != "running" {
 					// Adopting a container that was already running (e.g. after a
 					// panel restart): keep its real start time, not now.
@@ -300,7 +321,7 @@ func (r *Runner) doRun(ctx context.Context, bot domain.Bot) time.Duration {
 				}
 			}
 			r.reviveAddons(ctx, bot, addonConts)
-			return 0
+			return stableIn
 		case "created":
 			if len(bot.Addons) == 0 {
 				return r.startContainer(ctx, bot, run.ID, st)
@@ -652,22 +673,55 @@ func (r *Runner) startContainer(ctx context.Context, bot domain.Bot, id string, 
 	if r.intentChanged(ctx, bot) {
 		return immediate // the next pass removes this now-outdated container
 	}
+	// A port that another container (any panel or tool) already publishes
+	// would fail the start: say so instead of retrying in a loop (the
+	// container's name goes to the log, not to the tenant-visible state).
+	if msg, holder := r.portConflict(ctx, bot); msg != "" {
+		return r.blockPorts(ctx, bot, msg, holder, id)
+	}
 	if bot.ObservedState != "starting" {
 		if !r.observe(ctx, bot, sqlite.Observation{State: "starting", ContainerID: id}) {
 			return immediate
 		}
 	}
 	if err := r.docker.Start(ctx, id); err != nil {
+		if port, inUse := IsPortInUse(err); inUse && ctx.Err() == nil {
+			msg, holder := r.startErrorPortMessage(ctx, bot, port)
+			return r.blockPorts(ctx, bot, msg, holder, id)
+		}
 		return r.fail(ctx, bot, "container failed to start", err, st)
 	}
 	info, err := r.docker.Inspect(ctx, id)
 	if err != nil || info.State != "running" {
 		return immediate // exited already; the next pass applies crash backoff
 	}
-	if !r.observe(ctx, bot, sqlite.Observation{State: "running", SettleGeneration: true, ContainerID: id}) {
+	st.failures = 0
+	if !r.observe(ctx, bot, sqlite.Observation{State: "running", SettleGeneration: true, ContainerID: id, RestartCount: r.runningCount(bot, st)}) {
 		return immediate
 	}
+	if bot.RestartCount != 0 || st.attempts != 0 {
+		// Look again once the run counts as stable, to clear the crash streak.
+		return r.opts.StableAfter
+	}
 	return 0
+}
+
+// runningCount is the restart_count to store when a container of this
+// generation is seen running: the in-memory crash count of this generation,
+// zero for a generation that has not crashed yet (an explicit Start/Restart
+// or a configuration change starts a fresh streak), or nil to keep the
+// persisted count when it belongs to this generation but this process has
+// not counted yet (after a panel restart).
+func (r *Runner) runningCount(bot domain.Bot, st *botState) *int64 {
+	switch {
+	case st.countGen == bot.Generation:
+		n := int64(st.attempts)
+		return &n
+	case bot.ObservedGeneration == bot.Generation:
+		return nil
+	}
+	zero := int64(0)
+	return &zero
 }
 
 // buildStage runs the dependency/compile step in a resource-limited
@@ -780,4 +834,4 @@ func tidyBuildOutput(s string) string {
 	return out
 }
 
-var ansiRe = regexp.MustCompile(`\x1b\[[0-9;?]*[ -/]*[@-~]`)
+var ansiRe = lazyre.New(`\x1b\[[0-9;?]*[ -/]*[@-~]`)

@@ -68,6 +68,10 @@ type StatusService struct {
 	NodeOnline func(nodeID string) bool
 	Log        *slog.Logger
 	Now        func() time.Time
+	// RetentionDays returns how many days of samples are kept (at least
+	// StatusRetentionDays, which the public page shows); nil keeps
+	// StatusRetentionDays.
+	RetentionDays func() int
 }
 
 func (s *StatusService) now() time.Time {
@@ -271,7 +275,11 @@ func (s *StatusService) Sample(ctx context.Context) error {
 			return err
 		}
 	}
-	_, err = s.Store.PruneStatusSamples(ctx, today-StatusRetentionDays+1)
+	keep := int64(StatusRetentionDays)
+	if s.RetentionDays != nil {
+		keep = max(keep, int64(s.RetentionDays()))
+	}
+	_, err = s.Store.PruneStatusSamples(ctx, today-keep+1)
 	return err
 }
 

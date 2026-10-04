@@ -18,9 +18,89 @@ import (
 
 type Message struct {
 	Role       string     `json:"role"`
-	Content    string     `json:"content,omitempty"`
+	Content    string     `json:"content"`
 	ToolCallID string     `json:"tool_call_id,omitempty"`
 	ToolCalls  []ToolCall `json:"tool_calls,omitempty"`
+}
+
+// EmptyToolOutput replaces an empty tool result: several providers reject a
+// tool message whose content is empty.
+const EmptyToolOutput = "(the tool returned no output)"
+
+// MissingToolResult is the tool result sent for a call that never produced
+// one (the run was interrupted, cancelled or timed out mid-call).
+const MissingToolResult = "Tool failed: the call did not return a result (it was interrupted, cancelled or timed out)."
+
+// NormalizeMessages repairs a chat history so that every OpenAI-compatible
+// provider accepts it: every message carries content (strict providers such
+// as DeepSeek reject a missing "content" field even next to tool_calls),
+// every assistant tool call has an id, valid JSON arguments and exactly one
+// tool result directly after it (a synthesized failure when the result is
+// missing), orphan tool results are dropped, and empty user or assistant
+// turns are removed.
+func NormalizeMessages(in []Message) []Message {
+	out := make([]Message, 0, len(in))
+	for i := 0; i < len(in); i++ {
+		m := in[i]
+		switch m.Role {
+		case "tool":
+			continue // orphan: its assistant turn was dropped or never existed
+		case "assistant":
+			if len(m.ToolCalls) == 0 {
+				if strings.TrimSpace(m.Content) == "" {
+					continue
+				}
+				out = append(out, m)
+				continue
+			}
+			calls := make([]ToolCall, len(m.ToolCalls))
+			copy(calls, m.ToolCalls)
+			for j := range calls {
+				if calls[j].ID == "" {
+					calls[j].ID = "call_" + strconv.Itoa(i) + "_" + strconv.Itoa(j)
+				}
+				if calls[j].Type == "" {
+					calls[j].Type = "function"
+				}
+				if !json.Valid([]byte(calls[j].Function.Arguments)) {
+					calls[j].Function.Arguments = "{}"
+				}
+			}
+			orig := m.ToolCalls
+			m.ToolCalls = calls
+			out = append(out, m)
+			// Results are matched by the provider's original id (results to a
+			// call without an id carry an empty id); each is used once.
+			results := map[string][]Message{}
+			for i+1 < len(in) && in[i+1].Role == "tool" {
+				i++
+				results[in[i].ToolCallID] = append(results[in[i].ToolCallID], in[i])
+			}
+			for j, c := range calls {
+				var t Message
+				q := results[orig[j].ID]
+				ok := len(q) > 0
+				if ok {
+					t, results[orig[j].ID] = q[0], q[1:]
+				}
+				if !ok {
+					t = Message{Role: "tool", ToolCallID: c.ID, Content: MissingToolResult}
+				}
+				t.Role, t.ToolCallID, t.ToolCalls = "tool", c.ID, nil
+				if strings.TrimSpace(t.Content) == "" {
+					t.Content = EmptyToolOutput
+				}
+				out = append(out, t)
+			}
+		default: // system, user
+			if m.Role == "user" && strings.TrimSpace(m.Content) == "" {
+				continue
+			}
+			m.ToolCalls, m.ToolCallID = nil, ""
+			out = append(out, m)
+		}
+	}
+	return out
 }
 
 type Tool struct {
@@ -203,7 +283,7 @@ func (c *Client) Complete(ctx context.Context, cfg Config, msgs []Message, tools
 	if e != nil {
 		return Response{}, e
 	}
-	body := map[string]any{"model": cfg.Model, "messages": msgs, "stream": true, "stream_options": map[string]any{"include_usage": true}, "max_tokens": cfg.MaxTokens, "temperature": cfg.Temperature}
+	body := map[string]any{"model": cfg.Model, "messages": NormalizeMessages(msgs), "stream": true, "stream_options": map[string]any{"include_usage": true}, "max_tokens": cfg.MaxTokens, "temperature": cfg.Temperature}
 	if len(tools) > 0 {
 		body["tools"] = tools
 		body["tool_choice"] = "auto"
@@ -278,6 +358,11 @@ func (c *Client) Complete(ctx context.Context, cfg Config, msgs []Message, tools
 		}
 		if p.typ == "" {
 			p.typ = "function"
+		}
+		if p.id == "" {
+			// The id links the tool result to the call; a provider that
+			// omits it would otherwise get an unmatched tool message back.
+			p.id = "call_" + strconv.Itoa(i) + "_" + strconv.FormatInt(time.Now().UnixNano(), 36)
 		}
 		out.Calls = append(out.Calls, ToolCall{ID: p.id, Type: p.typ, Function: ToolCallFunction{Name: p.name, Arguments: p.args}})
 	}

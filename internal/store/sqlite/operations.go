@@ -10,14 +10,14 @@ import (
 // maxOpsPerBot bounds the retained history per bot.
 const maxOpsPerBot = 200
 
-const opCols = `o.id, o.bot_id, b.name, o.kind, o.trigger, o.actor_id, u.email, o.status, o.stage, o.source_ref, o.source_label,
+const opCols = `o.id, o.bot_id, b.name, COALESCE(NULLIF(b.kind, ''), 'bot'), o.kind, o.trigger, o.actor_id, u.email, o.status, o.stage, o.source_ref, o.source_label,
 	o.generation, o.result_code, o.message, o.detail_json, o.log_bytes, o.created_at_ms, o.started_at_ms, o.finished_at_ms`
 
 const opFrom = ` FROM operations o JOIN bots b ON b.id = o.bot_id LEFT JOIN users u ON u.id = o.actor_id`
 
 func scanOp(row interface{ Scan(...any) error }) (domain.Operation, error) {
 	var o domain.Operation
-	err := row.Scan(&o.ID, &o.BotID, &o.BotName, &o.Kind, &o.Trigger, &o.ActorID, &o.ActorEmail, &o.Status, &o.Stage,
+	err := row.Scan(&o.ID, &o.BotID, &o.BotName, &o.BotKind, &o.Kind, &o.Trigger, &o.ActorID, &o.ActorEmail, &o.Status, &o.Stage,
 		&o.SourceRef, &o.SourceLabel, &o.Generation, &o.ResultCode, &o.Message, &o.DetailJSON, &o.LogBytes,
 		&o.CreatedAtMS, &o.StartedAtMS, &o.FinishedAt)
 	return o, mapErr(err)

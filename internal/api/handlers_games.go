@@ -119,7 +119,53 @@ func (s *panel) getGame(c fiber.Ctx) error {
 			"current_revision": d.Blueprint.CurrentRevision},
 		"spec": publicSpec(d.Spec), "variables": vars, "update_available": d.UpdateAvailable,
 		"startup": blueprint.StartupCommand(d.Spec.Startup.Command),
+		"jvm":     toGameJVM(d.JVM),
 	})
+}
+
+type gameJVMDTO struct {
+	Supported      bool                  `json:"supported"`
+	Args           string                `json:"args"`
+	Default        string                `json:"default"`
+	Java           int                   `json:"java"`
+	HeapMiB        int64                 `json:"heap_mib"`
+	PendingRestart bool                  `json:"pending_restart"`
+	SavedGen       int64                 `json:"saved_generation"`
+	Set            bool                  `json:"set"`
+	MaxLength      int                   `json:"max_length"`
+	Presets        []blueprint.JVMPreset `json:"presets"`
+}
+
+func toGameJVM(j service.GameJVM) gameJVMDTO {
+	if j.Presets == nil {
+		j.Presets = []blueprint.JVMPreset{}
+	}
+	return gameJVMDTO{Supported: j.Supported, Args: j.Args, Default: j.Default, Java: j.Java, HeapMiB: j.HeapMiB,
+		PendingRestart: j.PendingRestart, SavedGen: j.SavedGeneration, Set: j.Set, MaxLength: blueprint.MaxJVMArgsLen, Presets: j.Presets}
+}
+
+// putGameJVMArgs stores a Java server's extra JVM options; they apply the
+// next time it starts.
+func (s *panel) putGameJVMArgs(c fiber.Ctx) error {
+	var in struct {
+		Args string `json:"args"`
+	}
+	if err := decode(c, &in); err != nil {
+		return err
+	}
+	b, j, err := s.games.SetJVMArgs(c.Context(), currentUser(c), strings.Clone(c.Params("id")), in.Args)
+	if err != nil {
+		return err
+	}
+	// The audit record names the preset, not the options themselves.
+	target := "custom options"
+	for _, p := range j.Presets {
+		if p.Args == j.Args {
+			target = "preset: " + p.Name
+		}
+	}
+	c.Locals(keyAuditTarget, target)
+	return c.JSON(fiber.Map{"bot": s.viewBot(c, b), "jvm": toGameJVM(j)})
 }
 
 func (s *panel) putGameVariables(c fiber.Ctx) error {
@@ -361,11 +407,15 @@ func (s *panel) adminCreateAllocations(c fiber.Ctx) error {
 	if err := decode(c, &in); err != nil {
 		return err
 	}
-	list, err := s.games.CreateAllocations(c.Context(), currentUser(c), in.NodeID, in.IP, in.Ports, in.Notes)
+	list, skipped, err := s.games.CreateAllocations(c.Context(), currentUser(c), in.NodeID, in.IP, in.Ports, in.Notes)
 	if err != nil {
 		return err
 	}
-	return c.Status(fiber.StatusCreated).JSON(fiber.Map{"allocations": allocList(list)})
+	busy := make([]fiber.Map, 0, len(skipped))
+	for _, p := range skipped {
+		busy = append(busy, fiber.Map{"port": p.Port, "reason": p.Reason})
+	}
+	return c.Status(fiber.StatusCreated).JSON(fiber.Map{"allocations": allocList(list), "skipped": busy})
 }
 
 func (s *panel) adminDeleteAllocation(c fiber.Ctx) error {
@@ -400,16 +450,19 @@ func (s *panel) gameRoutes(authed fiber.Router) {
 	authed.Post("/games", s.requirePerm(domain.PermBotsCreate), s.createGameServer)
 	authed.Get("/bots/:id/game", s.getGame)
 	authed.Put("/bots/:id/game/variables", s.putGameVariables)
+	authed.Put("/bots/:id/game/jvm-args", s.putGameJVMArgs)
 	authed.Post("/bots/:id/game/reinstall", s.reinstallGame)
 	authed.Put("/bots/:id/game/image", s.putGameImage)
 	authed.Post("/bots/:id/game/upgrade", s.upgradeGame)
 	authed.Get("/bots/:id/game/query", s.queryGame)
+	authed.Get("/game-hosts", s.gameHosts)
 	authed.Get("/bots/:id/game/addons", s.addonSearch)
 	authed.Get("/bots/:id/game/addons/:project/versions", s.addonVersions)
 	authed.Post("/bots/:id/game/addons", s.addonInstall)
 	authed.Post("/bots/:id/allocations", s.addGameAllocation)
 	authed.Delete("/bots/:id/allocations/:aid", s.removeGameAllocation)
 	authed.Put("/bots/:id/allocations/:aid/primary", s.primaryGameAllocation)
+	authed.Post("/bots/:id/allocations/pick-free", s.pickFreePort)
 
 	authed.Post("/admin/blueprints", s.requirePerm(domain.PermBlueprintsManage), s.adminImportBlueprint)
 	authed.Post("/admin/blueprints/egg-preview", s.requirePerm(domain.PermBlueprintsManage), s.adminEggPreview)
@@ -421,4 +474,35 @@ func (s *panel) gameRoutes(authed fiber.Router) {
 	authed.Post("/admin/allocations", s.requirePerm(domain.PermAllocations), s.adminCreateAllocations)
 	authed.Patch("/admin/allocations/:aid", s.requirePerm(domain.PermAllocations), s.adminPatchAllocation)
 	authed.Delete("/admin/allocations/:aid", s.requirePerm(domain.PermAllocations), s.adminDeleteAllocation)
+}
+
+// gameHosts maps node ids to the public address players use to reach game
+// servers on that node (Administration → Nodes → Public address). Nodes
+// without one are left out; clients then fall back to the panel's host.
+// The addresses are what players are given anyway, so any account may read
+// them; nothing else about the nodes is returned.
+func (s *panel) gameHosts(c fiber.Ctx) error {
+	if s.nodes == nil {
+		return c.JSON(fiber.Map{"hosts": fiber.Map{}})
+	}
+	nodes, err := s.nodes.ListNodes(c.Context())
+	if err != nil {
+		return err
+	}
+	hosts := map[string]string{}
+	for _, n := range nodes {
+		if a := strings.TrimSpace(n.PublicAddress); a != "" {
+			hosts[n.ID] = a
+		}
+	}
+	return c.JSON(fiber.Map{"hosts": hosts})
+}
+
+// pickFreePort moves a server off a primary port that is taken on the host.
+func (s *panel) pickFreePort(c fiber.Ctx) error {
+	b, err := s.games.PickFreePrimaryPort(c.Context(), currentUser(c), strings.Clone(c.Params("id")))
+	if err != nil {
+		return err
+	}
+	return c.JSON(s.viewBot(c, b))
 }

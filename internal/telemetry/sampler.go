@@ -153,9 +153,12 @@ type Sampler struct {
 	DiskPath  string
 	Interval  time.Duration // 30-60s
 	Retention time.Duration
-	Batch     int // prune batch size
-	Log       *slog.Logger
-	Now       func() time.Time
+	// RetentionFunc, when set, returns the current retention (chosen in the
+	// panel) and wins over Retention.
+	RetentionFunc func() time.Duration
+	Batch         int // prune batch size
+	Log           *slog.Logger
+	Now           func() time.Time
 
 	primed              bool
 	lastBusy, lastTotal uint64
@@ -251,7 +254,13 @@ func (s *Sampler) Prune(ctx context.Context) (int64, error) {
 	if batch <= 0 {
 		batch = 1000
 	}
-	cutoff := s.now().Add(-s.Retention).UnixMilli()
+	ret := s.Retention
+	if s.RetentionFunc != nil {
+		if r := s.RetentionFunc(); r > 0 {
+			ret = r
+		}
+	}
+	cutoff := s.now().Add(-ret).UnixMilli()
 	var total int64
 	for {
 		n, err := s.Store.PruneTelemetry(ctx, cutoff, batch)

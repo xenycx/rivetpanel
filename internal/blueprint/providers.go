@@ -13,12 +13,13 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"regexp"
 	"sort"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/xenycx/rivetpanel/internal/lazyre"
 )
 
 // Artifact is a resolved download.
@@ -214,7 +215,7 @@ func (p *Providers) Resolve(ctx context.Context, d Download, vars map[string]str
 	return pr.resolve(ctx, p, d.Project, version, build)
 }
 
-var versionRe = regexp.MustCompile(`^[0-9A-Za-z][0-9A-Za-z._+-]{0,63}$`)
+var versionRe = lazyre.New(`^[0-9A-Za-z][0-9A-Za-z._+-]{0,63}$`)
 
 // JavaFor returns the Java major version a Minecraft release needs, or 0
 // when it is unknown. provider/project translate provider-specific versions.
@@ -510,7 +511,37 @@ func (pm paperMC) resolve(ctx context.Context, p *Providers, project, version, b
 	if !ok || d.URL == "" {
 		return Artifact{}, fmt.Errorf("%s %s has no server download", project, version)
 	}
-	return Artifact{URL: d.URL, Name: d.Name, Version: version, Size: d.Size, SHA256: d.Checksums.SHA256}, nil
+	return Artifact{URL: d.URL, Name: d.Name, Version: version, Size: d.Size, SHA256: d.Checksums.SHA256,
+		JavaHint: pm.javaMinimum(ctx, p, project, version)}, nil
+}
+
+// javaMinimum is the Java major version Fill declares for a version (for
+// example 25 for Velocity 4 and Paper 26.x), or 0 when it is not published.
+// Proxies such as Velocity do not follow Minecraft versions, so this is the
+// only reliable source for them before the jar is downloaded.
+func (paperMC) javaMinimum(ctx context.Context, p *Providers, project, version string) int {
+	v, err := p.memo("pj|"+project+"|"+version, func() (any, error) {
+		var r struct {
+			Version struct {
+				Java struct {
+					Version struct {
+						Minimum int `json:"minimum"`
+					} `json:"version"`
+				} `json:"java"`
+			} `json:"version"`
+		}
+		if err := p.getJSON(ctx, p.ep().Paper+"/v3/projects/"+project+"/versions/"+url.PathEscape(version), &r); err != nil {
+			return 0, err
+		}
+		return r.Version.Java.Version.Minimum, nil
+	})
+	if err != nil {
+		return 0
+	}
+	if j := v.(int); j > 0 && j < 100 {
+		return j
+	}
+	return 0
 }
 
 func (paperMC) gameVersion(project, v string) string {

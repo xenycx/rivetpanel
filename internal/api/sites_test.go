@@ -503,3 +503,89 @@ func TestSiteBaseDomains(t *testing.T) {
 		t.Fatalf("after delete = %+v", list.Domains)
 	}
 }
+
+func TestSiteTemplates(t *testing.T) {
+	r := newSiteRig(t)
+	r.svc.PanelURL = "https://panel.example.com"
+	c := r.owner
+	var list struct {
+		Templates []struct {
+			ID, Name, Description string
+			Tags                  []string
+			Pages                 []string
+			Files                 int
+			StatusWidget          bool   `json:"status_widget"`
+			PreviewURL            string `json:"preview_url"`
+		}
+	}
+	json.Unmarshal(c.mustStatus(200, "GET", "/api/v1/site-templates", nil), &list)
+	ids := map[string]bool{}
+	for _, tp := range list.Templates {
+		ids[tp.ID] = true
+		if tp.PreviewURL != "/api/v1/site-templates/"+tp.ID+"/preview" || tp.Files == 0 || len(tp.Pages) == 0 {
+			t.Fatalf("template %+v", tp)
+		}
+		if tp.ID == "game-community" && !tp.StatusWidget {
+			t.Fatal("game community template should declare its status widget")
+		}
+	}
+	for _, id := range []string{"landing", "docs", "portfolio", "coming-soon", "game-community"} {
+		if !ids[id] {
+			t.Fatalf("template %s not listed: %v", id, ids)
+		}
+	}
+
+	// The preview is a sandboxed, self-contained document.
+	resp, body := c.do("GET", "/api/v1/site-templates/docs/preview?page=docs/getting-started.html", nil)
+	if resp.StatusCode != 200 || !strings.Contains(resp.Header.Get("Content-Security-Policy"), "sandbox") ||
+		resp.Header.Get("X-Frame-Options") != "SAMEORIGIN" || !strings.Contains(string(body), "<style>") {
+		t.Fatalf("preview: %d %v %.200s", resp.StatusCode, resp.Header, body)
+	}
+	c.mustStatus(404, "GET", "/api/v1/site-templates/nope/preview", nil)
+	c.mustStatus(404, "GET", "/api/v1/site-templates/docs/preview?page=../../etc/passwd", nil)
+
+	// Creating from a template publishes its files as the first release.
+	var site struct {
+		ID, Slug       string
+		CurrentRelease *string `json:"current_release"`
+	}
+	json.Unmarshal(c.mustStatus(201, "POST", "/api/v1/sites", map[string]string{"name": "Block Party", "template_id": "game-community"}), &site)
+	if site.CurrentRelease == nil {
+		t.Fatalf("no release: %+v", site)
+	}
+	host := site.Slug + ".sites.test:8081"
+	rec := r.get(host, "/")
+	if rec.Code != 200 || !strings.Contains(rec.Body.String(), "<title>Block Party</title>") ||
+		!strings.Contains(rec.Body.String(), `data-status-api="https://panel.example.com/api/v1/status"`) {
+		t.Fatalf("home: %d %.300s", rec.Code, rec.Body.String())
+	}
+	for _, p := range []string{"/style.css", "/status.js", "/rules.html"} {
+		if rec := r.get(host, p); rec.Code != 200 {
+			t.Fatalf("%s: %d", p, rec.Code)
+		}
+	}
+	var detail struct {
+		Releases []struct {
+			SourceLabel *string `json:"source_label"`
+		}
+	}
+	json.Unmarshal(c.mustStatus(200, "GET", "/api/v1/sites/"+site.ID, nil), &detail)
+	if len(detail.Releases) != 1 || detail.Releases[0].SourceLabel == nil || *detail.Releases[0].SourceLabel != "Template: Game server community" {
+		t.Fatalf("releases: %+v", detail.Releases)
+	}
+
+	// An unknown template creates nothing.
+	c.mustStatus(400, "POST", "/api/v1/sites", map[string]string{"name": "Ghost", "template_id": "nope"})
+	var sites struct{ Sites []struct{ ID string } }
+	json.Unmarshal(c.mustStatus(200, "GET", "/api/v1/sites", nil), &sites)
+	if len(sites.Sites) != 1 {
+		t.Fatalf("sites after a bad template: %+v", sites)
+	}
+
+	// Without sites.create the template cannot be used either.
+	admin := r.e.user("admin@x.io", domain.RoleAdmin)
+	rid := admin.createRole("Console only", domain.PermBotsConsole)
+	viewer := r.e.user("viewer@x.io", domain.RoleUser)
+	admin.mustStatus(204, "PATCH", "/api/v1/users/"+r.e.userID("viewer@x.io"), map[string]any{"role": rid})
+	viewer.mustStatus(403, "POST", "/api/v1/sites", map[string]string{"name": "Nope", "template_id": "landing"})
+}

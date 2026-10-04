@@ -10,6 +10,8 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+
+	"github.com/xenycx/rivetpanel/internal/lazyre"
 )
 
 // MaxManifestBytes bounds the manifests this package will parse.
@@ -69,18 +71,18 @@ func ForRuntime(runtime string, existing func(name string) bool) (*Ecosystem, er
 }
 
 var (
-	npmName   = regexp.MustCompile(`^(@[a-z0-9][a-z0-9._-]{0,213}/)?[a-z0-9][a-z0-9._-]{0,213}$`)
-	pipName   = regexp.MustCompile(`^[A-Za-z0-9](?:[A-Za-z0-9._-]{0,98}[A-Za-z0-9])?$`)
-	cargoName = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_-]{0,63}$`)
-	goPath    = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._~/-]{0,199}$`)
-	npmSpec   = regexp.MustCompile(`^[A-Za-z0-9.*^~<>=|, +-]{1,128}$`)
-	pipSpec   = regexp.MustCompile(`^(?:[<>=!~]{1,3}[A-Za-z0-9.*+!_-]+)(?:\s*,\s*[<>=!~]{1,3}[A-Za-z0-9.*+!_-]+)*$`)
-	cargoSpec = regexp.MustCompile(`^[A-Za-z0-9.*^~<>=, +-]{1,64}$`)
-	goVersion = regexp.MustCompile(`^v[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.+-]+)?(?:\+incompatible)?$`)
+	npmName   = lazyre.New(`^(@[a-z0-9][a-z0-9._-]{0,213}/)?[a-z0-9][a-z0-9._-]{0,213}$`)
+	pipName   = lazyre.New(`^[A-Za-z0-9](?:[A-Za-z0-9._-]{0,98}[A-Za-z0-9])?$`)
+	cargoName = lazyre.New(`^[A-Za-z_][A-Za-z0-9_-]{0,63}$`)
+	goPath    = lazyre.New(`^[A-Za-z0-9][A-Za-z0-9._~/-]{0,199}$`)
+	npmSpec   = lazyre.New(`^[A-Za-z0-9.*^~<>=|, +-]{1,128}$`)
+	pipSpec   = lazyre.New(`^(?:[<>=!~]{1,3}[A-Za-z0-9.*+!_-]+)(?:\s*,\s*[<>=!~]{1,3}[A-Za-z0-9.*+!_-]+)*$`)
+	cargoSpec = lazyre.New(`^[A-Za-z0-9.*^~<>=, +-]{1,64}$`)
+	goVersion = lazyre.New(`^v[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.+-]+)?(?:\+incompatible)?$`)
 )
 
 // checkOps validates the structure common to all ecosystems.
-func checkOps(eco string, ops []Op, groups []string, name, spec *regexp.Regexp, specOptional bool) error {
+func checkOps(eco string, ops []Op, groups []string, name, spec *lazyre.Regexp, specOptional bool) error {
 	if len(ops) == 0 || len(ops) > 50 {
 		return errors.New("provide between 1 and 50 changes")
 	}

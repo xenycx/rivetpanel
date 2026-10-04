@@ -49,7 +49,7 @@ var (
 	pushSkipDirs  = map[string]bool{".git": true, MetaDir: true, "node_modules": true, ".venv": true, "venv": true, "__pycache__": true, ".cache": true, ".npm": true, ".cargo": true, ".gopath": true, ".pytest_cache": true, ".mypy_cache": true}
 	pushSkipTop   = map[string]bool{"target": true}
 	envKeep       = map[string]bool{".env.example": true, ".env.sample": true, ".env.template": true, ".env.dist": true}
-	pushSkipFiles = map[string]bool{DeployManifest: true, ".DS_Store": true, "Thumbs.db": true}
+	pushSkipFiles = map[string]bool{DeployManifest: true, LegacyDeployManifest: true, ".DS_Store": true, "Thumbs.db": true}
 )
 
 func builtinIgnored(p string, isDir bool) bool {

@@ -16,7 +16,7 @@ func (s *panel) publicVerifyRoutes(v1 fiber.Router) {
 	if s.verify == nil {
 		return
 	}
-	v1.Post("/auth/email/verify", limiter.New(limiter.Config{
+	v1.Post("/auth/email/verify", newLimiter(limiter.Config{
 		Max: 20, Expiration: 10 * time.Minute,
 		KeyGenerator: func(c fiber.Ctx) string { return "verify:" + c.IP() },
 		LimitReached: func(c fiber.Ctx) error {
@@ -30,7 +30,7 @@ func (s *panel) verifyRoutes(authed fiber.Router) {
 		return
 	}
 	// Resends are limited per account here and to one a minute in the store.
-	sendLimit := limiter.New(limiter.Config{
+	sendLimit := newLimiter(limiter.Config{
 		Max: 5, Expiration: time.Hour,
 		KeyGenerator: func(c fiber.Ctx) string { return "verify-send:" + currentUser(c).ID },
 		LimitReached: func(c fiber.Ctx) error {

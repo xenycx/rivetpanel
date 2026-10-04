@@ -13,11 +13,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
+
+	"github.com/xenycx/rivetpanel/internal/lazyre"
 )
 
-var keyIDRe = regexp.MustCompile(`^[A-Za-z0-9._-]{1,32}$`)
+var keyIDRe = lazyre.New(`^[A-Za-z0-9._-]{1,32}$`)
 
 // Keyring holds all retained keys and the active key used for new encryption.
 type Keyring struct {

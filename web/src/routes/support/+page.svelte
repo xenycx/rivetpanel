@@ -47,6 +47,10 @@
 	let bots = $state<Bot[]>([]);
 	let form = $state({ subject: '', category: 'general', priority: 'normal', bot_id: '', body: '' });
 	let sending = $state(false);
+	// Opened from the "New" menu: start with the new-ticket form.
+	$effect(() => {
+		if (canOpen && !queue && untrack(() => !composing) && page.url.searchParams.get('new') === '1') untrack(() => startNew());
+	});
 	async function startNew() {
 		composing = true;
 		try {

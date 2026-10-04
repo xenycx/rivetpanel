@@ -13,13 +13,13 @@ import (
 	"io/fs"
 	"net/http"
 	"path"
-	"regexp"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/xenycx/rivetpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/lazyre"
 )
 
 // MaxLogoBytes bounds a custom logo (the browser resizes it first).
@@ -65,9 +65,9 @@ func (s *BotService) Logo(ctx context.Context, actor domain.User, botID string) 
 	return s.Store.GetBotLogo(ctx, b.ID)
 }
 
-var avatarHashRe = regexp.MustCompile(`^(a_)?[0-9a-f]{32}$`)
+var avatarHashRe = lazyre.New(`^(a_)?[0-9a-f]{32}$`)
 
-var discordTokenRe = regexp.MustCompile(`^[A-Za-z0-9_-]{18,}\.[A-Za-z0-9_-]{4,}\.[A-Za-z0-9_-]{20,}$`)
+var discordTokenRe = lazyre.New(`^[A-Za-z0-9_-]{18,}\.[A-Za-z0-9_-]{4,}\.[A-Za-z0-9_-]{20,}$`)
 
 // tokenVars are checked first, in order; then any variable whose value looks
 // like a bot token.
@@ -178,8 +178,8 @@ type SiteIcon struct {
 	BotAvatar   string // set instead of Data when the bot's Discord avatar is the icon
 }
 
-var iconLinkRe = regexp.MustCompile(`(?is)<link\b[^>]*\brel\s*=\s*["']?(?:shortcut\s+)?(?:icon|apple-touch-icon)["']?[^>]*>`)
-var hrefRe = regexp.MustCompile(`(?is)\bhref\s*=\s*["']([^"']+)["']`)
+var iconLinkRe = lazyre.New(`(?is)<link\b[^>]*\brel\s*=\s*["']?(?:shortcut\s+)?(?:icon|apple-touch-icon)["']?[^>]*>`)
+var hrefRe = lazyre.New(`(?is)\bhref\s*=\s*["']([^"']+)["']`)
 
 var iconTypes = map[string]string{".ico": "image/x-icon", ".png": "image/png", ".svg": "image/svg+xml", ".jpg": "image/jpeg",
 	".jpeg": "image/jpeg", ".gif": "image/gif", ".webp": "image/webp"}

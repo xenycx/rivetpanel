@@ -13,7 +13,7 @@ func TestLiveProviders(t *testing.T) {
 	if os.Getenv("RIVET_LIVE_PROVIDERS") != "1" {
 		t.Skip("set RIVET_LIVE_PROVIDERS=1 to contact the real provider APIs")
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
 	p := &Providers{}
 	for _, c := range []Download{
@@ -36,7 +36,17 @@ func TestLiveProviders(t *testing.T) {
 			t.Errorf("%s/%s resolve: %v", c.Name, c.Project, err)
 			continue
 		}
-		t.Logf("%s/%s: %d versions, newest %s -> %s (java %d)", c.Name, c.Project, len(vs), vs[0].ID, a.Version,
-			p.JavaFor(ctx, c.Name, c.Project, a.Version))
+		// The Java a server is started with is the highest of the provider's
+		// declared requirement, the Minecraft release's and the jar's classes.
+		sniff := NewJarJavaSniffer()
+		if _, err := p.Fetch(ctx, a, sniff); err != nil {
+			t.Errorf("%s/%s download: %v", c.Name, c.Project, err)
+		}
+		mc, jar := p.JavaFor(ctx, c.Name, c.Project, a.Version), sniff.Java()
+		t.Logf("%s/%s: %d versions, newest %s -> %s (provider java %d, minecraft java %d, jar classes java %d)",
+			c.Name, c.Project, len(vs), vs[0].ID, a.Version, a.JavaHint, mc, jar)
+		if c.Project == "velocity" && max(a.JavaHint, jar) < 21 {
+			t.Errorf("velocity %s: no Java requirement found", a.Version)
+		}
 	}
 }

@@ -33,9 +33,11 @@ check: version-check namespace-check test
 	cd web && npm run check
 
 # Historical release notes retain the former identity; active source,
-# deployment files and documentation must use the RivetPanel namespace.
+# deployment files and documentation must use the RivetPanel namespace. The
+# detector of former installations (internal/legacy) and the upgrade guide
+# for them (docs/upgrading-from-0.4.md) must name it and are exempt.
 namespace-check:
-	@if git grep -nEI '(botforge|botpanel|BOTPANEL)' -- ':!CHANGELOG.md' ':!Makefile' ':!docs/implementation-handoff.md'; then \
+	@if git grep -nEI '(botforge|botpanel|BOTPANEL)' -- ':!CHANGELOG.md' ':!Makefile' ':!docs/implementation-handoff.md' ':!internal/legacy' ':!docs/upgrading-from-0.4.md'; then \
 		echo 'legacy product namespace remains outside historical release notes' >&2; exit 1; \
 	fi
 
@@ -54,18 +56,21 @@ version-check:
 e2e: build
 	cd web && npm run test:e2e
 
-# Versioned Linux release archives (amd64, arm64) with the binary, the
+# Versioned Linux release archives (amd64, arm64) with the binaries in bin/
+# (where deploy/install.sh and deploy/install-agent.sh look for them), the
 # deployment files and the documentation, plus SHA256SUMS. Set VERSION.
+# docs/implementation-handoff.md is a local working note and is left out.
 RELEASE_ARCHES ?= amd64 arm64
 release: version-check web
 	rm -rf dist && mkdir -p dist
 	set -e; for arch in $(RELEASE_ARCHES); do \
 		name=rivetpanel-$(VERSION)-linux-$$arch; \
-		mkdir -p dist/$$name; \
-		CGO_ENABLED=0 GOOS=linux GOARCH=$$arch $(GO) build -trimpath -ldflags='-s -w -X main.version=$(VERSION)' -o dist/$$name/rivetpanel ./cmd/rivetpanel; \
-		CGO_ENABLED=0 GOOS=linux GOARCH=$$arch $(GO) build -trimpath -ldflags='-s -w -X main.version=$(VERSION)' -o dist/$$name/rivet-agent ./cmd/rivet-agent; \
+		mkdir -p dist/$$name/bin; \
+		CGO_ENABLED=0 GOOS=linux GOARCH=$$arch $(GO) build -trimpath -ldflags='-s -w -X main.version=$(VERSION)' -o dist/$$name/bin/rivetpanel ./cmd/rivetpanel; \
+		CGO_ENABLED=0 GOOS=linux GOARCH=$$arch $(GO) build -trimpath -ldflags='-s -w -X main.version=$(VERSION)' -o dist/$$name/bin/rivet-agent ./cmd/rivet-agent; \
 		cp -r deploy dist/$$name/deploy; \
 		cp -r docs dist/$$name/docs; \
+		rm -f dist/$$name/docs/implementation-handoff.md; \
 		cp README.md CHANGELOG.md VERSION dist/$$name/; \
 		tar -C dist --owner=0 --group=0 --sort=name -czf dist/$$name.tar.gz $$name; \
 		rm -rf dist/$$name; \

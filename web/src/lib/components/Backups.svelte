@@ -34,6 +34,10 @@
 	const msg = (e: unknown) => (e instanceof ApiError ? e.message : 'The request failed.');
 	const kindLabel = { manual: 'Manual', auto: 'Scheduled', pre_restore: 'Safety copy before a restore' } as const;
 	const running = $derived(bot.desired_state === 'running');
+	const isGame = $derived(bot.kind === 'game');
+	const noun = $derived(isGame ? 'server' : 'bot');
+	// A game server's startup variables are stored as its environment.
+	const varsWord = $derived(isGame ? 'server settings' : 'environment variables');
 
 	async function load() {
 		try {
@@ -73,7 +77,7 @@
 		try {
 			await api('POST', path, { include_env: includeEnv, label, consistent });
 			createOpen = false;
-			toast(consistent ? 'Stopping the bot and creating a backup' : 'Creating a backup');
+			toast(consistent ? `Stopping the ${noun} and creating a backup` : 'Creating a backup');
 			await load();
 		} catch (err) {
 			toast(msg(err), 'fail');
@@ -93,7 +97,7 @@
 		try {
 			onSaved(await api<Bot>('POST', `${path}/${restoreOf.id}/restore`, { restore_env: restoreEnv && restoreOf.includes_env }));
 			restoreOpen = false;
-			toast('Backup restored. Start the bot to use it.');
+			toast(`Backup restored. Start the ${noun} to use it.`);
 			await load();
 		} catch (e) {
 			toast(msg(e), 'fail');
@@ -178,7 +182,7 @@
 			<p class="font-medium">Off on this panel</p>
 			<p class="text-small text-muted">An administrator can turn on scheduled backups.</p>
 		{:else if !health.enabled}
-			<p class="font-medium">Off for this bot</p>
+			<p class="font-medium">Off for this {noun}</p>
 		{:else}
 			<p class="font-medium">Every {fmtDuration(health.interval_ms)}, keeps {health.keep}</p>
 			<p class="text-small text-muted">{health.next_due_ms <= now ? 'Next one is due now.' : `Next at ${fmtWhen(health.next_due_ms)}`}</p>
@@ -232,7 +236,7 @@
 					<div class="flex items-center gap-1">
 						{#if b.status === 'ready'}
 							<a class="btn btn-sm" href="/api/v1{path}/{b.id}/download" download><Icon name="download" size={14} />Download</a>
-							{#if admin}<button class="btn btn-sm" disabled={!stopped || !!b.verify_error} onclick={() => openRestore(b)} title={stopped ? '' : 'Stop the bot first'}>Restore…</button>{/if}
+							{#if admin}<button class="btn btn-sm" disabled={!stopped || !!b.verify_error} onclick={() => openRestore(b)} title={stopped ? '' : `Stop the ${noun} first`}>Restore…</button>{/if}
 						{/if}
 						{#if menu(b).length}<Menu label="More actions for this backup" items={menu(b)} />{/if}
 					</div>
@@ -243,14 +247,18 @@
 		</ul>
 	{/if}
 </div>
-<p class="mt-4 max-w-prose text-small text-muted">A backup holds the bot's files without rebuildable folders such as <code>node_modules</code>, and optionally its environment variables, sealed with this server's key and this bot's ID. A downloaded archive does not expose them, and they can only be restored to this bot on this server.</p>
+{#if isGame}
+	<p class="mt-4 max-w-prose text-small text-muted">A backup holds the server's files (worlds, configuration, mods and plugins) and optionally its server settings (the startup variables such as the version), sealed with this panel's key and this server's ID. A downloaded archive does not expose the settings, and they can only be restored to this server on this panel.</p>
+{:else}
+	<p class="mt-4 max-w-prose text-small text-muted">A backup holds the bot's files without rebuildable folders such as <code>node_modules</code>, and optionally its environment variables, sealed with this server's key and this bot's ID. A downloaded archive does not expose them, and they can only be restored to this bot on this server.</p>
+{/if}
 
 <Dialog bind:open={createOpen} title="Create a backup" size="sm">
 	<form id="bk-create" class="grid gap-4" onsubmit={create}>
 		<label class="block"><span class="label">Label <span class="font-normal text-muted">(optional)</span></span><input class="field" maxlength="80" bind:value={label} placeholder="Before the v2 upgrade" /></label>
-		<label class="flex items-start gap-2.5"><input type="checkbox" class="mt-0.5" bind:checked={includeEnv} /><span>Include environment variables<span class="help">Stored encrypted; restorable only to this bot on this server.</span></span></label>
+		<label class="flex items-start gap-2.5"><input type="checkbox" class="mt-0.5" bind:checked={includeEnv} /><span>Include {varsWord}<span class="help">Stored encrypted; restorable only to this {noun} on this panel.</span></span></label>
 		{#if running && can(bot, Perm.power)}
-			<label class="flex items-start gap-2.5"><input type="checkbox" class="mt-0.5" bind:checked={consistent} /><span>Stop the bot while copying<span class="help">Gives a consistent copy of files the bot is writing. The bot is started again afterwards unless someone stops or starts it meanwhile.</span></span></label>
+			<label class="flex items-start gap-2.5"><input type="checkbox" class="mt-0.5" bind:checked={consistent} /><span>Stop the {noun} while copying<span class="help">Gives a consistent copy of files the {noun} is writing{isGame ? ', such as the world' : ''}. The {noun} is started again afterwards unless someone stops or starts it meanwhile.</span></span></label>
 		{/if}
 	</form>
 	{#snippet footer()}
@@ -261,18 +269,18 @@
 
 <Dialog bind:open={restoreOpen} title="Restore this backup?" size="md">
 	{#if restoreOf}
-		<p>The bot's current files are replaced with the files in this backup. Files that were not in the backup are removed; rebuildable folders are rebuilt on the next start.</p>
+		<p>The {noun}'s current files are replaced with the files in this backup. Files that were not in the backup are removed{isGame ? '.' : '; rebuildable folders are rebuilt on the next start.'}</p>
 		<dl class="my-3 grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1 border-y border-rule-soft py-2">
 			<dt class="text-muted">Backup</dt><dd>{restoreOf.label ?? kindLabel[restoreOf.kind]}</dd>
 			<dt class="text-muted">Created</dt><dd>{fmtWhen(restoreOf.created_at_ms)} ({fmtAgo(restoreOf.created_at_ms, now)})</dd>
 			<dt class="text-muted">Size</dt><dd>{fmtBytes(restoreOf.size_bytes)}</dd>
 		</dl>
 		{#if restoreOf.includes_env}
-			<label class="flex items-start gap-2.5"><input type="checkbox" class="mt-0.5" bind:checked={restoreEnv} /><span>Also restore environment variables<span class="help">Replaces all current variables with the ones saved in this backup.</span></span></label>
+			<label class="flex items-start gap-2.5"><input type="checkbox" class="mt-0.5" bind:checked={restoreEnv} /><span>Also restore {varsWord}<span class="help">Replaces all current {isGame ? 'settings' : 'variables'} with the ones saved in this backup.</span></span></label>
 		{:else}
-			<p class="text-small text-muted">This backup has no environment variables; the current ones stay.</p>
+			<p class="text-small text-muted">This backup has no {varsWord}; the current ones stay.</p>
 		{/if}
-		<Notice class="mt-3">A safety copy of the current files{restoreEnv && restoreOf.includes_env ? ' and variables' : ''} is saved first, so you can undo this restore.</Notice>
+		<Notice class="mt-3">A safety copy of the current files{restoreEnv && restoreOf.includes_env ? (isGame ? ' and settings' : ' and variables') : ''} is saved first, so you can undo this restore.</Notice>
 	{/if}
 	{#snippet footer()}
 		<button class="btn" onclick={() => (restoreOpen = false)} disabled={restoring}>Cancel</button>

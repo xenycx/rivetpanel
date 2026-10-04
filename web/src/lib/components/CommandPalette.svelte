@@ -1,14 +1,17 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { api } from '$lib/api/client';
-	import type { Bot, Site } from '$lib/api/types';
+	import type { Bot, Site, SiteTemplate } from '$lib/api/types';
 	import type { EnvView } from '$lib/api/admin';
 	import { describe } from '$lib/status';
-	import { session, logout } from '$lib/session.svelte';
+	import { session, logout, can } from '$lib/session.svelte';
+	import { adminLinks } from '$lib/adminNav';
+	import { createOptions } from '$lib/create';
+	import { resourceHref } from '$lib/api/games';
 	import { chat, type Conversation } from '$lib/ai/chat.svelte';
 	import { cycleTheme, theme } from '$lib/ui/theme.svelte';
 	import { workspaces } from '$lib/workspaces.svelte';
-	import { adminPages, botTabs, docs, groups, pages, score, scopes, type Entry, type Scope } from '$lib/search';
+	import { adminPages, botTabs, notGameTabs, docs, groups, pages, score, scopes, type Entry, type Scope } from '$lib/search';
 	import Dialog from '$lib/components/ui/Dialog.svelte';
 	import Icon from '$lib/components/ui/Icon.svelte';
 
@@ -25,6 +28,7 @@
 
 	let bots = $state<Bot[]>([]);
 	let sites = $state<Site[]>([]);
+	let siteTemplates = $state<SiteTemplate[]>([]);
 	let people = $state<{ id: string; email: string; display_name?: string; role: string }[]>([]);
 	let envNames = $state<{ name: string; description: string }[]>([]);
 	let chats = $state<Conversation[]>([]);
@@ -42,6 +46,7 @@
 		active = 0;
 		const jobs: Promise<unknown>[] = [api<{ bots: Bot[] }>('GET', '/bots').then((r) => (bots = r.bots))];
 		if (session.features.sites) jobs.push(api<{ sites: Site[] }>('GET', '/sites').then((r) => (sites = r.sites)));
+		if (session.features.sites && can('sites.create')) jobs.push(api<{ templates: SiteTemplate[] }>('GET', '/site-templates').then((r) => (siteTemplates = r.templates)));
 		if (aiOn) jobs.push(api<{ conversations: Conversation[] }>('GET', '/ai/conversations').then((r) => (chats = r.conversations)));
 		if (isAdmin) {
 			jobs.push(api<{ users: typeof people }>('GET', '/users').then((r) => (people = r.users)));
@@ -52,8 +57,14 @@
 
 	const actions = $derived.by<Entry[]>(() => {
 		const a: Entry[] = [
-			{ key: 'x-newbot', group: 'action', label: 'New bot', hint: 'Create a bot', icon: 'plus', href: '/bots/new', words: 'create add deploy start', pinned: true },
-			...(session.features.sites ? [{ key: 'x-newsite', group: 'action', label: 'New site', hint: 'Host a static site', icon: 'plus' as const, href: '/sites', words: 'create add static website host' }] : []),
+			...(can('bots.create') ? [{ key: 'x-newbot', group: 'action', label: 'New bot', hint: 'Create a Discord bot', icon: 'plus' as const, href: '/bots/new', words: 'create add deploy start', pinned: true }] : []),
+			...(can('bots.create') && session.features.games ? [{ key: 'x-newserver', group: 'action', label: 'New game server', hint: 'Minecraft or a Steam game', icon: 'plus' as const, href: '/servers/new', words: 'create add game minecraft steam valheim rust zomboid', pinned: true }] : []),
+			// Everything else the "New" menu offers, as "New …" actions.
+			...createOptions()
+				.filter((o) => !o.key.startsWith('bot-') && !o.key.startsWith('game-'))
+				.map((o) => ({ key: `x-new-${o.key}`, group: 'action', label: o.action ?? `New ${o.label.charAt(0).toLowerCase()}${o.label.slice(1)}`, hint: o.hint, icon: 'plus' as const, href: o.href, words: `create add ${o.words ?? ''}` })),
+			// One action per site template: opens the new-site form with it chosen.
+			...siteTemplates.map((t) => ({ key: `x-site-tpl-${t.id}`, group: 'action', label: `New site from ${t.name}`, hint: `Site template · ${t.description}`, icon: 'globe' as const, href: `/templates?tab=sites&create=${t.id}`, words: `create add site template starter ${t.tags.join(' ')}` })),
 			{ key: 'x-theme', group: 'action', label: 'Switch theme', hint: `Now: ${theme.pref === 'system' ? 'follow system' : theme.pref}. Light, dark, system`, icon: 'moon', run: cycleTheme, words: 'dark light mode appearance' },
 			{ key: 'x-logout', group: 'action', label: 'Sign out', hint: session.user?.email ?? '', icon: 'logout', run: () => void logout(), words: 'log out exit' }
 		];
@@ -68,15 +79,24 @@
 	});
 
 	const catalog = $derived.by<Entry[]>(() => {
-		const out: Entry[] = [...actions, ...pages];
+		const hidden: Record<string, boolean> = {
+			'p-servers': !session.features.games,
+			'p-sites': !session.features.sites,
+			'p-support': !(can('tickets.create') || can('tickets.view_all') || can('tickets.manage'))
+		};
+		const out: Entry[] = [...actions, ...pages.filter((p) => !hidden[p.key])];
 		for (const b of bots) {
 			const d = describe(b);
-			out.push({ key: `b-${b.id}`, group: 'bot', label: b.name, hint: `${d.label} · ${b.runtime}${b.tags.length ? ` · ${b.tags.join(' ')}` : ''}`, icon: 'box', href: `/bots/${b.id}`, words: `${b.tags.join(' ')} ${b.runtime} ${b.owner_id === session.user?.id ? '' : 'shared'}`, boost: b.favorite ? 8 : 0 });
+			const game = b.kind === 'game';
+			out.push({ key: `b-${b.id}`, group: 'bot', label: b.name, hint: `${d.label} · ${game ? 'game server' : b.runtime}${b.tags.length ? ` · ${b.tags.join(' ')}` : ''}`, icon: game ? 'gamepad' : 'box', href: resourceHref(b), words: `${b.tags.join(' ')} ${b.runtime} ${game ? 'game server' : 'bot'} ${b.owner_id === session.user?.id ? '' : 'shared'}`, boost: b.favorite ? 8 : 0 });
 		}
 		for (const s of sites) out.push({ key: `si-${s.id}`, group: 'site', label: s.name, hint: `Site · ${s.slug}${s.workspace_name ? ` · ${s.workspace_name}` : ''}`, icon: 'globe', href: `/sites/${s.id}`, words: s.slug });
 		for (const c of chats.slice(0, 30)) out.push({ key: `c-${c.id}`, group: 'chat', label: c.title || 'Untitled chat', hint: 'AI chat', icon: 'sparkle', run: () => { chat.show(); void chat.openConversation(c); } });
 		for (const w of workspaces.list) out.push({ key: `w-${w.id}`, group: 'person', label: w.name, hint: 'Workspace', icon: 'building', href: isAdmin ? `/admin/workspaces/${w.id}` : `/settings/workspaces/${w.id}` });
 		out.push(...docs.map((d) => ({ ...d, boost: -10 })));
+		// Administration sections this role may open (all of them for administrators).
+		const known = new Set(isAdmin ? adminPages.map((p) => p.href) : []);
+		for (const l of adminLinks()) if (!known.has(l.href)) out.push({ key: `a-${l.href}`, group: 'admin', label: l.label, hint: 'Administration', icon: l.icon, href: l.href });
 		if (isAdmin) {
 			out.push(...adminPages);
 			for (const p of people) out.push({ key: `u-${p.id}`, group: 'person', label: p.display_name || p.email, hint: `${p.email} · ${p.role}`, icon: 'users', href: `/admin/users/${p.id}`, words: p.email });
@@ -114,9 +134,11 @@
 				const name = b.name.toLowerCase();
 				if (!words.some((w) => name.includes(w))) continue;
 				const rest = words.filter((w) => !name.includes(w)).join(' ');
+				const isGame = b.kind === 'game';
 				for (const t of botTabs) {
+					if (isGame && notGameTabs.has(t.id)) continue;
 					const s = rest ? score({ label: t.label, hint: '', words: t.words }, rest) : 1;
-					if (s > 0) found.push({ key: `bt-${b.id}-${t.id}`, group: 'bot-tab', label: `${b.name} › ${t.label}`, hint: rest ? 'Bot section' : 'Bot section', icon: t.icon, href: `/bots/${b.id}?tab=${t.id}`, s: rest ? s - 2 : 2 });
+					if (s > 0) found.push({ key: `bt-${b.id}-${t.id}`, group: 'bot-tab', label: `${b.name} › ${t.label}`, hint: isGame ? 'Server section' : 'Bot section', icon: t.icon, href: `${isGame ? '/servers' : '/bots'}/${b.id}?tab=${t.id}`, s: rest ? s - 2 : 2 });
 				}
 			}
 		}
@@ -205,19 +227,19 @@
 	</div>
 	<ul bind:this={list} id="palette-list" role="listbox" aria-label="Results" class="mt-2 max-h-[min(26rem,55vh)] overflow-y-auto pb-2">
 		{#each items as it, i (it.key)}
-			{#if headings[i]}<li role="presentation" class="eyebrow px-2 pt-3 pb-1 first:pt-1">{headings[i]}</li>{/if}
+			{#if headings[i]}<li role="presentation" class="eyebrow px-2 pt-2.5 pb-0.5 first:pt-1">{headings[i]}</li>{/if}
 			<li
 				id="pal-{it.key}"
 				data-i={i}
 				role="option"
 				aria-selected={i === active}
-				class="flex cursor-pointer items-center gap-3 rounded-control px-2 py-1.5 {i === active ? 'bg-paper' : ''}"
+				class="flex cursor-pointer items-center gap-2.5 rounded-control px-2 py-1 text-[13px] {i === active ? 'bg-paper' : ''}"
 				onmousemove={() => (active = i)}
 				onclick={() => choose(i)}
 				onkeydown={() => {}}
 			>
-				<Icon name={it.icon} class="text-muted" />
-				<span class="min-w-0 flex-1"><span class="block truncate font-medium">{it.label}</span><span class="block truncate text-small text-muted">{it.hint}</span></span>
+				<Icon name={it.icon} size={15} class="text-muted" />
+				<span class="min-w-0 flex-1"><span class="block truncate font-medium">{it.label}</span><span class="block truncate text-[11.5px] leading-4 text-muted">{it.hint}</span></span>
 				{#if i === active}<kbd class="text-small text-muted">Enter</kbd>{/if}
 			</li>
 		{:else}

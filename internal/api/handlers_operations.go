@@ -14,6 +14,7 @@ type opDTO struct {
 	ID          string          `json:"id"`
 	BotID       string          `json:"bot_id"`
 	BotName     string          `json:"bot_name"`
+	BotKind     string          `json:"bot_kind"` // bot | game
 	Kind        string          `json:"kind"`
 	Trigger     string          `json:"trigger"`
 	Actor       *string         `json:"actor"` // email, when a person started it
@@ -32,7 +33,7 @@ type opDTO struct {
 }
 
 func toOp(o domain.Operation) opDTO {
-	d := opDTO{o.ID, o.BotID, o.BotName, o.Kind, o.Trigger, o.ActorEmail, o.Status, o.Stage, o.SourceRef, o.SourceLabel,
+	d := opDTO{o.ID, o.BotID, o.BotName, o.BotKind, o.Kind, o.Trigger, o.ActorEmail, o.Status, o.Stage, o.SourceRef, o.SourceLabel,
 		o.Generation, o.ResultCode, o.Message, nil, o.LogBytes, o.CreatedAtMS, o.StartedAtMS, o.FinishedAt}
 	if o.DetailJSON != nil {
 		d.Detail = json.RawMessage(*o.DetailJSON)

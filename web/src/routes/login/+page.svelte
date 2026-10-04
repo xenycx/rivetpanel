@@ -1,4 +1,6 @@
 <script lang="ts">
+	import Notice from '$lib/components/ui/Notice.svelte';
+	import AuthFrame from '$lib/components/AuthFrame.svelte';
 	import { goto } from '$app/navigation';
 	import { loadSession, login, session, takeNext, verifyMFA } from '$lib/session.svelte';
 	import { passkeySecondStep, passkeySignIn, passkeysSupported } from '$lib/passkeys';
@@ -128,15 +130,13 @@
 
 <svelte:head><title>Sign in · RivetPanel</title></svelte:head>
 
-<main class="grid min-h-dvh place-items-center px-4 py-10">
-	<div class="w-full max-w-sm">
-		<p class="flex items-center gap-2 text-title font-semibold tracking-tight"><img src="/favicon.svg" alt="" width="28" height="28" class="rounded-tile" />RivetPanel</p>
-		<p class="eyebrow mt-8">{step === 'mfa' ? 'Step 2 of 2' : 'Welcome back'}</p>
-		<h1 class="mt-1 text-page">{step === 'mfa' ? 'Two-step verification' : 'Sign in'}<span class="text-action">.</span></h1>
+<AuthFrame>
+		{#if step === 'mfa'}<p class="eyebrow">Step 2 of 2</p>{/if}
+		<h1 class="text-page font-semibold">{step === 'mfa' ? 'Two-step verification' : 'Sign in'}</h1>
 		<p class="mt-1 text-muted">{step === 'mfa' ? (useRecovery ? 'Enter one of your recovery codes. Each works once.' : 'Enter the 6-digit code from your authenticator app.') : 'Run Discord bots and Minecraft servers on this machine.'}</p>
 
-		{#if !reachable}<p class="mt-4 border-l-[3px] border-warn bg-panel px-3 py-2">The panel does not respond right now. It may be restarting; try again in a minute.</p>{/if}
-		{#if error}<p bind:this={errorEl} tabindex="-1" class="mt-4 border-l-[3px] border-fail bg-panel px-3 py-2 text-fail outline-none" role="alert">{error}</p>{/if}
+		{#if !reachable}<Notice tone="warn" class="mt-4">The panel does not respond right now. It may be restarting; try again in a minute.</Notice>{/if}
+		{#if error}<p bind:this={errorEl} tabindex="-1" class="mt-4 rounded-tile border border-fail/30 bg-fail/7 px-3.5 py-2.5 text-fail outline-none" role="alert">{error}</p>{/if}
 
 		{#if step === 'mfa'}
 			<form class="mt-6 space-y-4" onsubmit={submitCode}>
@@ -183,6 +183,5 @@
 			<button class="btn btn-primary w-full" disabled={busy}>{busy ? 'Signing in…' : 'Sign in'}</button>
 		</form>
 		{/if}
-		<p class="mt-6 text-small text-muted">No account? Ask the administrator of this panel to add you. <a class="link" href="/">What is RivetPanel?</a></p>
-	</div>
-</main>
+		<p class="mt-6 border-t border-rule-soft pt-4 text-small text-muted">No account? Ask the administrator of this panel to add you. <a class="link" href="/">What is RivetPanel?</a></p>
+</AuthFrame>

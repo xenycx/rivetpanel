@@ -50,6 +50,7 @@ type AIStore interface {
 	ListAIRuns(context.Context, string, int) ([]domain.AIRun, error)
 	UpdateAIRun(context.Context, domain.AIRun) error
 	InterruptAIRuns(context.Context, int64) (int64, error)
+	CloseAIToolCalls(context.Context, string, int64) error
 	PruneAIConversations(context.Context, int64, int) (int64, error)
 	InsertAIToolCall(context.Context, domain.AIToolCall) error
 	GetAIToolCall(context.Context, string) (domain.AIToolCall, error)
@@ -206,6 +207,10 @@ type AIService struct {
 	// StreamGrace is how long a finished run's event stream stays available
 	// for late subscribers before it is dropped (default 5 minutes).
 	StreamGrace time.Duration
+	// ToolTimeout bounds one read-only tool call (file reads and listings on
+	// a remote node, logs, web research); default 90 seconds. Tools that
+	// wait for a person's approval are bounded by the run's wall time.
+	ToolTimeout time.Duration
 
 	mu      sync.Mutex
 	streams map[string]*aiStream
@@ -927,6 +932,14 @@ func (s *AIService) StartMessage(ctx context.Context, actor domain.User, convers
 	live := run
 	go func() {
 		defer cancel()
+		defer func() {
+			if p := recover(); p != nil {
+				if s.Log != nil {
+					s.Log.Error("AI run panicked", "run", live.ID, "panic", fmt.Sprint(p))
+				}
+				s.finishRun(&live, "failed", "internal", "The assistant stopped because of an internal error.")
+			}
+		}()
 		if mode == AIAuto {
 			if !s.awaitAutoEnvelope(rctx, &live, lim) {
 				return
@@ -1058,6 +1071,7 @@ func (s *AIService) Cancel(ctx context.Context, actor domain.User, runID string)
 	now := s.now()
 	r.FinishedAtMS = &now
 	_ = s.Store.UpdateAIRun(ctx, r)
+	_ = s.Store.CloseAIToolCalls(ctx, r.ID, now)
 	s.emit(runID, "cancelled", map[string]any{"status": "cancelled"})
 	s.retireStream(runID)
 	return nil
@@ -1193,7 +1207,7 @@ func (s *AIService) run(ctx context.Context, actor domain.User, conv domain.AICo
 			if budget.output >= lim.RetainedOutput {
 				e = limitReached("bytes of retained tool output", lim.RetainedOutput)
 			} else {
-				out, didMutate, e = s.executeTool(ctx, actor, eff, run, &call, budget)
+				out, didMutate, e = s.executeToolBounded(ctx, actor, eff, run, &call, budget)
 				// focus_target may have moved the run onto a bot or site.
 				if eff.BotID != run.BotID || eff.SiteID != run.SiteID {
 					eff = effective(conv, *run)
@@ -1309,6 +1323,9 @@ func (s *AIService) finishRun(r *domain.AIRun, status, code, msg string) {
 		r.ErrorMessage = &msg
 	}
 	_ = s.Store.UpdateAIRun(context.Background(), *r)
+	// A run that ends mid-call (failure, cancellation, limit) must not leave
+	// a tool call shown as running forever.
+	_ = s.Store.CloseAIToolCalls(context.Background(), r.ID, now)
 	s.emit(r.ID, map[string]string{"completed": "done", "cancelled": "cancelled", "failed": "error"}[status], map[string]any{"status": status, "error_code": code, "message": msg})
 	s.mu.Lock()
 	delete(s.cancels, r.ID)
@@ -1397,6 +1414,61 @@ func (s *AIService) redactor(ctx context.Context, c domain.AIConversation) *oper
 		vals[i] = ""
 	}
 	return r
+}
+
+// readOnlyAITools only read; each call runs under ToolTimeout so a slow or
+// unresponsive node, log source or web page cannot hang the run.
+var readOnlyAITools = map[string]bool{"list_targets": true, "target_status": true, "read_logs": true, "build_output": true, "list_files": true, "read_file": true, "search_files": true, "environment_names": true, "web_search": true, "web_fetch": true}
+
+// errAIToolTimeout is reported to the model (and the person) when a
+// read-only tool does not finish in time.
+var errAIToolTimeout = errors.New("the tool did not finish in time and was stopped (the server's node may be offline or slow); try again or use another tool")
+
+func (s *AIService) toolTimeout() time.Duration {
+	if s.ToolTimeout > 0 {
+		return s.ToolTimeout
+	}
+	return 90 * time.Second
+}
+
+// executeToolBounded runs a read-only tool with a deadline and returns when
+// the deadline passes even if the tool ignores its context. The tool works
+// on copies of the run and call rows (read-only tools do not change them).
+func (s *AIService) executeToolBounded(ctx context.Context, actor domain.User, c domain.AIConversation, run *domain.AIRun, call *domain.AIToolCall, budget *aiBudget) (string, bool, error) {
+	if !readOnlyAITools[call.Name] {
+		return s.executeTool(ctx, actor, c, run, call, budget)
+	}
+	tctx, cancel := context.WithTimeout(ctx, s.toolTimeout())
+	defer cancel()
+	type result struct {
+		out string
+		mut bool
+		err error
+	}
+	ch := make(chan result, 1)
+	runCopy, callCopy := *run, *call
+	go func() {
+		defer func() {
+			if p := recover(); p != nil {
+				ch <- result{err: errors.New("the tool stopped because of an internal error")}
+			}
+		}()
+		o, m, e := s.executeTool(tctx, actor, c, &runCopy, &callCopy, newAIBudget(budget.lim))
+		ch <- result{o, m, e}
+	}()
+	select {
+	case r := <-ch:
+		if r.err != nil && ctx.Err() == nil && errors.Is(tctx.Err(), context.DeadlineExceeded) {
+			return "", false, errAIToolTimeout
+		}
+		return r.out, r.mut, r.err
+	case <-tctx.Done():
+		if ctx.Err() != nil {
+			return "", false, ctx.Err()
+		}
+		s.emit(run.ID, "status", map[string]any{"warning": "A tool call timed out.", "tool_call_id": call.ID})
+		return "", false, errAIToolTimeout
+	}
 }
 
 func (s *AIService) executeTool(ctx context.Context, actor domain.User, c domain.AIConversation, run *domain.AIRun, call *domain.AIToolCall, budget *aiBudget) (string, bool, error) {
@@ -2054,7 +2126,19 @@ func (s *AIService) ConversationRuns(ctx context.Context, actor domain.User, con
 			return nil, e
 		}
 		d := AIRunDetail{Run: r, ToolCalls: make([]map[string]any, len(calls)), ChangeSets: make([]map[string]any, len(changes))}
+		ended := r.Status != "queued" && r.Status != "running" && r.Status != "waiting_approval"
 		for i, x := range calls {
+			if ended && (x.Status == "running" || x.Status == "proposed") {
+				// Stored before open calls were closed with their run.
+				x.Status = map[bool]string{true: "cancelled", false: "failed"}[x.Status == "proposed"]
+				if x.ApprovalState == "pending" {
+					x.ApprovalState = "rejected"
+				}
+				if x.ErrorMessage == nil {
+					m := "The run ended before this call finished."
+					x.ErrorMessage = &m
+				}
+			}
 			d.ToolCalls[i] = toolCallView(x)
 		}
 		for i, x := range changes {

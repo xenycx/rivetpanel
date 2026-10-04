@@ -10,9 +10,10 @@ import (
 	"errors"
 	"io"
 	"path"
-	"regexp"
 	"sort"
 	"strings"
+
+	"github.com/xenycx/rivetpanel/internal/lazyre"
 )
 
 // Limits bound a scan. Zero values use DefaultLimits.
@@ -81,15 +82,15 @@ var skipDirs = map[string]bool{"node_modules": true, "vendor": true, ".git": tru
 var sourceExt = map[string]bool{".js": true, ".mjs": true, ".cjs": true, ".ts": true, ".py": true, ".go": true, ".rs": true,
 	".rb": true, ".java": true, ".kt": true}
 
-var envPatterns = []*regexp.Regexp{
-	regexp.MustCompile(`process\.env\.([A-Z][A-Z0-9_]{1,63})\b`),
-	regexp.MustCompile(`process\.env\[\s*['"]([A-Z][A-Z0-9_]{1,63})['"]\s*\]`),
-	regexp.MustCompile(`(?:os\.getenv|os\.environ\.get|environ\.get|getenv)\(\s*['"]([A-Z][A-Z0-9_]{1,63})['"]`),
-	regexp.MustCompile(`(?:os\.)?environ\[\s*['"]([A-Z][A-Z0-9_]{1,63})['"]\s*\]`),
-	regexp.MustCompile(`os\.(?:Getenv|LookupEnv)\(\s*"([A-Z][A-Z0-9_]{1,63})"`),
-	regexp.MustCompile(`env::var(?:_os)?\(\s*"([A-Z][A-Z0-9_]{1,63})"`),
-	regexp.MustCompile(`ENV(?:\.fetch\(|\[)\s*['"]([A-Z][A-Z0-9_]{1,63})['"]`),
-	regexp.MustCompile(`System\.getenv\(\s*"([A-Z][A-Z0-9_]{1,63})"`),
+var envPatterns = []*lazyre.Regexp{
+	lazyre.New(`process\.env\.([A-Z][A-Z0-9_]{1,63})\b`),
+	lazyre.New(`process\.env\[\s*['"]([A-Z][A-Z0-9_]{1,63})['"]\s*\]`),
+	lazyre.New(`(?:os\.getenv|os\.environ\.get|environ\.get|getenv)\(\s*['"]([A-Z][A-Z0-9_]{1,63})['"]`),
+	lazyre.New(`(?:os\.)?environ\[\s*['"]([A-Z][A-Z0-9_]{1,63})['"]\s*\]`),
+	lazyre.New(`os\.(?:Getenv|LookupEnv)\(\s*"([A-Z][A-Z0-9_]{1,63})"`),
+	lazyre.New(`env::var(?:_os)?\(\s*"([A-Z][A-Z0-9_]{1,63})"`),
+	lazyre.New(`ENV(?:\.fetch\(|\[)\s*['"]([A-Z][A-Z0-9_]{1,63})['"]`),
+	lazyre.New(`System\.getenv\(\s*"([A-Z][A-Z0-9_]{1,63})"`),
 }
 
 // ignoredEnv are platform variables nobody needs to set.

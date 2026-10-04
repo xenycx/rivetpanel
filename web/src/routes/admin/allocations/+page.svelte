@@ -44,8 +44,10 @@
 		busy = true;
 		formError = '';
 		try {
-			const r = await api<{ allocations: Allocation[] }>('POST', '/admin/allocations', form);
-			toast(r.allocations.length ? `Added ${r.allocations.length} ${r.allocations.length === 1 ? 'port' : 'ports'}.` : 'Those ports already exist or are in use.');
+			const r = await api<{ allocations: Allocation[]; skipped?: { port: number; reason: string }[] }>('POST', '/admin/allocations', form);
+			const skipped = r.skipped ?? [];
+			const busy = skipped.length ? ` Skipped ${skipped.length} in use: ${skipped.slice(0, 3).map((p) => `${p.port} (${p.reason})`).join(', ')}${skipped.length > 3 ? '…' : ''}.` : '';
+			toast(r.allocations.length ? `Added ${r.allocations.length} ${r.allocations.length === 1 ? 'port' : 'ports'}.${busy}` : `No port was added: they already exist${busy ? '.' + busy : ' or are in use.'}`, skipped.length ? 'info' : 'success');
 			form.ports = '';
 			await load();
 		} catch (err) {

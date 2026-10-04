@@ -2,7 +2,7 @@
 	import { api, ApiError } from '$lib/api/client';
 	import { joinArgs, splitArgs } from '$lib/args';
 	import type { Bot, RuntimeInfo } from '$lib/api/types';
-	import { onMount } from 'svelte';
+	import { onMount, untrack } from 'svelte';
 	import { registerDirty } from '$lib/ui/guard.svelte';
 	import { toast } from '$lib/ui/toast.svelte';
 	import Notice from '$lib/components/ui/Notice.svelte';
@@ -10,19 +10,47 @@
 
 	let { bot, stopped, onSaved }: { bot: Bot; stopped: boolean; onSaved: (b: Bot) => void } = $props();
 
+	// The form is a draft of the saved settings: it starts from them and
+	// follows later changes of the bot (a save, another tab) while it has no
+	// unsaved edits.
+	const fromBot = (b: Bot) => ({
+		runtime: b.runtime,
+		command: joinArgs(b.argv),
+		entrypoint: joinArgs(b.entrypoint),
+		buildCommand: b.build_command ?? '',
+		policy: b.restart_policy,
+		maxAttempts: b.restart_max_attempts,
+		backoffInit: b.restart_backoff_initial_ms / 1000,
+		backoffMax: b.restart_backoff_max_ms / 1000
+	});
+	const saved = $derived(fromBot(bot));
+	const start = (() => fromBot(bot))();
+
 	let runtimes = $state<RuntimeInfo[]>([]);
-	let runtime = $state(bot.runtime);
-	let command = $state(joinArgs(bot.argv));
-	let entrypoint = $state(joinArgs(bot.entrypoint));
-	let buildCommand = $state(bot.build_command ?? '');
-	let policy = $state(bot.restart_policy);
-	let maxAttempts = $state(bot.restart_max_attempts);
-	let backoffInit = $state(bot.restart_backoff_initial_ms / 1000);
-	let backoffMax = $state(bot.restart_backoff_max_ms / 1000);
+	let runtime = $state(start.runtime);
+	let command = $state(start.command);
+	let entrypoint = $state(start.entrypoint);
+	let buildCommand = $state(start.buildCommand);
+	let policy = $state(start.policy);
+	let maxAttempts = $state(start.maxAttempts);
+	let backoffInit = $state(start.backoffInit);
+	let backoffMax = $state(start.backoffMax);
 	let error = $state('');
 	const snapshot = () => JSON.stringify([runtime, command, entrypoint, buildCommand, policy, maxAttempts, backoffInit, backoffMax]);
 	let base = $state(snapshot());
 	const dirty = $derived(snapshot() !== base);
+	let syncedFrom = JSON.stringify(start);
+	$effect.pre(() => {
+		const s = saved;
+		const key = JSON.stringify(s);
+		untrack(() => {
+			if (key === syncedFrom) return;
+			syncedFrom = key;
+			if (dirty) return; // keep unsaved edits
+			({ runtime, command, entrypoint, buildCommand, policy, maxAttempts, backoffInit, backoffMax } = s);
+			base = snapshot();
+		});
+	});
 
 	onMount(() => {
 		api<{ runtimes: RuntimeInfo[] }>('GET', '/runtimes').then((r) => (runtimes = r.runtimes));

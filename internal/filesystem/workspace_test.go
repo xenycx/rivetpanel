@@ -190,3 +190,36 @@ func TestRemoveHandlesReadOnlyTrees(t *testing.T) {
 		t.Fatal("workspace still exists")
 	}
 }
+
+func TestForeignOwnedAndRepair(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("needs an unprivileged user")
+	}
+	m, err := NewManager(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer m.Close()
+	const id = "11111111-2222-3333-4444-555555555555"
+	if err := m.Create(id); err != nil {
+		t.Fatal(err)
+	}
+	uid, gid := os.Geteuid(), os.Getegid()
+	if ids, err := m.ForeignOwned(uid, gid); err != nil || len(ids) != 0 {
+		t.Fatalf("own workspace reported foreign: %v %v", ids, err)
+	}
+	if ids, _ := m.ForeignOwned(65532, 65532); len(ids) != 1 || ids[0] != id {
+		t.Fatalf("foreign = %v", ids)
+	}
+	if n, failed, err := m.RepairOwnership(uid, gid); err != nil || n != 0 || len(failed) != 0 {
+		t.Fatalf("repair own: %d %v %v", n, failed, err)
+	}
+	// An unprivileged process cannot hand files to another user: the repair
+	// reports the workspace, and Prepare explains what to run.
+	if _, failed, _ := m.RepairOwnership(65532, 65532); len(failed) != 1 {
+		t.Fatalf("failed = %v", failed)
+	}
+	if err := m.Prepare(id, 65532, 65532); err == nil || !strings.Contains(err.Error(), "CAP_CHOWN") {
+		t.Fatalf("prepare error = %v", err)
+	}
+}

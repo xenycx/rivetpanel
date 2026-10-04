@@ -223,7 +223,36 @@ func (db *DB) InterruptAIRuns(ctx context.Context, nowMS int64) (int64, error) {
 	if e != nil {
 		return 0, e
 	}
-	return r.RowsAffected()
+	n, e := r.RowsAffected()
+	if e != nil {
+		return n, e
+	}
+	// Tool calls of every finished run that are still open (the run ended
+	// mid-call, possibly before this fix existed) are closed, so a reload
+	// never shows a call as forever running.
+	return n, db.CloseAIToolCalls(ctx, "", nowMS)
+}
+
+// CloseAIToolCalls marks open (proposed or running) tool calls as ended: a
+// running call failed, a proposed one was cancelled and a pending approval
+// was rejected. With runID "" it repairs the calls of every run that is no
+// longer active; otherwise only that run's calls are closed.
+func (db *DB) CloseAIToolCalls(ctx context.Context, runID string, nowMS int64) error {
+	q := `UPDATE ai_tool_calls SET
+		status=CASE WHEN status='proposed' THEN 'cancelled' ELSE 'failed' END,
+		approval_state=CASE WHEN approval_state='pending' THEN 'rejected' ELSE approval_state END,
+		error_message=COALESCE(error_message,'The run ended before this call finished.'),
+		finished_at_ms=COALESCE(finished_at_ms,?)
+		WHERE status IN ('proposed','running') AND `
+	args := []any{nowMS}
+	if runID == "" {
+		q += `run_id IN (SELECT id FROM ai_runs WHERE status NOT IN ('queued','running','waiting_approval'))`
+	} else {
+		q += `run_id=?`
+		args = append(args, runID)
+	}
+	_, e := db.ExecContext(ctx, q, args...)
+	return mapErr(e)
 }
 
 func (db *DB) PruneAIConversations(ctx context.Context, beforeMS int64, batch int) (int64, error) {

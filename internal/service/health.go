@@ -107,6 +107,12 @@ func (h *HealthService) Get(ctx context.Context, actor domain.User, botID string
 	if h.Alerts != nil {
 		_, v.Webhook = h.Alerts.webhookFor(ctx, b.OwnerID)
 	}
+	if b.IsGame() {
+		// Game servers have no SDK: their health is the process state and the
+		// game query. Only the notification choices apply.
+		v.Prefs.HeartbeatAfter = 0
+		return v, nil
+	}
 	hl, err := h.Store.GetHealth(ctx, botID)
 	if errors.Is(err, domain.ErrNotFound) {
 		return v, nil
@@ -142,8 +148,14 @@ func (h *HealthService) stale(b domain.Bot, hl domain.BotHealth, after time.Dura
 
 // SetPrefs saves a bot's alert preferences (full control of the bot).
 func (h *HealthService) SetPrefs(ctx context.Context, actor domain.User, botID string, p domain.AlertPrefs) (domain.AlertPrefs, error) {
-	if _, err := h.Bots.Authorize(ctx, actor, botID, domain.PermFullAdmin); err != nil {
+	b, err := h.Bots.Authorize(ctx, actor, botID, domain.PermFullAdmin)
+	if err != nil {
 		return domain.AlertPrefs{}, err
+	}
+	if b.IsGame() {
+		// No SDK heartbeat and no GitHub deployments for game servers; the
+		// stored values are neutral so nothing can ever fire for them.
+		p.HeartbeatAfter, p.Deploy = 0, false
 	}
 	if p.HeartbeatAfter != 0 && (p.HeartbeatAfter < 60 || p.HeartbeatAfter > 86400) {
 		return domain.AlertPrefs{}, domain.Invalid("the heartbeat alert waits between 1 minute and 24 hours")
@@ -169,13 +181,21 @@ func (h *HealthService) Test(ctx context.Context, actor domain.User, botID strin
 	if _, ok := h.Alerts.webhookFor(ctx, b.OwnerID); !ok {
 		return domain.Invalid("the bot's owner has not turned on Discord notifications (Settings → Connected accounts)")
 	}
-	return h.Alerts.SendErr(ctx, b.OwnerID, "🔔 Test notification for "+b.Name, "Alerts for this bot will arrive here.")
+	what := "bot"
+	if b.IsGame() {
+		what = "server"
+	}
+	return h.Alerts.SendErr(ctx, b.OwnerID, "🔔 Test notification for "+b.Name, "Alerts for this "+what+" will arrive here.")
 }
 
 // GetProbe returns the configured active check, or a disabled default.
 func (h *HealthService) GetProbe(ctx context.Context, actor domain.User, botID string) (domain.HealthProbe, error) {
-	if _, err := h.Bots.Authorize(ctx, actor, botID, domain.PermViewConsole); err != nil {
+	b, err := h.Bots.Authorize(ctx, actor, botID, domain.PermViewConsole)
+	if err != nil {
 		return domain.HealthProbe{}, err
+	}
+	if b.IsGame() {
+		return domain.HealthProbe{BotID: botID, Status: "disabled"}, nil
 	}
 	p, err := h.Store.GetHealthProbe(ctx, botID)
 	if errors.Is(err, domain.ErrNotFound) {
@@ -193,6 +213,9 @@ func (h *HealthService) SetProbe(ctx context.Context, actor domain.User, botID s
 	}
 	if p.Kind == "" {
 		return domain.HealthProbe{BotID: botID, Status: "disabled"}, h.Store.DeleteHealthProbe(ctx, botID)
+	}
+	if b.IsGame() {
+		return domain.HealthProbe{}, domain.Invalid("game servers have no health probe; their health comes from the game query and the process state")
 	}
 	if p.Kind != "tcp" && p.Kind != "http" {
 		return domain.HealthProbe{}, domain.Invalid("probe kind must be tcp or http")
@@ -274,7 +297,7 @@ func (h *HealthService) EvaluateProbes(ctx context.Context) {
 	var wg sync.WaitGroup
 	for _, p := range ps {
 		b, err := h.Bots.Store.GetBot(ctx, p.BotID)
-		if err != nil || b.DesiredState != domain.DesiredRunning || b.ObservedState != "running" {
+		if err != nil || b.IsGame() || b.DesiredState != domain.DesiredRunning || b.ObservedState != "running" {
 			continue
 		}
 		now := h.now()
@@ -372,7 +395,7 @@ func (h *HealthService) Evaluate(ctx context.Context) {
 		return
 	}
 	for _, w := range ws {
-		if w.Health == nil || w.Bot.DesiredState == domain.DesiredDeleted {
+		if w.Health == nil || w.Bot.IsGame() || w.Bot.DesiredState == domain.DesiredDeleted {
 			continue
 		}
 		after := time.Duration(w.Prefs.HeartbeatAfter) * time.Second

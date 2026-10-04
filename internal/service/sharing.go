@@ -153,6 +153,11 @@ func (s *BotService) SetPorts(ctx context.Context, actor domain.User, id string,
 	if err != nil {
 		return domain.Bot{}, err
 	}
+	if len(in) > 0 && b.IsGame() {
+		// A game server publishes its allocations (TCP and UDP); bot port
+		// mappings would never be applied and would only hold host ports.
+		return domain.Bot{}, domain.Invalid("game servers publish their allocations; add a port under Network → Allocations")
+	}
 	if len(in) > 16 {
 		return domain.Bot{}, domain.Invalid("at most 16 port mappings")
 	}

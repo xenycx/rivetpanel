@@ -21,14 +21,15 @@
 	const path = $derived(`/bots/${bot.id}/schedules`);
 	const msg = (e: unknown) => (e instanceof ApiError ? e.message : 'The request failed.');
 
-	const actions: { id: ScheduleAction; label: string; hint: string; perm: number; feature?: 'backups' | 'deploy' | 'runner' }[] = [
-		{ id: 'backup', label: 'Back up', hint: 'Files and sealed environment, kept with the scheduled backups', perm: Perm.files, feature: 'backups' },
-		{ id: 'restart', label: 'Restart', hint: 'Only if the bot is running', perm: Perm.power, feature: 'runner' },
-		{ id: 'start', label: 'Start', hint: 'Starts the bot, or retries it after it gave up', perm: Perm.power, feature: 'runner' },
-		{ id: 'stop', label: 'Stop', hint: 'Stops the bot', perm: Perm.power, feature: 'runner' },
+	const nounOf = (b: Bot) => (b.kind === 'game' ? 'server' : 'bot');
+	const actions: { id: ScheduleAction; label: string; hint: string; perm: number; feature?: 'backups' | 'deploy' | 'runner' }[] = $derived([
+		{ id: 'backup', label: 'Back up', hint: bot.kind === 'game' ? 'Files and sealed server settings, kept with the scheduled backups' : 'Files and sealed environment, kept with the scheduled backups', perm: Perm.files, feature: 'backups' },
+		{ id: 'restart', label: 'Restart', hint: `Only if the ${nounOf(bot)} is running`, perm: Perm.power, feature: 'runner' },
+		{ id: 'start', label: 'Start', hint: `Starts the ${nounOf(bot)}, or retries it after it gave up`, perm: Perm.power, feature: 'runner' },
+		{ id: 'stop', label: 'Stop', hint: `Stops the ${nounOf(bot)}`, perm: Perm.power, feature: 'runner' },
 		{ id: 'deploy', label: 'Deploy from GitHub', hint: 'Deploys the newest commit of the linked branch', perm: Perm.files, feature: 'deploy' },
 		{ id: 'chain', label: 'Task chain', hint: 'Several steps in order, with waits: console commands, power actions and backups', perm: Perm.power, feature: 'runner' }
-	];
+	]);
 	const isGame = $derived(bot.kind === 'game');
 	const offered = $derived(actions.filter((a) => can(bot, a.perm) && (!a.feature || session.features[a.feature]) && !(isGame && a.id === 'deploy')));
 	const taskLabels: Record<TaskAction, string> = { command: 'Send command', start: 'Start', stop: 'Stop', restart: 'Restart', kill: 'Kill', backup: 'Back up' };
@@ -314,7 +315,7 @@
 		</ul>
 	{/if}
 </div>
-<p class="mt-4 max-w-prose text-small text-muted">If the panel is offline when a run is due, the run is recorded as missed and not repeated later. A schedule pauses itself when its creator loses the permission or their account is disabled. Per-bot backup schedules replace the panel-wide backup interval for this bot.</p>
+<p class="mt-4 max-w-prose text-small text-muted">If the panel is offline when a run is due, the run is recorded as missed and not repeated later. A schedule pauses itself when its creator loses the permission or their account is disabled. Backup schedules here replace the panel-wide backup interval for this {nounOf(bot)}.</p>
 
 <Dialog bind:open title={editing ? 'Edit schedule' : 'Add a schedule'} size="md">
 	<form id="sched-form" class="grid gap-4" onsubmit={save}>

@@ -28,29 +28,30 @@
    surface, raised = dialogs/menus, ink/muted = text, rule = dividers, action =
    links/focus/the one primary action, run/warn/fail = lifecycle states. */
 @theme {
-	--color-paper: #e9eef2;
-	--color-paper-2: #dde4ea;
-	--color-panel: #f9fbfc;
+	--color-paper: #f4f4f3;
+	--color-paper-2: #e9e8e6;
+	--color-panel: #ffffff;
 	--color-raised: #ffffff;
-	--color-ink: #102331;
-	--color-muted: #60717e;
-	--color-rule: #c8d3db;
-	--color-rule-soft: #dfe6eb;
+	--color-ink: #1b1a19;
+	--color-muted: #625f5b;
+	--color-rule: #d6d4d0;
+	--color-rule-soft: #e6e4e1;
 	--color-action: var(--accent-light, #b44718);
 	--color-action-ink: var(--accent-light-ink, #ffffff);
+	--color-data: #4f6b86;
 	--color-run: #087f6c;
 	--color-warn: #a96500;
 	--color-fail: #bc3c2b;
-	--color-term: #0f1f2b;
-	--color-term-ink: #dce6ee;
+	--color-term: #161517;
+	--color-term-ink: #e4e2e0;
 
 	--font-sans: 'IBM Plex Sans', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
 	--font-mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', 'Cascadia Code', Menlo, Consolas, monospace;
 
-	--text-page: 1.75rem;
-	--text-page--line-height: 2.125rem;
-	--text-section: 1.25rem;
-	--text-section--line-height: 1.625rem;
+	--text-page: 1.25rem;
+	--text-page--line-height: 1.75rem;
+	--text-section: 1.0625rem;
+	--text-section--line-height: 1.5rem;
 	--text-title: 1rem;
 	--text-title--line-height: 1.375rem;
 	--text-body: 0.9375rem;
@@ -74,7 +75,7 @@
 	--radius-xl: calc(12px * var(--radius-scale));
 	--radius-2xl: calc(16px * var(--radius-scale));
 	--radius-3xl: calc(24px * var(--radius-scale));
-	--shadow-overlay: 0 12px 32px -8px rgb(16 35 49 / 0.28), 0 2px 6px rgb(16 35 49 / 0.08);
+	--shadow-overlay: 0 12px 32px -8px rgb(20 18 16 / 0.22), 0 2px 6px rgb(20 18 16 / 0.06);
 
 	--animate-enter: enter 160ms cubic-bezier(0.2, 0.7, 0.3, 1);
 	--animate-sheet: sheet 220ms cubic-bezier(0.2, 0.7, 0.3, 1);
@@ -118,45 +119,48 @@
 :root[data-accent='clay'] { --accent-light: #8d5142; --accent-dark: #db8b76; --accent-dark-ink: #26100a; }
 
 
-/* Dark theme: warm near-black surfaces with an ember accent. Applied when the
+/* Dark theme: warm dark-grey layers (canvas, surface, raised) with the accent
+   kept for primary actions, the active indicator, focus and warnings. Applied when the
    user picks Dark, or when they follow a dark operating system. Only tokens
    change, so every component follows without per-component dark classes. */
 :root[data-theme='dark'] {
-	--color-paper: #0b0908;
-	--color-paper-2: #1d1815;
-	--color-panel: #120f0d;
-	--color-raised: #181412;
-	--color-ink: #f3ece7;
-	--color-muted: #9d928b;
-	--color-rule: #342a25;
-	--color-rule-soft: #241d1a;
+	--color-paper: #0f0f10;
+	--color-paper-2: #222123;
+	--color-panel: #151516;
+	--color-raised: #1b1b1d;
+	--color-ink: #edeceb;
+	--color-muted: #9d9a97;
+	--color-rule: #333134;
+	--color-rule-soft: #242325;
 	--color-action: var(--accent-dark, #f47a3d);
 	--color-action-ink: var(--accent-dark-ink, #1b0b04);
+	--color-data: #8ea7bf;
 	--color-run: #3ecf9e;
 	--color-warn: #f2ab3c;
 	--color-fail: #ff6a55;
-	--color-term: #070605;
-	--color-term-ink: #ebe3dd;
+	--color-term: #0b0b0c;
+	--color-term-ink: #e6e4e2;
 	--shadow-overlay: 0 18px 48px -12px rgb(0 0 0 / 0.7), 0 0 0 1px rgb(255 255 255 / 0.04);
 	color-scheme: dark;
 }
 @media (prefers-color-scheme: dark) {
 	:root:not([data-theme='light']) {
-		--color-paper: #0b0908;
-		--color-paper-2: #1d1815;
-		--color-panel: #120f0d;
-		--color-raised: #181412;
-		--color-ink: #f3ece7;
-		--color-muted: #9d928b;
-		--color-rule: #342a25;
-		--color-rule-soft: #241d1a;
+		--color-paper: #0f0f10;
+		--color-paper-2: #222123;
+		--color-panel: #151516;
+		--color-raised: #1b1b1d;
+		--color-ink: #edeceb;
+		--color-muted: #9d9a97;
+		--color-rule: #333134;
+		--color-rule-soft: #242325;
 		--color-action: var(--accent-dark, #f47a3d);
 		--color-action-ink: var(--accent-dark-ink, #1b0b04);
+		--color-data: #8ea7bf;
 		--color-run: #3ecf9e;
 		--color-warn: #f2ab3c;
 		--color-fail: #ff6a55;
-		--color-term: #070605;
-		--color-term-ink: #ebe3dd;
+		--color-term: #0b0b0c;
+		--color-term-ink: #e6e4e2;
 		--shadow-overlay: 0 18px 48px -12px rgb(0 0 0 / 0.7), 0 0 0 1px rgb(255 255 255 / 0.04);
 		color-scheme: dark;
 	}
@@ -275,7 +279,7 @@
 		background: color-mix(in srgb, var(--color-action) 22%, transparent);
 	}
 	dialog::backdrop {
-		background: rgb(16 35 49 / 0.42);
+		background: rgb(20 18 16 / 0.42);
 	}
 }
 
@@ -368,6 +372,50 @@
 			width: 2.75rem;
 		}
 	}
+	/* Dropdown and context menus (ui/Menu.svelte, the New menu): compact rows
+	   with a 30px target, taller on touch screens. */
+	.menu-list {
+		@apply rounded-overlay border border-rule-soft bg-raised p-1 shadow-overlay;
+		font-size: 13px;
+		line-height: 18px;
+	}
+	.menu-item {
+		@apply flex w-full items-center gap-2 rounded-inner text-left whitespace-nowrap text-ink;
+		min-height: 30px;
+		padding: 6px 10px;
+	}
+	.menu-item:hover:not(:disabled),
+	.menu-item:focus {
+		@apply bg-paper-2/70;
+		outline: none;
+	}
+	.menu-item:focus-visible {
+		box-shadow: inset 0 0 0 2px var(--color-action);
+	}
+	.menu-item:disabled {
+		opacity: 0.45;
+	}
+	.menu-item.danger {
+		@apply text-fail;
+	}
+	.menu-item.danger:hover:not(:disabled),
+	.menu-item.danger:focus {
+		@apply bg-fail/8;
+	}
+	.menu-hint {
+		@apply ml-auto pl-4 text-[11px] text-muted;
+	}
+	.menu-sep {
+		@apply -mx-1 my-1 border-t border-rule-soft;
+	}
+	.menu-head {
+		@apply px-2.5 pt-1.5 pb-1 text-[11px] text-muted;
+	}
+	@media (pointer: coarse) {
+		.menu-item {
+			min-height: 36px;
+		}
+	}
 	.link {
 		@apply text-action underline decoration-action/35 underline-offset-2 hover:decoration-action;
 	}
@@ -383,26 +431,112 @@
 		@apply ml-0.5 text-fail;
 	}
 	.opt {
-		@apply ml-2 rounded-pill border border-rule-soft px-1.5 align-middle font-mono text-muted;
-		font-size: 0.625rem;
+		@apply ml-2 rounded-pill border border-rule-soft px-1.5 align-middle text-muted;
+		font-size: 0.6875rem;
 		line-height: 1rem;
 		font-weight: 500;
-		letter-spacing: 0.08em;
-		text-transform: uppercase;
 	}
 	.surface {
 		@apply border border-rule-soft bg-panel;
 	}
 
+	/* Page header: title on the left, at most one primary action on the right. */
+	.page-head {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.75rem 1rem;
+		min-height: 2.25rem;
+	}
+	.page-head > h1 {
+		font-size: var(--text-page);
+		line-height: var(--text-page--line-height);
+	}
 
-	/* Eyebrow: a small mono, spaced, uppercase label above a group or title. */
-	.eyebrow {
-		font-family: var(--font-mono);
-		font-size: 0.6875rem;
+	/* Metric tile: a label, one crisp number and an optional precise bar. */
+	.kpi {
+		min-width: 0;
+		border: 1px solid var(--color-rule-soft);
+		border-radius: var(--radius-tile);
+		background: var(--color-panel);
+		padding: 0.75rem 0.875rem 0.8125rem;
+	}
+	.kpi-value {
+		margin-top: 0.125rem;
+		font-size: 1.125rem;
+		line-height: 1.5rem;
+		font-weight: 600;
+		letter-spacing: -0.01em;
+		font-variant-numeric: tabular-nums;
+	}
+	.kpi-value small {
+		margin-left: 0.25rem;
+		font-size: 0.8125rem;
+		font-weight: 400;
+		color: var(--color-muted);
+	}
+
+	/* Data table built from rows: one bordered surface, hairline separators,
+	   a muted header row. Columns come from each page's grid template. */
+	.rows {
+		overflow: hidden;
+		border: 1px solid var(--color-rule-soft);
+		border-radius: var(--radius-tile);
+		background: var(--color-panel);
+	}
+	.rows > * + * {
+		border-top: 1px solid var(--color-rule-soft);
+	}
+	.rows-head {
+		font-size: 0.75rem;
 		line-height: 1rem;
 		font-weight: 500;
-		letter-spacing: 0.14em;
-		text-transform: uppercase;
+		color: var(--color-muted);
+		background: color-mix(in srgb, var(--color-paper) 45%, var(--color-panel));
+	}
+	.row-link {
+		transition: background-color 120ms;
+	}
+	.row-link:hover {
+		background: color-mix(in srgb, var(--color-ink) 3.5%, transparent);
+	}
+	/* The empty state of a table: one quiet row, not a dashed box. */
+	.rows-empty {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.5rem 1rem;
+		padding: 0.875rem 1rem;
+		font-size: var(--text-small);
+		line-height: var(--text-small--line-height);
+		color: var(--color-muted);
+	}
+
+	/* Wizard footer: Back and Cancel on the left, the next step on the right,
+	   spanning exactly the width of the step above it. */
+	.wizard-foot {
+		position: sticky;
+		bottom: 0;
+		z-index: 10;
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		margin-top: 2rem;
+		border-top: 1px solid var(--color-rule-soft);
+		background: color-mix(in srgb, var(--color-paper) 94%, transparent);
+		padding: 0.75rem 0;
+		backdrop-filter: blur(6px);
+	}
+	.wizard-foot > .wizard-next {
+		margin-left: auto;
+	}
+
+
+	/* Eyebrow: a small, quiet sentence-case label for a group or a value. */
+	.eyebrow {
+		font-size: 0.75rem;
+		line-height: 1rem;
+		font-weight: 500;
 		color: var(--color-muted);
 	}
 	.nav-underline {
@@ -414,10 +548,12 @@
 	}
 	.side-link {
 		display: flex;
+		width: 100%;
+		text-align: left;
 		align-items: center;
 		gap: 0.75rem;
 		border-radius: var(--radius-lg);
-		padding: 0.5rem 0.75rem;
+		padding: 0.4375rem 0.75rem;
 		color: color-mix(in srgb, var(--color-ink) 78%, transparent);
 		transition:
 			background-color 120ms,
@@ -428,9 +564,18 @@
 		color: var(--color-ink);
 	}
 	.side-link[data-active='true'] {
-		background: color-mix(in srgb, var(--color-action) 11%, transparent);
+		position: relative;
+		background: color-mix(in srgb, var(--color-ink) 7%, transparent);
 		color: var(--color-ink);
 		font-weight: 500;
+	}
+	.side-link[data-active='true']::before {
+		content: '';
+		position: absolute;
+		inset: 0.5rem auto 0.5rem -0.75rem;
+		width: 3px;
+		border-radius: var(--radius-pill);
+		background: var(--color-action);
 	}
 	.side-link .side-icon {
 		color: var(--color-muted);
@@ -464,19 +609,19 @@
 	.tb-btn {
 		display: grid;
 		place-items: center;
-		width: 2.375rem;
-		height: 2.375rem;
-		border-radius: var(--radius-tile);
-		border: 1px solid var(--color-rule-soft);
-		background: var(--color-panel);
+		width: 2.25rem;
+		height: 2.25rem;
+		border-radius: var(--radius-control);
 		color: var(--color-muted);
 		transition:
 			color 120ms,
-			border-color 120ms;
+			background-color 120ms;
 	}
-	.tb-btn:hover {
+	.tb-btn:hover,
+	.tb-btn[aria-pressed='true'],
+	.tb-btn[aria-expanded='true'] {
 		color: var(--color-ink);
-		border-color: var(--color-rule);
+		background: color-mix(in srgb, var(--color-ink) 7%, transparent);
 	}
 	.avatar {
 		display: grid;
@@ -487,9 +632,9 @@
 		font-size: 0.75rem;
 		font-weight: 600;
 		letter-spacing: 0.02em;
-		color: #fff;
-		background: linear-gradient(135deg, #ff9a4d, var(--color-action) 55%, #b8420f);
-		box-shadow: 0 0 0 2px var(--color-panel), 0 0 0 3px var(--color-rule-soft);
+		color: var(--color-ink);
+		background: var(--color-paper-2);
+		box-shadow: inset 0 0 0 1px var(--color-rule);
 	}
 	.card {
 		border: 1px solid var(--color-rule-soft);
@@ -514,6 +659,41 @@
 		background: var(--color-panel);
 		padding: 0.75rem 1rem;
 		min-width: 0;
+	}
+	/* The live strip in a bot or server page header (StatsBar, GameStatusStrip):
+	   items share the full row; two or three columns when the header is narrow.
+	   The parent sets container-type (@container). */
+	.stat-strip {
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		gap: 0.5rem 1.25rem;
+		font-size: 12px;
+		line-height: 16px;
+	}
+	.stat-strip > * {
+		min-width: 0;
+	}
+	@container (min-width: 30rem) {
+		.stat-strip {
+			grid-template-columns: repeat(3, minmax(0, 1fr));
+		}
+	}
+	@container (min-width: 54rem) {
+		.stat-strip {
+			grid-template-columns: repeat(auto-fit, minmax(6.5rem, 1fr));
+		}
+	}
+	.stat-strip .stat-k {
+		color: var(--color-muted);
+	}
+	.stat-strip .stat-v {
+		display: block;
+		margin-top: 0.125rem;
+		font-family: var(--font-mono);
+		font-size: 12.5px;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
 	.quick {
 		display: flex;
@@ -554,19 +734,9 @@
 		padding: 0.125rem 0.5rem;
 		font-size: 0.75rem;
 	}
+	/* Retired decoration; kept as a no-op for pages not yet migrated. */
 	.card-glow {
 		position: relative;
-		overflow: hidden;
-		isolation: isolate;
-	}
-	.card-glow::after {
-		content: '';
-		position: absolute;
-		z-index: -1;
-		inset: -40% -10% auto 45%;
-		height: 180%;
-		pointer-events: none;
-		background: radial-gradient(closest-side, color-mix(in srgb, var(--color-action) 14%, transparent), transparent);
 	}
 	.meter {
 		height: 3px;
@@ -578,7 +748,10 @@
 		display: block;
 		height: 100%;
 		border-radius: inherit;
-		background: var(--color-action);
+		background: color-mix(in srgb, var(--color-ink) 55%, transparent);
+	}
+	.meter[data-level='warn'] > i {
+		background: var(--color-warn);
 	}
 	.meter[data-open='true'] {
 		background: repeating-linear-gradient(90deg, var(--color-rule-soft) 0 4px, transparent 4px 8px);
@@ -591,12 +764,11 @@
 		align-items: center;
 		gap: 0.375rem;
 		border-radius: var(--radius-pill);
-		padding: 0.125rem 0.625rem;
-		font-family: var(--font-mono);
-		font-size: 0.6875rem;
+		padding: 0.0625rem 0.5rem;
+		font-size: 0.75rem;
+		line-height: 1.125rem;
 		font-weight: 500;
-		letter-spacing: 0.08em;
-		text-transform: uppercase;
+		white-space: nowrap;
 		background: color-mix(in srgb, var(--color-ink) 6%, transparent);
 		color: var(--color-muted);
 	}
@@ -653,73 +825,44 @@
 
 
 /* Dark-mode finishing touches. data-theme always holds the resolved theme
-   (lib/ui/theme.svelte.ts), so a system preference lands here too. */
+   (lib/ui/theme.svelte.ts), so a system preference lands here too. Layers
+   separate by lightness alone: no glows, gradients or tinted washes. */
 @layer components {
-	:root[data-theme='dark'] .sidebar {
-		background: color-mix(in srgb, var(--color-paper) 70%, #1a1411);
-	}
-	:root[data-theme='dark'] .card {
-		background: linear-gradient(180deg, color-mix(in srgb, var(--color-panel) 92%, white 2%), var(--color-panel));
-	}
 	:root[data-theme='dark'] body {
-		background:
-			radial-gradient(900px 480px at 88% -8%, color-mix(in srgb, var(--color-action) 10%, transparent), transparent 62%),
-			radial-gradient(700px 420px at -10% 110%, color-mix(in srgb, var(--color-action) 5%, transparent), transparent 60%),
-			var(--color-paper);
-		background-attachment: fixed;
+		background: var(--color-paper);
+	}
+	:root[data-theme='dark'] .sidebar {
+		background: color-mix(in srgb, var(--color-paper) 55%, var(--color-panel));
 	}
 	:root[data-theme='dark'] .btn:hover:not(:disabled) {
-		background: color-mix(in srgb, var(--color-raised) 88%, white);
+		background: color-mix(in srgb, var(--color-raised) 90%, white);
 	}
 	:root[data-theme='dark'] .btn:active:not(:disabled) {
-		background: color-mix(in srgb, var(--color-raised) 80%, white);
+		background: color-mix(in srgb, var(--color-raised) 82%, white);
 	}
 	:root[data-theme='dark'] .btn-quiet:hover:not(:disabled) {
-		background: color-mix(in srgb, var(--color-paper) 85%, white);
-	}
-	:root[data-theme='dark'] .btn-primary:disabled {
-		box-shadow: none;
-	}
-	:root[data-theme='dark'] .btn-primary:not(:disabled) {
-		box-shadow: 0 8px 22px -10px color-mix(in srgb, var(--color-action) 75%, transparent), inset 0 1px 0 rgb(255 255 255 / 0.14);
+		background: color-mix(in srgb, var(--color-ink) 7%, transparent);
 	}
 	:root[data-theme='dark'] .btn-primary:hover:not(:disabled) {
 		background: color-mix(in srgb, var(--color-action) 90%, white);
 	}
+	:root[data-theme='dark'] .btn-danger:hover:not(:disabled) {
+		background: color-mix(in srgb, var(--color-fail) 10%, transparent);
+	}
+	:root[data-theme='dark'] .btn-danger-solid:hover:not(:disabled) {
+		background: color-mix(in srgb, var(--color-fail) 88%, white);
+	}
 	:root[data-theme='dark'] .nav-underline {
 		background: var(--color-action);
-		box-shadow: 0 0 10px color-mix(in srgb, var(--color-action) 80%, transparent);
-	}
-	:root[data-theme='dark'] .hero::after {
-		content: '';
-		position: absolute;
-		inset: -1.5rem -1rem auto auto;
-		width: min(560px, 70%);
-		height: 180px;
-		z-index: -1;
-		pointer-events: none;
-		background: radial-gradient(closest-side, color-mix(in srgb, var(--color-action) 16%, transparent), transparent);
-		filter: blur(8px);
-	}
-	:root[data-theme='dark'] .spine[data-tone='run']::before {
-		box-shadow: 0 0 10px rgb(62 207 158 / 0.45);
-	}
-	:root[data-theme='dark'] .spine[data-tone='fail']::before {
-		box-shadow: 0 0 10px rgb(255 106 85 / 0.45);
-	}
-	:root[data-theme='dark'] .spine[data-tone='warn']::before {
-		box-shadow: 0 0 10px rgb(242 171 60 / 0.4);
 	}
 	:root[data-theme='dark'] dialog::backdrop {
 		background: rgb(0 0 0 / 0.62);
-		backdrop-filter: blur(2px);
 	}
 	:root[data-theme='dark'] ::selection {
 		background: color-mix(in srgb, var(--color-action) 35%, transparent);
 	}
 	:root[data-theme='dark'] .field:focus {
-		border-color: var(--color-action);
-		box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-action) 18%, transparent);
+		border-color: color-mix(in srgb, var(--color-action) 70%, var(--color-rule));
 	}
 }
 

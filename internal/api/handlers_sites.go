@@ -8,6 +8,7 @@ import (
 
 	"github.com/xenycx/rivetpanel/internal/domain"
 	"github.com/xenycx/rivetpanel/internal/service"
+	"github.com/xenycx/rivetpanel/internal/sitetemplates"
 )
 
 type siteDTO struct {
@@ -159,16 +160,48 @@ func (s *panel) createSite(c fiber.Ctx) error {
 		DomainID    string `json:"domain_id"`
 		WorkspaceID string `json:"workspace_id"`
 		SPA         bool   `json:"spa"`
+		// TemplateID seeds the first release from a site template (see
+		// GET /site-templates); omitted or "" creates an empty site.
+		TemplateID string `json:"template_id"`
 	}
 	if err := decode(c, &in); err != nil {
 		return err
 	}
 	st, err := s.sites.Create(c.Context(), currentUser(c), service.CreateSiteInput{Name: in.Name, Slug: in.Slug, DomainID: in.DomainID,
-		WorkspaceID: in.WorkspaceID, SPA: in.SPA})
+		WorkspaceID: in.WorkspaceID, SPA: in.SPA, TemplateID: in.TemplateID})
 	if err != nil {
 		return err
 	}
 	return c.Status(fiber.StatusCreated).JSON(s.toSite(st))
+}
+
+// listSiteTemplates lists the built-in site templates. preview_url renders
+// a page in a sandboxed, script-free document the panel UI may frame.
+func (s *panel) listSiteTemplates(c fiber.Ctx) error {
+	type tplDTO struct {
+		sitetemplates.Template
+		PreviewURL string `json:"preview_url"`
+	}
+	list := s.sites.SiteTemplates()
+	out := make([]tplDTO, 0, len(list))
+	for _, t := range list {
+		out = append(out, tplDTO{Template: t, PreviewURL: "/api/v1/site-templates/" + t.ID + "/preview"})
+	}
+	return c.JSON(fiber.Map{"templates": out})
+}
+
+func (s *panel) previewSiteTemplate(c fiber.Ctx) error {
+	b, err := s.sites.SiteTemplatePreview(strings.Clone(c.Params("tid")), strings.Clone(c.Query("page")))
+	if err != nil {
+		return err
+	}
+	// Template HTML never runs with the panel's origin: the sandbox gives it
+	// an opaque origin, and nothing but inline styles and data: images load.
+	c.Set("Content-Security-Policy", "sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src data:; frame-ancestors 'self'")
+	c.Set("X-Frame-Options", "SAMEORIGIN")
+	c.Set(fiber.HeaderCacheControl, "private, max-age=300")
+	c.Set(fiber.HeaderContentType, "text/html; charset=utf-8")
+	return c.Send(b)
 }
 
 func (s *panel) createBotSite(c fiber.Ctx) error {

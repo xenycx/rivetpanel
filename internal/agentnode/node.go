@@ -557,7 +557,11 @@ func App(d Deps) *fiber.App {
 			})
 		})
 	})
-	portsRoutes(v1, d.ProbePort)
+	var published func(ctx context.Context) ([]runner.PublishedPort, error)
+	if l, ok := d.Docker.(runner.PortLister); ok {
+		published = l.PublishedPorts
+	}
+	portsRoutes(v1, d.ProbePort, published)
 	v1.Get("/query/minecraft", func(c fiber.Ctx) error {
 		port, err := strconv.Atoi(c.Query("port"))
 		if err != nil || port < 1 || port > 65535 {

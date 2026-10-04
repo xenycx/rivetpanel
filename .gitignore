@@ -1,6 +1,9 @@
 # build output and dependencies
 /bin/
 /dist/
+# `go build ./cmd/...` from the repository root
+/rivetpanel
+/rivet-agent
 node_modules/
 web/build/
 web/.svelte-kit/

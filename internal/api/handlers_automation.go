@@ -5,7 +5,6 @@ import (
 
 	"crypto/rand"
 	"encoding/hex"
-	"regexp"
 	"strings"
 	"time"
 
@@ -13,6 +12,7 @@ import (
 	"github.com/gofiber/fiber/v3/middleware/limiter"
 
 	"github.com/xenycx/rivetpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/lazyre"
 	"github.com/xenycx/rivetpanel/internal/service"
 )
 
@@ -28,12 +28,12 @@ func currentAutoToken(c fiber.Ctx) domain.AutomationToken {
 	return fiber.Locals[domain.AutomationToken](c, keyAutoToken)
 }
 
-var requestIDRe = regexp.MustCompile(`^[A-Za-z0-9._-]{8,64}$`)
+var requestIDRe = lazyre.New(`^[A-Za-z0-9._-]{8,64}$`)
 
 func (s *panel) automationRoutes(v1 fiber.Router) {
 	g := v1.Group("/automation", s.requestID)
 	g.Get("/openapi.yaml", s.openAPI)
-	a := g.Group("", s.tokenAuth, limiter.New(limiter.Config{
+	a := g.Group("", s.tokenAuth, newLimiter(limiter.Config{
 		Max: 120, Expiration: time.Minute,
 		KeyGenerator: func(c fiber.Ctx) string { return "tok:" + currentAutoToken(c).ID },
 		LimitReached: func(c fiber.Ctx) error {

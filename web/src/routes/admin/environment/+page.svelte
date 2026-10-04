@@ -194,7 +194,7 @@
 		</label>
 		<div class="inline-flex rounded-control border border-rule bg-raised p-0.5" role="group" aria-label="Show">
 			{#each [['all', 'All'], ['changed', 'Set here'], ['pending', 'Needs restart']] as [id, label] (id)}
-				<button class="rounded-inner px-2.5 py-1 text-small font-medium {show === id ? 'bg-action text-action-ink' : 'text-muted hover:text-ink'}" aria-pressed={show === id} onclick={() => (show = id as typeof show)}>{label}</button>
+				<button class="rounded-inner px-2.5 py-1 text-small font-medium {show === id ? 'bg-paper-2 text-ink shadow-[inset_0_0_0_1px_var(--color-rule)]' : 'text-muted hover:text-ink'}" aria-pressed={show === id} onclick={() => (show = id as typeof show)}>{label}</button>
 			{/each}
 		</div>
 		<span class="text-small text-muted">{shown.length} of {editable.length} editable</span>

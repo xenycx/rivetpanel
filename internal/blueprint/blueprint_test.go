@@ -30,6 +30,15 @@ func TestBuiltinCatalogParses(t *testing.T) {
 		if strings.HasPrefix(b.Spec.Category, "Minecraft") && b.Spec.Category != "Minecraft Proxy" && len(b.Spec.Agreements) == 0 {
 			t.Errorf("%s: Minecraft servers must ask for the EULA", b.Spec.Slug)
 		}
+		// A fixed container port must be the one the server listens on:
+		// Velocity writes bind 0.0.0.0:25565 into a new velocity.toml, so the
+		// proxy is told the port on its command line.
+		if b.Spec.Ports.Container != 0 && b.Spec.Slug == "minecraft-velocity" && !strings.Contains(b.Spec.Startup.Command, "--port {{SERVER_PORT}}") {
+			t.Errorf("%s: the proxy must listen on the mapped container port", b.Spec.Slug)
+		}
+		if b.Spec.Slug == "minecraft-velocity" && b.Spec.ImageForJava(0).Java < 25 {
+			t.Errorf("%s: without a known requirement the newest Java must come first (Velocity 4 needs Java 25)", b.Spec.Slug)
+		}
 		if st := b.Spec.Install.SteamCMD; st != nil {
 			steam++
 			if b.Spec.Startup.Stop == "" && b.Spec.Startup.StopSignal == "" {
@@ -263,6 +272,15 @@ func fakeProviders(t *testing.T, jar []byte) *Providers {
 	})
 	mux.HandleFunc("/v3/projects/paper/versions/1.21.11/builds/latest", func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, `{"downloads":{"server:default":{"name":"paper.jar","size":%d,"url":"%s/jar","checksums":{"sha256":"%s"}}}}`, len(jar), srv.URL, hex.EncodeToString(sum[:]))
+	})
+	mux.HandleFunc("/v3/projects/velocity", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{"versions":{"4.0.0":["4.2.1-SNAPSHOT","4.2.0"],"3.0.0":["3.5.1"]}}`)
+	})
+	mux.HandleFunc("/v3/projects/velocity/versions/4.2.0", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{"version":{"id":"4.2.0","java":{"version":{"minimum":25}}},"builds":[30]}`)
+	})
+	mux.HandleFunc("/v3/projects/velocity/versions/4.2.0/builds/latest", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, `{"downloads":{"server:default":{"name":"velocity.jar","size":%d,"url":"%s/jar","checksums":{"sha256":"%s"}}}}`, len(jar), srv.URL, hex.EncodeToString(sum[:]))
 	})
 	mux.HandleFunc("/jar", func(w http.ResponseWriter, r *http.Request) { w.Write(jar) })
 	srv = httptest.NewServer(mux)

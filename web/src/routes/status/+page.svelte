@@ -4,6 +4,7 @@
 	import { type StatusPage, type StatusIncident, stateLabel, overallLabel, stateTone, words } from '$lib/api/kb';
 	import PublicShell from '$lib/components/PublicShell.svelte';
 	import EmptyState from '$lib/components/ui/EmptyState.svelte';
+	import Notice from '$lib/components/ui/Notice.svelte';
 	import { fmtWhen } from '$lib/args';
 
 	let data = $state<StatusPage | null>(null);
@@ -35,10 +36,10 @@
 <svelte:head><title>{data?.title ?? 'Status'}</title></svelte:head>
 
 {#snippet incident(i: StatusIncident)}
-	<article class="card p-5">
+	<article class="rounded-tile border border-rule-soft bg-panel p-5">
 		<div class="flex flex-wrap items-baseline gap-2">
 			<h3 class="font-semibold">{i.title}</h3>
-			<span class="rounded-pill border border-rule px-2 py-0.5 text-[12px] capitalize">{words(i.status)}</span>
+			<span class="pill capitalize">{words(i.status)}</span>
 			{#if i.kind === 'incident' && i.impact !== 'none'}<span class="text-[12px] text-muted">{i.impact} impact</span>{/if}
 		</div>
 		{#if i.kind === 'maintenance' && i.starts_at_ms}<p class="mt-1 text-small text-muted">Window: {fmtWhen(i.starts_at_ms)}{#if i.ends_at_ms} – {fmtWhen(i.ends_at_ms)}{/if}</p>{/if}
@@ -55,11 +56,11 @@
 	{#if missing}
 		<EmptyState title="No status page here">This panel does not publish a status page.</EmptyState>
 	{:else if error && !data}
-		<p class="text-fail">{error}</p>
+		<Notice tone="fail" live>{error}</Notice>
 	{:else if data}
-		<h1 class="text-page">{data.title}</h1>
+		<h1 class="text-page font-semibold">{data.title}</h1>
 		{#if data.intro}<p class="mt-1 max-w-prose whitespace-pre-line text-muted">{data.intro}</p>{/if}
-		<div class="mt-6 flex items-center gap-3 rounded-card border border-rule-soft bg-raised p-5" role="status">
+		<div class="mt-6 flex flex-wrap items-center gap-3 rounded-tile border border-rule-soft bg-panel px-5 py-4" role="status">
 			<span class="size-3.5 shrink-0 rounded-pill {stateTone[data.overall]?.bg}"></span>
 			<p class="text-title font-semibold">{overallLabel[data.overall] ?? stateLabel[data.overall]}</p>
 			<p class="ml-auto text-small text-muted">Checked {fmtWhen(data.updated_at_ms)}</p>
@@ -73,7 +74,7 @@
 			{#if !data.components.length}
 				<p class="mt-2 text-muted">No components are published yet.</p>
 			{:else}
-				<ul class="card mt-3 divide-y divide-rule-soft">
+				<ul class="list-card mt-3">
 					{#each data.components as c (c.id)}
 						<li class="p-4">
 							<div class="flex flex-wrap items-baseline gap-x-3">

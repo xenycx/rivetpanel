@@ -10,11 +10,15 @@ services:
       # - "127.0.0.1:8081:8081"
       # Uncomment for remote nodes (agents=preview). Raw TLS, not HTTP.
       # - "8444:8444"
+    # Start from deploy/container.env.example (not the systemd example).
     env_file: .env
     volumes:
-      - rivetpanel-data:/var/lib/rivetpanel
+      # Database, keys, bot workspaces, add-on data and backups. It must be a
+      # HOST DIRECTORY: bot containers bind-mount their workspaces from it, and
+      # Docker resolves those mounts on the host (it refuses them from a named
+      # volume). The panel translates paths through this mount at start, so
+      # another host path also works (for example /srv/rivetpanel:/var/lib/rivetpanel).
+      # Do not share it with a systemd installation on the same host.
+      - /var/lib/rivetpanel:/var/lib/rivetpanel
       # The in-process runner needs Docker. Treat this container as root-equivalent.
       - /var/run/docker.sock:/var/run/docker.sock
-
-volumes:
-  rivetpanel-data:

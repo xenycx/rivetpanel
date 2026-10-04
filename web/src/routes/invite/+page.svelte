@@ -50,18 +50,18 @@
 
 <svelte:head><title>Invitation · RivetPanel</title></svelte:head>
 
-<section class="hero mx-auto max-w-lg py-8">
+<section class="mx-auto max-w-lg py-8">
 	<p class="eyebrow">Invitation</p>
 	{#if error}
-		<h1 class="mt-1 text-page">This invitation does not work<span class="text-action">.</span></h1>
+		<h1 class="mt-1 text-page font-semibold">This invitation does not work</h1>
 		<Notice tone="fail" class="mt-4">{error}</Notice>
 		<a class="btn mt-4" href="/dashboard">Back to your bots</a>
 	{:else if !invite}
 		<p class="mt-2 text-muted">Checking the invitation…</p>
 	{:else}
-		<h1 class="mt-1 text-page">Join {invite.bot_name}<span class="text-action">.</span></h1>
+		<h1 class="mt-1 text-page font-semibold">Join {invite.bot_name}</h1>
 		<p class="mt-1 text-muted">{invite.created_by} invited you. The link expires {new Date(invite.expires_at_ms).toLocaleString()}.</p>
-		<ul class="mt-5 grid gap-2 rounded-overlay border border-rule-soft bg-panel p-4">
+		<ul class="mt-5 grid gap-2 rounded-tile border border-rule-soft bg-panel p-4">
 			{#each labels.filter(([bit]) => invite && (invite.permissions & bit || invite.permissions & Perm.admin)) as [bit, text] (bit)}
 				<li class="flex items-start gap-2"><Icon name="check" class="mt-[3px] text-run" />{text}</li>
 			{/each}

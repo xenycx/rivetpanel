@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { untrack } from 'svelte';
 	import { api, ApiError } from '$lib/api/client';
 	import type { OutputChunk } from '$lib/api/types';
 	import Icon from '$lib/components/ui/Icon.svelte';
@@ -20,11 +20,14 @@
 	let pre: HTMLPreElement | undefined = $state();
 	let copied = $state(false);
 
-	const base = `/bots/${botId}/operations/${opId}/output`;
+	const base = $derived(`/bots/${botId}/operations/${opId}/output`);
 
-	async function poll() {
+	// One poll of url; nothing is applied once the loop for url was stopped
+	// (another build was opened in this component).
+	async function poll(url: string, stopped: () => boolean) {
 		try {
-			const c = await api<OutputChunk>('GET', `${base}?offset=${offset}`);
+			const c = await api<OutputChunk>('GET', `${url}?offset=${offset}`);
+			if (stopped()) return;
 			if (c.truncated) truncated = true;
 			if (c.text) {
 				text = (text + c.text).slice(-MAX_CHARS);
@@ -34,16 +37,26 @@
 			live = c.live || c.next_offset < c.total;
 			error = '';
 		} catch (e) {
+			if (stopped()) return;
 			live = false;
 			error = e instanceof ApiError && e.status === 404 ? 'No output was kept for this build.' : e instanceof ApiError ? e.message : 'The output could not be loaded.';
 		}
 	}
-	onMount(() => {
+	// (Re)starts polling whenever the build changes.
+	$effect(() => {
+		const url = base;
 		let stop = false;
+		untrack(() => {
+			text = '';
+			offset = 0;
+			live = true;
+			truncated = false;
+			error = '';
+		});
 		(async () => {
 			while (!stop) {
-				await poll();
-				if (!live) break;
+				await poll(url, () => stop);
+				if (stop || !live) break;
 				await new Promise((r) => setTimeout(r, document.visibilityState === 'visible' ? 1000 : 4000));
 			}
 		})();

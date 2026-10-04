@@ -2,8 +2,9 @@ package pkgmgr
 
 import (
 	"fmt"
-	"regexp"
 	"strings"
+
+	"github.com/xenycx/rivetpanel/internal/lazyre"
 )
 
 var cargoGroups = []string{"dependencies", "dev-dependencies", "build-dependencies"}
@@ -11,11 +12,11 @@ var cargoGroups = []string{"dependencies", "dev-dependencies", "build-dependenci
 var cargo = &Ecosystem{ID: "cargo", File: "Cargo.toml", Groups: cargoGroups, Parse: parseCargo, Apply: applyCargo}
 
 var (
-	cargoKV     = regexp.MustCompile(`^(\s*)([A-Za-z_][A-Za-z0-9_-]*|"[^"]+")\s*=\s*(.*?)\s*$`)
-	cargoVerStr = regexp.MustCompile(`^"([^"]*)"\s*(#.*)?$`)
-	cargoInlVer = regexp.MustCompile(`(\bversion\s*=\s*)"[^"]*"`)
-	cargoInlGet = regexp.MustCompile(`\bversion\s*=\s*"([^"]*)"`)
-	cargoDotted = regexp.MustCompile(`^(dependencies|dev-dependencies|build-dependencies)\.([A-Za-z_][A-Za-z0-9_-]*|"[^"]+")$`)
+	cargoKV     = lazyre.New(`^(\s*)([A-Za-z_][A-Za-z0-9_-]*|"[^"]+")\s*=\s*(.*?)\s*$`)
+	cargoVerStr = lazyre.New(`^"([^"]*)"\s*(#.*)?$`)
+	cargoInlVer = lazyre.New(`(\bversion\s*=\s*)"[^"]*"`)
+	cargoInlGet = lazyre.New(`\bversion\s*=\s*"([^"]*)"`)
+	cargoDotted = lazyre.New(`^(dependencies|dev-dependencies|build-dependencies)\.([A-Za-z_][A-Za-z0-9_-]*|"[^"]+")$`)
 )
 
 // tomlSection records where a header's body lives in the line slice.

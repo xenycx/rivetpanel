@@ -250,7 +250,9 @@ func (a *AlertService) Watch(ctx context.Context, bus *events.Bus) {
 		case <-ctx.Done():
 			return
 		case st := <-sub.C:
-			if st.ObservedState != "failed" || st.LastError == "" || st.DesiredState != domain.DesiredRunning {
+			// A taken host port is a configuration problem shown on the
+			// server's page, not a crash: it is not retried or alerted.
+			if st.ObservedState != "failed" || st.LastError == "" || st.DesiredState != domain.DesiredRunning || st.Reason == domain.ReasonPortConflict {
 				continue
 			}
 			a.mu.Lock()

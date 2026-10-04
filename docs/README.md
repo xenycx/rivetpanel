@@ -2,17 +2,19 @@
 
 RivetPanel is a control plane for Discord bots, Minecraft servers and static
 sites, with an embedded local runner and preview remote execution nodes. The
-current project version is **0.4.0**. Start with
+current project version is **0.5.0**. Start with
 the guides below.
 
 ## Install and operate
 
-- [Deployment](deployment.md) — binary, systemd, reverse proxy, and first admin
+- [Deployment](deployment.md) — binary, systemd, reverse proxy, first admin, upgrades and rollback
 - [Container deployment](container.md) — GHCR image and Docker Compose
+- [Upgrading from BotPanel 0.4.0](upgrading-from-0.4.md) — clean-break migration and clean-up steps
 - [OAuth setup](oauth.md) — GitHub and Discord sign-in
 - [Email (Mailgun)](email.md) — password reset, invitations, alert emails and security notices
 - [Notifications and support](support.md) — the bell, notification preferences and support tickets
 - [Backups](backup.md) — installation backup, verification, and restore
+- [Log files and archive](logs.md) — daily log files, the archive job, retention of logs and graph data
 - [Diagnostics and footprint](footprint.md) — memory expectations and measurement
 
 ## Use and extend

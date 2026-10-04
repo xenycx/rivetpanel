@@ -123,6 +123,15 @@ func gameEnv(s blueprint.Spec, bot domain.Bot) map[string]string {
 		"SERVER_IP":     "0.0.0.0",
 		"SERVER_ID":     bot.ID,
 	}
+	if s.Startup.JVMArgs {
+		// Validated when saved; checked again here because the value is
+		// word-split by the shell. Invalid stored options are dropped.
+		args, err := blueprint.CheckJVMArgs(bot.JVMArgs)
+		if err != nil {
+			args = ""
+		}
+		env[blueprint.JVMArgsVar] = args
+	}
 	if p, ok := bot.PrimaryAllocation(); ok {
 		port := p.Port
 		if s.Ports.Container != 0 {
@@ -224,15 +233,9 @@ func (r *Runner) installGame(ctx context.Context, bot domain.Bot, rt runtimes.Ru
 		}
 		fmt.Fprintf(log, "Installing %s %s\n", s.Name, art.Version)
 		version = art.Version
-		if choice == "" { // automatic image: pick the Java the version needs
-			need := art.JavaHint
-			if need == 0 && s.JavaFrom != "" {
-				need = r.providers().JavaFor(ctx, d.Name, d.Project, art.Version)
-			}
-			choice = s.ImageForJava(need).Label
-			if need > 0 {
-				fmt.Fprintf(log, "Minecraft %s needs Java %d: using %s\n", art.Version, need, choice)
-			}
+		need := art.JavaHint // the provider's declared requirement
+		if need == 0 && s.JavaFrom != "" {
+			need = r.providers().JavaFor(ctx, d.Name, d.Project, art.Version)
 		}
 		dest := blueprint.Render(d.Dest, vars)
 		if !validRel(dest) {
@@ -241,18 +244,24 @@ func (r *Runner) installGame(ctx context.Context, bot domain.Bot, rt runtimes.Ru
 		r.buildStageName(ctx, op, "Downloading "+art.Name)
 		fmt.Fprintf(log, "Downloading %s\n", art.URL)
 		pr, pw := io.Pipe()
+		sniff := blueprint.NewJarJavaSniffer() // the classes' own Java requirement
 		go func() {
-			_, err := r.providers().Fetch(ctx, art, pw)
+			_, err := r.providers().Fetch(ctx, art, io.MultiWriter(pw, sniff))
 			pw.CloseWithError(err)
 		}()
 		if err := files.WriteFile(bot.ID, dest, pr, blueprint.MaxDownloadBytes); err != nil {
 			pr.CloseWithError(err)
+			sniff.Java()
 			if strings.Contains(err.Error(), "checksum") {
 				return rt, "installation failed: the download did not match its published checksum", err
 			}
 			return rt, "installation failed: the download did not complete", err
 		}
 		fmt.Fprintf(log, "Saved %s\n", dest)
+		if j := sniff.Java(); j > need {
+			need = j
+		}
+		choice = javaImageChoice(s, choice, need, s.Name+" "+art.Version, log)
 	}
 	if choice == "" {
 		choice = s.Images[0].Label
@@ -315,6 +324,31 @@ func (r *Runner) installGame(ctx context.Context, bot domain.Bot, rt runtimes.Ru
 	}
 	st.built, st.builtGen = true, bot.Generation
 	return rt, "", nil
+}
+
+// javaImageChoice picks the image for a download that needs Java need (0 =
+// unknown). An automatic choice ("") takes the lowest Java at or above need;
+// an existing choice is kept unless its Java is too old to start the server,
+// which would only fail with UnsupportedClassVersionError.
+func javaImageChoice(s blueprint.Spec, choice string, need int, what string, log io.Writer) string {
+	if choice == "" {
+		choice = s.ImageForJava(need).Label
+		if need > 0 {
+			fmt.Fprintf(log, "%s needs Java %d: using %s\n", what, need, choice)
+		}
+		return choice
+	}
+	if need <= 0 {
+		return choice
+	}
+	if im, ok := s.Image(choice); ok && im.Java > 0 && im.Java < need {
+		if up := s.ImageForJava(need); up.Java >= need {
+			fmt.Fprintf(log, "%s needs Java %d but %s provides Java %d: using %s\n", what, need, im.Label, im.Java, up.Label)
+			return up.Label
+		}
+		fmt.Fprintf(log, "Warning: %s needs Java %d but no image of this blueprint provides it\n", what, need)
+	}
+	return choice
 }
 
 // installEnv is the install script's environment: the server's declared

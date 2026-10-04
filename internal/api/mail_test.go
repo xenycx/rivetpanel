@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"regexp"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -19,10 +20,12 @@ import (
 )
 
 // fakeMailgun records the messages the panel sends and answers the two
-// endpoints it uses.
+// endpoints it uses. The panel can send several messages at once, so the
+// recorded fields are guarded.
 type fakeMailgun struct {
 	srv   *httptest.Server
 	sent  chan map[string]string
+	mu    sync.Mutex
 	key   string
 	calls []string
 }
@@ -30,13 +33,18 @@ type fakeMailgun struct {
 func newFakeMailgun(t *testing.T) *fakeMailgun {
 	f := &fakeMailgun{sent: make(chan map[string]string, 16)}
 	f.srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, p, _ := r.BasicAuth()
+		f.mu.Lock()
 		f.calls = append(f.calls, r.Method+" "+r.URL.Path)
-		if _, p, _ := r.BasicAuth(); p != "key-good" {
+		if p == "key-good" {
+			f.key = p
+		}
+		f.mu.Unlock()
+		if p != "key-good" {
 			w.WriteHeader(401)
 			io.WriteString(w, `{"message":"Invalid private key"}`)
 			return
 		}
-		f.key = "key-good"
 		switch {
 		case r.Method == http.MethodGet && r.URL.Path == "/v4/domains/mg.example.com":
 			io.WriteString(w, `{"domain":{"name":"mg.example.com","state":"active","type":"custom"},"sending_dns_records":[{"valid":"valid"}]}`)

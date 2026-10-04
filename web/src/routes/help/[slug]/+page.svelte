@@ -8,6 +8,7 @@
 	import SafeMarkdown from '$lib/components/SafeMarkdown.svelte';
 	import Icon from '$lib/components/ui/Icon.svelte';
 	import EmptyState from '$lib/components/ui/EmptyState.svelte';
+	import Notice from '$lib/components/ui/Notice.svelte';
 	import { fmtWhen } from '$lib/args';
 
 	let article = $state<KBArticle | null>(null);
@@ -46,14 +47,14 @@
 	{:else if problem === 'missing'}
 		<div class="mt-6"><EmptyState title="Article not found">It may have been moved or unpublished, or it is not available to your account.{#snippet actions()}<a class="btn" href="/help">Back to the help center</a>{/snippet}</EmptyState></div>
 	{:else if problem === 'error'}
-		<p class="mt-6 text-fail">{message}</p>
+		<Notice tone="fail" class="mt-6" live>{message}</Notice>
 	{:else if article}
 		<article class="mt-3 max-w-3xl">
-			<h1 class="text-page">{article.title}</h1>
+			<h1 class="text-page font-semibold">{article.title}</h1>
 			<p class="mt-1 text-small text-muted">
 				Updated {fmtWhen(article.updated_at_ms)}
-				{#if article.status === 'draft'}<span class="ml-2 rounded-pill border border-warn/40 px-2 py-0.5 text-[12px] text-warn">Draft (not published)</span>{/if}
-				{#if article.visibility !== 'public' && session.user}<span class="ml-2 rounded-pill border border-rule px-2 py-0.5 text-[12px]">{visibilityLabel[article.visibility]}</span>{/if}
+				{#if article.status === 'draft'}<span class="pill ml-2" data-tone="warn">Draft (not published)</span>{/if}
+				{#if article.visibility !== 'public' && session.user}<span class="pill ml-2">{visibilityLabel[article.visibility]}</span>{/if}
 			</p>
 			{#if article.summary}<p class="mt-4 text-lg text-muted">{article.summary}</p>{/if}
 			<div class="kb-body mt-5"><SafeMarkdown source={article.body ?? ''} relativeLinks /></div>

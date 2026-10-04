@@ -158,6 +158,10 @@ func (s *panel) listBots(c fiber.Ctx) error {
 		if (q != "" && !strings.Contains(strings.ToLower(b.Name), q)) || (rt != "" && b.Runtime != rt) || (tag != "" && !slices.Contains(tags[b.ID], tag)) {
 			continue
 		}
+		if b.IsGame() && len(b.Allocations) == 0 && s.games != nil && s.games.Store != nil {
+			// Lists show each game server's join address (its primary allocation).
+			b.Allocations, _ = s.games.Store.ListBotAllocations(c.Context(), b.ID)
+		}
 		d := s.viewBot(c, b)
 		d.Tags, d.Favorite = tags[b.ID], favs[b.ID]
 		if d.Tags == nil {

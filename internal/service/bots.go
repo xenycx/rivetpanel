@@ -17,6 +17,7 @@ import (
 	"github.com/xenycx/rivetpanel/internal/domain"
 	"github.com/xenycx/rivetpanel/internal/events"
 	"github.com/xenycx/rivetpanel/internal/filesystem"
+	"github.com/xenycx/rivetpanel/internal/runner"
 	"github.com/xenycx/rivetpanel/internal/runtimes"
 	"github.com/xenycx/rivetpanel/internal/secrets"
 	"github.com/xenycx/rivetpanel/internal/templates"
@@ -78,6 +79,11 @@ type BotService struct {
 	// RemotePorts asks a remote node's agent whether host ports can be
 	// bound there (a check, not a reservation). Nil skips remote probing.
 	RemotePorts func(ctx context.Context, nodeID, ip string, ports []int) ([]PortState, error)
+	// LocalPublished lists the host ports that running containers on the
+	// local node's Docker publish, whoever created them (another panel, any
+	// other tool). Allocations skip them and a start that would collide is
+	// refused. Nil skips the check (no Docker).
+	LocalPublished func(ctx context.Context) ([]runner.PublishedPort, error)
 	// Notices receives access notifications (sharing, transfers, workspace
 	// membership, accepted invitations); nil sends none.
 	Notices *NotificationService
@@ -745,7 +751,10 @@ func (s *BotService) setIntent(ctx context.Context, actor domain.User, id, desir
 		if _, ok := s.Catalog.Get(b.Runtime); !ok {
 			return domain.Bot{}, domain.Invalid("runtime is no longer available")
 		}
-		if err := s.checkRemotePorts(ctx, b); err != nil {
+		if err := s.checkRemotePorts(ctx, actor, b); err != nil {
+			return domain.Bot{}, err
+		}
+		if err := s.checkLocalPorts(ctx, actor, b); err != nil {
 			return domain.Bot{}, err
 		}
 	}

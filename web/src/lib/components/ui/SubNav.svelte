@@ -15,7 +15,7 @@
 			<li class="shrink-0">
 				<a
 					href={l.href}
-					class="flex items-center gap-2.5 rounded-control px-2.5 py-1.5 whitespace-nowrap transition-colors {on ? 'bg-action/10 font-medium text-ink' : 'text-ink/75 hover:bg-panel hover:text-ink'}"
+					class="flex items-center gap-2.5 rounded-control px-2.5 py-1.5 whitespace-nowrap transition-colors {on ? 'bg-ink/7 font-medium text-ink' : 'text-ink/75 hover:bg-panel hover:text-ink'}"
 					aria-current={on ? 'page' : undefined}><Icon name={l.icon} class={on ? 'text-action' : 'text-muted'} />{l.label}</a
 				>
 			</li>

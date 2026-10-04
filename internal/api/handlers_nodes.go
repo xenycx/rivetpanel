@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
-	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -14,6 +13,7 @@ import (
 	"github.com/gofiber/fiber/v3"
 
 	"github.com/xenycx/rivetpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/lazyre"
 	"github.com/xenycx/rivetpanel/internal/store/sqlite"
 )
 
@@ -127,7 +127,7 @@ func (s *panel) listNodes(c fiber.Ctx) error {
 	return c.JSON(fiber.Map{"nodes": out})
 }
 
-var publicAddressRE = regexp.MustCompile(`^[A-Za-z0-9](?:[A-Za-z0-9.-]{0,251}[A-Za-z0-9])?$`)
+var publicAddressRE = lazyre.New(`^[A-Za-z0-9](?:[A-Za-z0-9.-]{0,251}[A-Za-z0-9])?$`)
 
 func validLabel(v, what string, max int) (string, error) {
 	v = strings.TrimSpace(v)

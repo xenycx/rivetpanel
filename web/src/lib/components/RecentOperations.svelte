@@ -5,7 +5,7 @@
 	import type { OpPage, Operation } from '$lib/api/types';
 	import OperationRow from '$lib/components/OperationRow.svelte';
 
-	let { botId, canOutput = true }: { botId: string; canOutput?: boolean } = $props();
+	let { botId, canOutput = true, isGame = false }: { botId: string; canOutput?: boolean; isGame?: boolean } = $props();
 
 	let ops = $state<Operation[] | null>(null);
 	let now = $state(Date.now());
@@ -41,7 +41,7 @@
 	{#if ops === null}
 		<p class="mt-2 text-muted">Loading…</p>
 	{:else if ops.length === 0}
-		<p class="mt-2 text-muted">Builds, deployments, backups and restores appear here once they run.</p>
+		<p class="mt-2 text-muted">{isGame ? 'Installations, backups and restores' : 'Builds, deployments, backups and restores'} appear here once they run.</p>
 	{:else}
 		<ul class="mt-2 list-card">
 			{#each ops as op (op.id)}

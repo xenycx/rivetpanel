@@ -10,6 +10,8 @@ import (
 	"strings"
 
 	"go.yaml.in/yaml/v3"
+
+	"github.com/xenycx/rivetpanel/internal/lazyre"
 )
 
 // Plan is a hosting suggestion. Every field is a proposal the person reviews
@@ -44,7 +46,7 @@ type EnvVar struct {
 
 const mib = 1 << 20
 
-var secretRe = regexp.MustCompile(`(?i)token|secret|key|password|passwd|pass$|auth|credential|webhook|dsn|_uri$|_url$`)
+var secretRe = lazyre.New(`(?i)token|secret|key|password|passwd|pass$|auth|credential|webhook|dsn|_uri$|_url$`)
 
 // IsSecretName reports whether a variable name looks like it holds a secret.
 func IsSecretName(n string) bool { return secretRe.MatchString(n) }
@@ -347,7 +349,7 @@ func detectDeps(p *Plan, text string, m map[string]string) {
 	}
 }
 
-var envLineRe = regexp.MustCompile(`^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$`)
+var envLineRe = lazyre.New(`^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$`)
 
 // detectEnvFiles reads .env.example-style files: NAME=value with preceding
 // comment lines as the description.
@@ -447,7 +449,7 @@ func detectCompose(s *Snapshot, p *Plan) {
 	}
 }
 
-var cmdRe = regexp.MustCompile(`(?im)^\s*(?:CMD|ENTRYPOINT)\s+(.+)$`)
+var cmdRe = lazyre.New(`(?im)^\s*(?:CMD|ENTRYPOINT)\s+(.+)$`)
 
 func detectDockerfile(s *Snapshot, p *Plan) {
 	for f, c := range s.Files {

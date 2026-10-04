@@ -8,11 +8,11 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/xenycx/rivetpanel/internal/lazyre"
 	"github.com/xenycx/rivetpanel/internal/modules"
 )
 
@@ -51,10 +51,17 @@ type Config struct {
 	MaxBotMemory int64
 	MaxBotCPUs   int64 // nano CPUs
 
-	DockerHost       string
-	ContainerUser    string // uid:gid of bot processes
-	WorkspaceOwner   string // host uid:gid owning workspaces; defaults to ContainerUser
-	AllowRootUser    bool   // permit uid/gid 0 (only sensible with a rootless daemon)
+	DockerHost     string
+	ContainerUser  string // uid:gid of bot processes
+	WorkspaceOwner string // host uid:gid owning workspaces; defaults to ContainerUser
+	// ContainerUserSet and WorkspaceOwnerSet record that the operator chose
+	// the value (RIVET_CONTAINER_USER / RIVET_WORKSPACE_OWNER). Only unset
+	// values may be replaced by the unprivileged-panel fallback.
+	ContainerUserSet, WorkspaceOwnerSet bool
+	AllowRootUser                       bool // permit uid/gid 0 (only sensible with a rootless daemon)
+	// AllowSharedUID lets a production panel that cannot chown run bot
+	// containers as its own uid:gid (RIVET_ALLOW_SHARED_UID=1).
+	AllowSharedUID   bool
 	ContainerNetwork string // Docker network mode for bot and build containers
 	RunnerWorkers    int
 	MaxBuilds        int // concurrent build containers
@@ -270,15 +277,16 @@ func LoadLookup(look Lookup) (Config, error) {
 		c.DockerHost = v
 	}
 	if v := getenv("RIVET_CONTAINER_USER"); v != "" {
-		c.ContainerUser = v
+		c.ContainerUser, c.ContainerUserSet = v, true
 	}
 	if v := getenv("RIVET_CONTAINER_NETWORK"); v != "" {
 		c.ContainerNetwork = v
 	}
 	if v := getenv("RIVET_WORKSPACE_OWNER"); v != "" {
-		c.WorkspaceOwner = v
+		c.WorkspaceOwner, c.WorkspaceOwnerSet = v, true
 	}
 	c.AllowRootUser = getenv("RIVET_ALLOW_ROOT_CONTAINER_USER") == "1"
+	c.AllowSharedUID = getenv("RIVET_ALLOW_SHARED_UID") == "1"
 	if v := getenv("RIVET_RUNNER_WORKERS"); v != "" {
 		n, err := strconv.Atoi(v)
 		if err != nil {
@@ -508,7 +516,7 @@ func (c Config) validateSites() []error {
 	return errs
 }
 
-var hostLabelRe = regexp.MustCompile(`^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$`)
+var hostLabelRe = lazyre.New(`^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$`)
 
 // validateSitesDomains checks RIVET_SITES_DOMAINS: host names that overlap
 // neither each other, the primary sites domain, nor the panel's host (a site

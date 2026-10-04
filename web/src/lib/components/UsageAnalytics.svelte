@@ -52,13 +52,13 @@
 	<div>
 		<h2 class="text-title font-semibold">Analytics</h2>
 		<p class="text-small text-muted">
-			Resource use, uptime, crashes, deployments and backups of this {noun}{#if data}, per {fmtResolution(data.resolution_s)}{/if}. Sampled once a minute while the panel runs.
+			Resource use, uptime, crashes{bot.kind === 'game' ? '' : ', deployments'} and backups of this {noun}{#if data}, per {fmtResolution(data.resolution_s)}{/if}. Sampled once a minute while the panel runs.
 		</p>
 	</div>
 	<div class="flex flex-wrap items-center gap-2">
 		<div class="inline-flex rounded-control border border-rule bg-raised p-0.5" role="group" aria-label="Time range">
 			{#each botRanges as r (r.id)}
-				<button class="rounded-inner px-2.5 py-1 text-small font-medium {range === r.id ? 'bg-action text-action-ink' : 'text-muted hover:text-ink'}" aria-pressed={range === r.id} onclick={() => (range = r.id)}>{r.label}</button>
+				<button class="rounded-inner px-2.5 py-1 text-small font-medium {range === r.id ? 'bg-paper-2 text-ink shadow-[inset_0_0_0_1px_var(--color-rule)]' : 'text-muted hover:text-ink'}" aria-pressed={range === r.id} onclick={() => (range = r.id)}>{r.label}</button>
 			{/each}
 		</div>
 		<a class="btn btn-sm" href={csv} download>Export CSV</a>

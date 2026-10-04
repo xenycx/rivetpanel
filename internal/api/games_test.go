@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"crypto/sha512"
 	"encoding/json"
 	"fmt"
@@ -9,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/xenycx/rivetpanel/blueprints"
@@ -16,7 +18,9 @@ import (
 	"github.com/xenycx/rivetpanel/internal/domain"
 	"github.com/xenycx/rivetpanel/internal/filesystem"
 	"github.com/xenycx/rivetpanel/internal/modrinth"
+	"github.com/xenycx/rivetpanel/internal/runner"
 	"github.com/xenycx/rivetpanel/internal/service"
+	"github.com/xenycx/rivetpanel/internal/store/sqlite"
 )
 
 // withGames rebuilds the env's app with game servers enabled. Ports are
@@ -35,6 +39,7 @@ func withGames(t *testing.T, e *env) *service.GameService {
 
 type gameOut struct {
 	ID           string     `json:"id"`
+	NodeID       string     `json:"node_id"`
 	Kind         string     `json:"kind"`
 	InstallState string     `json:"install_state"`
 	ImageChoice  string     `json:"image_choice"`
@@ -93,6 +98,32 @@ func TestGameServerLifecycleAPI(t *testing.T) {
 	json.Unmarshal(u.mustStatus(200, "GET", "/api/v1/bots/"+g.ID+"/game", nil), &detail)
 	if len(detail.Variables) != 3 || detail.Variables[0].Env != "MINECRAFT_VERSION" || detail.Variables[0].Value != "1.21.11" {
 		t.Fatalf("variables %+v", detail.Variables)
+	}
+
+	// The list carries each server's allocations, for its join address.
+	var listed struct {
+		Bots []gameOut `json:"bots"`
+	}
+	json.Unmarshal(u.mustStatus(200, "GET", "/api/v1/bots", nil), &listed)
+	if len(listed.Bots) != 1 || len(listed.Bots[0].Allocations) != 1 || listed.Bots[0].Allocations[0].Port != 25565 {
+		t.Fatalf("listed %+v", listed.Bots)
+	}
+
+	// Join addresses: any account reads the nodes' public addresses only.
+	var hosts struct {
+		Hosts map[string]string `json:"hosts"`
+	}
+	json.Unmarshal(u.mustStatus(200, "GET", "/api/v1/game-hosts", nil), &hosts)
+	if len(hosts.Hosts) != 0 {
+		t.Fatalf("hosts without public addresses: %v", hosts.Hosts)
+	}
+	addr := "play.example.com"
+	if err := e.db.UpdateNode(t.Context(), g.NodeID, sqlite.NodeUpdate{PublicAddress: &addr}, 1); err != nil {
+		t.Fatal(err)
+	}
+	json.Unmarshal(u.mustStatus(200, "GET", "/api/v1/game-hosts", nil), &hosts)
+	if hosts.Hosts[g.NodeID] != addr || len(hosts.Hosts) != 1 {
+		t.Fatalf("hosts %v (node %s)", hosts.Hosts, g.NodeID)
 	}
 
 	// A second server gets the next port.
@@ -291,5 +322,90 @@ func TestGameAddonInstall(t *testing.T) {
 	other := e.user("o@example.com", domain.RoleUser)
 	if resp, _ := other.do("POST", base+"/game/addons", map[string]string{"project": "AbCd1234", "version": "Ver00001"}); resp.StatusCode != 404 {
 		t.Fatalf("cross-account install: %d", resp.StatusCode)
+	}
+}
+
+// Ports published by any running container on the host (another panel, any
+// other tool) are never handed out, pool ports included; a start onto one is
+// refused with the holder's name, and the server can move to a free port.
+func TestDockerPublishedPortsAreSkipped(t *testing.T) {
+	e := newEnv(t)
+	withGames(t, e)
+	var mu sync.Mutex
+	pubs := []runner.PublishedPort{{HostIP: "0.0.0.0", HostPort: 25577, Proto: "tcp", Container: "other-panel-runtime"}}
+	e.bots.LocalPublished = func(context.Context) ([]runner.PublishedPort, error) {
+		mu.Lock()
+		defer mu.Unlock()
+		return append([]runner.PublishedPort(nil), pubs...), nil
+	}
+	publish := func(port int, name string) {
+		mu.Lock()
+		pubs = append(pubs, runner.PublishedPort{HostIP: "0.0.0.0", HostPort: port, Proto: "tcp", Container: name})
+		mu.Unlock()
+	}
+	u := e.user("proxy@example.com", domain.RoleUser)
+	admin := e.user("ports-admin@example.com", domain.RoleAdmin)
+	create := map[string]any{"name": "Proxy", "blueprint": "minecraft-velocity", "memory_bytes": 512 << 20}
+	var g gameOut
+	json.Unmarshal(u.mustStatus(201, "POST", "/api/v1/games", create), &g)
+	if g.Allocations[0].Port != 25578 {
+		t.Fatalf("got port %d, want 25578 (25577 is published by another container)", g.Allocations[0].Port)
+	}
+
+	// Administrators adding pool ports get busy ones skipped and named.
+	var added struct {
+		Allocations []allocDTO `json:"allocations"`
+		Skipped     []struct {
+			Port   int    `json:"port"`
+			Reason string `json:"reason"`
+		} `json:"skipped"`
+	}
+	publish(25580, "someone-else")
+	json.Unmarshal(admin.mustStatus(201, "POST", "/api/v1/admin/allocations", map[string]any{"ports": "25579-25581"}), &added)
+	if len(added.Allocations) != 2 || len(added.Skipped) != 1 || added.Skipped[0].Port != 25580 || !strings.Contains(added.Skipped[0].Reason, "someone-else") {
+		t.Fatalf("admin add: %+v", added)
+	}
+	if resp, body := admin.do("POST", "/api/v1/admin/allocations", map[string]any{"ports": "25577"}); resp.StatusCode != 400 || !strings.Contains(string(body), "other-panel-runtime") {
+		t.Fatalf("busy single port: %d %s", resp.StatusCode, body)
+	}
+
+	// A pool port taken on the host since it was added is skipped too.
+	publish(25579, "late-comer")
+	var g2 gameOut
+	create["name"] = "Proxy 2"
+	json.Unmarshal(u.mustStatus(201, "POST", "/api/v1/games", create), &g2)
+	if p := g2.Allocations[0].Port; p != 25581 {
+		t.Fatalf("second server got %d, want the free pool port 25581", p)
+	}
+
+	// The host takes the first server's port: Start is refused. The holder
+	// can be another tenant's container, so only an administrator sees its
+	// name.
+	publish(25578, "rivetpanel-other-runtime")
+	base := "/api/v1/bots/" + g.ID
+	if resp, body := u.do("POST", base+"/start", nil); resp.StatusCode != 400 || !strings.Contains(string(body), "Port 25578 is already used by another container") ||
+		strings.Contains(string(body), "rivetpanel-other-runtime") {
+		t.Fatalf("start onto a busy port: %d %s", resp.StatusCode, body)
+	}
+	if resp, body := admin.do("POST", base+"/start", nil); resp.StatusCode != 400 || !strings.Contains(string(body), "Port 25578 is already used by container rivetpanel-other-runtime") {
+		t.Fatalf("admin start onto a busy port: %d %s", resp.StatusCode, body)
+	}
+	// One click moves it to a free port and returns the old one to the pool.
+	var moved gameOut
+	json.Unmarshal(u.mustStatus(200, "POST", base+"/allocations/pick-free", nil), &moved)
+	if len(moved.Allocations) != 1 || !moved.Allocations[0].Primary || moved.Allocations[0].Port != 25582 || moved.Generation <= g.Generation {
+		t.Fatalf("after pick-free: %+v", moved)
+	}
+	u.mustStatus(202, "POST", base+"/start", nil)
+	// The runner then hits a port taken meanwhile: one click moves the
+	// waiting server without stopping it first, and it starts again.
+	b, _ := e.db.GetBot(t.Context(), g.ID)
+	e.db.Observe(t.Context(), sqlite.Observation{BotID: g.ID, Generation: b.Generation, State: "failed", SettleGeneration: true,
+		Reason: domain.ReasonPortConflict, LastError: "Port 25582 is already used by container late. Choose another port in Network or stop that container.", NowMS: 1})
+	publish(25582, "late")
+	json.Unmarshal(u.mustStatus(200, "POST", base+"/allocations/pick-free", nil), &moved)
+	if after, _ := e.db.GetBot(t.Context(), g.ID); after.DesiredState != domain.DesiredRunning || after.Generation <= b.Generation ||
+		moved.Allocations[0].Port == 25582 || moved.Allocations[0].Port == 25580 {
+		t.Fatalf("pick-free while blocked: %+v desired=%s", moved.Allocations, after.DesiredState)
 	}
 }

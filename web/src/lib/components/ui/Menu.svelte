@@ -1,5 +1,15 @@
 <script lang="ts" module>
-	export type MenuItem = { label: string; onselect: () => void; danger?: boolean; disabled?: boolean; hint?: string } | 'separator';
+	/**
+	 * A menu row. A short hint (a shortcut such as "Ctrl+K") sits on the same
+	 * line; a longer one becomes the tooltip, or a second line when the item is
+	 * disabled (the reason) or `detail` asks for it. `heading` is a non-interactive
+	 * caption such as the signed-in e-mail.
+	 */
+	export type MenuItem =
+		| { label: string; onselect: () => void; danger?: boolean; disabled?: boolean; hint?: string; detail?: boolean }
+		| { heading: string }
+		| 'separator';
+	const SHORT_HINT = 16;
 </script>
 
 <script lang="ts">
@@ -19,6 +29,7 @@
 		menuClass = '',
 		fixed = false,
 		side = false,
+		block = false,
 		trigger
 	}: {
 		items: MenuItem[];
@@ -33,6 +44,8 @@
 		fixed?: boolean;
 		/** With fixed: open beside the trigger (a flyout from a narrow rail) instead of below it. */
 		side?: boolean;
+		/** Take the full width of the parent (a sidebar row) instead of sitting inline. */
+		block?: boolean;
 		trigger?: Snippet;
 	} = $props();
 
@@ -63,8 +76,11 @@
 	function place() {
 		if (!btn) return;
 		const r = btn.getBoundingClientRect();
-		if (side) at = `position: fixed; top: ${Math.round(r.top)}px; left: ${Math.round(r.right + 10)}px;`;
-		else at = `position: fixed; top: ${Math.round(r.bottom + 4)}px; ${align === 'end' ? `right: ${Math.round(document.documentElement.clientWidth - r.right)}px` : `left: ${Math.round(r.left)}px`}; min-width: ${Math.round(r.width)}px;`;
+		// A trigger in the lower part of the screen (a sidebar footer) opens upwards.
+		const vh = window.innerHeight;
+		const up = r.top > vh * 0.55;
+		if (side) at = `position: fixed; ${up ? `bottom: ${Math.round(vh - r.bottom)}px` : `top: ${Math.round(r.top)}px`}; left: ${Math.round(r.right + 10)}px;`;
+		else at = `position: fixed; ${up ? `bottom: ${Math.round(vh - r.top + 4)}px` : `top: ${Math.round(r.bottom + 4)}px`}; ${align === 'end' ? `right: ${Math.round(document.documentElement.clientWidth - r.right)}px` : `left: ${Math.round(r.left)}px`}; min-width: ${Math.max(160, Math.round(r.width))}px;`;
 	}
 	async function show() {
 		floating = fixed || (!!btn && clipped(btn));
@@ -103,7 +119,7 @@
 <svelte:window onpointerdown={outside} onresize={() => floating && open && place()} />
 <svelte:document onscrollcapture={() => floating && open && place()} />
 
-<div class="relative inline-block {cls}">
+<div class="relative {block ? 'block' : 'inline-block'} {cls}">
 	<button
 		bind:this={btn}
 		class={triggerClass || (trigger ? 'flex items-center gap-1.5 rounded-pill p-0.5 pr-1.5 hover:bg-paper-2/60' : `btn ${text ? '' : 'btn-icon'} btn-quiet`)}
@@ -128,25 +144,32 @@
 			role="menu"
 			tabindex="-1"
 			aria-label={label}
-			class="{floating ? 'z-50' : 'absolute top-full z-40 mt-1'} max-h-[70vh] min-w-48 animate-enter overflow-y-auto rounded-overlay border border-rule-soft bg-raised py-1 shadow-overlay {floating ? '' : align === 'end' ? 'right-0' : 'left-0'} {menuClass}"
+			class="menu-list {floating ? 'z-50' : 'absolute top-full z-40 mt-1'} max-h-[70vh] max-w-[min(22rem,calc(100vw-1rem))] min-w-40 animate-enter overflow-y-auto {floating ? '' : align === 'end' ? 'right-0' : 'left-0'} {menuClass}"
 			style={floating ? at : undefined}
 			onkeydown={onkey}
 		>
 			{#each items as it, i (i)}
 				{#if it === 'separator'}
-					<div class="my-1 border-t border-rule-soft" role="separator"></div>
+					<div class="menu-sep" role="separator"></div>
+				{:else if 'heading' in it}
+					<div class="menu-head truncate" role="presentation" title={it.heading}>{it.heading}</div>
 				{:else}
+					{@const short = !!it.hint && it.hint.length <= SHORT_HINT}
+					{@const below = !!it.hint && !short && (it.disabled || it.detail)}
 					<button
 						role="menuitem"
-						class="flex w-full flex-col items-start px-3 py-2 text-left hover:bg-paper focus:bg-paper focus:outline-none disabled:opacity-45 {it.danger ? 'text-fail' : ''}"
+						class="menu-item {it.danger ? 'danger' : ''} {below ? 'flex-col items-start! gap-0!' : ''}"
 						disabled={it.disabled}
+						title={it.hint && !short && !below ? it.hint : undefined}
 						onclick={() => {
 							hide();
 							it.onselect();
 						}}
 					>
-						<span>{it.label}</span>
-						{#if it.hint}<span class="text-small text-muted">{it.hint}</span>{/if}
+						<span class="truncate">{it.label}</span>
+						{#if short}<span class="menu-hint">{it.hint}</span>
+						{:else if below}<span class="text-[11px] leading-4 whitespace-normal text-muted">{it.hint}</span>
+						{:else if it.hint}<span class="sr-only">: {it.hint}</span>{/if}
 					</button>
 				{/if}
 			{/each}

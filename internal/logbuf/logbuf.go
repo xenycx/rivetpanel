@@ -7,11 +7,12 @@ package logbuf
 import (
 	"context"
 	"log/slog"
-	"regexp"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/xenycx/rivetpanel/internal/lazyre"
 )
 
 // DefaultCapacity is how many lines are kept. At a few hundred bytes each this
@@ -52,13 +53,16 @@ type Stats struct {
 	LastErrMS int64 `json:"last_error_ms"`
 }
 
-// Buffer is a fixed-size ring of the newest lines.
+// Buffer is a fixed-size ring of the newest lines. The ring grows up to its
+// capacity as lines arrive, so a quiet panel does not hold a full ring of
+// empty entries.
 type Buffer struct {
 	mu       sync.Mutex
-	ring     []Entry
-	next     int   // index the next entry is written to
-	size     int   // entries held
-	seq      int64 // sequence of the newest entry
+	capacity int
+	ring     []Entry // len(ring) <= capacity; full once it has wrapped
+	next     int     // index the next entry is written to
+	size     int     // entries held
+	seq      int64   // sequence of the newest entry
 	errors   atomic.Int64
 	warnings atomic.Int64
 	lastErr  atomic.Int64
@@ -70,10 +74,10 @@ func New(capacity int) *Buffer {
 	if capacity < 16 {
 		capacity = DefaultCapacity
 	}
-	return &Buffer{ring: make([]Entry, capacity)}
+	return &Buffer{capacity: capacity}
 }
 
-var secretKey = regexp.MustCompile(`(?i)pass(word|wd)?|secret|token|authorization|cookie|api[_-]?key|setup[_-]?code|private|credential`)
+var secretKey = lazyre.New(`(?i)pass(word|wd)?|secret|token|authorization|cookie|api[_-]?key|setup[_-]?code|private|credential`)
 
 // redacted reports whether the value of a key must not be kept.
 func redacted(key string) bool { return secretKey.MatchString(key) }
@@ -115,11 +119,15 @@ func (b *Buffer) Add(e Entry) int64 {
 	defer b.mu.Unlock()
 	b.seq++
 	e.Seq = b.seq
+	if len(b.ring) < b.capacity {
+		// Still filling: next == size == len(ring).
+		b.ring = append(b.ring, e)
+		b.size++
+		b.next = len(b.ring) % b.capacity
+		return e.Seq
+	}
 	b.ring[b.next] = e
 	b.next = (b.next + 1) % len(b.ring)
-	if b.size < len(b.ring) {
-		b.size++
-	}
 	return e.Seq
 }
 
@@ -127,7 +135,7 @@ func (b *Buffer) Add(e Entry) int64 {
 func (b *Buffer) Stats() Stats {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	st := Stats{Capacity: len(b.ring), Held: b.size, LatestSeq: b.seq, Total: b.total.Load(), Errors: b.errors.Load(),
+	st := Stats{Capacity: b.capacity, Held: b.size, LatestSeq: b.seq, Total: b.total.Load(), Errors: b.errors.Load(),
 		Warnings: b.warnings.Load(), LastErrMS: b.lastErr.Load()}
 	if b.size > 0 {
 		first := b.ring[(b.next-b.size+len(b.ring))%len(b.ring)]

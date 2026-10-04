@@ -2,8 +2,9 @@ package pkgmgr
 
 import (
 	"fmt"
-	"regexp"
 	"strings"
+
+	"github.com/xenycx/rivetpanel/internal/lazyre"
 )
 
 var pyGroups = []string{"main"}
@@ -12,7 +13,7 @@ var requirements = &Ecosystem{ID: "pip", File: "requirements.txt", Groups: pyGro
 var pyproject = &Ecosystem{ID: "pip", File: "pyproject.toml", Groups: pyGroups, Parse: parsePyproject, Apply: applyPyproject}
 
 // reqLine matches "name[extras] spec ; marker  # comment".
-var reqLine = regexp.MustCompile(`^\s*([A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?)\s*(?:\[[^\]]*\])?\s*((?:[<>=!~][^;#]*?)?)\s*(;[^#]*)?\s*(#.*)?$`)
+var reqLine = lazyre.New(`^\s*([A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?)\s*(?:\[[^\]]*\])?\s*((?:[<>=!~][^;#]*?)?)\s*(;[^#]*)?\s*(#.*)?$`)
 
 type reqEntry struct {
 	line int // index into lines
@@ -106,9 +107,9 @@ func applyReqs(data []byte, ops []Op) ([]byte, error) {
 // ---- pyproject.toml ([project].dependencies, PEP 621) ----
 
 var (
-	tomlHeader = regexp.MustCompile(`^\s*\[([^\[\]]+)\]\s*(#.*)?$`)
-	depsKey    = regexp.MustCompile(`^\s*dependencies\s*=\s*\[`)
-	strItem    = regexp.MustCompile(`"((?:[^"\\]|\\.)*)"|'([^']*)'`)
+	tomlHeader = lazyre.New(`^\s*\[([^\[\]]+)\]\s*(#.*)?$`)
+	depsKey    = lazyre.New(`^\s*dependencies\s*=\s*\[`)
+	strItem    = lazyre.New(`"((?:[^"\\]|\\.)*)"|'([^']*)'`)
 )
 
 // projectDeps locates the dependencies array text inside [project]. It returns

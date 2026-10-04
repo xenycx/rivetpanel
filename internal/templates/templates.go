@@ -8,12 +8,12 @@ import (
 	"fmt"
 	"io/fs"
 	"path"
-	"regexp"
 	"sort"
 	"strings"
 
 	"go.yaml.in/yaml/v3"
 
+	"github.com/xenycx/rivetpanel/internal/lazyre"
 	"github.com/xenycx/rivetpanel/sdk"
 )
 
@@ -51,7 +51,7 @@ type EnvVar struct {
 	Default     string `yaml:"default" json:"default,omitempty"`
 }
 
-var envName = regexp.MustCompile(`^[A-Z_][A-Z0-9_]{0,63}$`)
+var envName = lazyre.New(`^[A-Z_][A-Z0-9_]{0,63}$`)
 
 // File is one file to create in the workspace.
 type File struct {

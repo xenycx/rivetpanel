@@ -6,7 +6,146 @@ authoritative current version.
 
 ## Unreleased
 
+## 0.5.0 - 2026-10-05
+
 ### Added
+
+- **Former BotPanel installations are recognised, never touched.** At start
+  the panel logs a `WARNING` and Administration → Diagnostics (and
+  `rivetpanel doctor`) shows "Former installation" when it finds `BOTPANEL_*`
+  or `BOTFORGE_*` variables, the former data directory, a former database next
+  to its own, or running containers with the former management label (whose
+  bots would fight new ones over the same Discord token). New guide
+  `docs/upgrading-from-0.4.md` covers stopping the old service, removing its
+  containers, moving its data aside, the new SFTP host key and re-creating
+  accounts and bots; `docs/deployment.md` gains "Upgrades and rollback"
+  (backup first, migrations are forward-only, roll back by restoring the
+  pre-upgrade backup with the previous binary).
+- **`rivetpanel health`** checks the running panel's `/api/v1/healthz`; the
+  container image uses it as its `HEALTHCHECK`, so `docker compose ps` shows
+  `(healthy)`.
+- **`deploy/container.env.example`**, a container-specific `.env` that keeps
+  the image's listen address and data paths. The container guide no longer
+  tells people to reuse the systemd example, whose loopback listen address and
+  `/etc` key directory made the published port unreachable and lost the key
+  created by `keygen`.
+- The panel warns at start, and Diagnostics shows "Unencrypted public
+  address", when it listens beyond loopback in production while
+  `RIVET_PUBLIC_URL` is plain `http://` on a non-local host.
+
+- **JVM arguments for Java game servers.** Every Minecraft type (including
+  Velocity) has a **JVM arguments** box on its Startup page, passed to `java`
+  right after the heap size as the new panel-provided variable
+  `SERVER_JVM_ARGS`. One-click presets, editable afterwards: *Aikar's flags*
+  (with the documented large-heap values above 12 GB), *ZGC (Java 21+, large
+  heaps)* and *None*; the page shows the server's Java version and warns when
+  a preset needs a newer Java. The options are validated strictly by the panel
+  on save and again before each start: at most 2 KiB of whitespace-separated
+  JVM options (`-XX:…`, `-X…`, `-D…`, `--add-opens=…` and similar,
+  `-javaagent:` with a jar inside the server's files) made only of letters,
+  digits and `. _ : + = , / @ % -`; `-Xmx`/`-Xms` and heap-sizing `-XX`
+  options (the heap follows the memory limit), `-jar`/`-cp`/module paths,
+  native agents, `-XX:OnError` and option files are refused with an
+  explanation shown under the field. Changes can be made while the server
+  runs and apply at its next start; until then the page shows **Restart to
+  apply**. Same permission as the server's settings; audited as
+  `game.jvm_args` with the preset name, never the options. New built-in
+  blueprint revisions carry the setting; existing servers get it with
+  **Update** on their Startup page. Velocity's `-XX:+UseG1GC` moved from its
+  command line into its default JVM arguments (kept for servers that update).
+  Custom and imported blueprints opt in with `startup.jvm_args: true` and
+  `{{SERVER_JVM_ARGS}}` in the command (`startup.jvm_args_default` optional);
+  `SERVER_JVM_ARGS` is now reserved. New `PUT /api/v1/bots/{id}/game/jvm-args`;
+  migration `0053` adds three columns to `bots`.
+
+- **Game servers show how players connect.** The Manage tab of a game
+  server starts its side column with a **Connect** block: the join address
+  with a copy button (the port is left out when it is the game's default,
+  such as 25565 for Minecraft, and the full `host:port` is still copied),
+  the query port when the game uses a separate one, and where to paste it
+  (Minecraft: Multiplayer → Add Server; Valheim: Join IP; Rust:
+  `client.connect`; other Steam games: the Steam server browser). The host
+  is the allocation's alias, else its bound IP, else the node's **Public
+  address** (Administration → Nodes, also for the local node), else the
+  host the panel was opened on; a loopback or private address is shown with
+  a note that players elsewhere cannot use it and where to set a public one.
+  The servers list and the header strip use the same address. New `GET
+  /api/v1/game-hosts` returns `{hosts: {node_id: public_address}}` (public
+  addresses only) for any signed-in account.
+
+- **One Templates page for bots, game servers and sites.** The sidebar's
+  Templates entry (`/templates`, which used to list bot templates only) now
+  has three tabs: **Bot templates** (with Create bot), **Game servers** (every
+  server type you may create, built-in Minecraft and Steam types and
+  Pterodactyl eggs imported by administrators, marked "Imported", each with
+  its game icon, a short description and **Create server**, which opens the
+  new-server wizard on that type; administrators also get **Import egg** and
+  a link to Server types) and **Sites** (the five site templates with a
+  framed, script-free preview, tags, page count and **Create site**, which
+  asks for the name and address like the new-site form and publishes the
+  template as the first release). One search box filters the page and points
+  to matches in other tabs. Tabs and actions follow the enabled modules and
+  the account's permissions (`bots.create`, `sites.create`,
+  `blueprints.manage`). Sites → New site gained a **Start from** field with
+  the same templates, the New menu a "Site from a template" entry, and Go to
+  (Ctrl+K) a "New site from …" action per template plus the Templates tabs.
+  Old links (`/templates`, `/templates?lang=`) keep working.
+
+- **Site templates.** Five built-in static site starters written for
+  RivetPanel ship inside the binary: a landing page, a docs and blog starter,
+  a portfolio, a "coming soon" page and a game server community page whose
+  status section reads this panel's public status page. `GET
+  /api/v1/site-templates` lists them (id, name, description, tags, accent,
+  theme, pages, file count and size, `status_widget`, `preview_url`);
+  `GET /api/v1/site-templates/:id/preview[?page=]` renders a page as a
+  sandboxed, script-free document the panel UI can frame; and `POST
+  /api/v1/sites` accepts `template_id` to publish the template (with the site
+  name filled in) as the site's first release through the normal release
+  path, under the usual `sites.create` permission, site size limits and
+  audit entry. A failed seed removes the half-created site. No migration;
+  admin-authored site templates are not included yet.
+
+- **Daily log files and a log archive job.** The panel now writes the console
+  output of every bot and game server (local and on remote nodes) and its own
+  log to one file per day under `logs/` next to the database. At the archive
+  time (default 00:00, server time; time and time zone are configurable) each
+  finished day is gzipped into `log-archive/<scope>/<YYYY-MM-DD>.log.gz`
+  atomically (temporary file, fsync, rename, then the source is removed);
+  missed days are caught up after a restart and an interrupted pass never
+  archives a day twice. Archives older than the retention (default 30 days)
+  and, optionally, the oldest archives beyond a total size cap are deleted.
+  Console output is copied every few minutes (default 5) with a per-server
+  cursor, so live viewing is unchanged and a capture resumes where it ended.
+  Days can be listed and downloaded per server with the same access as its
+  console (`GET /api/v1/bots/:id/logs/days[/:date]`) and for the panel log
+  with `system.view` (`GET /api/v1/admin/logs/days[/:date]`). Settings, disk
+  usage (live, archived and operation logs) and the last run are at
+  `GET/PUT /api/v1/admin/log-archive` and `POST /api/v1/admin/log-archive/run`
+  (`settings.manage` to change and run, read-only with `system.view`;
+  changes and runs are recorded in the activity record). No migration; remote
+  nodes need no upgrade (their output streams through the agent as for the
+  console). **Administration → Logs and retention** (also in Ctrl+K) edits
+  the archive time and time zone, retention, size limit, capture toggles and
+  interval and the panel log file, with inline validation against the
+  server's bounds; it shows live and archived disk use, build/backup output
+  size, the last run and the next one, offers **Run archival now** with a
+  confirmation, and lists the panel log's days with downloads. A server's
+  Console tab has a **Log history** list: download any archived `.log.gz` and
+  view or download the current day.
+- **Retention of graph data is configurable** with the same settings: host and
+  node telemetry plus bot telemetry samples (hours, default
+  `RIVET_TELEMETRY_RETENTION`), analytics 5-minute/hourly/daily rows (default
+  3/35/400 days) and status page samples (90-730 days), each within safe
+  bounds and applied without a restart; set on the same administration page
+  with plain-language help for each value.
+
+- **Game icons.** Server types show a game icon in the new-server flow, the
+  game server list, the overview, server pages and Administration → Server
+  types (Minecraft, Fabric, Valheim and Steam icons from Dashboard Icons,
+  Apache-2.0, and Paper, Folia, Velocity and Purpur icons from selfh.st/icons,
+  CC BY 4.0, bundled with the web app; types without an icon of their own use
+  their family's icon or a drawn fallback). Attribution and the licences are in
+  `web/src/lib/assets/games/`.
 
 - **Usage analytics (migration `0052`).** Bots and game servers have an
   Analytics tab with CPU, memory, network, uptime, crashes and starts,
@@ -440,6 +579,181 @@ authoritative current version.
 
 ### Changed
 
+- `compose.yaml` mounts the host directory `/var/lib/rivetpanel` instead of the
+  `rivetpanel-data` named volume (see Fixed). The image keeps running as root
+  inside its container, now documented with the reason (it hands workspaces to
+  the bot user and drives the root-equivalent Docker socket), and the systemd
+  unit is described as "RivetPanel: Discord bot and game server hosting panel".
+
+- **Idle memory is back down: about 37 MiB instead of 43–45 MiB.** A fresh
+  idle panel (production build, default modules, no bots) measured 43.0–45.2
+  MiB RSS (20.6–22.9 MiB anonymous) and now 36.6–38.6 MiB (14.4–16.4 MiB
+  anonymous) over three starts each; after a login and one running Node.js
+  bot 42.3 → 39.5 MiB; with a running Velocity server 48.8 → 43.7 MiB. The
+  panel now keeps its own heap out of transparent huge pages (on hosts with
+  THP `always` the kernel had doubled the resident heap; setting `disablethp`
+  in `GODEBUG` leaves this to the operator) and hands startup garbage back
+  before listening; built-in regular expressions are compiled on first use
+  instead of at start; the ~20 rate limiters share one store whose single
+  cleanup goroutine runs only while it holds entries (previously one goroutine
+  per limiter, each waking every second); the pruning jobs run from one
+  goroutine; the in-memory panel log grows as lines arrive; UI files are
+  streamed instead of copied into memory per request; and the Java-version
+  check of a downloaded server jar no longer allocates a decompressor per jar
+  entry (about 1 GB of short-lived allocations per Velocity install). Idle
+  goroutines: 53 → 31. Not changed: binary pages (22–24 MiB, they follow the
+  binary size), about 1 MiB per SQLite pool connection
+  (`RIVET_DB_MAX_CONNS`), and the Argon2id login peak, which still reaches
+  about 55 MiB for a moment. Details and method in `docs/footprint.md`.
+
+- **Every icon now uses the new rivet logo.** The PNG favicons, `favicon.ico`,
+  the iOS touch icon, the Android maskable icon and the social preview image
+  were still the old design; they are regenerated from the new mark, and the
+  preview image now mentions game servers. Ready-to-upload app icons for the
+  GitHub OAuth app (512 px) and the Discord application (1024 px) are in
+  `docs/branding/`. The one-off icon generator under `web/assets-src/` was
+  removed; `web/static/favicon.svg` is the master logo.
+
+- **Compact menus, section tabs and usage strip.** Every dropdown and
+  context menu (account, row actions, Help & resources, a tab bar's "More",
+  workspace switcher, the New menu) uses one compact style: 13px text,
+  30px rows (36px on touch screens) and content-sized width. The signed-in
+  e-mail is a caption, short hints such as shortcuts sit on the same line
+  and longer ones (for example Kill's) become the tooltip; a disabled item
+  still shows its reason underneath. The New menu and the Go to palette are
+  tighter. A bot or server page's section tabs are smaller and share the
+  whole row, moving into "More" only when they do not fit. The usage strip
+  under the page header spreads across the full width (three columns, two on
+  phones, when narrow), the Address item shows the full `host:port` like the
+  Connect block, and Players reads **Offline** while the server is stopped.
+
+- **Game servers no longer have a Health tab; notifications moved to
+  Settings.** A game server's health is its process state plus the game
+  query (players, latency and version in the header); the bot-only SDK
+  heartbeat and TCP/HTTP probe are gone for game servers, and the API now
+  refuses a probe for a game server (`PUT …/health-probe` → 400), returns it
+  as disabled, never runs a stored one and ignores heartbeat rules and the
+  deployment choice for it. Crash alerts still work for game servers. Both
+  bots and game servers now choose notifications under **Settings →
+  Notifications** (same `PUT /api/v1/bots/{id}/alerts` backend): the copy
+  says they reach the owner's account (bell, email, the Discord channel the
+  owner connected) and not a Discord bot; game servers offer crashes
+  (including failed installs and starts) and backup failures in server
+  wording. Bots keep the Health tab for the heartbeat and probe only; old
+  `?tab=alerts` links of a game server open Settings.
+- **Bot-only leftovers removed from game server pages.** Access
+  permissions, Backups (server settings instead of environment variables, no
+  `node_modules`), Schedules, Databases, Files, Settings (logo without the
+  Discord avatar button, server wording, delete returns to Servers),
+  Analytics (no deployments), status texts and the AI prompt now speak of
+  the server. Operations of a game server are called **Installation** /
+  "Installing" instead of Build (`bot_kind` is added to operation
+  responses) and link to `/servers/…`; the command palette offers only a
+  server's own sections. Bot ports (`PUT …/ports`) are refused for game
+  servers, which publish their allocations. The Startup tab of a game server
+  is open to accounts with "Change server settings" (its variables), as the
+  API already allowed.
+- **Host ports in use are skipped and reported, not crashed into.** New
+  game servers, added ports, Pick a free port and the allocation pool skip
+  ports that any running Docker container publishes (another panel or any
+  other tool, seen through the Docker API even when published without a
+  userland proxy) as well as pool ports taken since they were added.
+  Administrators adding pool ports get busy ports skipped and listed
+  (`skipped` in the response). A start onto a taken port is refused with
+  "Port N is already used by container X. Choose another port in Network or
+  stop that container."; when Docker itself reports "port is already
+  allocated" or "address already in use" the bot or server shows **Port in
+  use** (`state_reason: port_conflict`) and is not retried, not counted as a
+  crash and not alerted until Start again or a changed port. A game server
+  offers **Pick a free port** (`POST /api/v1/bots/{id}/allocations/pick-free`),
+  which moves its primary allocation to the next free port and starts it
+  again if it was meant to run. Remote nodes' port probe also reports
+  Docker-published ports (no protocol change; still agent protocol 8).
+
+- **Manage and Overview are one tab.** A bot's or game server's **Manage**
+  tab now shows the console (a little shorter) with the status, the setup
+  checklist, recent activity and log history below it, and a narrow side
+  column with the source, backups and details; phones get one column,
+  console first. `?tab=overview` links open Manage. Game servers say
+  "Server ID" and show their server type and installed version (for example
+  Paper 1.21.11) instead of "Uploaded files", activity reads "when it
+  started" instead of "when the bot started", and the players field in the
+  header uses the same state words as the status badge instead of saying
+  "Starting" for a running server whose game has not answered yet. Bot
+  DTOs gained `installed_version` for game servers.
+- **Add-ons are now called Databases** in the interface and documentation
+  (PostgreSQL, Redis, MongoDB and MariaDB). Plugins and mods stay a
+  separate tab. API paths are unchanged.
+
+- **Public pages follow the new design.** The product overview ("What
+  RivetPanel does"), first-run setup, sign-in, registration, password reset,
+  email confirmation, invitation, help center and status page use the same
+  tokens as the panel: no glow, gradient, tilted preview or accent-coloured
+  feature tiles; sign-in, registration, reset and email confirmation share
+  one quiet panel; messages use the standard notice styles. The in-product
+  documentation describes site templates, the Templates page, the new Java
+  selection and the workspace-ownership fallback.
+
+- **A quieter, more functional interface.** The overview drops its marketing
+  banner for a plain "Overview" header with one **New** action, four capacity
+  numbers with precise bars (host memory, CPU and disk for administrators;
+  reserved memory, CPU and limits for everyone else; running out of total),
+  and full-width tables of game servers and Discord bots with one quiet row
+  when there are none. The full bot list with filters and batch power moved
+  to a new **Bots** page (`/bots`); Game servers and Sites are tables too.
+  The sidebar reads Overview, Game servers, Bots, Sites, Templates, Activity,
+  Support, then Settings and Administration; the documentation, help center,
+  status page, Automation API, Diagnostics and shortcuts sit in one **Help &
+  resources** menu, and notifications stay on the bell. The floating Ask AI
+  button is gone: the top-bar sparkle button (Ctrl+.) opens the assistant.
+  Dark mode uses layered warm greys instead of near-black with orange glows,
+  the light theme is neutral, labels are sentence case, and the accent is
+  kept for primary actions, the active tab or page, focus and warnings
+  (progress bars and charts are neutral).
+- **Bot and server pages fit the screen.** Start, Restart, Stop and Kill sit
+  in the page header (Adjust resources is under Settings); a waiting or failed
+  state is one compact line; live usage and a game server's address and
+  players share one strip; tabs that do not fit move into a **More** menu
+  instead of a row that could not be scrolled with a mouse wheel; and on wide
+  screens the console fills the rest of the window. Wizard footers (new game
+  server, new bot) keep Back and Cancel on the left and the next step aligned
+  to the right edge of the step.
+- **The public status JSON may be read by hosted sites.** `GET
+  /api/v1/status` now sends `Access-Control-Allow-Origin: *` so a site on
+  the sites domain (for example the game community template) can show live
+  status. The response is the same public, credential-free data as before.
+
+- **The top bar's New menu creates everything, not only bots.** It lists what
+  the account's role and the enabled modules allow: Discord bots (GitHub,
+  template, ZIP upload, empty), game servers (Minecraft, Steam, every type),
+  sites, workspaces, support tickets, API clients and keys, and for
+  administrators invitations, nodes, server types, help articles, status
+  incidents and announcements. Go to (Ctrl+K) offers the same "New …"
+  actions, finds game servers (opening their server page) and lists every
+  administration section a delegated role may open.
+- **The overview covers game servers.** It counts running bots and servers,
+  adds quick-create buttons for Minecraft and Steam servers and a strip of
+  game servers (icon, address, state) above the bot list. The sidebar now
+  reads Overview, Game servers, Bot templates, Sites, Activity,
+  Notifications, Support, Settings and Administration, and Resources link the
+  public status page when one is published. Roles holding only support,
+  knowledgebase, status-page or analytics permissions now reach their
+  administration sections (they were sent back to the overview).
+- **New game server is a guided four-step flow** like New bot: pick a game
+  from searchable, grouped cards with large icons; choose the version (latest
+  stable first, pre-releases on request) and the game's everyday settings,
+  with the rest under More options; set name, memory presets, CPU, workspace
+  and node with plain-language help and the ports that will be reserved;
+  review, accept the licence terms the game requires and create. Empty and
+  error states explain what to do (no types enabled, module off, no
+  permission, version list unavailable). Game servers can be starred as
+  favourites from their list.
+- **"What RivetPanel does" describes the whole product**: Discord bot hosting,
+  Minecraft and Steam game servers, remote nodes, backups, schedules, SFTP,
+  usage analytics, sites, workspaces and roles, OpenID Connect, passkeys, API
+  clients, notifications, support tickets, the help center, the status page
+  and the AI assistant, with preview modules marked as such.
+
 - Bot alert, deployment and backup emails now follow the per-category
   notification preferences as well as the profile's Alert emails switch, and
   go only to verified email addresses (accounts created before verification
@@ -454,11 +768,15 @@ authoritative current version.
 - **The project is now RivetPanel.** The executable, Go module, web package,
   container image, services, SDKs, configuration prefix, data paths, container
   labels and DNS verification records use the new namespace. This is an
-  intentional clean break: compatibility aliases are not provided.
+  intentional clean break: there are no compatibility aliases and **no upgrade
+  path from BotPanel 0.4.0**, automatic or manual. A BotPanel 0.4.0 database,
+  configuration or backup is never read or converted; accounts and bots are
+  re-created (steps in `docs/upgrading-from-0.4.md`). The migration notes in
+  this section apply to RivetPanel databases only.
 - New databases carry a RivetPanel schema-family marker. A database containing
-  tables without that marker is refused before the migration ledger or any
-  application table is changed; automatic conversion of earlier installations
-  is not supported.
+  tables without that marker (such as a BotPanel 0.4.0 database pointed to by
+  `RIVET_DB_PATH`) is refused before the migration ledger or any application
+  table is changed.
 
 - The default Python build also installs packaged projects (`setup.py`, or a
   `pyproject.toml` with `[project]` or Poetry metadata) when there is no
@@ -484,6 +802,46 @@ authoritative current version.
   commit, and turn foreign keys back on afterwards.
 
 ### Security
+
+- **Live log files are bounded.** Console output and the panel log could
+  grow without limit until the day was archived (a noisy server could copy up
+  to 32 MiB per capture pass, tens of GB a day, onto the database's disk). Each
+  server's (and the panel log's) file is now capped per day (new setting
+  **Daily file limit**, `max_day_mb`, default 256 MB): the whole lines that
+  fit are kept, then one `[rivetpanel] log capped:` line, and the rest of that
+  day is dropped (the live console still shows it); the log history marks the
+  day **Capped**. Nothing is written and the console capture is skipped while
+  free disk space is below `RIVET_MIN_FREE_DISK_BYTES` (the capture catches up
+  later from Docker). The log size limit (`max_archive_mb`) now counts live
+  files too, deleting the oldest archives to make room.
+- **Production refuses the shared-uid fallback.** A panel that is neither root
+  nor holds `CAP_CHOWN` no longer silently runs tenant containers as its own
+  uid, the uid that owns `rivetpanel.db` and the key folder. The automatic
+  fallback stays for `RIVET_ENV=development`; in production the panel refuses
+  to start with an explanation unless the new `RIVET_ALLOW_SHARED_UID=1` is
+  set, and Diagnostics then shows a warning (`rivetpanel doctor` reports the
+  refusal as a failed check). `rivet-agent serve` behaves the same with the
+  new `--allow-shared-uid` / `RIVET_AGENT_ALLOW_SHARED_UID=1`. **Upgrade
+  note:** an unprivileged production install that relied on the fallback must
+  set the opt-in, set `RIVET_CONTAINER_USER`/`RIVET_WORKSPACE_OWNER`, or run
+  as root/with `CAP_CHOWN` (the packaged systemd units are unaffected).
+- Port conflicts no longer reveal other tenants' containers: the error stored
+  on a server, and the refusal shown to a non-administrator who starts it,
+  say "already used by another container". The container's name stays in the
+  panel log, the allocation views and for administrators (`allocations.manage`,
+  `nodes.manage` or `system.view`).
+- The panel sends `Strict-Transport-Security: max-age=31536000` (without
+  `includeSubDomains`) in production when its public address is https.
+- The pages' Content-Security-Policy no longer allows every inline script:
+  `script-src` lists the SHA-256 hashes of the two inline scripts of the built
+  page (theme setup and SvelteKit's start script), computed from the embedded
+  files at runtime. A proxy that rewrites the panel's HTML breaks them.
+
+- The container workflow publishes images (including `latest`) only after
+  `go vet`, `go test`, the version/namespace checks and the web checks pass on
+  the same commit, and a release tag must match `VERSION`. The Docker build
+  context excludes `.env` files, `*.key` files, local development data and
+  agent notes.
 
 - API clients never act as administrators (even when an administrator made
   them), cannot manage passwords, two-step sign-in, passkeys, sessions, linked
@@ -537,6 +895,127 @@ authoritative current version.
   `nosniff`.
 
 ### Fixed
+
+- Bot settings pages (Startup, Network) follow later changes of the bot while
+  they have no unsaved edits, and build output, packages, access and the
+  analytics layout reload when another bot is shown in the same view, instead
+  of keeping the first bot's values (fixes the 16 `state_referenced_locally`
+  warnings of `npm run check`).
+- The browser end-to-end checks follow the current interface (overview,
+  **Manage** tab after creation, workspace and tag filters on the bot list,
+  favorites from the actions menu) and also cover the log settings page.
+- `go test -race ./internal/api` runs in about 1¼ minutes instead of timing
+  out: the tests start from one migrated template database instead of
+  migrating a new database for every test.
+
+- **The container image can run bots.** Bot workspaces, add-on data and
+  diagnostic scratch directories were bind-mounted by their path inside the
+  panel container, which the host's Docker daemon cannot see, so every start
+  failed with "bind source path does not exist". The panel now identifies its
+  own container at start and translates these paths through its mounts to
+  host paths. The data directory must be a host directory (`compose.yaml` now
+  mounts `/var/lib/rivetpanel:/var/lib/rivetpanel`; any host path works):
+  Docker refuses such mounts from named volumes, so a named volume, or a data
+  path on no mount at all, now stops the start with an explanation instead of
+  failing every bot. **Existing container installs:** move the data out of the
+  `rivetpanel-data` volume into a host directory before upgrading.
+- **Remote nodes start under the systemd unit.** The unit keeps
+  `/etc/rivetpanel` read-only, but the panel created the agent certificate
+  authority there on first start with `agents` enabled and failed.
+  `rivetpanel keygen` now creates the agent CA with the encryption key, and
+  `rivetpanel keygen --agent-ca` creates only the CA for existing
+  installations; the start error explains this. The key directory stays
+  read-only to the service.
+- `rivetpanel backup-verify` and `restore` recognise a BotPanel 0.4.0 backup
+  and say that RivetPanel cannot restore it, instead of "manifest lacks a
+  checksum for rivetpanel.db".
+- `rivetpanel doctor` is read-only as documented: it opens the database
+  read-only without migrations and no longer creates the database or data
+  directories when a path is wrong; it reports them missing.
+- Release archives put the binaries in `bin/`, where `deploy/install.sh` and
+  `deploy/install-agent.sh` look for them, and no longer include the local
+  implementation hand-off note. `install.sh` explains that `rivet-agent` is
+  installed on remote nodes with `install-agent.sh`.
+- The deployment guide described "no unauthenticated first-run setup
+  endpoint"; it now documents the one-time setup code flow on `/setup`. The
+  environment example no longer refers to a `rivetpanel` group that nothing
+  creates (the file is root-owned, mode 0640).
+
+- **"N crashes in a row" no longer sticks to a running server.** The
+  persisted crash count was only written when a container exited, so a bot
+  or game server that recovered (or was restarted explicitly) kept showing
+  its old count while running. The count now clears after the run has been
+  stable for a minute and starts at zero for every new generation (Start,
+  Restart, configuration change). Setup retries (image, installation,
+  build, create, start) have their own backoff counter and are never counted
+  as crashes.
+
+- **Velocity no longer crashes on start with `UnsupportedClassVersionError`.**
+  Velocity 4.x is compiled for Java 25 (class file 69), but automatic Java
+  selection had no requirement for the proxy (it does not follow Minecraft
+  versions) and fell back to the blueprint's first image, Java 21 (class
+  file 65). Java selection now takes the highest of the provider's declared
+  minimum (PaperMC's Fill v3 API publishes one per version for Paper, Folia,
+  Velocity and Waterfall), the Minecraft release's requirement and the
+  class-file version of the downloaded jar, read while it streams in
+  (`META-INF/` multi-release entries ignored), so any provider is covered. A
+  Java image that is too old for the downloaded version (chosen by hand, or
+  stored by an earlier automatic pick) is replaced by a new enough one at
+  installation and the build output says so; the Velocity blueprint now
+  lists Java 25 first. Existing Velocity servers that crashed this way start
+  after **Reinstall**. Checked against the live providers: Velocity 4.2.0
+  needs Java 25; Paper 26.3, Folia 26.2, Purpur 26.3, Fabric 26.3 and
+  NeoForge 26.2.0.x resolve to Java 25, Forge 1.20.1 to Java 17.
+
+- **Velocity is reachable on its port.** The Velocity blueprint maps the
+  fixed container port 25577, but a new `velocity.toml` binds 25565, so a
+  freshly created proxy listened on a port nothing was published to. It is
+  now started with `--port {{SERVER_PORT}}` (supported since Velocity 1.1),
+  which overrides the configured bind. Existing Velocity servers pick it up
+  with **Update** on their Startup page (new blueprint revision).
+
+- **Bots can write their workspace when the panel runs as a normal user.**
+  When neither `RIVET_CONTAINER_USER` nor `RIVET_WORKSPACE_OWNER` is set and
+  the panel is neither root nor holds `CAP_CHOWN`, it can no longer hand
+  files to the default `65532:65532`; it now uses its own uid:gid for both,
+  logs a warning, and Diagnostics shows an informational "Workspace
+  ownership" check explaining it. Containers stay non-root but share the
+  panel's uid on the host, so production should keep running the panel as
+  root through the systemd unit (unchanged: root or `CAP_CHOWN` keeps the
+  dedicated unprivileged user, and explicit settings are never overridden).
+  Workspaces created earlier under another user are repaired where possible;
+  otherwise Diagnostics and the start error name the `chown -R` to run.
+  `rivet-agent serve` applies the same rule when `--user`/
+  `--workspace-owner` and their environment variables are unset (agent
+  protocol unchanged).
+
+- Time-series charts (Host, node, bot/server usage and Analytics) let you
+  read a spike again: the hover read-out now sits beside the hovered moment
+  on the side that covers the fewest points instead of always above it, the
+  nearest sample is picked anywhere in the plot's height (tap or drag on
+  touch screens), and every series' point is marked. Y-axis labels such as
+  "40 KiB/s" are no longer cut off at the left edge, and narrow charts show
+  fewer time labels so they no longer overlap.
+- The AI assistant could fail with "The provider rejected the request: Failed
+  to deserialize the JSON body ... missing field content" after a tool call:
+  an assistant turn that only called tools, and a tool that returned nothing
+  (an empty file), were sent without a `content` field, which strict
+  OpenAI-compatible providers (DeepSeek and others) reject. Every message now
+  carries content, empty tool results are sent as a short placeholder, and
+  the history sent to the provider is repaired first (every tool call gets
+  exactly one result, a synthesized failure when it never produced one;
+  orphan results and empty turns are dropped; calls without an id get one).
+- An AI run could hang on a read-only tool (file reads on an unresponsive
+  node, logs, web research) until the run's 20-minute limit. Such a call is
+  now stopped after 90 seconds and the model and the person are told it
+  timed out. Tool calls of a run that failed, was cancelled or was
+  interrupted by a restart are closed as failed/cancelled instead of being
+  shown as running forever, including calls stored before this fix.
+- Workspaces deployed before the RivetPanel rename kept the old deploy
+  manifest: the next deploy did not remove files the repository had dropped,
+  and the AI assistant could read that internal file. The old manifest is now
+  honoured once, replaced by the current one, skipped when pushing, and
+  protected from the AI like the current one.
 
 - Uploading files on the Files page never finished: the upload helper could
   not handle the panel's empty 204 answer, so the first file was written but

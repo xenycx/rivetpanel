@@ -8,7 +8,6 @@ import (
 	"net"
 	"net/http"
 	"net/url"
-	"regexp"
 	"slices"
 	"strings"
 	"sync"
@@ -19,6 +18,7 @@ import (
 	"golang.org/x/oauth2"
 
 	"github.com/xenycx/rivetpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/lazyre"
 	"github.com/xenycx/rivetpanel/internal/oauth"
 	"github.com/xenycx/rivetpanel/internal/secrets"
 )
@@ -59,7 +59,7 @@ const (
 	oidcMaxDisplayName = 64
 )
 
-var oidcSlugRe = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,31}$`)
+var oidcSlugRe = lazyre.New(`^[a-z0-9][a-z0-9-]{0,31}$`)
 
 // OIDCService manages OpenID Connect providers and signs accounts in with
 // them (authorization code flow with PKCE, state and nonce; the ID token's

@@ -121,3 +121,77 @@ func TestTCPHealthProbeValidationAndUnhealthyRestart(t *testing.T) {
 		t.Fatalf("disable: %+v", got)
 	}
 }
+
+// Game servers have no SDK heartbeat and no active probe: their health is
+// the process state and the game query. Notification choices still apply.
+func TestGameServersHaveNoHeartbeatOrProbe(t *testing.T) {
+	e := newEnv(t)
+	clk := &atomicClock{}
+	clk.set(time.Unix(1_800_000_000, 0))
+	h := &service.HealthService{Store: e.db, Bots: e.bots, Now: clk.now}
+	e.app = New(Deps{Log: slog.New(slog.NewTextHandler(io.Discard, nil)), DB: e.db, Auth: e.auth, Bots: e.bots, Health: h, SecureCookies: true})
+	owner := e.user("game-owner@x.io", domain.RoleUser)
+	id := owner.createBot("mc")
+	ctx := context.Background()
+	if _, err := e.db.ExecContext(ctx, `UPDATE bots SET kind = ? WHERE id = ?`, domain.KindGame, id); err != nil {
+		t.Fatal(err)
+	}
+	base := "/api/v1/bots/" + id
+	// Bot-style published ports are refused: the server publishes its allocations.
+	owner.mustStatus(400, "PUT", base+"/ports", map[string]any{"ports": []map[string]any{{"container_port": 25565, "host_port": 25000, "protocol": "tcp"}}})
+	owner.mustStatus(200, "PUT", base+"/ports", map[string]any{"ports": []map[string]any{}})
+	b, _ := e.db.GetBot(ctx, id)
+	if err := e.db.SetBotPorts(ctx, id, b.Generation, []domain.BotPort{{BotID: id, ContainerPort: 25565, HostPort: 29998, Protocol: "tcp", HostIP: "127.0.0.1"}}, clk.ms); err != nil {
+		t.Fatal(err)
+	}
+	probe := map[string]any{"kind": "tcp", "host_port": 29998, "path": "/", "interval_s": 5, "timeout_ms": 250, "failure_threshold": 1, "success_threshold": 1, "startup_grace_s": 0, "restart_unhealthy": true}
+	owner.mustStatus(400, "PUT", base+"/health-probe", probe)
+	owner.mustStatus(200, "PUT", base+"/health-probe", map[string]any{"kind": ""})
+	var got healthProbeDTO
+	json.Unmarshal(owner.mustStatus(200, "GET", base+"/health-probe", nil), &got)
+	if got.Status != "disabled" || got.Kind != "" {
+		t.Fatalf("game probe: %+v", got)
+	}
+	// A probe stored before this rule (or by hand) is never run.
+	if err := e.db.SetHealthProbe(ctx, domain.HealthProbe{BotID: id, Kind: "tcp", HostPort: 29998, Path: "/", IntervalSeconds: 5, TimeoutMS: 250,
+		FailureThreshold: 1, SuccessThreshold: 1, RestartUnhealthy: true, Status: "unknown", UpdatedAtMS: clk.ms}); err != nil {
+		t.Fatal(err)
+	}
+	b, _, _ = e.db.SetDesired(ctx, id, domain.DesiredRunning, false, clk.ms)
+	e.db.Observe(ctx, sqlite.Observation{BotID: id, Generation: b.Generation, State: "running", SettleGeneration: true, NowMS: clk.ms})
+	before, _ := e.db.GetBot(ctx, id)
+	h.EvaluateProbes(ctx)
+	if after, _ := e.db.GetBot(ctx, id); after.Generation != before.Generation {
+		t.Fatal("a game server was restarted by a health probe")
+	}
+	if p, _ := e.db.GetHealthProbe(ctx, id); p.LastCheckedAtMS != nil {
+		t.Fatal("a game server was probed")
+	}
+
+	// Heartbeat alerts are ignored; crash/backup choices are kept.
+	var prefs alertPrefsDTO
+	json.Unmarshal(owner.mustStatus(200, "PUT", base+"/alerts", map[string]any{"crash": true, "deploy": true, "backup": true, "recovery": true, "heartbeat_after_s": 120}), &prefs)
+	if !prefs.Crash || !prefs.Backup || prefs.Deploy || prefs.HeartbeatAfter != 0 {
+		t.Fatalf("game prefs: %+v", prefs)
+	}
+	// Even a heartbeat rule stored directly never fires for a game server.
+	if err := e.db.SetAlertPrefs(ctx, id, domain.AlertPrefs{Crash: true, HeartbeatAfter: 60}, clk.ms); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.db.RecordHeartbeat(ctx, id, clk.ms, nil); err != nil {
+		t.Fatal(err)
+	}
+	clk.add(10 * time.Minute)
+	h.Evaluate(ctx)
+	if hl, _ := e.db.GetHealth(ctx, id); hl.StaleAlerted {
+		t.Fatal("heartbeat rule fired for a game server")
+	}
+	var v struct {
+		State  string        `json:"state"`
+		Alerts alertPrefsDTO `json:"alerts"`
+	}
+	json.Unmarshal(owner.mustStatus(200, "GET", base+"/health", nil), &v)
+	if v.State != "unknown" || v.Alerts.HeartbeatAfter != 0 || !v.Alerts.Crash {
+		t.Fatalf("game health: %+v", v)
+	}
+}

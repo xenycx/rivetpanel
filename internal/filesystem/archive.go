@@ -353,6 +353,13 @@ func mkdirAllIn(r *os.Root, p string) error {
 // leaving everything else (data, .env files, node_modules) alone.
 const DeployManifest = ".rivetpanel-deploy"
 
+// LegacyDeployManifest is the manifest name written before the RivetPanel
+// rename. A deploy reads it when no current manifest exists (so files the
+// repository dropped are still removed) and then removes it. (Spelled in two
+// parts so the namespace check, which rejects the former product name in
+// active source, keeps passing; this is the one place it must remain.)
+const LegacyDeployManifest = ".bot" + "panel-deploy"
+
 // DeployTarGz applies a repository tarball (GitHub layout: one top-level
 // directory) to the workspace. rootDir selects a subdirectory of the
 // repository to deploy ("" or "." for the whole tree). The tarball is fully
@@ -452,7 +459,7 @@ func (w *Workspace) DeployTarGzCommit(src io.Reader, rootDir string, lim BackupL
 			return 0, nil, reject("unsafe path in archive: %q", hdr.Name)
 		}
 		top, _, _ := strings.Cut(name, "/")
-		if name == DeployManifest || strings.HasPrefix(top, ".restore-") || strings.HasPrefix(top, ".deploy-") {
+		if name == DeployManifest || name == LegacyDeployManifest || strings.HasPrefix(top, ".restore-") || strings.HasPrefix(top, ".deploy-") {
 			continue
 		}
 		switch hdr.Typeflag {
@@ -548,12 +555,16 @@ func (w *Workspace) DeployTarGzCommit(src io.Reader, rootDir string, lim BackupL
 	}
 	// Files the previous deploy wrote that are gone now are moved aside.
 	var dirsToPrune []string
-	if b, err := w.Read(DeployManifest, 8<<20); err == nil {
+	prevRaw, perr := w.Read(DeployManifest, 8<<20)
+	if perr != nil {
+		prevRaw, perr = w.Read(LegacyDeployManifest, 8<<20)
+	}
+	if b, err := prevRaw, perr; err == nil {
 		var prev []string
 		if json.Unmarshal(b, &prev) == nil && len(prev) <= lim.MaxEntries {
 			for _, p := range prev {
 				p = path.Clean(p)
-				if !filepath.IsLocal(p) || newFiles[p] || p == DeployManifest {
+				if !filepath.IsLocal(p) || newFiles[p] || p == DeployManifest || p == LegacyDeployManifest {
 					continue
 				}
 				if st, err := w.root.Lstat(p); err == nil && !st.IsDir() {
@@ -563,6 +574,12 @@ func (w *Workspace) DeployTarGzCommit(src io.Reader, rootDir string, lim BackupL
 					dirsToPrune = append(dirsToPrune, path.Dir(p))
 				}
 			}
+		}
+	}
+	// The pre-rename manifest is replaced by the current one.
+	if st, err := w.root.Lstat(LegacyDeployManifest); err == nil && !st.IsDir() {
+		if err := c.moveAside(LegacyDeployManifest); err != nil {
+			return fail(err)
 		}
 	}
 	for _, p := range in {

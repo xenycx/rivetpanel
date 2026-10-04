@@ -1,4 +1,6 @@
 <script lang="ts">
+	import Notice from '$lib/components/ui/Notice.svelte';
+	import AuthFrame from '$lib/components/AuthFrame.svelte';
 	import { onMount } from 'svelte';
 	import { api, ApiError } from '$lib/api/client';
 
@@ -69,12 +71,10 @@
 
 <svelte:head><title>Reset password · RivetPanel</title></svelte:head>
 
-<main class="grid min-h-dvh place-items-center px-4 py-10">
-	<div class="w-full max-w-sm">
-		<a href="/" class="flex items-center gap-2 text-title font-semibold tracking-tight"><img src="/favicon.svg" alt="" width="28" height="28" class="rounded-tile" />RivetPanel</a>
-		<h1 class="mt-8 text-page">{step === 'set' ? 'Choose a new password' : step === 'done' ? 'Password changed' : 'Reset your password'}<span class="text-action">.</span></h1>
+<AuthFrame>
+		<h1 class="text-page font-semibold">{step === 'set' ? 'Choose a new password' : step === 'done' ? 'Password changed' : 'Reset your password'}</h1>
 
-		{#if error}<p class="mt-4 border-l-[3px] border-fail bg-panel px-3 py-2 text-fail" role="alert">{error}</p>{/if}
+		{#if error}<Notice tone="fail" class="mt-4" live>{error}</Notice>{/if}
 
 		{#if available === false && step !== 'set'}
 			<p class="mt-4 text-muted">Password reset by email is not set up on this panel. Ask its administrator to reset your password.</p>
@@ -85,7 +85,7 @@
 				<button class="btn btn-primary w-full" disabled={busy}>{busy ? 'Sending…' : 'Send reset link'}</button>
 			</form>
 		{:else if step === 'asked'}
-			<p class="mt-4 border-l-[3px] border-action bg-panel px-3 py-2">If an account uses that email, a reset link is on its way. It works once and expires in an hour.</p>
+			<Notice tone="success" class="mt-4" live>If an account uses that email, a reset link is on its way. It works once and expires in an hour.</Notice>
 		{:else if step === 'set'}
 			<p class="mt-1 text-muted">Signing in again will be needed on every device.</p>
 			<form class="mt-6 space-y-4" onsubmit={set}>
@@ -94,9 +94,8 @@
 				<button class="btn btn-primary w-full" disabled={busy}>{busy ? 'Saving…' : 'Change password'}</button>
 			</form>
 		{:else if step === 'done'}
-			<p class="mt-4 border-l-[3px] border-action bg-panel px-3 py-2">Your password was changed and every session was signed out.</p>
+			<Notice tone="success" class="mt-4" live>Your password was changed and every session was signed out.</Notice>
 			<a class="btn btn-primary mt-6 w-full" href="/login">Sign in</a>
 		{/if}
-		{#if step !== 'done'}<p class="mt-6 text-small text-muted"><a class="link" href="/login">Back to sign in</a></p>{/if}
-	</div>
-</main>
+		{#if step !== 'done'}<p class="mt-6 border-t border-rule-soft pt-4 text-small text-muted"><a class="link" href="/login">Back to sign in</a></p>{/if}
+</AuthFrame>

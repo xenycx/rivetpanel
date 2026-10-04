@@ -12,14 +12,15 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"regexp"
 	"sync"
+
+	"github.com/xenycx/rivetpanel/internal/lazyre"
 )
 
 // DefaultMax is the retained output per operation.
 const DefaultMax = 256 << 10
 
-var idRe = regexp.MustCompile(`^[0-9a-f-]{36}$`)
+var idRe = lazyre.New(`^[0-9a-f-]{36}$`)
 
 // ErrUnknown means there is no output for the operation.
 var ErrUnknown = errors.New("no output for this operation")

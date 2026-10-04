@@ -34,6 +34,9 @@ type fakeDocker struct {
 	// start time for live containers.
 	listOmitsLiveStart bool
 
+	// published are host ports held by containers outside this panel.
+	published []PublishedPort
+
 	created  []ContainerSpec
 	starts   int
 	removes  int
@@ -266,4 +269,20 @@ func (f *fakeDocker) crash(id string, code int, oom bool) {
 	defer f.mu.Unlock()
 	c := f.conts[id]
 	c.State, c.ExitCode, c.OOMKilled, c.FinishedAt = "exited", code, oom, time.Now()
+}
+
+// PublishedPorts reports the foreign ports plus those of running fake containers.
+func (f *fakeDocker) PublishedPorts(ctx context.Context) ([]PublishedPort, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	out := append([]PublishedPort(nil), f.published...)
+	for id, c := range f.conts {
+		if c.State != "running" {
+			continue
+		}
+		for _, p := range f.specs[id].Ports {
+			out = append(out, PublishedPort{HostIP: p.HostIP, HostPort: p.HostPort, Proto: p.Proto, ContainerID: id, Container: c.Name, BotID: c.Labels[LabelBot]})
+		}
+	}
+	return out, nil
 }

@@ -9,7 +9,7 @@ export const scopes: { id: Scope; label: string }[] = [
 	{ id: 'all', label: 'All' },
 	{ id: 'actions', label: 'Actions' },
 	{ id: 'pages', label: 'Pages' },
-	{ id: 'bots', label: 'Bots' },
+	{ id: 'bots', label: 'Bots & servers' },
 	{ id: 'sites', label: 'Sites' },
 	{ id: 'admin', label: 'Admin' },
 	{ id: 'people', label: 'People' },
@@ -19,7 +19,7 @@ export const scopes: { id: Scope; label: string }[] = [
 /** Display order of the groups, and the scope each belongs to. */
 export const groups: { id: string; label: string; scope: Scope }[] = [
 	{ id: 'action', label: 'Actions', scope: 'actions' },
-	{ id: 'bot', label: 'Bots', scope: 'bots' },
+	{ id: 'bot', label: 'Bots and servers', scope: 'bots' },
 	{ id: 'bot-tab', label: 'Bot sections', scope: 'bots' },
 	{ id: 'site', label: 'Sites', scope: 'sites' },
 	{ id: 'page', label: 'Pages', scope: 'pages' },
@@ -47,14 +47,24 @@ export type Entry = {
 };
 
 export const pages: Entry[] = [
-	{ key: 'p-overview', group: 'page', label: 'Overview', hint: 'All your bots', icon: 'home', href: '/dashboard', words: 'dashboard home fleet bots list' },
-	{ key: 'p-templates', group: 'page', label: 'Templates', hint: 'Start a bot from a template', icon: 'layers', href: '/templates', words: 'starter discord.js discord.py jda example' },
+	{ key: 'p-overview', group: 'page', label: 'Overview', hint: 'Capacity, servers and bots at a glance', icon: 'home', href: '/dashboard', words: 'dashboard home fleet capacity' },
+	{ key: 'p-bots', group: 'page', label: 'Bots', hint: 'Every Discord bot, with filters', icon: 'box', href: '/bots', words: 'discord bots list filter batch' },
+	{ key: 'p-servers', group: 'page', label: 'Game servers', hint: 'Minecraft and Steam servers', icon: 'gamepad', href: '/servers', words: 'game minecraft paper fabric forge valheim rust zomboid steam' },
+	{ key: 'p-templates', group: 'page', label: 'Templates', hint: 'Bot templates, game server types and site templates', icon: 'layers', href: '/templates', words: 'starter discord.js discord.py jda example bot templates blueprints eggs server types site templates' },
+	{ key: 'p-templates-games', group: 'page', label: 'Game server templates', hint: 'Templates · every server type you can create', icon: 'gamepad', href: '/templates?tab=games', words: 'blueprints eggs minecraft steam server types imported' },
+	{ key: 'p-templates-sites', group: 'page', label: 'Site templates', hint: 'Templates · static site starters with previews', icon: 'globe', href: '/templates?tab=sites', words: 'landing docs portfolio coming soon community starter website' },
+	{ key: 'p-sites', group: 'page', label: 'Sites', hint: 'Hosted static sites', icon: 'globe', href: '/sites', words: 'static website pages domains' },
 	{ key: 'p-activity', group: 'page', label: 'Activity', hint: 'Work in progress and recent changes', icon: 'activity', href: '/activity', words: 'audit log history operations changes builds deployments' },
+	{ key: 'p-notifications', group: 'page', label: 'Notifications', hint: 'Alerts, deployments, replies and announcements', icon: 'bell', href: '/notifications', words: 'inbox bell alerts unread' },
+	{ key: 'p-support', group: 'page', label: 'Support', hint: 'Your support tickets', icon: 'lifebuoy', href: '/support', words: 'help ticket question staff' },
+	{ key: 'p-help', group: 'page', label: 'Help center', hint: 'Articles from the panel staff', icon: 'lifebuoy', href: '/help', words: 'knowledgebase kb articles faq' },
+	{ key: 'p-status', group: 'page', label: 'Status page', hint: 'Public status, incidents and maintenance', icon: 'activity', href: '/status', words: 'uptime incidents outage maintenance' },
 	{ key: 'p-docs', group: 'page', label: 'Documentation', hint: 'Guides and limits', icon: 'book', href: '/docs', words: 'help manual guide docs how to' },
 	{ key: 'p-api', group: 'page', label: 'Automation API', hint: 'OpenAPI description', icon: 'code', href: '/api/v1/automation/openapi.yaml', words: 'openapi rest tokens swagger' },
 	{ key: 'p-about', group: 'page', label: 'What RivetPanel does', hint: 'Overview of the product', icon: 'info', href: '/', words: 'about landing features' },
 
 	{ key: 's-profile', group: 'settings', label: 'Profile', hint: 'Name and picture', icon: 'users', href: '/settings/profile', words: 'account avatar display name email' },
+	{ key: 's-notifications', group: 'settings', label: 'Notification settings', hint: 'In-panel and email per category', icon: 'bell', href: '/settings/notifications', words: 'email alerts preferences mute' },
 	{ key: 's-appearance', group: 'settings', label: 'Appearance', hint: 'Theme, accent colour and corners', icon: 'sliders', href: '/settings/appearance', words: 'dark light theme accent color colour radius corners' },
 	{ key: 's-workspaces', group: 'settings', label: 'Workspaces', hint: 'Your workspaces and members', icon: 'building', href: '/settings/workspaces', words: 'team members roles invite' },
 	{ key: 's-accounts', group: 'settings', label: 'Connected accounts', hint: 'GitHub and Discord links', icon: 'link', href: '/settings/connected-accounts', words: 'github discord oauth connect link repo' },
@@ -71,6 +81,7 @@ export const adminPages: Entry[] = [
 	{ key: 'a-host-bots', group: 'admin', label: 'Resource use per bot', hint: 'Host · what each bot consumes', icon: 'chart', href: '/admin/host?tab=bots', words: 'top cpu memory network pids consumers heavy' },
 	{ key: 'a-host-capacity', group: 'admin', label: 'Capacity and budgets', hint: 'Host · memory reserved, limits', icon: 'chart', href: '/admin/host?tab=capacity', words: 'budget admission memory limit node reserved' },
 	{ key: 'a-logs', group: 'admin', label: 'Panel logs', hint: 'Host · what RivetPanel itself logged', icon: 'terminal', href: '/admin/host?tab=logs', words: 'log errors warnings server output debug journal' },
+	{ key: 'a-log-archive', group: 'admin', label: 'Logs and retention', hint: 'Administration · daily log archive, graph history', icon: 'archive', href: '/admin/logs', words: 'log archive retention gzip days history download console output graph telemetry metrics keep delete disk' },
 	{ key: 'a-env', group: 'admin', label: 'Environment', hint: 'Administration · RIVET_ variables', icon: 'sliders', href: '/admin/environment', words: 'env variables configuration config settings limits restart environment file rivetpanel' },
 	{ key: 'a-settings', group: 'admin', label: 'Panel settings', hint: 'Administration · address, sign-in, AI', icon: 'gear', href: '/admin/settings', words: 'public url oauth github discord registration signup' },
 	{ key: 'a-modules', group: 'admin', label: 'Modules', hint: 'Administration · stable and preview capabilities', icon: 'layers', href: '/admin/modules', words: 'features preview experimental agents games identity support extensions virtual machines' },
@@ -84,28 +95,30 @@ export const docs: Entry[] = [
 	['version', 'Version and implementation status'], ['quickstart', 'Quick start'], ['deploy', 'Deployment and GitHub'], ['publish', 'Publishing a bot to GitHub'],
 	['workspaces', 'Workspaces and roles'], ['sites', 'Bot Sites and public pages'], ['appearance', 'Appearance'], ['ai', 'AI assistant'], ['widgets', 'Dashboard and public widgets'],
 	['widget-data', 'Widget data shapes'], ['telemetry', 'Telemetry limits'], ['health', 'Health and alerts'], ['usage', 'Usage analytics'], ['security', 'Security and isolation'], ['backups', 'Backups and restore'],
-	['automation', 'Automation API'], ['admin-tools', 'Host, logs and environment'], ['operations', 'Operations guide']
+	['automation', 'Automation API'], ['admin-tools', 'Host, logs and environment'], ['log-archive', 'Log archive and retention'], ['operations', 'Operations guide']
 ].map(([id, title]) => ({ key: `d-${id}`, group: 'docs', label: title, hint: 'Documentation', icon: 'book' as IconName, href: `/docs#${id}` }));
 
 /** The tabs of a bot page; BotView falls back to Manage for ones the person may not open. */
 export const botTabs: { id: string; label: string; icon: IconName; words: string }[] = [
-	{ id: 'manage', label: 'Console', icon: 'terminal', words: 'manage start stop restart logs output terminal' },
-	{ id: 'overview', label: 'Overview', icon: 'overview', words: 'status summary' },
+	{ id: 'manage', label: 'Manage', icon: 'terminal', words: 'console overview status summary start stop restart logs output terminal activity source details' },
 	{ id: 'files', label: 'Files', icon: 'file', words: 'editor upload code' },
 	{ id: 'deploy', label: 'Deploy', icon: 'rocket', words: 'github push webhook release build' },
 	{ id: 'startup', label: 'Startup', icon: 'sliders', words: 'command entrypoint arguments restart policy build script' },
 	{ id: 'packages', label: 'Packages', icon: 'package', words: 'npm pip dependencies install' },
 	{ id: 'env', label: 'Environment variables', icon: 'key', words: 'env secrets token config' },
-	{ id: 'addons', label: 'Add-ons (databases)', icon: 'layers', words: 'postgres postgresql redis mongodb mariadb mysql database cache addon' },
+	{ id: 'addons', label: 'Databases', icon: 'layers', words: 'postgres postgresql redis mongodb mariadb mysql database cache addon add-ons' },
 	{ id: 'network', label: 'Network', icon: 'network', words: 'ports publish outbound' },
 	{ id: 'page', label: 'Public page', icon: 'globe', words: 'site studio widgets analytics' },
-	{ id: 'alerts', label: 'Health and alerts', icon: 'activity', words: 'probe discord webhook notify uptime' },
+	{ id: 'alerts', label: 'Health', icon: 'activity', words: 'probe heartbeat sdk uptime tcp http' },
 	{ id: 'usage', label: 'Analytics', icon: 'chart', words: 'usage cpu memory network uptime crashes deployments backups history trends csv' },
 	{ id: 'backups', label: 'Backups', icon: 'archive', words: 'restore snapshot download' },
 	{ id: 'schedules', label: 'Schedules', icon: 'clock', words: 'cron restart timer' },
 	{ id: 'users', label: 'Access', icon: 'users', words: 'share invite permissions' },
-	{ id: 'settings', label: 'Settings', icon: 'gear', words: 'rename memory cpu limits transfer delete' }
+	{ id: 'settings', label: 'Settings', icon: 'gear', words: 'rename memory cpu limits transfer delete notifications alerts discord email crash' }
 ];
+
+/** Bot tabs a game server does not have (BotView hides them too). */
+export const notGameTabs = new Set(['deploy', 'packages', 'env', 'page', 'alerts']);
 
 const norm = (s: string) => s.toLowerCase();
 

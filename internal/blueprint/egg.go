@@ -12,6 +12,8 @@ import (
 	"unicode/utf8"
 
 	"go.yaml.in/yaml/v3"
+
+	"github.com/xenycx/rivetpanel/internal/lazyre"
 )
 
 // Pterodactyl egg import. An egg is untrusted input: it is size-limited,
@@ -210,7 +212,7 @@ func jsonish(r json.RawMessage, v any) error {
 	return strictDecode(r, v)
 }
 
-var slugCleanRe = regexp.MustCompile(`[^a-z0-9]+`)
+var slugCleanRe = lazyre.New(`[^a-z0-9]+`)
 
 func eggSlug(name string) string {
 	s := strings.Trim(slugCleanRe.ReplaceAllString(strings.ToLower(name), "-"), "-")
@@ -240,8 +242,8 @@ func clip(s string, n int) string {
 	return cut
 }
 
-var labelCleanRe = regexp.MustCompile(`[^A-Za-z0-9 ._+()-]+`)
-var javaLabelRe = regexp.MustCompile(`(?i)java[ _-]?([0-9]{1,2})\b`)
+var labelCleanRe = lazyre.New(`[^A-Za-z0-9 ._+()-]+`)
+var javaLabelRe = lazyre.New(`(?i)java[ _-]?([0-9]{1,2})\b`)
 
 func (c *eggConverter) images(e egg) []Image {
 	type pair struct{ label, ref string }
@@ -607,7 +609,7 @@ var eggPlaceholders = map[string]string{
 	"P_SERVER_UUID":             "{{SERVER_ID}}",
 }
 
-var eggRefRe = regexp.MustCompile(`\{\{\s*([A-Za-z_][A-Za-z0-9_.]*)\s*\}\}`)
+var eggRefRe = lazyre.New(`\{\{\s*([A-Za-z_][A-Za-z0-9_.]*)\s*\}\}`)
 
 // mapValue rewrites a config value's placeholders. ok is false when the
 // value references something with no equivalent.

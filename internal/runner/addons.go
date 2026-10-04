@@ -7,13 +7,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"regexp"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/xenycx/rivetpanel/internal/addons"
 	"github.com/xenycx/rivetpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/lazyre"
 )
 
 // AddonNetwork is the private, internal network that joins a bot to its
@@ -220,7 +220,7 @@ func (r *Runner) removeAddonResources(ctx context.Context, botID string) error {
 	return nil
 }
 
-var varRef = regexp.MustCompile(`\$\{([A-Za-z_][A-Za-z0-9_]*)\}`)
+var varRef = lazyre.New(`\$\{([A-Za-z_][A-Za-z0-9_]*)\}`)
 
 // expandRefs replaces ${NAME} in the bot's own variables with values from
 // provided (add-on connection details and the bot's other variables), so a

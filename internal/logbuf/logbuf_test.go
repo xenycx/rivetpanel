@@ -88,3 +88,29 @@ func TestLongValuesAreClipped(t *testing.T) {
 		t.Fatalf("not clipped: %d %d", len(e.Msg), len(e.Attrs[0].Value))
 	}
 }
+
+// The ring grows with the lines it receives instead of reserving its whole
+// capacity up front, and behaves the same before and after it fills.
+func TestRingGrowsOnDemand(t *testing.T) {
+	b := New(16)
+	if len(b.ring) != 0 || b.Stats().Capacity != 16 {
+		t.Fatalf("new buffer holds %d entries, capacity %d", len(b.ring), b.Stats().Capacity)
+	}
+	l := logger(b)
+	for i := 0; i < 5; i++ {
+		l.Info("line", "n", i)
+	}
+	if st := b.Stats(); st.Held != 5 || st.OldestSeq != 1 || st.LatestSeq != 5 || len(b.ring) != 5 {
+		t.Fatalf("partly filled: %+v (ring %d)", st, len(b.ring))
+	}
+	got := b.Find(Query{Limit: 100})
+	if len(got) != 5 || got[0].Seq != 1 || got[4].Seq != 5 {
+		t.Fatalf("partly filled order: %+v", got)
+	}
+	for i := 5; i < 17; i++ { // fill exactly, then wrap once
+		l.Info("line", "n", i)
+	}
+	if st := b.Stats(); st.Held != 16 || st.OldestSeq != 2 || st.LatestSeq != 17 || len(b.ring) != 16 {
+		t.Fatalf("wrapped: %+v (ring %d)", st, len(b.ring))
+	}
+}

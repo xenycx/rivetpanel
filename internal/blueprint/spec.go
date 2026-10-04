@@ -13,6 +13,8 @@ import (
 	"strings"
 
 	"go.yaml.in/yaml/v3"
+
+	"github.com/xenycx/rivetpanel/internal/lazyre"
 )
 
 const (
@@ -25,11 +27,11 @@ const (
 )
 
 var (
-	slugRe     = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{1,63}$`)
-	envNameRe  = regexp.MustCompile(`^[A-Z][A-Z0-9_]{0,63}$`)
-	imageRe    = regexp.MustCompile(`^[a-z0-9]+([._/-][a-z0-9]+)*(:[A-Za-z0-9_][A-Za-z0-9_.-]{0,127})?(@sha256:[a-f0-9]{64})?$`)
-	templateRe = regexp.MustCompile(`\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}`)
-	labelRe    = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9 ._+()-]{0,63}$`)
+	slugRe     = lazyre.New(`^[a-z0-9][a-z0-9-]{1,63}$`)
+	envNameRe  = lazyre.New(`^[A-Z][A-Z0-9_]{0,63}$`)
+	imageRe    = lazyre.New(`^[a-z0-9]+([._/-][a-z0-9]+)*(:[A-Za-z0-9_][A-Za-z0-9_.-]{0,127})?(@sha256:[a-f0-9]{64})?$`)
+	templateRe = lazyre.New(`\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}`)
+	labelRe    = lazyre.New(`^[A-Za-z0-9][A-Za-z0-9 ._+()-]{0,63}$`)
 )
 
 // Runtimes a blueprint may record for compatibility with the bots table.
@@ -44,7 +46,7 @@ const DefaultRuntime = "go"
 // MaxExtraPorts bounds ports.extra and the SERVER_PORT_<n> variables.
 const MaxExtraPorts = 10
 
-var extraPortVarRe = regexp.MustCompile(`^SERVER_PORT_([1-9]|10)$`)
+var extraPortVarRe = lazyre.New(`^SERVER_PORT_([1-9]|10)$`)
 
 // IsSystemVariable reports whether the panel provides name at run time:
 // a SystemVariables entry or SERVER_PORT_1 … SERVER_PORT_10 (the ports of
@@ -66,7 +68,7 @@ const (
 	defaultSteamMaxSizeGB  = 40
 )
 
-var betaRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`)
+var betaRe = lazyre.New(`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`)
 
 // ValidBeta reports whether a rendered beta branch name is safe to pass to
 // SteamCMD ("" = the default public branch).
@@ -79,6 +81,7 @@ var SystemVariables = map[string]string{
 	"SERVER_IP":     "address the server should bind (0.0.0.0)",
 	"SERVER_PORT":   "the primary allocation's port",
 	"SERVER_ID":     "the server's UUID",
+	JVMArgsVar:      "the server's extra JVM options (blueprints with startup.jvm_args)",
 }
 
 // Spec is one blueprint revision.
@@ -151,6 +154,13 @@ type Startup struct {
 	// a console command (SIGINT, SIGTERM, SIGQUIT or SIGHUP). Stop and
 	// StopSignal are mutually exclusive.
 	StopSignal string `yaml:"stop_signal" json:"stop_signal,omitempty"`
+	// JVMArgs offers a per-server "JVM arguments" setting. The command must
+	// then contain {{SERVER_JVM_ARGS}} unquoted (right after `java`); the
+	// panel validates the options strictly before they reach the shell.
+	JVMArgs bool `yaml:"jvm_args" json:"jvm_args,omitempty"`
+	// JVMArgsDefault are the JVM options new servers (and servers updated to
+	// this revision that never set their own) start with.
+	JVMArgsDefault string `yaml:"jvm_args_default" json:"jvm_args_default,omitempty"`
 }
 
 // Variable is one server setting exposed as an environment variable.
@@ -407,6 +417,20 @@ func (s Spec) Validate() error {
 		if err := checkRefs(tpl, known); err != nil {
 			return fmt.Errorf("startup.command: %w", err)
 		}
+	}
+	usesJVMArgs := strings.Contains(StartupCommand(s.Startup.Command), "${"+JVMArgsVar+"}")
+	switch {
+	case s.Startup.JVMArgs && !usesJVMArgs:
+		return fmt.Errorf("startup.jvm_args needs {{%s}} in startup.command", JVMArgsVar)
+	case !s.Startup.JVMArgs && usesJVMArgs:
+		return fmt.Errorf("startup.command uses {{%s}}; set startup.jvm_args: true", JVMArgsVar)
+	case !s.Startup.JVMArgs && s.Startup.JVMArgsDefault != "":
+		return fmt.Errorf("startup.jvm_args_default needs startup.jvm_args: true")
+	}
+	if norm, err := CheckJVMArgs(s.Startup.JVMArgsDefault); err != nil {
+		return fmt.Errorf("startup.jvm_args_default: %w", err)
+	} else if norm != s.Startup.JVMArgsDefault {
+		return fmt.Errorf("startup.jvm_args_default must be options separated by single spaces")
 	}
 	if s.JavaFrom != "" && !vars[s.JavaFrom] {
 		return fmt.Errorf("java_from names an undeclared variable")

@@ -1,0 +1,28 @@
+Game icons in this folder come from Dashboard Icons by Homarr Labs
+(https://dashboardicons.com, https://github.com/homarr-labs/dashboard-icons),
+licensed under the Apache License, Version 2.0 (see LICENSE in this folder).
+
+Files and their upstream sources (fetched 2026-10-04 from the main branch):
+
+  minecraft.webp  webp/minecraft.webp  resized to 160 px and re-encoded as lossy WebP
+  fabricmc.webp   webp/fabricmc.webp   resized to 160 px and re-encoded as lossy WebP
+  valheim.webp    webp/valheim.webp    resized to 160 px and re-encoded as lossy WebP
+  steam.svg       svg/steam.svg        unchanged
+
+Upstream notice: all product names, trademarks and registered trademarks are
+the property of their respective owners. The icons are used for
+identification only and do not imply endorsement.
+
+The following icons come from selfh.st/icons (https://selfh.st/icons,
+https://github.com/selfhst/icons), listed on dashboardicons.com, licensed
+under Creative Commons Attribution 4.0 International (see LICENSE-selfhst in
+this folder). Fetched 2026-10-04, unchanged:
+
+  papermc-paper.svg     svg/papermc-paper.svg
+  papermc-folia.svg     svg/papermc-folia.svg
+  papermc-velocity.svg  svg/papermc-velocity.svg
+  purpurmc.svg          svg/purpurmc.svg
+
+Server types without an icon in either set (Forge, NeoForge, Rust, Project
+Zomboid and imported types) use the Minecraft or Steam icon of their family,
+or a generic drawn fallback.

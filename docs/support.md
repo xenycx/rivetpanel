@@ -133,7 +133,7 @@ only). Messages carry a 300-character excerpt and a link to the ticket.
 
 ## Knowledgebase (help center)
 
-**Help center** (`/help`, also under Resources in the sidebar) lists and
+**Help center** (`/help`, also under Help & resources in the sidebar) lists and
 searches help articles. Administration → **Knowledgebase** (permission
 `kb.manage`) writes them.
 

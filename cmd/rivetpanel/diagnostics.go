@@ -32,11 +32,16 @@ type diagSources struct {
 	runnerStatus func(ctx context.Context) (runner.Status, bool)
 	oauth        []string // enabled providers
 	knownSchema  int      // newest migration this binary ships
+	ownership    runner.OwnershipChoice
+	deploy       []diag.Check // found once at start (see deploycheck.go)
 }
 
 func probes(s diagSources) []diag.Probe {
 	const panel, host, bots, data = "Panel", "Host", "Bots", "Data"
 	return []diag.Probe{
+		// Deployment problems found at start: a former installation, the
+		// container data paths, an unencrypted public address.
+		func(context.Context) []diag.Check { return append([]diag.Check(nil), s.deploy...) },
 		// Database and schema.
 		func(ctx context.Context) []diag.Check {
 			c := diag.Check{ID: "database", Group: data, Title: "Database"}
@@ -130,11 +135,40 @@ func probes(s diagSources) []diag.Probe {
 			if err := s.files.ProbeOwnership(uid, gid); err != nil {
 				c.Status = diag.Fail
 				c.Detail = fmt.Sprintf("The panel cannot give files to %s, so bots cannot write their workspace.", owner)
-				c.Fix = "Run the panel as root (the systemd unit does), give it CAP_CHOWN, or set RIVET_CONTAINER_USER to the panel's own uid:gid."
+				c.Fix = "Run the panel as root (the systemd unit does), give it CAP_CHOWN, or set RIVET_CONTAINER_USER and RIVET_WORKSPACE_OWNER to the panel's own uid:gid."
+				if s.ownership.Refused {
+					c.Detail += " In production the panel does not fall back to running bots as its own uid (which owns the database and keys), so it refuses to start."
+					c.Fix += " To accept the shared uid anyway, set RIVET_ALLOW_SHARED_UID=1."
+				}
 				return []diag.Check{c}
 			}
 			c.Status, c.Detail = diag.OK, fmt.Sprintf("Workspaces can be handed to %s.", owner)
-			return []diag.Check{c}
+			out := []diag.Check{c}
+			if s.ownership.Fallback {
+				c.Status = diag.Info
+				c.Detail = fmt.Sprintf("Bot containers run as the panel's own user %s because the panel is neither root nor holds CAP_CHOWN, "+
+					"so it cannot give files to the default %s. They are still not root inside their containers, but they share the panel's uid on the host.",
+					owner, s.ownership.Default)
+				c.Fix = "Fine for trying the panel out. In production run it as root through the systemd unit, which gives bots a dedicated unprivileged user, or set RIVET_CONTAINER_USER and RIVET_WORKSPACE_OWNER explicitly."
+				if s.ownership.OptedIn {
+					// Production on the shared uid, allowed explicitly.
+					c.Status = diag.Warn
+					c.Detail += " The same uid owns the panel's database and keys; this production panel runs that way only because RIVET_ALLOW_SHARED_UID=1 is set."
+					c.Fix = "Run the panel as root through the systemd unit (bots then get a dedicated unprivileged user) or give it CAP_CHOWN, then remove RIVET_ALLOW_SHARED_UID."
+				}
+				out[0] = c
+			}
+			// Running as itself, the panel cannot repair files another user
+			// owns (root or CAP_CHOWN repairs them before each start).
+			if uid != os.Geteuid() || os.Geteuid() == 0 {
+				return out
+			}
+			if ids, err := s.files.ForeignOwned(uid, gid); err == nil && len(ids) > 0 {
+				out = append(out, diag.Check{ID: "ownership-foreign", Group: host, Title: "Workspaces owned by another user", Status: diag.Warn,
+					Detail: fmt.Sprintf("%d workspace(s) in %s belong to another user (for example created while the panel ran as root); their bots cannot start.", len(ids), s.cfg.DataRoot),
+					Fix:    fmt.Sprintf("Run as root: chown -R %s %s, or run the panel with the user that owns them.", owner, s.cfg.DataRoot)})
+			}
+			return out
 		},
 		// Disk and inodes.
 		func(ctx context.Context) []diag.Check {

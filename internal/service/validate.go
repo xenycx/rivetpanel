@@ -4,11 +4,11 @@ import (
 	"errors"
 	"fmt"
 	"net/mail"
-	"regexp"
 	"strings"
 	"unicode/utf8"
 
 	"github.com/xenycx/rivetpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/lazyre"
 	"github.com/xenycx/rivetpanel/internal/runtimes"
 )
 
@@ -23,7 +23,7 @@ const (
 	maxPids        = 4096
 )
 
-var envNameRe = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+var envNameRe = lazyre.New(`^[A-Za-z_][A-Za-z0-9_]*$`)
 
 // Limits bound per-bot resources (administrator policy).
 type Limits struct {

@@ -76,6 +76,8 @@ export type Bot = {
 	/** Chosen image label; "" = automatic (decided when installing). */
 	image_choice?: string;
 	install_state?: 'pending' | 'installing' | 'installed' | 'failed';
+	/** Game servers: the version the last installation resolved, such as 1.21.11. */
+	installed_version?: string;
 	allocations?: Allocation[];
 };
 
@@ -325,6 +327,8 @@ export type Operation = {
 	id: string;
 	bot_id: string;
 	bot_name: string;
+	/** Absent from responses of panels older than this field. */
+	bot_kind?: 'bot' | 'game';
 	kind: OpKind;
 	trigger: 'manual' | 'push' | 'schedule' | 'initial' | 'start' | 'api' | 'system';
 	actor: string | null;
@@ -471,6 +475,22 @@ export type SitesInfo = {
 	domains?: SiteBaseChoice[];
 	max_bytes?: number;
 	max_domains?: number;
+};
+/** A built-in site starter (GET /site-templates). */
+export type SiteTemplate = {
+	id: string;
+	name: string;
+	description: string;
+	tags: string[];
+	accent: string;
+	theme: 'light' | 'dark';
+	status_widget: boolean;
+	spa: boolean;
+	pages: string[];
+	files: number;
+	bytes: number;
+	/** A sandboxed, script-free rendering for an <iframe sandbox>; add ?page= for other pages. */
+	preview_url: string;
 };
 /** A sites domain as administrators manage it. */
 export type SiteBaseDomain = {

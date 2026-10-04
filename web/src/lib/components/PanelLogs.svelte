@@ -86,7 +86,7 @@
 <div class="flex flex-wrap items-center gap-2">
 	<div class="inline-flex rounded-control border border-rule bg-raised p-0.5" role="group" aria-label="Level">
 		{#each [['all', 'Everything'], ['info', 'Info'], ['warn', 'Warnings'], ['error', 'Errors']] as [id, label] (id)}
-			<button class="rounded-inner px-2.5 py-1 text-small font-medium {level === id ? 'bg-action text-action-ink' : 'text-muted hover:text-ink'}" aria-pressed={level === id} onclick={() => { level = id as typeof level; void load(true); }}>{label}</button>
+			<button class="rounded-inner px-2.5 py-1 text-small font-medium {level === id ? 'bg-paper-2 text-ink shadow-[inset_0_0_0_1px_var(--color-rule)]' : 'text-muted hover:text-ink'}" aria-pressed={level === id} onclick={() => { level = id as typeof level; void load(true); }}>{label}</button>
 		{/each}
 	</div>
 	<label class="min-w-48 flex-1 sm:max-w-sm"><span class="sr-only">Search the log</span><input class="field" type="search" placeholder="Search messages and fields" bind:value={search} oninput={refilter} /></label>

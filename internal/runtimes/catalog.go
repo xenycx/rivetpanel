@@ -5,12 +5,13 @@ import (
 	"fmt"
 	"io/fs"
 	"path/filepath"
-	"regexp"
 	"sort"
 	"strings"
 	"time"
 
 	"go.yaml.in/yaml/v3"
+
+	"github.com/xenycx/rivetpanel/internal/lazyre"
 )
 
 // Allowed runtime IDs; must match the CHECK constraint on bots.runtime.
@@ -18,9 +19,9 @@ var validIDs = map[string]bool{"nodejs": true, "python": true, "rust": true, "go
 
 var (
 	// repo[:tag][@sha256:digest] with no whitespace or shell metacharacters.
-	imageRe   = regexp.MustCompile(`^[a-z0-9]+([._/-][a-z0-9]+)*(:[A-Za-z0-9_][A-Za-z0-9_.-]{0,127})?(@sha256:[a-f0-9]{64})?$`)
-	digestRe  = regexp.MustCompile(`^sha256:[a-f0-9]{64}$`)
-	envNameRe = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+	imageRe   = lazyre.New(`^[a-z0-9]+([._/-][a-z0-9]+)*(:[A-Za-z0-9_][A-Za-z0-9_.-]{0,127})?(@sha256:[a-f0-9]{64})?$`)
+	digestRe  = lazyre.New(`^sha256:[a-f0-9]{64}$`)
+	envNameRe = lazyre.New(`^[A-Za-z_][A-Za-z0-9_]*$`)
 )
 
 // Defaults are the initial resource settings for new bots of a runtime.

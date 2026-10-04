@@ -1,8 +1,10 @@
 #!/bin/sh
 # Installs a built rivet-agent binary and its systemd unit on a remote node.
+# Run as root from the repository root (after `make build`) or from an unpacked
+# release archive; both keep the binaries in bin/.
 set -eu
 [ "$(id -u)" = 0 ] || { echo "run as root" >&2; exit 1; }
-[ -x bin/rivet-agent ] || { echo "build first: make build" >&2; exit 1; }
+[ -x bin/rivet-agent ] || { echo "bin/rivet-agent not found: run make build, or run this from an unpacked release archive" >&2; exit 1; }
 install -m 0755 bin/rivet-agent /usr/local/bin/rivet-agent
 install -d -m 0750 /etc/rivet-agent /var/lib/rivet-agent /var/lib/rivet-agent/servers
 [ -e /etc/rivet-agent/rivet-agent.env ] || install -m 0640 deploy/systemd/rivet-agent.env.example /etc/rivet-agent/rivet-agent.env

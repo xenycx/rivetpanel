@@ -124,6 +124,13 @@ page (status and stats there are the last ones the node reported).
 
 ## Current enforcement and limits
 
+Console output of servers on a node is copied into the panel's daily log
+files and archive (`logs.md`) through the same authenticated console stream
+the browser console uses; nothing is stored or rotated on the node beyond
+Docker's own 3 × 10 MB container logs, and no agent upgrade is needed (protocol
+stays 8). Output older than Docker's rotation window when the node was offline
+is not captured.
+
 Enforced now:
 
 - the panel issues node-bound, client-auth-only 30-day certificates; a

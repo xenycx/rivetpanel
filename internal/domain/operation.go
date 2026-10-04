@@ -26,6 +26,7 @@ type Operation struct {
 	ID          string
 	BotID       string
 	BotName     string // filled by listing queries
+	BotKind     string // bot | game, filled by listing queries
 	Kind        string
 	Trigger     string
 	ActorID     *string

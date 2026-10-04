@@ -123,16 +123,19 @@ await step('sign-in error keeps the email and announces the problem', async () =
 	expect((await page.getByLabel('Password').inputValue()) === '', 'password kept after failure');
 });
 
-await step('sign in and see the first-bot empty state', async () => {
+await step('sign in and see the empty overview with ways to start', async () => {
 	await page.getByLabel('Password').fill(adminPw);
 	await page.getByRole('button', { name: 'Sign in' }).click();
 	await page.waitForURL(base + '/dashboard');
-	await page.getByRole('heading', { name: 'Create your first bot' }).waitFor();
+	await page.getByRole('heading', { level: 1, name: 'Overview' }).waitFor();
+	const bots = page.getByRole('region', { name: 'Discord bots' });
+	await bots.getByText(/No bots .*yet/).waitFor();
+	await bots.getByRole('link', { name: 'Start from a template' }).waitFor();
 });
 
 await step('the public home and panel dashboard have distinct routes', async () => {
 	await page.goto('/');
-	await page.getByRole('heading', { name: 'Run every bot. Know its state.' }).waitFor();
+	await page.getByRole('heading', { level: 1, name: /^Run every bot/ }).waitFor();
 	expect((await page.getByRole('link', { name: 'Open panel', exact: true }).getAttribute('href')) === '/dashboard', 'Open panel does not target the dashboard');
 	await page.goto('/dashboard');
 });
@@ -181,7 +184,7 @@ await step('guided creation validates required values and creates the bot', asyn
 	await page.getByRole('button', { name: 'Continue' }).click();
 	await page.getByRole('heading', { name: 'Review and create' }).waitFor();
 	await page.getByRole('button', { name: /Create/ }).click();
-	await page.waitForURL(/\/bots\/[0-9a-f-]{36}\?tab=overview/);
+	await page.waitForURL(/\/bots\/[0-9a-f-]{36}\?tab=manage/);
 	botId = page.url().match(/bots\/([0-9a-f-]{36})/)[1];
 	await page.getByRole('heading', { name: 'Setup' }).waitFor();
 });
@@ -285,7 +288,7 @@ await step('Ask AI opens one chat that knows which bot and section is in view', 
 	await page.goto(`/bots/${botId}?tab=files`);
 	await page.getByRole('link', { name: 'Files', exact: true }).waitFor();
 	expect((await page.getByRole('link', { name: 'AI operator' }).count()) === 0, 'the per-bot AI tab is still there');
-	await page.getByRole('button', { name: 'Ask AI', exact: true }).click();
+	await page.getByRole('button', { name: /^Ask AI\b/ }).click();
 	const chat = page.getByRole('dialog', { name: 'AI assistant' });
 	await chat.waitFor();
 	// No provider is configured in this panel: the chat says so instead of failing.
@@ -296,7 +299,7 @@ await step('Ask AI opens one chat that knows which bot and section is in view', 
 	// It follows the person to another page.
 	await chat.getByRole('button', { name: 'Close' }).click();
 	await page.getByRole('link', { name: 'Activity', exact: true }).first().click();
-	await page.getByRole('button', { name: 'Ask AI', exact: true }).click();
+	await page.getByRole('button', { name: /^Ask AI\b/ }).click();
 	await page.getByRole('dialog', { name: 'AI assistant' }).getByTitle(/This page is shared with the assistant: \/activity/).waitFor();
 	await page.keyboard.press('Escape');
 });
@@ -308,12 +311,12 @@ await step('the Changes view lists who changed what, without values', async () =
 	expect(!(await page.content()).includes('placeholder-token-for-tests'), 'a secret value is on the page');
 });
 
-await step('the workspace switcher scopes the overview', async () => {
+await step('the workspace switcher scopes the bot list', async () => {
 	const ws = await admin('POST', '/workspaces', { name: 'E2E team' });
-	await page.goto('/dashboard');
+	await page.goto('/bots');
 	await page.getByRole('button', { name: 'Switch workspace' }).first().click();
 	await page.getByRole('menuitem', { name: /E2E team/ }).click();
-	await page.getByRole('heading', { name: /No bots in E2E team yet/ }).waitFor();
+	await page.getByRole('region', { name: 'Bot list' }).getByText(/No bots in E2E team yet/).waitFor();
 	expect((await page.evaluate(() => localStorage.getItem('rivetpanel.workspace'))) === ws.workspace.id, 'the selection was not remembered');
 	await page.getByRole('button', { name: 'Show all workspaces' }).click();
 });
@@ -321,19 +324,22 @@ await step('the workspace switcher scopes the overview', async () => {
 await step('tags filter the fleet and favorites come first', async () => {
 	await admin('POST', '/bots', { name: 'zz second', runtime: 'python' });
 	await admin('PUT', `/bots/${botId}/tags`, { tags: ['music'] });
-	await page.goto('/dashboard');
-	await page.getByRole('button', { name: 'Show bots tagged music' }).click();
+	await page.goto('/bots');
+	await page.getByRole('button', { name: 'Show items tagged music' }).click();
 	await page.waitForURL(/tag=music/);
 	expect((await page.getByRole('link', { name: 'zz second' }).count()) === 0, 'tag filter did not filter');
-	await page.goto('/dashboard?sort=name');
-	await page.getByRole('button', { name: 'Add zz second to favorites' }).click();
+	await page.goto('/bots?sort=name');
+	await page.getByRole('button', { name: 'Actions for zz second' }).click();
+	await page.getByRole('menuitem', { name: 'Add to favorites' }).click();
 	await page.reload();
-	const first = await page.locator('section[aria-label="Bot list"] li.card a[href^="/bots/"]').first().textContent();
+	const list = page.getByRole('region', { name: 'Bot list' });
+	await list.getByRole('link', { name: 'zz second' }).waitFor();
+	const first = await list.getByRole('link').first().textContent();
 	expect(first?.includes('zz second'), 'the favorite is not listed first');
 });
 
 // Visual review at three sizes and page-wide overflow checks.
-const pages = ['/', '/register', '/dashboard', '/bots/new', `/bots/${botId}?tab=overview`, `/bots/${botId}?tab=console`, `/bots/${botId}?tab=files`, `/bots/${botId}?tab=env`, `/bots/${botId}?tab=analytics`, `/bots/${botId}?tab=backups`, `/bots/${botId}?tab=deploy`, `/bots/${botId}?tab=schedules`, `/bots/${botId}?tab=alerts`, `/bots/${botId}?tab=users`, '/activity', '/sites', '/settings/profile', '/settings/appearance', '/settings/workspaces', '/settings/connected-accounts', '/settings/security', '/settings/sftp', '/admin/users', '/admin/workspaces', '/admin/sites', '/admin/settings', '/admin/modules', '/admin/host', '/admin/host?tab=bots', '/admin/host?tab=logs', '/admin/environment', '/admin/diagnostics'];
+const pages = ['/', '/register', '/dashboard', '/bots', '/bots/new', `/bots/${botId}?tab=manage`, `/bots/${botId}?tab=files`, `/bots/${botId}?tab=env`, `/bots/${botId}?tab=usage`, `/bots/${botId}?tab=backups`, `/bots/${botId}?tab=deploy`, `/bots/${botId}?tab=schedules`, `/bots/${botId}?tab=alerts`, `/bots/${botId}?tab=users`, `/bots/${botId}?tab=settings`, '/activity', '/sites', '/settings/profile', '/settings/appearance', '/settings/workspaces', '/settings/connected-accounts', '/settings/security', '/settings/sftp', '/admin/users', '/admin/workspaces', '/admin/sites', '/admin/settings', '/admin/modules', '/admin/host', '/admin/host?tab=bots', '/admin/host?tab=logs', '/admin/logs', '/admin/environment', '/admin/diagnostics'];
 for (const [label, vp] of [['phone', { width: 375, height: 812 }], ['tablet', { width: 768, height: 1024 }], ['desktop', { width: 1440, height: 900 }]]) {
 	const p = await newPage(vp);
 	await signIn(p, 'admin@e2e.test', adminPw);
@@ -367,7 +373,7 @@ for (const [label, vp] of [['phone', { width: 375, height: 812 }], ['tablet', { 
 		await p.getByRole('button', { name: /Switch theme/ }).click(); // light -> dark
 		expect((await p.getAttribute('html', 'data-theme')) === 'dark', 'did not switch to dark');
 	});
-	for (const path of ['/', '/register', '/dashboard', `/bots/${botId}?tab=overview`, `/bots/${botId}?tab=analytics`, `/bots/${botId}?tab=schedules`, `/bots/${botId}?tab=alerts`, '/settings/profile', '/settings/appearance', '/settings/security', '/admin/settings', '/login']) {
+	for (const path of ['/', '/register', '/dashboard', `/bots/${botId}?tab=manage`, `/bots/${botId}?tab=usage`, `/bots/${botId}?tab=schedules`, `/bots/${botId}?tab=alerts`, '/settings/profile', '/settings/appearance', '/settings/security', '/admin/settings', '/login']) {
 		await step(`dark ${path.replace(botId, ':bot')} renders`, async () => {
 			await p.goto(path);
 			await p.waitForLoadState('networkidle').catch(() => {});
@@ -396,6 +402,16 @@ await step('AI research settings save (enable, key) and survive a reload', async
 	expect(await research.getByLabel('Search the web').isChecked(), 'search is not enabled after a reload');
 	expect((await research.getByLabel('API keys').getAttribute('placeholder'))?.startsWith('1 encrypted key'), 'the key was not stored');
 	expect(!(await research.getByRole('button', { name: 'Test search' }).isDisabled()), 'Test search stays disabled after saving');
+	await p.context().close();
+});
+
+await step('log settings show the per-day file limit', async () => {
+	const p = await newPage();
+	await signIn(p, 'admin@e2e.test', adminPw);
+	await p.goto('/admin/logs');
+	const field = p.getByLabel('Daily file limit');
+	await field.waitFor();
+	expect((await field.inputValue()) === '256', `daily file limit ${await field.inputValue()}`);
 	await p.context().close();
 });
 

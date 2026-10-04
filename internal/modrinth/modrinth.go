@@ -12,9 +12,10 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"regexp"
 	"strings"
 	"time"
+
+	"github.com/xenycx/rivetpanel/internal/lazyre"
 )
 
 // MaxFileBytes bounds one downloaded mod or plugin.
@@ -72,9 +73,9 @@ type Dependency struct {
 }
 
 var (
-	idRe       = regexp.MustCompile(`^[A-Za-z0-9]{1,64}$`)
-	tokenRe    = regexp.MustCompile(`^[a-z0-9_.-]{1,32}$`)
-	filenameRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9 ._+()\[\]-]{0,150}\.(jar|zip)$`)
+	idRe       = lazyre.New(`^[A-Za-z0-9]{1,64}$`)
+	tokenRe    = lazyre.New(`^[a-z0-9_.-]{1,32}$`)
+	filenameRe = lazyre.New(`^[A-Za-z0-9][A-Za-z0-9 ._+()\[\]-]{0,150}\.(jar|zip)$`)
 )
 
 // ValidID reports whether s looks like a Modrinth project or version ID/slug.

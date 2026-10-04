@@ -401,11 +401,59 @@ func (m *Manager) Prepare(botID string, uid, gid int) error {
 		if err != nil {
 			return err
 		}
-		if sys, ok := info.Sys().(*syscall.Stat_t); ok && int(sys.Uid) == uid && int(sys.Gid) == gid {
+		sys, ok := info.Sys().(*syscall.Stat_t)
+		if ok && int(sys.Uid) == uid && int(sys.Gid) == gid {
 			return nil
 		}
-		return w.root.Lchown(p, uid, gid)
+		if err := w.root.Lchown(p, uid, gid); err != nil {
+			if ok && errors.Is(err, fs.ErrPermission) {
+				return fmt.Errorf("%q belongs to %d:%d and this process cannot give it to %d:%d (it needs root or CAP_CHOWN); "+
+					"run as root: chown -R %d:%d %s: %w", p, sys.Uid, sys.Gid, uid, gid, uid, gid, filepath.Join(m.path, botID), err)
+			}
+			return err
+		}
+		return nil
 	})
+}
+
+// ForeignOwned lists the workspaces whose top directory is not owned by
+// uid:gid, for example ones created while the panel ran as another user.
+func (m *Manager) ForeignOwned(uid, gid int) ([]string, error) {
+	entries, err := fs.ReadDir(m.root.FS(), ".")
+	if err != nil {
+		return nil, err
+	}
+	var out []string
+	for _, e := range entries {
+		if !e.IsDir() || checkID(e.Name()) != nil {
+			continue
+		}
+		info, err := m.root.Lstat(e.Name())
+		if err != nil {
+			continue
+		}
+		if sys, ok := info.Sys().(*syscall.Stat_t); ok && (int(sys.Uid) != uid || int(sys.Gid) != gid) {
+			out = append(out, e.Name())
+		}
+	}
+	return out, nil
+}
+
+// RepairOwnership hands every foreign-owned workspace (see ForeignOwned) to
+// uid:gid. It returns the workspaces it could not repair.
+func (m *Manager) RepairOwnership(uid, gid int) (repaired int, failed []string, err error) {
+	ids, err := m.ForeignOwned(uid, gid)
+	if err != nil {
+		return 0, nil, err
+	}
+	for _, id := range ids {
+		if m.Prepare(id, uid, gid) != nil {
+			failed = append(failed, id)
+			continue
+		}
+		repaired++
+	}
+	return repaired, failed, nil
 }
 
 // Exists reports whether a path exists inside a bot's workspace.

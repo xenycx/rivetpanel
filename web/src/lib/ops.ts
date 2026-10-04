@@ -18,6 +18,12 @@ export const kindVerb: Record<Operation['kind'], string> = {
 	restore: 'Restoring',
 	publish: 'Pushing'
 };
+/** Game servers install instead of building: their "build" is the installation. */
+export const opNoun = (o: Operation) => (o.kind === 'build' && o.bot_kind === 'game' ? 'Installation' : kindNoun[o.kind]);
+export const opVerb = (o: Operation) => (o.kind === 'build' && o.bot_kind === 'game' ? 'Installing' : kindVerb[o.kind]);
+/** The page of the bot or game server an operation belongs to. */
+export const opOwnerHref = (o: Operation) => `${o.bot_kind === 'game' ? '/servers' : '/bots'}/${o.bot_id}`;
+
 export const statusText: Record<Operation['status'], string> = {
 	queued: 'Waiting',
 	running: 'In progress',
@@ -30,8 +36,8 @@ export const triggerText: Record<Operation['trigger'], string> = {
 	manual: 'started by hand',
 	push: 'after a push to GitHub',
 	schedule: 'on schedule',
-	initial: 'when the bot was created',
-	start: 'when the bot started',
+	initial: 'when it was created',
+	start: 'when it started',
 	api: 'through the API',
 	system: 'by the panel'
 };
@@ -51,8 +57,8 @@ export function elapsed(o: Operation, now = Date.now()): string {
 
 /** Where to look at an operation in the bot workspace. */
 export function opHref(o: Operation): string {
-	const tab = o.kind === 'deploy' || o.kind === 'rollback' || o.kind === 'publish' ? 'deploy' : o.kind === 'backup' || o.kind === 'restore' ? 'backups' : 'overview';
-	return `/bots/${o.bot_id}?tab=${tab}&op=${o.id}`;
+	const tab = o.kind === 'deploy' || o.kind === 'rollback' || o.kind === 'publish' ? 'deploy' : o.kind === 'backup' || o.kind === 'restore' ? 'backups' : 'manage';
+	return `${opOwnerHref(o)}?tab=${tab}&op=${o.id}`;
 }
 
 export const active = (o: Operation) => o.status === 'queued' || o.status === 'running';

@@ -17,16 +17,17 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"regexp"
 	"strings"
 	"time"
+
+	"github.com/xenycx/rivetpanel/internal/lazyre"
 )
 
 var (
 	// FullNameRe validates "owner/repo".
-	FullNameRe = regexp.MustCompile(`^[A-Za-z0-9_.-]{1,100}/[A-Za-z0-9_.-]{1,100}$`)
-	branchRe   = regexp.MustCompile(`^[A-Za-z0-9._/-]{1,255}$`)
-	shaRe      = regexp.MustCompile(`^[0-9a-f]{40}$`)
+	FullNameRe = lazyre.New(`^[A-Za-z0-9_.-]{1,100}/[A-Za-z0-9_.-]{1,100}$`)
+	branchRe   = lazyre.New(`^[A-Za-z0-9._/-]{1,255}$`)
+	shaRe      = lazyre.New(`^[0-9a-f]{40}$`)
 )
 
 // ValidFullName reports whether s is "owner/name" with neither part being
@@ -428,7 +429,7 @@ func (c *Client) Owners(ctx context.Context, token string) ([]Owner, error) {
 	return out, nil
 }
 
-var repoNameRe = regexp.MustCompile(`^[A-Za-z0-9_.-]{1,100}$`)
+var repoNameRe = lazyre.New(`^[A-Za-z0-9_.-]{1,100}$`)
 
 // ValidRepoName reports whether name is usable as a new repository name.
 func ValidRepoName(name string) bool {

@@ -8,7 +8,7 @@
 	});
 </script>
 
-<svg width={fluid ? '100%' : width} {height} viewBox="0 0 {width} {height}" preserveAspectRatio={fluid ? 'none' : undefined} role="img" aria-label={label} class="block text-action">
+<svg width={fluid ? '100%' : width} {height} viewBox="0 0 {width} {height}" preserveAspectRatio={fluid ? 'none' : undefined} role="img" aria-label={label} class="block text-data">
 	<line x1="0" y1={height - 0.5} x2={width} y2={height - 0.5} stroke="currentColor" stroke-opacity="0.2" vector-effect="non-scaling-stroke" />
 	{#if points}<polyline {points} fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" vector-effect="non-scaling-stroke" />{/if}
 </svg>

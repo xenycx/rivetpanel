@@ -2,13 +2,17 @@
 	import { onMount } from 'svelte';
 	import { api } from '$lib/api/client';
 	import type { Bot } from '$lib/api/types';
-	import { joinAddress, type GameStatus } from '$lib/api/games';
+	import type { GameStatus } from '$lib/api/games';
+	import { connectInfo, loadGameHosts } from '$lib/connect.svelte';
 	import { toast } from '$lib/ui/toast.svelte';
 	import Icon from '$lib/components/ui/Icon.svelte';
+	import { describe } from '$lib/status';
 
 	let { bot }: { bot: Bot } = $props();
 	let st = $state<GameStatus | null>(null);
 	const running = $derived(bot.observed_state === 'running');
+	// The same state words as the status badge in the page header.
+	const shown = $derived(describe(bot));
 
 	async function load() {
 		if (!running || document.visibilityState !== 'visible') return;
@@ -19,6 +23,7 @@
 		}
 	}
 	onMount(() => {
+		loadGameHosts();
 		load();
 		const t = setInterval(load, 10_000);
 		return () => clearInterval(t);
@@ -27,7 +32,8 @@
 		if (running) load();
 		else st = null;
 	});
-	const addr = $derived(joinAddress(bot));
+	const ci = $derived(connectInfo(bot));
+	const addr = $derived(ci?.full ?? '');
 	async function copy() {
 		try {
 			await navigator.clipboard.writeText(addr);
@@ -38,22 +44,23 @@
 	}
 </script>
 
-<section class="card flex flex-wrap items-center gap-x-6 gap-y-3 px-4 py-3" aria-label="Server status">
-	{#if addr}
-		<div class="min-w-0">
-			<p class="eyebrow">Address</p>
-			<button class="mt-0.5 flex items-center gap-1.5 font-mono text-small font-medium text-action hover:underline" onclick={copy} title="Copy the address players connect to">{addr}<Icon name="copy" size={12} /></button>
-		</div>
-	{/if}
+<!-- Inline items for the server page's stat strip: address, players and
+     what the server reports about itself. -->
+{#if addr}
 	<div>
-		<p class="eyebrow">Players</p>
-		<p class="mt-0.5 font-mono text-small font-medium">{st?.online ? `${st.players} / ${st.max_players}` : running ? 'Starting…' : 'Offline'}</p>
+		<span class="stat-k">Address</span>
+		<button class="stat-v flex max-w-full items-center gap-1 hover:underline" onclick={copy} title="Copy {addr}"><span class="truncate">{addr}</span><Icon name="copy" size={11} class="shrink-0 text-muted" /></button>
 	</div>
-	{#if st?.version}<div><p class="eyebrow">Version</p><p class="mt-0.5 text-small font-medium">{st.version}</p></div>{/if}
-	{#if st?.map}<div><p class="eyebrow">Map</p><p class="mt-0.5 text-small font-medium">{st.map}</p></div>{/if}
-	{#if st?.online}<div><p class="eyebrow">Ping</p><p class="mt-0.5 font-mono text-small font-medium">{st.latency_ms} ms</p></div>{/if}
-	{#if st?.motd}<p class="min-w-0 flex-1 basis-48 truncate text-small text-muted" title={st.motd}>{st.motd}</p>{/if}
-	{#if st?.sample?.length}
-		<p class="w-full truncate text-small text-muted">Online: {st.sample.join(', ')}{st.players > st.sample.length ? ` and ${st.players - st.sample.length} more` : ''}</p>
-	{/if}
-</section>
+{/if}
+<div>
+	<span class="stat-k">Players</span>
+	<!-- The process state comes from the same source as the status badge;
+	     only the player count comes from the game's own status query. -->
+	<p class="stat-v" title={running && !st?.online ? 'The game has not answered a status query yet; it may still be loading the world.' : undefined}>{st?.online ? `${st.players} / ${st.max_players}` : !running ? 'Offline' : bot.phase === 'running' ? 'No answer yet' : shown.label}</p>
+</div>
+{#if st?.version}<div><span class="stat-k">Version</span><p class="stat-v" title={st.version}>{st.version}</p></div>{/if}
+{#if st?.online}<div><span class="stat-k">Ping</span><p class="stat-v">{st.latency_ms} ms</p></div>{/if}
+{#if st?.map}<div><span class="stat-k">Map</span><p class="stat-v" title={st.map}>{st.map}</p></div>{/if}
+{#if st?.sample?.length}
+	<p class="col-span-full truncate text-muted" title={st.motd || undefined}>Online: {st.sample.join(', ')}{st.players > st.sample.length ? ` and ${st.players - st.sample.length} more` : ''}</p>
+{/if}

@@ -45,7 +45,7 @@ func (s *panel) apiClientRoutes(authed fiber.Router) {
 // clientLimit caps requests per API client (browser sessions are not
 // affected).
 func clientLimit() fiber.Handler {
-	return limiter.New(limiter.Config{
+	return newLimiter(limiter.Config{
 		Max: 600, Expiration: time.Minute,
 		Next:         func(c fiber.Ctx) bool { return currentUser(c).Client == nil },
 		KeyGenerator: func(c fiber.Ctx) string { return "client:" + currentUser(c).Client.ID },

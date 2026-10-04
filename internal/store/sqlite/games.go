@@ -187,6 +187,20 @@ func (db *DB) SetInstalledVersion(ctx context.Context, botID, version string) er
 	return err
 }
 
+// SetJVMArgs stores a game server's extra JVM options. It does not touch the
+// generation: a running server keeps its options until it is started again.
+func (db *DB) SetJVMArgs(ctx context.Context, botID, args string, nowMS int64) error {
+	res, err := db.ExecContext(ctx, `UPDATE bots SET jvm_args = ?, jvm_args_updated_at_ms = ?, jvm_args_generation = generation, updated_at_ms = ?
+		WHERE id = ? AND kind = 'game' AND desired_state != 'deleted'`, args, nowMS, nowMS, botID)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return domain.ErrNotFound
+	}
+	return nil
+}
+
 // UpdateGameServer changes a game server's blueprint revision, image choice,
 // startup argv and install state, bumping its generation.
 func (db *DB) UpdateGameServer(ctx context.Context, b domain.Bot, nowMS int64) error {
@@ -340,9 +354,17 @@ func (db *DB) AllocateForBot(ctx context.Context, botID, nodeID string, count, p
 		return nil, err
 	}
 	var picked []string
-	free, err := queryAllocs(ctx, tx, `WHERE node_id = ? AND bot_id IS NULL ORDER BY (port < ?), port`, nodeID, preferred)
+	pool, err := queryAllocs(ctx, tx, `WHERE node_id = ? AND bot_id IS NULL ORDER BY (port < ?), port`, nodeID, preferred)
 	if err != nil {
 		return nil, err
+	}
+	// Pool ports are checked like new ones: a port in the pool may have been
+	// taken on the host since it was added (another panel, any other program).
+	free := pool[:0:0]
+	for _, a := range pool {
+		if usable == nil || usable(a.Port) {
+			free = append(free, a)
+		}
 	}
 	if contiguous && count > 1 {
 		picked = contiguousRun(free, count)

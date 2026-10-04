@@ -26,6 +26,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -81,7 +82,7 @@ func main() {
 func usage() {
 	fmt.Fprintln(os.Stderr, `usage:
   rivet-agent enroll --panel URL --token TOKEN [--dir DIR] [--connect HOST:PORT]
-  rivet-agent serve [--dir DIR] [--data DIR] [--docker HOST] [--user UID:GID] [--network NAME]
+  rivet-agent serve [--dir DIR] [--data DIR] [--docker HOST] [--user UID:GID] [--network NAME] [--allow-shared-uid]
   rivet-agent doctor [--dir DIR]
   rivet-agent version`)
 }
@@ -155,6 +156,8 @@ func serve(log *slog.Logger, args []string) error {
 	owner := fs.String("workspace-owner", env("RIVET_AGENT_WORKSPACE_OWNER", ""), "uid:gid that owns server files on the host (default: --user)")
 	network := fs.String("network", env("RIVET_AGENT_NETWORK", "bridge"), "Docker network for servers")
 	workers := fs.Int("workers", 2, "servers reconciled in parallel")
+	allowShared := fs.Bool("allow-shared-uid", os.Getenv("RIVET_AGENT_ALLOW_SHARED_UID") == "1",
+		"when the agent is neither root nor holds CAP_CHOWN, run servers as the agent's own uid:gid (the uid that owns the node key) instead of refusing to start")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -187,8 +190,33 @@ func serve(log *slog.Logger, args []string) error {
 	} else if len(rolled) > 0 {
 		log.Warn("rolled back interrupted remote restores or deployments", "servers", rolled)
 	}
-	if *owner == "" {
-		*owner = *user
+	// Explicit flags or environment are kept; otherwise an agent that is not
+	// root and cannot chown runs servers as its own uid:gid so their files
+	// stay writable (still nonroot inside the container).
+	userSet, ownerSet := os.Getenv("RIVET_AGENT_CONTAINER_USER") != "", os.Getenv("RIVET_AGENT_WORKSPACE_OWNER") != ""
+	fs.Visit(func(f *flag.Flag) {
+		userSet = userSet || f.Name == "user"
+		ownerSet = ownerSet || f.Name == "workspace-owner"
+	})
+	ownership := runner.ChooseOwnership(*user, *owner, userSet, ownerSet, runner.DefaultOwnershipProbe(files.ProbeOwnership))
+	// The shared uid also owns the node key and certificate: only a
+	// development setup (RIVET_ENV=development) falls back automatically.
+	production := strings.ToLower(strings.TrimSpace(os.Getenv("RIVET_ENV"))) != "development"
+	ownership = runner.ApplySharedUIDPolicy(ownership, production, *allowShared)
+	if err := ownership.RefusalError("the agent", "--allow-shared-uid (or RIVET_AGENT_ALLOW_SHARED_UID=1)", "--user and --workspace-owner"); err != nil {
+		return err
+	}
+	*user, *owner = ownership.User, ownership.Owner
+	if ownership.Fallback {
+		log.Warn("the agent is not root and lacks CAP_CHOWN, so servers run as the agent's own user; they stay non-root inside "+
+			"the container but share this uid, which owns the node key, on the host. For production run the agent as root (the systemd unit does) or pass --user",
+			"user", ownership.User, "default", ownership.Default, "probe", ownership.Reason, "opted_in", ownership.OptedIn)
+		if uid, gid, err := runner.ParseUser(ownership.Owner); err == nil {
+			if _, failed, err := files.RepairOwnership(uid, gid); err == nil && len(failed) > 0 {
+				log.Warn("some server folders belong to another user and cannot be repaired without root; run chown -R "+ownership.Owner+" on them",
+					"servers", failed, "data", absData)
+			}
+		}
 	}
 	if uid, gid, err := runner.ParseUser(*owner); err == nil {
 		files.SetOwner(uid, gid)

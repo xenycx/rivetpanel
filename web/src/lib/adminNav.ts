@@ -13,6 +13,7 @@ const sections: { href: string; label: string; icon: IconName; match?: string; p
 	{ href: '/admin/nodes', label: 'Nodes', icon: 'monitor', perms: ['nodes.manage'] },
 	{ href: '/admin/analytics', label: 'Analytics', icon: 'chart', perms: ['analytics.view'] },
 	{ href: '/admin/host', label: 'Host', icon: 'chart', perms: ['system.view'] },
+	{ href: '/admin/logs', label: 'Logs and retention', icon: 'archive', perms: ['settings.manage', 'system.view'] },
 	{ href: '/admin/settings', label: 'Panel settings', icon: 'gear', perms: ['settings.manage', 'ai.manage'] },
 	{ href: '/admin/sign-in', label: 'Single sign-on', icon: 'key', perms: ['settings.manage'] },
 	{ href: '/admin/modules', label: 'Modules', icon: 'layers', perms: ['admin'] },

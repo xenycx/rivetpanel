@@ -31,6 +31,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/xenycx/rivetpanel/internal/legacy"
 	"github.com/xenycx/rivetpanel/internal/store/sqlite"
 )
 
@@ -316,11 +317,19 @@ func ReadManifest(dir string) (Manifest, error) {
 	if err := json.Unmarshal(b, &m); err != nil {
 		return m, fmt.Errorf("manifest: %w", err)
 	}
+	if legacy.IsBackup(dir, m.SHA256, dbName) {
+		return m, ErrLegacyBackup
+	}
 	if m.Version != 1 {
 		return m, fmt.Errorf("unsupported backup version %d", m.Version)
 	}
 	return m, nil
 }
+
+// ErrLegacyBackup is returned for backups written by the former product,
+// which RivetPanel deliberately cannot restore.
+var ErrLegacyBackup = errors.New("this is a " + legacy.Release + " backup; RivetPanel cannot restore it " +
+	"(the rename was a clean break, see " + legacy.DocsPath + "). Keep it for the old panel, and re-create accounts and bots in RivetPanel")
 
 // Verify checks every file listed in the manifest against its checksum.
 func Verify(dir string) (Manifest, error) {

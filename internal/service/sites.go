@@ -14,7 +14,6 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -26,6 +25,8 @@ import (
 	"github.com/xenycx/rivetpanel/internal/domain"
 	"github.com/xenycx/rivetpanel/internal/filesystem"
 	"github.com/xenycx/rivetpanel/internal/github"
+	"github.com/xenycx/rivetpanel/internal/lazyre"
+	"github.com/xenycx/rivetpanel/internal/sitetemplates"
 )
 
 // SiteStore is the persistence surface of static site hosting.
@@ -96,6 +97,7 @@ type SiteService struct {
 	ExtraDomains []string       // further configured base domains, trusted without DNS proof
 	DNSTarget    string         // CNAME target shown for custom domains; default: the site's own host
 	PanelHost    string         // the panel's own host name, never assignable to a site
+	PanelURL     string         // the panel's public URL, for site templates that link to its status page
 	MaxBytes     int64          // largest release
 	MaxPerUser   int            // sites an account may create; 0 = unlimited
 	Resolver     TXTResolver    // nil: net.DefaultResolver
@@ -507,8 +509,8 @@ func (s *SiteService) job(id string) SiteJob {
 // ---- creating and changing ----
 
 var (
-	slugRe        = regexp.MustCompile(`^[a-z0-9](?:[a-z0-9-]{1,38}[a-z0-9])$`)
-	slugRun       = regexp.MustCompile(`[^a-z0-9]+`)
+	slugRe        = lazyre.New(`^[a-z0-9](?:[a-z0-9-]{1,38}[a-z0-9])$`)
+	slugRun       = lazyre.New(`[^a-z0-9]+`)
 	reservedSlugs = map[string]bool{"www": true, "api": true, "admin": true, "panel": true, "mail": true, "ftp": true, "sites": true,
 		"static": true, "assets": true, "cdn": true, "app": true, "status": true, "docs": true, "localhost": true, "rivetpanel": true}
 )
@@ -522,6 +524,9 @@ type CreateSiteInput struct {
 	SPA         bool
 	BotID       string // optional: creates the one public page attached to this bot
 	Mode        string // files (default) | page
+	// TemplateID seeds the first release from a built-in site template
+	// (package sitetemplates); "" creates an empty site.
+	TemplateID string
 }
 
 func slugFrom(name string) string {
@@ -642,6 +647,20 @@ func (s *SiteService) Create(ctx context.Context, actor domain.User, in CreateSi
 	if mode == "page" && botID == nil {
 		return domain.Site{}, domain.Invalid("a generated public page must be attached to a bot")
 	}
+	var tpl sitetemplates.Template
+	if in.TemplateID != "" {
+		var ok bool
+		if tpl, ok = sitetemplates.Get(in.TemplateID); !ok {
+			return domain.Site{}, domain.Invalid("that site template does not exist")
+		}
+		if mode != "files" {
+			return domain.Site{}, domain.Invalid("a site template makes a files site, not a generated page")
+		}
+		if elim, _ := s.limits(); tpl.Bytes > elim.MaxTotalSize || tpl.Files > elim.MaxEntries {
+			return domain.Site{}, domain.Invalid("that site template is larger than this panel's site size limit")
+		}
+		in.SPA = in.SPA || tpl.SPA
+	}
 	st := domain.Site{ID: uuid.NewString(), WorkspaceID: wsID, OwnerID: actor.ID, BotID: botID, Name: name, Slug: slug, DomainID: &base.ID, SPA: in.SPA, CleanURLs: true,
 		Mode: mode, PageTitle: name, PageDescription: "A Discord community powered by " + name + ".", PageTheme: "midnight", PageAccent: "#5865f2",
 		CreatedAtMS: now, UpdatedAtMS: now}
@@ -662,8 +681,66 @@ func (s *SiteService) Create(ctx context.Context, actor domain.User, in CreateSi
 	if err != nil {
 		return domain.Site{}, err
 	}
+	if tpl.ID != "" {
+		if err := s.seedTemplate(ctx, actor, st, tpl); err != nil {
+			// The site was never usable: remove it rather than leave an
+			// empty site the caller did not ask for.
+			if derr := s.Store.DeleteSite(ctx, st.ID); derr != nil {
+				s.warn("remove site after a failed template", derr)
+			}
+			_ = s.root.Remove(st.ID)
+			return domain.Site{}, err
+		}
+	}
 	s.reloadSoon()
 	return s.Store.GetSite(ctx, st.ID)
+}
+
+// SiteTemplates lists the built-in site templates.
+func (s *SiteService) SiteTemplates() []sitetemplates.Template { return sitetemplates.List() }
+
+func (s *SiteService) templateVars(name string) sitetemplates.Vars {
+	return sitetemplates.Vars{SiteName: name, Year: s.now().Year(), PanelURL: s.PanelURL}
+}
+
+// SiteTemplatePreview renders one page of a template as a self-contained
+// document (stylesheets inlined, scripts not run) with a sample name.
+func (s *SiteService) SiteTemplatePreview(id, page string) ([]byte, error) {
+	t, ok := sitetemplates.Get(id)
+	if !ok {
+		return nil, domain.ErrNotFound
+	}
+	b, err := sitetemplates.Preview(id, page, s.templateVars(t.Name))
+	if err != nil {
+		return nil, domain.ErrNotFound
+	}
+	return b, nil
+}
+
+// seedTemplate makes a new site's first release from a template.
+func (s *SiteService) seedTemplate(ctx context.Context, actor domain.User, st domain.Site, tpl sitetemplates.Template) error {
+	files, err := sitetemplates.Render(tpl.ID, s.templateVars(st.Name))
+	if err != nil {
+		return err
+	}
+	rel, w, done, err := s.newRelease(st.ID)
+	if err != nil {
+		return err
+	}
+	ok := false
+	defer func() { done(ok) }()
+	elim, _ := s.limits()
+	for _, f := range files {
+		if err := w.Write(f.Path, bytes.NewReader(f.Data), elim.MaxFileSize); err != nil {
+			return err
+		}
+	}
+	label := "Template: " + tpl.Name
+	if _, err := s.finish(ctx, st, rel, w, "upload", &label, &actor.ID); err != nil {
+		return err
+	}
+	ok = true
+	return nil
 }
 
 // RepoInput links a GitHub repository (Clear removes the link).
@@ -693,7 +770,7 @@ type UpdateSiteInput struct {
 	WidgetsPublic   *bool
 }
 
-var hexColorRe = regexp.MustCompile(`^#[0-9a-fA-F]{6}$`)
+var hexColorRe = lazyre.New(`^#[0-9a-fA-F]{6}$`)
 
 func cleanPageText(v string, max int, field string) (string, error) {
 	v = strings.TrimSpace(v)
@@ -1104,6 +1181,7 @@ func (s *SiteService) finish(ctx context.Context, st domain.Site, rel string, w 
 		return domain.SiteRelease{}, err
 	}
 	_ = w.Remove(filesystem.DeployManifest) // written by tarball deploys; not part of the site
+	_ = w.Remove(filesystem.LegacyDeployManifest)
 	files, bytes, err := w.Usage()
 	if err != nil {
 		return domain.SiteRelease{}, err

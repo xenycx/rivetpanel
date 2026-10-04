@@ -1,22 +1,32 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
-	import { api } from '$lib/api/client';
+	import { onMount, type Snippet } from 'svelte';
+	import type { GameDetail } from '$lib/api/games';
+	import { api, ApiError } from '$lib/api/client';
+	import { toast } from '$lib/ui/toast.svelte';
 	import { can, Perm, type Backup, type Bot, type EnvVar, type RepoLink, type Template } from '$lib/api/types';
 	import type { PowerAction } from '$lib/api/bots';
 	import { joinArgs, fmtAgo, fmtWhen } from '$lib/args';
 	import { describe } from '$lib/status';
 	import Icon from '$lib/components/ui/Icon.svelte';
 	import RecentOperations from '$lib/components/RecentOperations.svelte';
+	import ConnectCard from '$lib/components/ConnectCard.svelte';
 	import Notice from '$lib/components/ui/Notice.svelte';
 	import { helpFor } from '$lib/help';
 	import { session } from '$lib/session.svelte';
 
+	// The Manage tab: what runs (the console, passed in as `top`), its state and
+	// recent activity in the wide column, and the side facts in a narrow one.
 	let {
 		bot,
 		now,
 		acting,
-		onAct
-	}: { bot: Bot; now: number; acting: boolean; onSaved: (b: Bot) => void; onAct: (a: PowerAction) => void } = $props();
+		onAct,
+		game = null,
+		top,
+		bottom
+	}: { bot: Bot; now: number; acting: boolean; onAct: (a: PowerAction) => void; game?: GameDetail | null; top?: Snippet; bottom?: Snippet } = $props();
+	const isGame = $derived(bot.kind === 'game');
+	const noun = $derived(isGame ? 'server' : 'bot');
 
 	let template = $state<Template | null>(null);
 	let env = $state<EnvVar[] | null>(null);
@@ -42,7 +52,7 @@
 						.then((r) => ((backups = r.backups), (schedule = r.health)))
 						.catch(() => {})
 				);
-			if (bot.source_type === 'github')
+			if (bot.source_type === 'github' && !isGame)
 				jobs.push(api<{ linked: boolean; repo?: RepoLink }>('GET', `/bots/${bot.id}/github`).then((r) => (repo = r.linked ? r.repo! : null)).catch(() => {}));
 		}
 		await Promise.allSettled(jobs);
@@ -105,7 +115,7 @@
 			cta: 'Change'
 		};
 		const ran: Step = {
-			label: 'Bot started successfully',
+			label: `${isGame ? 'Server' : 'Bot'} started successfully`,
 			done: everRan ? true : ['building', 'starting', 'queued', 'retrying'].includes(bot.phase) ? null : false,
 			detail: everRan
 				? 'It reached the running state.'
@@ -117,21 +127,39 @@
 		};
 		return [code, vars, start, ran];
 	});
-	const pendingSetup = $derived(!everRan);
+	// Game servers install themselves on the first start: no setup checklist.
+	const pendingSetup = $derived(!everRan && !isGame);
+	const versionVar = $derived(game?.variables.find((v) => v.versions) ?? null);
+	// A game server whose port another container holds can move to a free one.
+	const portBlocked = $derived(isGame && bot.state_reason === 'port_conflict' && can(bot, Perm.admin));
+	let picking = $state(false);
+	async function pickFreePort() {
+		picking = true;
+		try {
+			const b = await api<Bot>('POST', `/bots/${bot.id}/allocations/pick-free`);
+			const p = b.allocations?.find((a) => a.primary);
+			toast(p ? `Moved to port ${p.port}.${b.desired_state === 'running' ? ' Starting again.' : ''}` : 'Moved to a free port.', 'success');
+		} catch (e) {
+			toast(e instanceof ApiError ? e.message : 'No free port could be chosen.', 'fail');
+		} finally {
+			picking = false;
+		}
+	}
 </script>
 
-<div class="grid gap-8 xl:grid-cols-[minmax(0,1fr)_20rem]">
-	<div class="min-w-0 space-y-8">
+<div class="grid gap-x-8 gap-y-6 lg:grid-cols-[minmax(0,1fr)_18rem] xl:grid-cols-[minmax(0,1fr)_20rem]">
+	<div class="min-w-0 space-y-6">
+		{#if top}{@render top()}{/if}
 		<!-- What is happening and what to do next. A failure outranks everything else. -->
 		<section aria-labelledby="ov-state">
-			<h3 id="ov-state" class="text-title font-semibold">Status</h3>
+			<h2 id="ov-state" class="text-title font-semibold">Status</h2>
 			<div class="mt-2 rounded-tile border border-rule-soft bg-panel p-4">
 				<p class="text-section font-semibold {d.tone === 'fail' ? 'text-fail' : ''}">{d.label}</p>
 				{#if d.detail}<p class="mt-1 max-w-prose">{d.detail}</p>{/if}
 				{#if bot.phase === 'running' && bot.last_started_at_ms}
 					<p class="mt-1 text-muted">Running since {fmtWhen(bot.last_started_at_ms)} ({fmtAgo(bot.last_started_at_ms, now).replace(' ago', '')}).</p>
 				{/if}
-				{#if bot.last_error && ['failed', 'retrying', 'stopped', 'exited'].includes(bot.phase)}
+				{#if bot.last_error && bot.state_reason !== 'port_conflict' && ['failed', 'retrying', 'stopped', 'exited'].includes(bot.phase)}
 					<pre class="mt-3 max-h-60 overflow-auto bg-term p-3 font-mono text-[12.5px] leading-relaxed whitespace-pre-wrap text-term-ink">{bot.last_error}</pre>
 				{/if}
 				{#if help}
@@ -140,11 +168,15 @@
 						{#snippet action()}{#if help.action}<a class="btn btn-sm" href={help.action.href}>{help.action.label}</a>{/if}{/snippet}
 					</Notice>
 				{/if}
-				{#if canPower}
+				{#if canPower || portBlocked}
 					<div class="mt-4 flex flex-wrap gap-2">
-						{#if d.next === 'retry'}
-							<button class="btn btn-primary" disabled={acting} onclick={() => onAct('start')}><Icon name="play" size={12} />Start again</button>
-						{:else if d.next === 'start' && bot.desired_state !== 'running'}
+						{#if portBlocked}
+							<button class="btn btn-primary" disabled={picking} onclick={pickFreePort}><Icon name="network" size={13} />Pick a free port</button>
+							<span class="sr-only">Gives the server the next free port of this node and returns the busy one to the pool.</span>
+						{/if}
+						{#if canPower && d.next === 'retry'}
+							<button class="btn {portBlocked ? '' : 'btn-primary'}" disabled={acting} onclick={() => onAct('start')}><Icon name="play" size={12} />Start again</button>
+						{:else if canPower && d.next === 'start' && bot.desired_state !== 'running'}
 							<button class="btn btn-primary" disabled={acting || (pendingSetup && missingVars.length > 0)} onclick={() => onAct('start')}><Icon name="play" size={12} />Start</button>
 						{/if}
 						{#if can(bot, Perm.console) && ['running', 'retrying', 'failed', 'exited'].includes(bot.phase) && bot.state_reason !== 'setup_failed' && bot.state_reason !== 'build_failed'}
@@ -161,7 +193,7 @@
 		{#if pendingSetup}
 			<section aria-labelledby="ov-setup">
 				<h3 id="ov-setup" class="text-title font-semibold">Setup</h3>
-				<p class="text-muted">Shown until the bot runs for the first time.</p>
+				<p class="text-muted">Shown until the {noun} runs for the first time.</p>
 				<ol class="mt-3 list-card">
 					{#each steps as s, i (s.label)}
 						<li class="flex items-start gap-3 px-4 py-3">
@@ -183,14 +215,23 @@
 			</section>
 		{/if}
 
-		<RecentOperations botId={bot.id} canOutput={can(bot, Perm.console)} />
+		<RecentOperations botId={bot.id} canOutput={can(bot, Perm.console)} {isGame} />
+		{#if bottom}{@render bottom()}{/if}
 	</div>
 
 	<aside class="space-y-6" aria-label="Details">
+		{#if isGame}<ConnectCard {bot} {game} />{/if}
 		<section>
-			<h3 class="text-title font-semibold">Source</h3>
+			<h3 class="text-title font-semibold">{isGame ? 'Server type' : 'Source'}</h3>
 			<div class="mt-2 text-ink/90">
-				{#if bot.source_type === 'github'}
+				{#if isGame}
+					<p>{game?.blueprint.name ?? 'Game server'}{#if bot.installed_version}{' '}<span class="text-muted">{bot.installed_version}</span>{/if}</p>
+					<p class="text-small text-muted">
+						{#if !bot.installed_version}{bot.install_state === 'installing' ? 'Installing now.' : bot.install_state === 'failed' ? 'The last installation failed.' : 'Installed on the first start.'}{:else if versionVar}{versionVar.value === 'latest' || !versionVar.value ? 'Follows the latest stable release when reinstalled.' : `Pinned to ${versionVar.value}.`}{/if}
+						{#if game}Revision {bot.blueprint_revision ?? game.blueprint.current_revision}{game.update_available ? ', an update is available' : ''}.{/if}
+					</p>
+					{#if can(bot, Perm.admin)}<a class="link mt-1 inline-block text-small" href="?tab=startup" data-sveltekit-noscroll>Version and startup</a>{/if}
+				{:else if bot.source_type === 'github'}
 					{#if repo}
 						<p><Icon name="github" class="mr-1 inline align-[-2px]" /><code>{repo.full_name}</code> on <code>{repo.branch}</code></p>
 						<p class="text-muted">
@@ -218,7 +259,7 @@
 						<p class="text-muted">Loading…</p>
 					{:else if lastBackup}
 						<p>Last backup {fmtAgo(lastBackup.created_at_ms, now)}</p>
-						<p class="text-small text-muted">{fmtWhen(lastBackup.created_at_ms)}. {!schedule?.interval_ms ? 'Scheduled backups are off on this panel.' : schedule.enabled ? 'Scheduled backups are on.' : 'Scheduled backups are off for this bot.'}</p>
+						<p class="text-small text-muted">{fmtWhen(lastBackup.created_at_ms)}. {!schedule?.interval_ms ? 'Scheduled backups are off on this panel.' : schedule.enabled ? 'Scheduled backups are on.' : `Scheduled backups are off for this ${noun}.`}</p>
 					{:else}
 						<p class="text-muted">No backup yet.</p>
 					{/if}
@@ -234,7 +275,7 @@
 				<dt class="text-muted">Created</dt><dd>{fmtWhen(bot.created_at_ms)}</dd>
 				<dt class="text-muted">Restart policy</dt><dd>{bot.restart_policy === 'never' ? 'Never restart' : `Restart after a crash${bot.restart_max_attempts ? `, up to ${bot.restart_max_attempts} times in a row` : ''}`}</dd>
 				<dt class="text-muted">Network</dt><dd>{bot.network_enabled ? 'Internet access on' : 'No network'}{bot.ports.length ? `, ${bot.ports.length} published port${bot.ports.length === 1 ? '' : 's'}` : ''}</dd>
-				<dt class="text-muted">Bot ID</dt><dd><code class="break-all">{bot.id}</code></dd>
+				<dt class="text-muted">{isGame ? 'Server ID' : 'Bot ID'}</dt><dd><code class="break-all">{bot.id}</code></dd>
 			</dl>
 		</section>
 	</aside>

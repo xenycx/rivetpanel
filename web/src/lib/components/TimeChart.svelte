@@ -25,9 +25,8 @@
 
 	let width = $state(0);
 	let hover = $state<number | null>(null);
-	const pad = { l: 46, r: 8, t: 8, b: 20 };
-	const iw = $derived(Math.max(0, width - pad.l - pad.r));
-	const ih = $derived(height - pad.t - pad.b);
+	let tipW = $state(0);
+	let tipH = $state(0);
 
 	function niceMax(v: number): number {
 		if (v <= 0) return 1;
@@ -41,6 +40,12 @@
 		for (const s of series) for (const v of s.values) if (v !== null && v > m) m = v;
 		return niceMax(m * 1.08);
 	});
+	// Reserve the left gutter from the widest y-axis label (10px monospace is
+	// about 6.1px per character) so long values such as "40 KiB/s" are not cut off.
+	const gutter = $derived(Math.max(28, Math.ceil(Math.max(...[0, 0.5, 1].map((f) => format(top * f).length)) * 6.1) + 10));
+	const pad = $derived({ l: gutter, r: 8, t: 8, b: 20 });
+	const iw = $derived(Math.max(0, width - pad.l - pad.r));
+	const ih = $derived(height - pad.t - pad.b);
 	const x = (i: number) => pad.l + (times.length > 1 ? (i / (times.length - 1)) * iw : iw / 2);
 	const y = (v: number) => pad.t + ih - (Math.min(Math.max(v, 0), top) / top) * ih;
 
@@ -69,22 +74,62 @@
 		const d = new Date(t);
 		return span > 36 * 3600_000 ? d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
 	};
-	// Four evenly spaced labels; with only a few samples several would land on the
-	// same one, so each index is used once (duplicate keys would also break the list).
+	// Up to four evenly spaced labels, fewer on a narrow chart so they never run
+	// into each other (about 80px per label); with only a few samples several would
+	// land on the same one, so each index is used once (duplicate keys would also break the list).
+	const xCount = $derived(Math.min(4, Math.max(2, Math.floor(iw / 80) + 1)));
 	const xTicks = $derived(
 		times.length < 2
 			? []
-			: [...new Set([0, 1, 2, 3].map((k) => Math.round((k / 3) * (times.length - 1))))].map((i) => ({ i, label: fmtT(times[i]), anchor: i === 0 ? 'start' : i === times.length - 1 ? 'end' : 'middle' }))
+			: [...new Set(Array.from({ length: xCount }, (_, k) => Math.round((k / (xCount - 1)) * (times.length - 1))))].map((i) => ({ i, label: fmtT(times[i]), anchor: i === 0 ? 'start' : i === times.length - 1 ? 'end' : 'middle' }))
 	);
 
+	// The whole plot height is the hover target: the nearest sample on the x axis
+	// wins regardless of where the pointer is vertically, so a narrow spike is as
+	// easy to read as a flat stretch. Touch works the same way (tap or drag).
 	function move(e: PointerEvent) {
 		if (times.length < 1 || iw <= 0) return;
 		const r = (e.currentTarget as SVGElement).getBoundingClientRect();
 		const f = (e.clientX - r.left - pad.l) / iw;
 		hover = Math.min(times.length - 1, Math.max(0, Math.round(f * (times.length - 1))));
 	}
-	const colorClass = { action: 'text-action', run: 'text-run', warn: 'text-warn', fail: 'text-fail', muted: 'text-muted' } as const;
-	const tip = $derived(hover === null || hover >= times.length ? null : { i: hover, left: Math.min(Math.max(x(hover), 70), width - 70) });
+	function leave(e: PointerEvent) {
+		// A finger lifting off fires pointerleave; keep the read-out until the next touch.
+		if (e.pointerType === 'mouse') hover = null;
+	}
+	const colorClass = { action: 'text-data', run: 'text-run', warn: 'text-warn', fail: 'text-fail', muted: 'text-muted' } as const;
+	// The read-out sits beside the hovered column, never on it, and never takes
+	// pointer events. Of the four corners around the guide line (right/left, top/
+	// bottom of the plot) it takes the one covering the fewest drawn points, so a
+	// spike at or next to the cursor stays visible and reachable.
+	const tip = $derived.by(() => {
+		if (hover === null || hover >= times.length) return null;
+		const i = hover;
+		const cx = x(i);
+		const gap = 12;
+		const w = tipW || 160;
+		const h = tipH || 60;
+		const clampL = (l: number) => Math.min(Math.max(l, 2), Math.max(2, width - w - 2));
+		const clampT = (t: number) => Math.min(Math.max(t, 0), Math.max(0, height - h));
+		const lefts = [clampL(cx + gap), clampL(cx - gap - w)];
+		const tops = [clampT(pad.t), clampT(pad.t + ih - h)];
+		let best = { left: lefts[0], top: tops[0], score: Infinity };
+		for (const [li, left] of lefts.entries())
+			for (const [ti, top] of tops.entries()) {
+				let score = li * 0.5 + ti * 0.25; // prefer right, then top, on ties
+				const coversColumn = left <= cx + 4 && left + w >= cx - 4;
+				for (const s of series)
+					s.values.forEach((v, k) => {
+						if (v === null || v === undefined) return;
+						const px = x(k);
+						const py = y(v);
+						if (px >= left - 4 && px <= left + w + 4 && py >= top - 4 && py <= top + h + 4) score += k === i ? 1000 : 1;
+					});
+				if (coversColumn) score += 5;
+				if (score < best.score) best = { left, top, score };
+			}
+		return { i, left: best.left, top: best.top };
+	});
 
 	const summary = $derived.by(() => {
 		const s = series[0];
@@ -106,7 +151,7 @@
 		<p class="grid place-items-center text-small text-muted" style="height: {height}px">Not enough samples in this range yet.</p>
 	{:else if width > 0}
 		<div class="relative">
-			<svg {width} {height} role="img" aria-label={summary} class="block touch-pan-y" onpointermove={move} onpointerleave={() => (hover = null)}>
+			<svg {width} {height} role="img" aria-label={summary} class="block touch-pan-y select-none" onpointermove={move} onpointerdown={move} onpointerleave={leave}>
 				{#each yTicks as t, k (k)}
 					<line x1={pad.l} x2={width - pad.r} y1={t.y} y2={t.y} stroke="var(--color-rule-soft)" stroke-dasharray={t.v === 0 ? undefined : '2 3'} />
 					<text x={pad.l - 6} y={t.y + 3.5} text-anchor="end" class="fill-muted font-mono text-[10px]">{format(t.v)}</text>
@@ -122,17 +167,18 @@
 						{/each}
 					</g>
 				{/each}
+				<rect x={pad.l} y="0" width={iw} {height} fill="transparent" />
 				{#if tip}
-					<line x1={x(tip.i)} x2={x(tip.i)} y1={pad.t} y2={pad.t + ih} stroke="var(--color-muted)" stroke-opacity="0.5" />
+					<line x1={x(tip.i)} x2={x(tip.i)} y1={pad.t} y2={pad.t + ih} pointer-events="none" stroke="var(--color-muted)" stroke-opacity="0.5" />
 					{#each series.filter((s) => !s.dashed) as s (s.label)}
 						{#if s.values[tip.i] !== null && s.values[tip.i] !== undefined}
-							<circle cx={x(tip.i)} cy={y(s.values[tip.i]!)} r="3.5" class="{colorClass[s.color ?? 'action']}" fill="var(--color-panel)" stroke="currentColor" stroke-width="1.6" />
+							<circle cx={x(tip.i)} cy={y(s.values[tip.i]!)} r="3.5" pointer-events="none" class="{colorClass[s.color ?? 'action']}" fill="var(--color-panel)" stroke="currentColor" stroke-width="1.6" />
 						{/if}
 					{/each}
 				{/if}
 			</svg>
 			{#if tip}
-				<div class="pointer-events-none absolute top-0 z-10 -translate-x-1/2 rounded-control border border-rule bg-raised px-2.5 py-1.5 text-small shadow-overlay" style="left: {tip.left}px">
+				<div class="pointer-events-none absolute z-10 rounded-control border border-rule bg-raised px-2.5 py-1.5 text-small shadow-overlay" style="left: {tip.left}px; top: {tip.top}px; pointer-events: none" bind:clientWidth={tipW} bind:clientHeight={tipH} aria-hidden="true">
 					<p class="font-mono text-[11px] text-muted">{new Date(times[tip.i]).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}</p>
 					{#each series as s (s.label)}
 						{#if s.values[tip.i] !== null && s.values[tip.i] !== undefined}

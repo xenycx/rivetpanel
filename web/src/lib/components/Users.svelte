@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { untrack } from 'svelte';
 	import { api, ApiError } from '$lib/api/client';
 	import { Perm, type SubUser } from '$lib/api/types';
 	import { confirmDialog } from '$lib/ui/dialogs.svelte';
@@ -12,21 +12,32 @@
 	import { goto } from '$app/navigation';
 	import { session } from '$lib/session.svelte';
 
-	let { botId, botName }: { botId: string; botName: string } = $props();
+	let { botId, botName, isGame = false }: { botId: string; botName: string; isGame?: boolean } = $props();
+	const noun = $derived(isGame ? 'server' : 'bot');
 
-	const options = [
-		{ bit: Perm.console, label: 'View console', hint: 'Live output, analytics and resource usage' },
-		{ bit: Perm.power, label: 'Start / stop', hint: 'Start, stop, restart, kill and send console input' },
-		{ bit: Perm.files, label: 'Edit files', hint: 'File manager, SFTP, packages, deployments and backups' },
-		{ bit: Perm.env, label: 'Manage env vars', hint: 'Read and change environment variables, including secrets' },
-		{ bit: Perm.admin, label: 'Full admin', hint: 'Everything above plus settings, startup, restore and delete backups' }
-	];
+	const options = $derived(
+		isGame
+			? [
+					{ bit: Perm.console, label: 'View console', hint: 'Live output, players, analytics and resource usage' },
+					{ bit: Perm.power, label: 'Start / stop', hint: 'Start, stop, restart, kill and send console commands' },
+					{ bit: Perm.files, label: 'Edit files', hint: 'File manager, SFTP, properties, mods and plugins, and backups' },
+					{ bit: Perm.env, label: 'Change server settings', hint: 'Startup variables of the server type, such as the version' },
+					{ bit: Perm.admin, label: 'Full admin', hint: 'Everything above plus settings, Java image, reinstall, network, restore and delete backups' }
+				]
+			: [
+					{ bit: Perm.console, label: 'View console', hint: 'Live output, analytics and resource usage' },
+					{ bit: Perm.power, label: 'Start / stop', hint: 'Start, stop, restart, kill and send console input' },
+					{ bit: Perm.files, label: 'Edit files', hint: 'File manager, SFTP, packages, deployments and backups' },
+					{ bit: Perm.env, label: 'Manage env vars', hint: 'Read and change environment variables, including secrets' },
+					{ bit: Perm.admin, label: 'Full admin', hint: 'Everything above plus settings, startup, restore and delete backups' }
+				]
+	);
 
 	let users = $state<SubUser[]>([]);
 	let email = $state('');
 	let perms = $state<number>(Perm.console);
 	let error = $state('');
-	const path = `/bots/${botId}/users`;
+	const path = $derived(`/bots/${botId}/users`);
 	const msg = (e: unknown) => (e instanceof ApiError ? e.message : 'The request failed.');
 
 	async function load() {
@@ -34,16 +45,23 @@
 	}
 	let changes = $state<AuditEvent[] | null>(null);
 	let transferTo = $state('');
-	onMount(() => {
-		load().catch((e) => (error = msg(e)));
-		api<AuditPage>('GET', `/bots/${botId}/changes?limit=8`).then((r) => (changes = r.events)).catch(() => (changes = []));
+	// Loads the people and recent changes of the bot shown (again when
+	// another bot is opened here).
+	$effect(() => {
+		const id = botId;
+		untrack(() => {
+			load().catch((e) => (error = msg(e)));
+			api<AuditPage>('GET', `/bots/${id}/changes?limit=8`).then((r) => (changes = r.events)).catch(() => (changes = []));
+		});
 	});
 
 	async function transfer(e: SubmitEvent) {
 		e.preventDefault();
 		const r = await confirmWithOption({
 			title: `Transfer ${botName} to ${transferTo}?`,
-			body: 'They become the owner: they can delete the bot, share it and publish ports. A linked GitHub repository is unlinked, because it uses your GitHub access; the new owner links it again with theirs.',
+			body: isGame
+				? 'They become the owner: they can delete the server, share it and change its ports.'
+				: 'They become the owner: they can delete the bot, share it and publish ports. A linked GitHub repository is unlinked, because it uses your GitHub access; the new owner links it again with theirs.',
 			confirmLabel: 'Transfer ownership',
 			tone: 'danger',
 			checkbox: { label: 'Keep full access for me', checked: true }
@@ -52,7 +70,7 @@
 		try {
 			const res = await api<{ repository_unlinked: boolean }>('POST', `/bots/${botId}/transfer`, { email: transferTo, keep_access: r.checked });
 			toast(`${botName} now belongs to ${transferTo}${res.repository_unlinked ? '. The repository link was removed.' : ''}`);
-			if (!r.checked && session.user?.role !== 'admin') await goto('/dashboard');
+			if (!r.checked && session.user?.role !== 'admin') await goto(isGame ? '/servers' : '/dashboard');
 			else location.reload();
 		} catch (err) {
 			error = msg(err);
@@ -89,8 +107,9 @@
 	async function loadInvites() {
 		invites = (await api<{ invites: Invite[] }>('GET', `/bots/${botId}/invites`)).invites;
 	}
-	onMount(() => {
-		loadInvites().catch(() => {});
+	$effect(() => {
+		void botId;
+		untrack(() => loadInvites().catch(() => {}));
 	});
 	async function createInvite(e: SubmitEvent) {
 		e.preventDefault();
@@ -115,7 +134,7 @@
 	const permNames = (m: number) => (m & Perm.admin ? 'Full admin' : options.filter((o) => m & o.bit).map((o) => o.label).join(', '));
 
 	async function remove(u: SubUser) {
-		const ok = await confirmDialog({ title: `Remove ${u.email}?`, body: 'They lose access to this bot immediately, including open consoles and SFTP.', confirmLabel: 'Remove access', tone: 'danger' });
+		const ok = await confirmDialog({ title: `Remove ${u.email}?`, body: `They lose access to this ${noun} immediately, including open consoles and SFTP.`, confirmLabel: 'Remove access', tone: 'danger' });
 		if (!ok) return;
 		error = '';
 		try {
@@ -128,7 +147,7 @@
 	}
 </script>
 
-<SettingsSection title="People with access" description="The owner and administrators always have full access. Anyone who can change files or environment variables can make the bot reveal its secrets, so share those only with people you trust.">
+<SettingsSection title="People with access" description={isGame ? 'The owner and administrators always have full access. Anyone who can change files can change the world, plugins and server configuration, so share that only with people you trust.' : 'The owner and administrators always have full access. Anyone who can change files or environment variables can make the bot reveal its secrets, so share those only with people you trust.'}>
 	<ul class="list-card">
 		{#each users as u (u.user_id)}
 			<li class="grid gap-2 px-4 py-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
@@ -145,7 +164,7 @@
 				<button class="btn btn-sm btn-danger" onclick={() => remove(u)}>Remove access</button>
 			</li>
 		{:else}
-			<li class="px-4 py-4 text-muted">This bot is not shared with anyone yet.</li>
+			<li class="px-4 py-4 text-muted">This {noun} is not shared with anyone yet.</li>
 		{/each}
 	</ul>
 </SettingsSection>
@@ -159,7 +178,7 @@
 			{/each}
 		</div>
 		{#if error}<Notice tone="fail" class="mt-3" live>{error}</Notice>{/if}
-		<button class="btn btn-primary mt-4" disabled={perms === 0}>Share bot</button>
+		<button class="btn btn-primary mt-4" disabled={perms === 0}>Share {noun}</button>
 	</form>
 </SettingsSection>
 
@@ -198,12 +217,12 @@
 	{/if}
 </SettingsSection>
 
-<SettingsSection title="Recent changes" description="Who changed files, variables, access and settings of this bot. Values are never recorded.">
+<SettingsSection title="Recent changes" description="Who changed files, variables, access and settings of this {noun}. Values are never recorded.">
 	{#snippet aside()}<p class="mt-2 text-small"><a class="link" href="/activity?bot={botId}&view=changes">Full history</a></p>{/snippet}
 	{#if changes === null}<p class="text-muted">Loading…</p>{:else if changes.length}<ChangeList events={changes} />{:else}<p class="text-muted">Nothing recorded yet.</p>{/if}
 </SettingsSection>
 
-<SettingsSection title="Transfer ownership" description="Give this bot to another account on the panel, for example when someone leaves the team. It moves into their personal workspace.">
+<SettingsSection title="Transfer ownership" description="Give this {noun} to another account on the panel, for example when someone leaves the team. It moves into their personal workspace.">
 	<form class="flex flex-wrap items-end gap-2 rounded-tile border border-fail/30 bg-fail/5 px-4 py-3" onsubmit={transfer}>
 		<label class="block min-w-0 flex-1 basis-64"><span class="label">Email of the new owner</span><input class="field" type="email" required bind:value={transferTo} /></label>
 		<button class="btn btn-danger">Transfer…</button>

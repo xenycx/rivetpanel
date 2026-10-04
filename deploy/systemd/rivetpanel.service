@@ -1,5 +1,5 @@
 [Unit]
-Description=RivetPanel (Discord bot hosting panel)
+Description=RivetPanel: Discord bot and game server hosting panel
 Documentation=file:///usr/share/doc/rivetpanel/README.md
 After=network-online.target docker.service
 Wants=network-online.target
@@ -37,6 +37,8 @@ LockPersonality=true
 MemoryDenyWriteExecute=true
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
 ReadWritePaths=/var/lib/rivetpanel
+# Keys and the agent certificate authority are created by an administrator
+# with `rivetpanel keygen` (which creates both); the panel only reads them.
 ReadOnlyPaths=/etc/rivetpanel
 StateDirectory=rivetpanel
 StateDirectoryMode=0750

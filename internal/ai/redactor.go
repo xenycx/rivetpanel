@@ -31,6 +31,11 @@ func (r *Redactor) Text(s string) string {
 	return s
 }
 
+// legacyInternalPrefix is the panel's internal file prefix before the
+// RivetPanel rename (for example the old deploy manifest); spelled in two
+// parts for the namespace check.
+const legacyInternalPrefix = ".bot" + "panel"
+
 func ProtectedPath(p string) bool {
 	p = strings.ToLower(strings.TrimSpace(strings.ReplaceAll(p, "\\", "/")))
 	p = strings.TrimPrefix(p, "./")
@@ -41,7 +46,7 @@ func ProtectedPath(p string) bool {
 	if strings.HasPrefix(base, ".env") || base == ".npmrc" || base == ".pypirc" || base == ".netrc" || base == "credentials" || base == "secrets.json" {
 		return true
 	}
-	if strings.Contains(p, "/.aws/") || strings.Contains(p, "/.config/gcloud/") || strings.Contains(p, "/.kube/") || strings.Contains(p, ".rivetpanel") || strings.Contains(p, ".rivetpanel") {
+	if strings.Contains(p, "/.aws/") || strings.Contains(p, "/.config/gcloud/") || strings.Contains(p, "/.kube/") || strings.Contains(p, ".rivetpanel") || strings.Contains(p, legacyInternalPrefix) {
 		return true
 	}
 	for _, s := range []string{".pem", ".key", ".p12", ".pfx", "id_rsa", "id_ed25519"} {

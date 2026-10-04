@@ -69,7 +69,7 @@
 <div class="relative" bind:this={root}>
 	<button
 		bind:this={btn}
-		class="tb-btn relative {open ? 'text-action' : ''}"
+		class="tb-btn relative"
 		onclick={toggle}
 		aria-label={inbox.unread ? `Notifications, ${inbox.unread} unread` : 'Notifications'}
 		aria-expanded={open}

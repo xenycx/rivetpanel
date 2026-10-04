@@ -1,0 +1,6 @@
+id: docs
+name: Docs and blog
+description: A small documentation site with a sidebar, a getting-started guide and a blog with one first post. Plain HTML pages you can copy to add more.
+tags: [docs, blog, multi-page, light]
+accent: "#2563eb"
+theme: light

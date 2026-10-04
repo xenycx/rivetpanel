@@ -255,11 +255,8 @@
 {/snippet}
 
 {#if session.user && session.features.ai}
-	{#if !chat.open}
-		<button class="fixed right-4 bottom-4 z-40 inline-flex items-center gap-2 rounded-pill bg-action px-4 py-2.5 font-semibold text-action-ink shadow-overlay transition-transform hover:scale-[1.03] sm:right-6 sm:bottom-6" onclick={() => chat.show()} aria-label="Ask AI" title="Ask AI (Ctrl+.)">
-			<Icon name="sparkle" size={17} />Ask AI
-		</button>
-	{:else}
+	<!-- Opened from the top bar's Ask AI button or Ctrl+. (no floating launcher). -->
+	{#if chat.open}
 		<div class="fixed inset-0 z-40 bg-black/40 sm:hidden" role="presentation" onclick={() => chat.hide()}></div>
 		<div
 			class="fixed inset-x-0 bottom-0 z-40 flex h-[calc(100dvh-3rem)] flex-col outline-none overflow-hidden rounded-t-card border border-rule bg-panel shadow-overlay sm:inset-x-auto sm:right-5 sm:bottom-5 sm:h-[min(42rem,calc(100dvh-2.5rem))] sm:w-[26rem] sm:rounded-card {chat.wide ? 'sm:h-[calc(100dvh-2.5rem)] sm:w-[min(46rem,calc(100vw-2.5rem))]' : ''}"
@@ -273,7 +270,7 @@
 					<button class="btn btn-quiet btn-icon btn-sm" onclick={() => (screen = 'chat')} aria-label="Back to the chat"><Icon name="chevronLeft" size={16} /></button>
 					<h2 class="min-w-0 flex-1 truncate font-semibold">{screen === 'history' ? 'Chats' : 'Model and mode'}</h2>
 				{:else}
-					<span class="grid size-8 shrink-0 place-items-center rounded-control bg-action/12 text-action"><Icon name="sparkle" size={16} /></span>
+					<span class="grid size-8 shrink-0 place-items-center rounded-control bg-paper-2 text-muted"><Icon name="sparkle" size={16} /></span>
 					<div class="min-w-0 flex-1">
 						<h2 class="truncate leading-tight font-semibold">{chat.selected && chat.messages.length ? chat.selected.title : 'Ask AI'}</h2>
 						<p class="truncate text-[.72rem] text-muted">{chat.provider ? `${chat.provider.name} · ${chat.selected?.model ?? chat.provider.default_model}` : 'RivetPanel assistant'}</p>
@@ -339,7 +336,7 @@
 						</div>
 					{:else if chat.messages.length === 0 && chat.runs.length === 0}
 						<div class="flex h-full flex-col justify-center py-4">
-							<span class="grid size-11 place-items-center rounded-tile bg-action/12 text-action"><Icon name="sparkle" size={22} /></span>
+							<span class="grid size-11 place-items-center rounded-tile bg-paper-2 text-muted"><Icon name="sparkle" size={22} /></span>
 							<h3 class="mt-3 text-section font-semibold">How can I help?</h3>
 							<p class="mt-1 text-small text-muted">
 								{#if view.kind !== 'page' && attach}I can see you are on <strong class="text-ink">{view.label}</strong>{view.section ? ` (${view.section.replace(/[-_]/g, ' ')})` : ''}. Ask about it, or ask me to find and fix a problem.{:else}Ask about RivetPanel, or open a bot and I can look at its logs, files and settings.{/if}
@@ -356,7 +353,7 @@
 								{#if it.t === 'msg'}
 									{#if it.m.role === 'user'}
 										<div class="flex flex-col items-end gap-1">
-											<p class="max-w-[88%] rounded-tile rounded-br-sm bg-action px-3 py-2 text-body whitespace-pre-wrap text-action-ink">{it.m.content}</p>
+											<p class="max-w-[88%] rounded-tile rounded-br-sm bg-paper-2 px-3 py-2 text-body whitespace-pre-wrap text-ink">{it.m.content}</p>
 											{#if it.m.context?.label || it.m.context?.kind === 'page'}
 												<span class="inline-flex max-w-[88%] items-center gap-1 truncate text-[.7rem] text-muted" title={it.m.context?.detail ?? it.m.context?.path}>
 													<Icon name={it.m.context?.kind === 'bot' ? 'terminal' : it.m.context?.kind === 'site' ? 'globe' : 'file'} size={11} />{describeView({ kind: 'page', label: it.m.context?.label, section: it.m.context?.section, path: it.m.context?.path ?? '' })}

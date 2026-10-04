@@ -121,6 +121,9 @@ func (s *panel) statusPublic(c fiber.Ctx) error {
 		return err
 	}
 	c.Set(fiber.HeaderCacheControl, "public, max-age=30")
+	// Public, credential-free data: hosted sites (another origin, e.g. the
+	// game community site template) may read it from the browser.
+	c.Set(fiber.HeaderAccessControlAllowOrigin, "*")
 	return c.JSON(statusPageJSON(p, nil))
 }
 

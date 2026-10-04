@@ -13,7 +13,7 @@
 	}: { tone?: 'info' | 'warn' | 'fail' | 'success'; title?: string; children?: Snippet; action?: Snippet; class?: string; live?: boolean } = $props();
 
 	const s = {
-		info: { bar: 'border-action/25 bg-action/6', icon: 'info', color: 'text-action' },
+		info: { bar: 'border-rule bg-paper-2/40', icon: 'info', color: 'text-muted' },
 		warn: { bar: 'border-warn/30 bg-warn/7', icon: 'alert', color: 'text-warn' },
 		fail: { bar: 'border-fail/30 bg-fail/7', icon: 'alert', color: 'text-fail' },
 		success: { bar: 'border-run/25 bg-run/6', icon: 'check', color: 'text-run' }

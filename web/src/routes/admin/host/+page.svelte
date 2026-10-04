@@ -37,13 +37,13 @@
 
 <svelte:head><title>Host · RivetPanel</title></svelte:head>
 <h2 class="text-section">Host</h2>
-<p class="mt-1 max-w-3xl text-muted">The machine that runs the bots, RivetPanel itself and what each bot uses. Samples are taken every 30 seconds and kept for the retention set on the Environment page (7 days by default).</p>
+<p class="mt-1 max-w-3xl text-muted">The machine that runs the bots, RivetPanel itself and what each bot uses. Samples are taken every 30 seconds and kept for the time set under <a class="link" href="/admin/logs">Logs and retention</a> (7 days by default, or <code>RIVET_TELEMETRY_RETENTION</code>).</p>
 
 <nav class="mt-4 flex gap-0.5 overflow-x-auto border-b border-rule-soft [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" aria-label="Host sections">
 	{#each tabs as t (t.id)}
 		<a
 			href={t.id === 'resources' ? '/admin/host' : `/admin/host?tab=${t.id}`}
-			class="relative flex shrink-0 items-center gap-2 px-3 py-2.5 text-small font-medium whitespace-nowrap {tab === t.id ? 'text-action after:absolute after:inset-x-2 after:-bottom-px after:h-0.5 after:bg-action' : 'text-muted hover:text-ink'}"
+			class="relative flex shrink-0 items-center gap-2 px-3 py-2.5 text-small font-medium whitespace-nowrap {tab === t.id ? 'text-ink after:absolute after:inset-x-2 after:-bottom-px after:h-0.5 after:bg-action' : 'text-muted hover:text-ink'}"
 			aria-current={tab === t.id ? 'page' : undefined}
 			onclick={(e) => { e.preventDefault(); void go(t.id); }}
 		>

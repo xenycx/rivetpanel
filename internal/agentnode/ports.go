@@ -1,22 +1,27 @@
 package agentnode
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net"
 	"net/netip"
 	"strconv"
 	"syscall"
+	"time"
 
 	"github.com/gofiber/fiber/v3"
 
 	"github.com/xenycx/rivetpanel/internal/agentproto"
+	"github.com/xenycx/rivetpanel/internal/runner"
 )
 
 // portsRoutes serves POST /node/v1/ports/probe: whether host ports can be
 // bound on this node. It is a check, not a reservation; the panel uses it to
 // skip busy ports and to refuse a start that Docker would fail anyway.
-func portsRoutes(v1 fiber.Router, probe func(ip string, port int) error) {
+// published, when set, also reports ports that running containers publish
+// (any panel or tool), which a bind test misses without a userland proxy.
+func portsRoutes(v1 fiber.Router, probe func(ip string, port int) error, published func(ctx context.Context) ([]runner.PublishedPort, error)) {
 	if probe == nil {
 		probe = BindProbe
 	}
@@ -32,13 +37,21 @@ func portsRoutes(v1 fiber.Router, probe func(ip string, port int) error) {
 		if len(in.Ports) == 0 || len(in.Ports) > agentproto.MaxProbePorts {
 			return fiber.NewError(fiber.StatusBadRequest, "probe between 1 and 64 ports")
 		}
+		var pubs []runner.PublishedPort
+		if published != nil {
+			ctx, cancel := context.WithTimeout(c.Context(), 10*time.Second)
+			pubs, _ = published(ctx) // a failed listing leaves the bind test
+			cancel()
+		}
 		out := agentproto.PortProbe{Ports: make([]agentproto.PortProbeResult, 0, len(in.Ports))}
 		for _, p := range in.Ports {
 			if p < 1 || p > 65535 {
 				return fiber.NewError(fiber.StatusBadRequest, "ports must be between 1 and 65535")
 			}
 			r := agentproto.PortProbeResult{Port: p, Free: true}
-			if err := probe(addr.String(), p); err != nil {
+			if h, busy := runner.PortHolder(pubs, addr.String(), p, "", ""); busy {
+				r.Free, r.Reason = false, runner.PortReason(h.Container)
+			} else if err := probe(addr.String(), p); err != nil {
 				r.Free, r.Reason = false, probeReason(err)
 			}
 			out.Ports = append(out.Ports, r)

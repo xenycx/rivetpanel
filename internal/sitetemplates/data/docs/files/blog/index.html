@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Blog · {{site_name}}</title>
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<header class="top"><a class="brand" href="../index.html">{{site_name}}</a><nav><a href="../docs/getting-started.html">Docs</a><a href="../blog/index.html">Blog</a></nav></header>
+<div class="layout">
+<aside>
+  <p class="label">Documentation</p>
+  <a href="../index.html">Overview</a>
+  <a href="../docs/getting-started.html">Getting started</a>
+  <p class="label">Blog</p>
+  <a href="../blog/index.html">All posts</a>
+</aside>
+<main>
+<h1>Blog</h1>
+<ul class="posts">
+  <li><a href="first-post.html">Hello, world</a><time>{{year}}</time><p>Why this site exists and what to expect here.</p></li>
+</ul>
+</main>
+</div>
+<footer>&copy; {{year}} {{site_name}}</footer>
+</body>
+</html>

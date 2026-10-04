@@ -92,7 +92,8 @@ func TestAlertsSendAndThrottle(t *testing.T) {
 		return &http.Response{StatusCode: 204, Body: io.NopCloser(bytes.NewReader(nil))}, nil
 	})}
 	st := &alertStore{accts: []domain.OAuthAccount{seal("https://discord.com/api/webhooks/1/abc")},
-		bots: map[string]domain.Bot{"b1": {ID: "b1", OwnerID: "u1", Name: "My Bot"}}}
+		bots: map[string]domain.Bot{"b1": {ID: "b1", OwnerID: "u1", Name: "My Bot"},
+			"g1": {ID: "g1", OwnerID: "u1", Name: "My Server", Kind: domain.KindGame}}}
 	var clock atomic.Int64
 	clock.Store(1000)
 	count := func() int { mu.Lock(); defer mu.Unlock(); return len(posts) }
@@ -156,6 +157,22 @@ func TestAlertsSendAndThrottle(t *testing.T) {
 	clock.Add(int64(11 * time.Minute / time.Second))
 	bus.Publish(events.Status{BotID: "b1", DesiredState: "running", ObservedState: "failed", LastError: "after the interval"})
 	waitPosts(base + 2)
+	// A taken host port is a configuration problem, not a crash: no alert.
+	bus.Publish(events.Status{BotID: "g1", DesiredState: "running", ObservedState: "failed", Reason: domain.ReasonPortConflict,
+		LastError: "Port 25565 is already used by container x. Choose another port in Network or stop that container."})
+	time.Sleep(100 * time.Millisecond)
+	if count() != base+2 {
+		t.Fatalf("port conflict alerted: %d", count()-base)
+	}
+	// Game servers get crash alerts too (they have no SDK heartbeat).
+	bus.Publish(events.Status{BotID: "g1", DesiredState: "running", ObservedState: "failed", LastError: "exited with code 1"})
+	waitPosts(base + 3)
+	mu.Lock()
+	b, _ := json.Marshal(posts[base+2])
+	mu.Unlock()
+	if !strings.Contains(string(b), "My Server") {
+		t.Fatalf("game crash alert: %s", b)
+	}
 	cancel()
 	<-done
 }

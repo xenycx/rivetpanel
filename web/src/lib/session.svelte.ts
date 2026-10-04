@@ -1,6 +1,7 @@
 import { goto } from '$app/navigation';
 import { api, setCsrf, setUnauthorizedHandler } from '$lib/api/client';
 import type { EmailVerification, User } from '$lib/api/types';
+import { adminPermissions } from '$lib/permissions';
 
 export type Features = { runner: boolean; console: boolean; stats: boolean; files: boolean; deploy: boolean; backups: boolean; analytics: boolean; sftp: boolean; operations: boolean; oauth: boolean; schedules: boolean; mfa: boolean; automation: boolean; health: boolean; sites: boolean; workspaces: boolean; ai: boolean; mail: boolean; public_repos: boolean; addons: boolean; games: boolean; agents: boolean; api_clients: boolean; passkeys: boolean; usage: boolean };
 const allOn: Features = { runner: true, console: true, stats: true, files: true, deploy: true, backups: true, analytics: true, sftp: true, operations: true, oauth: true, schedules: true, mfa: true, automation: true, health: true, sites: false, workspaces: true, ai: true, mail: false, public_repos: true, addons: true, games: false, agents: false, api_clients: true, passkeys: true, usage: true };
@@ -30,8 +31,9 @@ export function can(p: string): boolean {
 	return session.user?.role === 'admin' || session.permissions.includes(p);
 }
 
-/** Administration permissions, in the order of the administration sections. */
-export const adminPermissions = ['users.view', 'users.manage', 'roles.manage', 'workspaces.view', 'sites.manage', 'blueprints.manage', 'allocations.manage', 'nodes.manage', 'system.view', 'settings.manage', 'mail.announce', 'ai.manage'];
+// Administration permissions (support staff, knowledgebase, status page and
+// analytics included, so those roles reach their sections too).
+export { adminPermissions };
 
 /** Whether the account may open any part of the administration area. */
 export function canAdminister(): boolean {

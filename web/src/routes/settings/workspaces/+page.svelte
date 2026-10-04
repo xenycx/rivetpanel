@@ -17,6 +17,14 @@
 	$effect(() => {
 		loadWorkspaces();
 	});
+	// Opened from the "New" menu: go straight to the name field.
+	let nameField: HTMLInputElement | undefined = $state();
+	$effect(() => {
+		if (nameField && new URLSearchParams(location.search).get('new') === '1') {
+			nameField.scrollIntoView({ block: 'center' });
+			nameField.focus();
+		}
+	});
 
 	async function create(e: SubmitEvent) {
 		e.preventDefault();
@@ -76,7 +84,7 @@
 
 <SettingsSection title="New team workspace" description="Create a workspace, then add people by the email address they sign in with. You become its owner.">
 	<form class="card grid gap-3 p-5 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end" onsubmit={create}>
-		<label class="block"><span class="label">Name</span><input class="field" required maxlength="64" bind:value={name} placeholder="Community bots" /></label>
+		<label class="block"><span class="label">Name</span><input class="field" required maxlength="64" bind:value={name} bind:this={nameField} placeholder="Community bots" /></label>
 		<button class="btn btn-primary" disabled={busy || !name.trim()}><Icon name="plus" size={14} />Create workspace</button>
 	</form>
 	{#if error}<Notice tone="fail" class="mt-3" live>{error}</Notice>{/if}

@@ -37,7 +37,8 @@ const (
 
 // Adapter implements runner.Docker on top of the official SDK.
 type Adapter struct {
-	cli *client.Client
+	cli   *client.Client
+	paths PathMap // bind sources as the Docker host sees them (see SetPathMap)
 }
 
 var _ runner.Docker = (*Adapter)(nil)
@@ -144,6 +145,36 @@ func labelFilter(botID string) filters.Args {
 	return f
 }
 
+// PublishedPorts lists the host ports published by every running container
+// on this Docker host, not only managed ones: another panel or any other tool
+// may hold a port this panel is about to use.
+func (a *Adapter) PublishedPorts(ctx context.Context) ([]runner.PublishedPort, error) {
+	ctx, cancel := within(ctx, opTimeout)
+	defer cancel()
+	list, err := a.cli.ContainerList(ctx, container.ListOptions{})
+	if err != nil {
+		return nil, err
+	}
+	var out []runner.PublishedPort
+	for _, c := range list {
+		name := c.ID
+		if len(name) > 12 {
+			name = name[:12]
+		}
+		if len(c.Names) > 0 {
+			name = strings.TrimPrefix(c.Names[0], "/")
+		}
+		for _, p := range c.Ports {
+			if p.PublicPort == 0 {
+				continue
+			}
+			out = append(out, runner.PublishedPort{HostIP: p.IP, HostPort: int(p.PublicPort), Proto: p.Type,
+				ContainerID: c.ID, Container: name, BotID: c.Labels[runner.LabelBot]})
+		}
+	}
+	return out, nil
+}
+
 func (a *Adapter) ListManaged(ctx context.Context, botID string) ([]runner.ContainerInfo, error) {
 	ctx, cancel := within(ctx, opTimeout)
 	defer cancel()
@@ -200,6 +231,7 @@ func (a *Adapter) Inspect(ctx context.Context, id string) (runner.ContainerInfo,
 func (a *Adapter) Create(ctx context.Context, spec runner.ContainerSpec) (string, error) {
 	ctx, cancel := within(ctx, opTimeout)
 	defer cancel()
+	spec = a.translateSpec(spec)
 	resp, err := a.cli.ContainerCreate(ctx, ContainerConfig(spec), HostConfig(spec), NetworkingConfig(spec), nil, spec.Name)
 	if err != nil {
 		if errdefs.IsConflict(err) {
@@ -521,6 +553,24 @@ func (a *Adapter) Logs(ctx context.Context, id string, since time.Time, tail int
 		opts.Since = since.UTC().Format(time.RFC3339Nano)
 	} else if tail > 0 {
 		opts.Tail = strconv.Itoa(tail)
+	}
+	rc, err := a.cli.ContainerLogs(ctx, id, opts)
+	if err != nil && errdefs.IsNotFound(err) {
+		return nil, runner.ErrNoContainer
+	}
+	return rc, err
+}
+
+// LogRange returns a container's output between since and until (Docker's
+// multiplexed stream with timestamps) without following it, so the stream
+// ends at until. The log archive uses it to capture console output.
+func (a *Adapter) LogRange(ctx context.Context, id string, since, until time.Time) (io.ReadCloser, error) {
+	opts := container.LogsOptions{ShowStdout: true, ShowStderr: true, Timestamps: true}
+	if !since.IsZero() {
+		opts.Since = since.UTC().Format(time.RFC3339Nano)
+	}
+	if !until.IsZero() {
+		opts.Until = until.UTC().Format(time.RFC3339Nano)
 	}
 	rc, err := a.cli.ContainerLogs(ctx, id, opts)
 	if err != nil && errdefs.IsNotFound(err) {

@@ -9,3 +9,10 @@ internal/webui/dist/*
 !internal/webui/dist/.gitkeep
 *.db
 *.log
+# secrets and local-only files never belong in the build context
+.env
+.env.*
+*.key
+# stray root-level go build outputs
+rivetpanel
+rivet-agent

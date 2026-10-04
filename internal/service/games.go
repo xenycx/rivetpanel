@@ -43,6 +43,7 @@ type GameStore interface {
 		usable func(port int) bool, nowMS int64) ([]domain.Allocation, error)
 	ReleaseAllocation(ctx context.Context, botID, allocID string) error
 	SetPrimaryAllocation(ctx context.Context, botID, allocID string) error
+	SetJVMArgs(ctx context.Context, botID, args string, nowMS int64) error
 }
 
 // GameService manages game servers on top of the shared bot lifecycle.
@@ -192,7 +193,7 @@ type PortState struct {
 // settled stopped or failed server is probed. A node that cannot answer
 // (offline) does not block the start: the request is recorded and the node
 // acts on it when it reconnects.
-func (s *BotService) checkRemotePorts(ctx context.Context, b domain.Bot) error {
+func (s *BotService) checkRemotePorts(ctx context.Context, actor domain.User, b domain.Bot) error {
 	if !b.IsGame() || len(b.Allocations) == 0 || s.RemotePorts == nil || !s.remote(b.NodeID) {
 		return nil
 	}
@@ -216,12 +217,95 @@ func (s *BotService) checkRemotePorts(ctx context.Context, b domain.Bot) error {
 		}
 		for _, r := range res {
 			if !r.Free {
+				why := r.Reason
+				if !seesHostPorts(actor) {
+					why = runner.RedactPortReason(why)
+				}
 				return domain.Invalid(fmt.Sprintf("port %d on %s is %s; stop whatever uses it or choose another allocation under Network before starting",
-					r.Port, ip, r.Reason))
+					r.Port, ip, why))
 			}
 		}
 	}
 	return nil
+}
+
+// seesHostPorts reports whether actor may learn which container holds a
+// host port: the container can belong to another tenant, so only accounts
+// that manage allocations or nodes, or view the system, see its name.
+func seesHostPorts(actor domain.User) bool {
+	return actor.Can(domain.PermAllocations) || actor.Can(domain.PermNodesManage) || actor.Can(domain.PermSystemView)
+}
+
+// localPublished lists ports published by running containers on the local
+// Docker host; nil when the check is unavailable or fails (the bind test and
+// Docker's own start error remain).
+func (s *BotService) localPublished(ctx context.Context) []runner.PublishedPort {
+	if s.LocalPublished == nil {
+		return nil
+	}
+	cctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	pubs, err := s.LocalPublished(cctx)
+	if err != nil {
+		return nil
+	}
+	return pubs
+}
+
+// checkLocalPorts refuses to start a stopped game server on the local node
+// when a running container of anything else (another panel, any other tool)
+// already publishes one of its ports. Without this, Docker would fail the
+// start; the runner then records the same message without retrying.
+func (s *BotService) checkLocalPorts(ctx context.Context, actor domain.User, b domain.Bot) error {
+	if !b.IsGame() || len(b.Allocations) == 0 || s.remote(b.NodeID) || s.LocalPublished == nil {
+		return nil
+	}
+	if b.ObservedState != "stopped" && b.ObservedState != "failed" {
+		return nil
+	}
+	pubs := s.localPublished(ctx)
+	for _, a := range b.Allocations {
+		if h, busy := runner.PortHolder(pubs, a.IP, a.Port, "", b.ID); busy {
+			return domain.Invalid(runner.PortConflictMessage(a.Port, h.Container, seesHostPorts(actor)))
+		}
+	}
+	return nil
+}
+
+// busyPorts reports which of ports cannot be used on a node, with the
+// reason in words. A node that cannot be asked reports none (its ports are
+// still checked when a server is given them and when it starts).
+func (g *GameService) busyPorts(ctx context.Context, nodeID, ip string, ports []int) map[int]string {
+	out := map[int]string{}
+	if nodeID == g.Bots.LocalNode {
+		pubs := g.Bots.localPublished(ctx)
+		for _, p := range ports {
+			if h, busy := runner.PortHolder(pubs, ip, p, "", ""); busy {
+				out[p] = runner.PortReason(h.Container) // administrators only (allocations)
+			} else if !g.portFree(p) {
+				out[p] = "already in use on this host"
+			}
+		}
+		return out
+	}
+	if g.Bots.RemotePorts == nil || !g.Bots.remote(nodeID) {
+		return out
+	}
+	for i := 0; i < len(ports); i += 64 {
+		batch := ports[i:min(i+64, len(ports))]
+		cctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+		res, err := g.Bots.RemotePorts(cctx, nodeID, ip, batch)
+		cancel()
+		if err != nil {
+			return out
+		}
+		for _, r := range res {
+			if !r.Free {
+				out[r.Port] = r.Reason
+			}
+		}
+	}
+	return out
 }
 
 // allocationProbe returns the port filter for an automatic allocation on
@@ -232,7 +316,15 @@ func (s *BotService) checkRemotePorts(ctx context.Context, b domain.Bot) error {
 func (g *GameService) allocationProbe(ctx context.Context, nodeID, ip string, from int) (usable func(int) bool, probeErr func() error) {
 	none := func() error { return nil }
 	if nodeID == g.Bots.LocalNode {
-		return g.portFree, none
+		// Docker-published ports first: a port published only with firewall
+		// rules (no userland proxy) passes a bind test but still fails the start.
+		pubs := g.Bots.localPublished(ctx)
+		return func(p int) bool {
+			if _, busy := runner.PortHolder(pubs, ip, p, "", ""); busy {
+				return false
+			}
+			return g.portFree(p)
+		}, none
 	}
 	if g.Bots.RemotePorts == nil || !g.Bots.remote(nodeID) {
 		return nil, none
@@ -431,6 +523,12 @@ func (g *GameService) CreateServer(ctx context.Context, actor domain.User, in Ga
 		undo()
 		return domain.Bot{}, err
 	}
+	if spec.Startup.JVMArgs && spec.Startup.JVMArgsDefault != "" {
+		if err := g.Store.SetJVMArgs(ctx, b.ID, spec.Startup.JVMArgsDefault, now); err != nil {
+			undo()
+			return domain.Bot{}, err
+		}
+	}
 	return s.Store.GetBot(ctx, b.ID)
 }
 
@@ -466,6 +564,55 @@ type GameDetail struct {
 	Blueprint       domain.Blueprint
 	Variables       []GameVariable
 	UpdateAvailable bool
+	JVM             GameJVM
+}
+
+// GameJVM is the JVM-arguments state shown on the Startup page.
+type GameJVM struct {
+	Supported bool   // the pinned revision takes JVM arguments
+	Args      string // the stored options
+	Default   string // the server type's default options
+	// Java is the Java major version of the server's image (0 = unknown,
+	// decided at installation).
+	Java int
+	// HeapMiB is the heap the panel passes as SERVER_MEMORY.
+	HeapMiB int64
+	// PendingRestart: the server is running with options older than Args.
+	PendingRestart bool
+	// SavedGeneration is the server's generation when the options were last
+	// saved (0 with Set false = never saved); a container of a later
+	// generation runs them.
+	SavedGeneration int64
+	Set             bool
+	Presets         []blueprint.JVMPreset
+}
+
+// heapMiB mirrors the runner's SERVER_MEMORY.
+func heapMiB(s blueprint.Spec, b domain.Bot) int64 {
+	return max((b.MemoryBytes>>20)*int64(s.Resources.HeapPercent)/100, 64)
+}
+
+// gameJava is the Java version of the server's current image (0 = unknown).
+func gameJava(s blueprint.Spec, b domain.Bot) int {
+	for _, im := range s.Images {
+		if im.Ref == b.ImageRef {
+			return im.Java
+		}
+	}
+	return 0
+}
+
+func gameJVM(s blueprint.Spec, b domain.Bot) GameJVM {
+	j := GameJVM{Supported: s.Startup.JVMArgs, Args: b.JVMArgs, Default: s.Startup.JVMArgsDefault,
+		Java: gameJava(s, b), HeapMiB: heapMiB(s, b), SavedGeneration: b.JVMArgsGeneration, Set: b.JVMArgsUpdatedMS > 0}
+	if j.Supported {
+		j.Presets = blueprint.JVMPresets(j.Java, j.HeapMiB)
+		// Starting or restarting advances the generation; a server still
+		// running the generation the options were saved at started before.
+		j.PendingRestart = b.ObservedState == "running" && b.JVMArgsUpdatedMS > 0 &&
+			b.ObservedGeneration <= b.JVMArgsGeneration
+	}
+	return j
 }
 
 // Detail returns the server's blueprint, variables and update state.
@@ -486,7 +633,7 @@ func (g *GameService) Detail(ctx context.Context, actor domain.User, id string) 
 	if err != nil {
 		return GameDetail{}, err
 	}
-	out := GameDetail{Spec: s, Blueprint: bp, UpdateAvailable: bp.CurrentRevision > b.BlueprintRevision}
+	out := GameDetail{Spec: s, Blueprint: bp, UpdateAvailable: bp.CurrentRevision > b.BlueprintRevision, JVM: gameJVM(s, b)}
 	for _, v := range s.Variables {
 		val, ok := vals[v.Env]
 		if !ok {
@@ -539,6 +686,40 @@ func (g *GameService) SetVariables(ctx context.Context, actor domain.User, id st
 		}
 	}
 	return g.Bots.Store.GetBot(ctx, b.ID)
+}
+
+// SetJVMArgs stores a Java server's extra JVM options ("" = none). They are
+// validated strictly (they are word-split by the shell) and apply the next
+// time the server starts; a running server keeps its current options until
+// it is restarted. Same permission as the server's settings.
+func (g *GameService) SetJVMArgs(ctx context.Context, actor domain.User, id, args string) (domain.Bot, GameJVM, error) {
+	b, err := g.loadGame(ctx, actor, id, domain.PermManageEnv)
+	if err != nil {
+		return b, GameJVM{}, err
+	}
+	s, err := g.spec(ctx, b)
+	if err != nil {
+		return b, GameJVM{}, err
+	}
+	if !s.Startup.JVMArgs {
+		msg := "this server type does not take JVM arguments"
+		if bp, err := g.Store.GetBlueprint(ctx, b.BlueprintID); err == nil && bp.CurrentRevision > b.BlueprintRevision {
+			msg += "; update it to the newest server-type definition on the Startup page first"
+		}
+		return b, GameJVM{}, domain.Invalid(msg)
+	}
+	norm, err := blueprint.CheckJVMArgs(args)
+	if err != nil {
+		return b, GameJVM{}, domain.Invalid(err.Error())
+	}
+	if err := g.Store.SetJVMArgs(ctx, b.ID, norm, g.now()); err != nil {
+		return b, GameJVM{}, err
+	}
+	nb, err := g.Bots.Store.GetBot(ctx, b.ID)
+	if err != nil {
+		return nb, GameJVM{}, err
+	}
+	return nb, gameJVM(s, nb), nil
 }
 
 // Reinstall runs the installation again on the next start.
@@ -633,6 +814,14 @@ func (g *GameService) UpgradeBlueprint(ctx context.Context, actor domain.User, i
 			return b, err
 		}
 	}
+	// A server that never chose JVM options starts with the new revision's
+	// defaults (for example Velocity's G1 collector, previously part of its
+	// command line).
+	if st := v.Spec.Startup; st.JVMArgs && st.JVMArgsDefault != "" && b.JVMArgsUpdatedMS == 0 && b.JVMArgs == "" {
+		if err := g.Store.SetJVMArgs(ctx, b.ID, st.JVMArgsDefault, g.now()); err != nil {
+			return b, err
+		}
+	}
 	return g.Bots.Store.GetBot(ctx, b.ID)
 }
 
@@ -702,6 +891,65 @@ func (g *GameService) SetPrimaryAllocation(ctx context.Context, actor domain.Use
 		return err
 	}
 	return g.Store.SetPrimaryAllocation(ctx, b.ID, allocID)
+}
+
+// PickFreePrimaryPort moves a server whose primary port is taken on the host
+// to a free port: it allocates the next free port of its node (skipping
+// ports any container publishes), makes it primary and returns the old one
+// to the pool. The server must be stopped, or waiting after a port conflict;
+// in that case the new generation starts it again on the new port.
+func (g *GameService) PickFreePrimaryPort(ctx context.Context, actor domain.User, id string) (domain.Bot, error) {
+	b, err := g.loadGame(ctx, actor, id, domain.PermFullAdmin)
+	if err != nil {
+		return b, err
+	}
+	blocked := b.ObservedState == "failed" && b.StateReason != nil && *b.StateReason == domain.ReasonPortConflict
+	if !blocked {
+		if err := requireStopped(b); err != nil {
+			return b, err
+		}
+	}
+	old, ok := b.PrimaryAllocation()
+	if !ok {
+		return b, domain.Invalid("the server has no primary allocation")
+	}
+	start := old.Port + 1
+	usable, probeErr := g.allocationProbe(ctx, b.NodeID, "0.0.0.0", start)
+	if err := probeErr(); err != nil {
+		return b, err
+	}
+	added, err := g.Store.AllocateForBot(ctx, b.ID, b.NodeID, 1, start, false, true, "0.0.0.0", usable, g.now())
+	if err != nil {
+		if perr := probeErr(); perr != nil {
+			return b, perr
+		}
+		return b, err
+	}
+	var fresh *domain.Allocation
+	for i := range added {
+		known := false
+		for _, a := range b.Allocations {
+			known = known || a.ID == added[i].ID
+		}
+		if !known {
+			fresh = &added[i]
+		}
+	}
+	if fresh == nil {
+		return b, domain.Invalid("no free port is available on this node; an administrator can add ports under Administration → Allocations")
+	}
+	// Making it primary advances the generation, which starts a blocked
+	// server again on the new port.
+	if err := g.Store.SetPrimaryAllocation(ctx, b.ID, fresh.ID); err != nil {
+		return b, err
+	}
+	if err := g.Store.ReleaseAllocation(ctx, b.ID, old.ID); err != nil {
+		return b, err
+	}
+	if g.Bots.Notifier != nil {
+		g.Bots.Notifier.Notify(b.ID)
+	}
+	return g.Bots.Store.GetBot(ctx, b.ID)
 }
 
 // Query asks a running server for its public status (players, version).
@@ -1106,32 +1354,52 @@ func ParsePorts(s string) ([]int, error) {
 	return out, nil
 }
 
-// CreateAllocations adds ports on a node (administrators).
-func (g *GameService) CreateAllocations(ctx context.Context, actor domain.User, nodeID, ip, ports, notes string) ([]domain.Allocation, error) {
+// CreateAllocations adds ports on a node (administrators). Ports that are
+// already in use on the host (published by any running container, or not
+// bindable) are skipped and returned with the reason, so a server is never
+// given a port that cannot start; on a remote node the agent is asked.
+func (g *GameService) CreateAllocations(ctx context.Context, actor domain.User, nodeID, ip, ports, notes string) ([]domain.Allocation, []PortState, error) {
 	if err := requirePerm(actor, domain.PermAllocations); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if nodeID == "" {
 		nodeID = g.Bots.LocalNode
 	}
 	if _, err := g.Bots.Store.GetNode(ctx, nodeID); err != nil {
-		return nil, domain.Invalid("unknown node")
+		return nil, nil, domain.Invalid("unknown node")
 	}
 	ip = strings.TrimSpace(ip)
 	if ip == "" {
 		ip = "0.0.0.0"
 	}
 	if net.ParseIP(ip) == nil {
-		return nil, domain.Invalid("the address must be an IP address such as 0.0.0.0")
+		return nil, nil, domain.Invalid("the address must be an IP address such as 0.0.0.0")
 	}
 	if len(notes) > 200 {
-		return nil, domain.Invalid("notes must be at most 200 characters")
+		return nil, nil, domain.Invalid("notes must be at most 200 characters")
 	}
 	list, err := ParsePorts(ports)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return g.Store.CreateAllocations(ctx, nodeID, ip, list, notes, g.now())
+	busy := g.busyPorts(ctx, nodeID, ip, list)
+	var skipped []PortState
+	keep := list[:0:0]
+	for _, p := range list {
+		if why, ok := busy[p]; ok {
+			skipped = append(skipped, PortState{Port: p, Reason: why})
+			continue
+		}
+		keep = append(keep, p)
+	}
+	if len(keep) == 0 {
+		if len(skipped) > 0 {
+			return nil, skipped, domain.Invalid(fmt.Sprintf("port %d is %s; no port was added", skipped[0].Port, skipped[0].Reason))
+		}
+		return nil, nil, nil
+	}
+	out, err := g.Store.CreateAllocations(ctx, nodeID, ip, keep, notes, g.now())
+	return out, skipped, err
 }
 
 // ListAllocations returns a node's allocations (administrators).

@@ -80,6 +80,7 @@ type Deps struct {
 	AI            *service.AIService                // nil disables the AI operator
 	Env           *service.PanelEnvService          // nil disables the environment editor
 	Host          *hostmon.Monitor                  // nil disables the host monitoring routes
+	LogArchive    *service.LogArchiveService        // nil disables the log archive routes
 	Logs          *logbuf.Buffer                    // nil disables the panel log viewer
 	SetupCodeFile string                            // shown by the setup wizard
 	OnSetupDone   func()                            // called after the first administrator is created
@@ -152,6 +153,7 @@ type panel struct {
 	kb            *service.KBService
 	status        *service.StatusService
 	usage         *service.UsageService
+	logArchive    *service.LogArchiveService
 	resets        *service.PasswordResetService
 	verify        *service.EmailVerificationService
 	mailPrefs     MailPrefs
@@ -207,11 +209,11 @@ func New(d Deps) *fiber.App {
 	if d.Host != nil && d.Host.HTTP == nil {
 		d.Host.HTTP = metrics.stats
 	}
-	app.Use(securityHeaders, metrics.observe, smallBody)
+	app.Use(securityHeaders, hsts(d), metrics.observe, smallBody)
 	app.Get("/metrics", metrics.handler(d))
 	if d.Enrollment != nil {
 		agent := app.Group("/api/agent/v1")
-		agent.Post("/enroll", limiter.New(limiter.Config{
+		agent.Post("/enroll", newLimiter(limiter.Config{
 			Max: 10, Expiration: time.Minute,
 			KeyGenerator: func(c fiber.Ctx) string { return "agent-enroll:" + c.IP() },
 			LimitReached: func(c fiber.Ctx) error {
@@ -247,7 +249,7 @@ func New(d Deps) *fiber.App {
 		return c.JSON(fiber.Map{"status": "ok", "checks": checks})
 	})
 	if d.Auth != nil && d.Bots != nil {
-		s := &panel{log: d.Log, auth: d.Auth, bots: d.Bots, oauth: d.OAuth, sftp: d.SFTP, analytics: d.Analytics, publicURL: d.PublicURL, registry: d.Registry, stats: d.Stats, backups: d.Backups, deploy: d.Deploy, ops: d.Ops, audit: d.Audit, schedules: d.Schedules, mfa: d.MFA, tokens: d.Tokens, clients: d.Clients, oidc: d.OIDC, passkeys: d.Passkeys, enrollment: d.Enrollment, agentControl: d.AgentControl, games: d.Games, router: d.Router, health: d.Health, settings: d.Settings, mail: d.Mail, notifications: d.Notifications, tickets: d.Tickets, kb: d.KB, status: d.Status, usage: d.Usage, resets: d.Resets, verify: d.Verify, mailPrefs: d.MailPrefs, sites: d.Sites, ai: d.AI, env: d.Env, host: d.Host, logs: d.Logs, setupCodeFile: d.SetupCodeFile, onSetupDone: d.OnSetupDone, statsLimit: console.NewLimiter(0, 0, 0), catalog: d.Catalog, secureCookies: d.SecureCookies, modules: d.Modules,
+		s := &panel{log: d.Log, auth: d.Auth, bots: d.Bots, oauth: d.OAuth, sftp: d.SFTP, analytics: d.Analytics, publicURL: d.PublicURL, registry: d.Registry, stats: d.Stats, backups: d.Backups, deploy: d.Deploy, ops: d.Ops, audit: d.Audit, schedules: d.Schedules, mfa: d.MFA, tokens: d.Tokens, clients: d.Clients, oidc: d.OIDC, passkeys: d.Passkeys, enrollment: d.Enrollment, agentControl: d.AgentControl, games: d.Games, router: d.Router, health: d.Health, settings: d.Settings, mail: d.Mail, notifications: d.Notifications, tickets: d.Tickets, kb: d.KB, status: d.Status, usage: d.Usage, resets: d.Resets, verify: d.Verify, mailPrefs: d.MailPrefs, sites: d.Sites, ai: d.AI, env: d.Env, host: d.Host, logs: d.Logs, logArchive: d.LogArchive, setupCodeFile: d.SetupCodeFile, onSetupDone: d.OnSetupDone, statsLimit: console.NewLimiter(0, 0, 0), catalog: d.Catalog, secureCookies: d.SecureCookies, modules: d.Modules,
 			console: d.Console, consoleLimit: d.ConsoleLimit, baseCtx: d.BaseCtx, nodes: d.Nodes, files: d.Files, maxUpload: d.MaxUpload,
 			runnerReady: d.RunnerReady, buildMemory: d.BuildMemory, diagnostics: d.Diagnostics}
 		if s.buildMemory == 0 {
@@ -298,6 +300,25 @@ func smallBody(c fiber.Ctx) error {
 	return c.Next()
 }
 
+// hsts sends Strict-Transport-Security (one year, without includeSubDomains,
+// which could break other services on sibling names) when the panel runs in
+// production (secure cookies) and its public address is https. The address
+// follows changes made on the settings page.
+func hsts(d Deps) fiber.Handler {
+	return func(c fiber.Ctx) error {
+		if d.SecureCookies {
+			u := d.OAuth.CurrentPublicURL()
+			if u == "" {
+				u = d.PublicURL
+			}
+			if len(u) > 8 && strings.EqualFold(u[:8], "https://") {
+				c.Set("Strict-Transport-Security", "max-age=31536000")
+			}
+		}
+		return c.Next()
+	}
+}
+
 func securityHeaders(c fiber.Ctx) error {
 	c.Set("X-Content-Type-Options", "nosniff")
 	c.Set("X-Frame-Options", "DENY")
@@ -315,7 +336,7 @@ type MailPrefs interface {
 
 func (s *panel) routes(v1 fiber.Router) {
 	v1.Use(s.checkOrigin)
-	v1.Post("/auth/login", limiter.New(limiter.Config{
+	v1.Post("/auth/login", newLimiter(limiter.Config{
 		Max: 10, Expiration: time.Minute,
 		KeyGenerator: func(c fiber.Ctx) string { return c.IP() },
 		LimitReached: func(c fiber.Ctx) error {
@@ -323,7 +344,7 @@ func (s *panel) routes(v1 fiber.Router) {
 		},
 	}), s.login)
 
-	oauthLimit := limiter.New(limiter.Config{
+	oauthLimit := newLimiter(limiter.Config{
 		Max: 30, Expiration: time.Minute,
 		KeyGenerator: func(c fiber.Ctx) string { return c.IP() },
 		LimitReached: func(c fiber.Ctx) error {
@@ -333,7 +354,7 @@ func (s *panel) routes(v1 fiber.Router) {
 	if s.deploy != nil {
 		// GitHub authenticates deliveries with an HMAC, not a session, so there
 		// is no CSRF token; the limit caps signature guessing.
-		hookLimit := limiter.New(limiter.Config{
+		hookLimit := newLimiter(limiter.Config{
 			Max: 120, Expiration: time.Minute,
 			KeyGenerator: func(c fiber.Ctx) string { return c.IP() },
 			LimitReached: func(c fiber.Ctx) error {
@@ -343,7 +364,7 @@ func (s *panel) routes(v1 fiber.Router) {
 		v1.Post("/webhooks/github", hookLimit, s.githubWebhook)
 	}
 	if s.mfa != nil {
-		v1.Post("/auth/mfa", limiter.New(limiter.Config{
+		v1.Post("/auth/mfa", newLimiter(limiter.Config{
 			Max: 10, Expiration: time.Minute,
 			KeyGenerator: func(c fiber.Ctx) string { return "mfa:" + c.IP() },
 			LimitReached: func(c fiber.Ctx) error {
@@ -352,7 +373,7 @@ func (s *panel) routes(v1 fiber.Router) {
 		}), s.completeMFA)
 	}
 	if s.settings != nil {
-		setupLimit := limiter.New(limiter.Config{
+		setupLimit := newLimiter(limiter.Config{
 			Max: 10, Expiration: time.Minute,
 			KeyGenerator: func(c fiber.Ctx) string { return "setup:" + c.IP() },
 			LimitReached: func(c fiber.Ctx) error {
@@ -364,7 +385,7 @@ func (s *panel) routes(v1 fiber.Router) {
 		v1.Post("/setup/complete", setupLimit, s.setupComplete)
 	}
 	if s.resets != nil {
-		resetLimit := limiter.New(limiter.Config{
+		resetLimit := newLimiter(limiter.Config{
 			Max: 10, Expiration: 10 * time.Minute,
 			KeyGenerator: func(c fiber.Ctx) string { return "reset:" + c.IP() },
 			LimitReached: func(c fiber.Ctx) error {
@@ -391,7 +412,7 @@ func (s *panel) routes(v1 fiber.Router) {
 	if s.analytics != nil {
 		// Bots authenticate with a bearer key, not a session, so there is no
 		// CSRF; the per-IP limit caps key guessing, the per-bot limit caps volume.
-		botLimit := limiter.New(limiter.Config{
+		botLimit := newLimiter(limiter.Config{
 			Max: 300, Expiration: time.Minute,
 			KeyGenerator: func(c fiber.Ctx) string { return c.IP() },
 			LimitReached: func(c fiber.Ctx) error {
@@ -418,7 +439,7 @@ func (s *panel) routes(v1 fiber.Router) {
 	if s.ai != nil {
 		s.aiRoutes(authed)
 	}
-	registryLimit := limiter.New(limiter.Config{
+	registryLimit := newLimiter(limiter.Config{
 		Max: 60, Expiration: time.Minute,
 		KeyGenerator: func(c fiber.Ctx) string { return "reg:" + currentUser(c).ID },
 		LimitReached: func(c fiber.Ctx) error {
@@ -428,7 +449,7 @@ func (s *panel) routes(v1 fiber.Router) {
 	authed.Get("/templates", s.listTemplates)
 	// Lookups of other people's repositories spend the panel's (or the
 	// person's) GitHub API budget.
-	ghLimit := limiter.New(limiter.Config{
+	ghLimit := newLimiter(limiter.Config{
 		Max: 30, Expiration: time.Minute,
 		KeyGenerator: func(c fiber.Ctx) string { return "gh:" + currentUser(c).ID },
 		LimitReached: func(c fiber.Ctx) error {
@@ -485,7 +506,7 @@ func (s *panel) routes(v1 fiber.Router) {
 	authed.Post("/me/connections/:provider/start", s.startConnection)
 	authed.Delete("/me/connections/:provider", s.deleteConnection)
 	authed.Post("/auth/logout", s.logout)
-	passwordLimit := limiter.New(limiter.Config{
+	passwordLimit := newLimiter(limiter.Config{
 		Max: 10, Expiration: time.Minute,
 		KeyGenerator: func(c fiber.Ctx) string { return "pw:" + currentUser(c).ID },
 		LimitReached: func(c fiber.Ctx) error {
@@ -536,6 +557,8 @@ func (s *panel) routes(v1 fiber.Router) {
 		authed.Post("/bots/:id/site", s.requirePerm(domain.PermSitesCreate), s.createBotSite)
 		authed.Get("/sites", s.listSites)
 		authed.Post("/sites", s.requirePerm(domain.PermSitesCreate), s.createSite)
+		authed.Get("/site-templates", s.listSiteTemplates)
+		authed.Get("/site-templates/:tid/preview", s.previewSiteTemplate)
 		authed.Get("/sites/:sid", s.getSite)
 		authed.Patch("/sites/:sid", s.patchSite)
 		authed.Delete("/sites/:sid", s.deleteSite)
@@ -615,6 +638,7 @@ func (s *panel) routes(v1 fiber.Router) {
 	if s.logs != nil {
 		authed.Get("/admin/logs", s.requirePerm(domain.PermSystemView), s.panelLogs)
 	}
+	s.logArchiveRoutes(authed)
 
 	s.gameRoutes(authed)
 	authed.Post("/bots/:id/command", s.requirePerm(domain.PermBotsPower), s.sendCommand)

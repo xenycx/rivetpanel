@@ -1,15 +1,11 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { api, ApiError, fmtBytes, fmtCpu } from '$lib/api/client';
-	import { can, Perm, type Bot } from '$lib/api/types';
+	import { api, ApiError } from '$lib/api/client';
+	import type { Bot } from '$lib/api/types';
 	import type { Blueprint, GameStatus } from '$lib/api/games';
-	import { joinAddress, resourceHref } from '$lib/api/games';
-	import { power } from '$lib/api/bots';
-	import { session } from '$lib/session.svelte';
-	import { isStopped } from '$lib/status';
-	import { toast } from '$lib/ui/toast.svelte';
+	import { session, can as canDo } from '$lib/session.svelte';
 	import { currentWorkspace, loadWorkspaces, workspaceName, workspaces } from '$lib/workspaces.svelte';
-	import StatusBadge from '$lib/components/ui/StatusBadge.svelte';
+	import ResourceTable from '$lib/components/ResourceTable.svelte';
 	import EmptyState from '$lib/components/ui/EmptyState.svelte';
 	import Icon from '$lib/components/ui/Icon.svelte';
 	import Notice from '$lib/components/ui/Notice.svelte';
@@ -21,7 +17,6 @@
 	let error = $state('');
 	let q = $state('');
 	let now = $state(Date.now());
-	let busy = $state<Record<string, boolean>>({});
 	const msg = (e: unknown) => (e instanceof ApiError ? e.message : 'Connection to the panel was lost. Retrying…');
 
 	async function load() {
@@ -73,31 +68,17 @@
 	const scope = $derived(currentWorkspace());
 	const multi = $derived(workspaces.list.length > 1 && workspaces.selected === 'all');
 
-	async function act(s: Bot, a: 'start' | 'stop') {
-		busy[s.id] = true;
-		if (await power(s, a)) await load();
-		busy[s.id] = false;
-	}
-	async function copy(text: string) {
-		try {
-			await navigator.clipboard.writeText(text);
-			toast('Address copied', 'success');
-		} catch {
-			toast(text, 'info');
-		}
-	}
+	const sorted = $derived([...shown].sort((a, b) => Number(b.favorite) - Number(a.favorite) || a.name.localeCompare(b.name)));
+	const creates = $derived(session.features.games && canDo('bots.create'));
 </script>
 
 <svelte:head><title>Game servers · RivetPanel</title></svelte:head>
 
-<section class="card card-glow grid gap-6 p-6 sm:p-8 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
-	<div>
-		<p class="eyebrow">Game servers{scope ? ` · ${scope.personal ? 'Personal workspace' : scope.name}` : ''}</p>
-		<h1 class="mt-2 text-[2rem] leading-tight font-semibold tracking-tight">Host a <span class="text-action">Minecraft</span> server.</h1>
-		<p class="mt-2 max-w-prose text-muted">Paper, Purpur, Vanilla, Fabric, Forge, NeoForge, Folia and Velocity. Pick a version, accept the EULA and start: RivetPanel downloads the server, chooses the right Java, and gives you a console, files, backups and schedules.</p>
-	</div>
-	{#if session.features.games}<a class="btn btn-primary" href="/servers/new"><Icon name="plus" />New server</a>{/if}
-</section>
+<header class="page-head">
+	<h1 class="font-semibold">Game servers</h1>
+	{#if servers}<p class="text-small text-muted">{scoped.filter((s) => s.phase === 'running').length} of {scoped.length} running{scope ? `, ${scope.personal ? 'personal workspace' : scope.name}` : ''}</p>{/if}
+	{#if creates}<a class="btn btn-primary ml-auto" href="/servers/new"><Icon name="plus" />New server</a>{/if}
+</header>
 
 {#if error}<Notice tone="fail" class="mt-4" live>{error}</Notice>{/if}
 
@@ -120,54 +101,21 @@
 	<section class="mt-4" aria-label="Game servers">
 		{#if servers === null}
 			<Skeleton rows={3} label="Loading servers" />
-		{:else if scoped.length === 0}
-			<EmptyState title={servers.length ? 'No servers in this workspace' : 'Create your first game server'}>
-				<p>Choose a server type such as Paper (plugins) or Fabric (mods), pick the Minecraft version, and start it. The first start downloads the server software.</p>
-				{#snippet actions()}<a class="btn btn-primary" href="/servers/new"><Icon name="plus" />New server</a>{/snippet}
-			</EmptyState>
 		{:else}
-			<ul class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-				{#each shown as s (s.id)}
-					{@const bp = blueprints[s.blueprint_id ?? '']}
-					{@const st = status[s.id]}
-					{@const addr = joinAddress(s)}
-					<li class="card flex flex-col p-5">
-						<div class="flex items-start justify-between gap-2">
-							{#if s.logo_url}
-								<img src={s.logo_url} alt="" class="size-10 shrink-0 rounded-tile object-cover" />
-							{:else}
-								<span class="grid size-10 shrink-0 place-items-center rounded-tile bg-paper-2 text-action" aria-hidden="true"><Icon name="cube" /></span>
-							{/if}
-							<StatusBadge bot={s} {now} size="sm" />
-						</div>
-						<a href={resourceHref(s)} class="mt-4 truncate text-title font-semibold hover:underline">{s.name}</a>
-						<p class="truncate text-small text-muted">{bp ? `${bp.name} · ${bp.category}` : 'Game server'}</p>
-						{#if addr}
-							<button class="mt-2 flex min-w-0 items-center gap-1.5 text-left font-mono text-small text-action hover:underline" onclick={() => copy(addr)} title="Copy the address players connect to">
-								<span class="truncate">{addr}</span><Icon name="copy" size={12} />
-							</button>
-						{/if}
-						<dl class="mt-4 grid grid-cols-3 gap-2 border-t border-rule-soft pt-4">
-							<div><dt class="eyebrow">Players</dt><dd class="mt-0.5 font-mono text-small font-medium">{st?.online ? `${st.players}/${st.max_players}` : '—'}</dd></div>
-							<div><dt class="eyebrow">Memory</dt><dd class="mt-0.5 font-mono text-small font-medium">{fmtBytes(s.memory_bytes)}</dd></div>
-							<div><dt class="eyebrow">CPU</dt><dd class="mt-0.5 font-mono text-small font-medium">{fmtCpu(s.nano_cpus)}</dd></div>
-						</dl>
-						{#if st?.version || multi}
-							<p class="mt-3 truncate text-small text-muted">{st?.version ?? ''}{st?.version && multi && workspaceName(s.workspace_id) ? ' · ' : ''}{multi ? workspaceName(s.workspace_id) : ''}</p>
-						{/if}
-						<div class="mt-auto flex gap-2 pt-4">
-							<a href={resourceHref(s)} class="btn btn-primary flex-1">Manage</a>
-							{#if can(s, Perm.power) && session.features.runner}
-								{#if isStopped(s)}
-									<button class="btn btn-icon" aria-label="Start {s.name}" title="Start" disabled={busy[s.id]} onclick={() => act(s, 'start')}><Icon name="play" size={14} /></button>
-								{:else}
-									<button class="btn btn-icon" aria-label="Stop {s.name}" title="Stop" disabled={busy[s.id] || s.desired_state === 'stopped'} onclick={() => act(s, 'stop')}><Icon name="stop" size={14} /></button>
-								{/if}
-							{/if}
-						</div>
-					</li>
-				{/each}
-			</ul>
+			<ResourceTable kind="game" label="Game servers" items={sorted} {now} {blueprints} players={status} note={(s) => (s.shared ? 'shared with you' : multi ? workspaceName(s.workspace_id) : '')} onChanged={load}>
+				{#snippet empty()}
+					{#if q.trim() && scoped.length}
+						<span>No servers match “{q.trim()}”.</span><button class="link" onclick={() => (q = '')}>Clear search</button>
+					{:else if servers?.length}
+						<span>No servers in this workspace.</span>
+					{:else if creates}
+						<span>No game servers yet. Pick a game such as Minecraft Paper (plugins), Fabric (mods) or Valheim, choose the version and start it.</span>
+						<a class="link" href="/servers/new?family=minecraft">Minecraft server</a><a class="link" href="/servers/new?family=steam">Steam game server</a>
+					{:else}
+						<span>No game servers yet. Servers shared with you, or in workspaces you belong to, appear here.</span>
+					{/if}
+				{/snippet}
+			</ResourceTable>
 		{/if}
 	</section>
 {/if}

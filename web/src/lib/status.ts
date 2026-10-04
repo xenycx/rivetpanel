@@ -27,6 +27,7 @@ const reasonText: Record<string, string> = {
 
 /** The reason sentence, naming a game server "the server" instead of "the bot". */
 function reasonFor(b: Bot, reason: string): string | undefined {
+	if (b.kind === 'game' && reason === 'build_failed') return 'The installation failed.';
 	const t = reasonText[reason];
 	return t && b.kind === 'game' ? t.replace(/^The bot\b/, 'The server') : t;
 }
@@ -79,6 +80,8 @@ export function describe(b: Bot, now = Date.now()): Described {
 			};
 		}
 		case 'failed':
+			if (reason === 'port_conflict')
+				return { label: 'Port in use', tone: 'fail', busy: false, detail: b.last_error ?? 'A published port is already in use on this host.', next: 'retry' };
 			return {
 				label: 'Failed',
 				tone: 'fail',
@@ -91,9 +94,9 @@ export function describe(b: Bot, now = Date.now()): Described {
 		case 'checking':
 			return { label: 'Checking host', tone: 'warn', busy: true, detail: 'Confirming the container state with Docker.' };
 		case 'runner_offline':
-			return { label: 'Runner offline', tone: 'fail', busy: false, detail: 'Docker is not reachable. The bot starts as soon as the runner is back.' };
+			return { label: 'Runner offline', tone: 'fail', busy: false, detail: `Docker is not reachable. The ${b.kind === 'game' ? 'server' : 'bot'} starts as soon as the runner is back.` };
 		case 'no_runner':
-			return { label: 'No runner', tone: 'fail', busy: false, detail: 'This panel runs without Docker, so bots cannot be started here.' };
+			return { label: 'No runner', tone: 'fail', busy: false, detail: `This panel runs without Docker, so ${b.kind === 'game' ? 'servers' : 'bots'} cannot be started here.` };
 		case 'deleting':
 			return { label: 'Deleting', tone: 'warn', busy: true, detail: '' };
 		case 'stopped':

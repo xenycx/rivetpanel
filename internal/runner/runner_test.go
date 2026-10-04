@@ -1229,3 +1229,152 @@ func TestBuildWaitsForAFreeSlot(t *testing.T) {
 		t.Fatal("build slot not released")
 	}
 }
+
+// restart_count is "crashes in a row". It must clear once the server has run
+// for StableAfter, start over on an explicit restart, and never include setup
+// (image, install, create, start) retries.
+func TestCrashStreakClearsAfterStableRunAndExcludesSetupRetries(t *testing.T) {
+	g := newRig(t)
+	g.desire("running", false)
+	g.pass()
+	for i := 0; i < 2; i++ {
+		g.fd.crash(*g.bot().ContainerID, 1, false)
+		g.pass()
+		g.advance(10 * time.Second)
+		g.pass()
+	}
+	b := g.wantState("running")
+	if b.RestartCount != 2 {
+		t.Fatalf("restart_count after two crashes = %d, want 2", b.RestartCount)
+	}
+	// Still within StableAfter: the streak is kept, and the runner asks to look again.
+	if d := g.pass(); d <= 0 || d > time.Minute {
+		t.Fatalf("expected a re-check before the run is stable, got %v", d)
+	}
+	if b = g.bot(); b.RestartCount != 2 {
+		t.Fatalf("restart_count cleared too early: %d", b.RestartCount)
+	}
+	g.advance(time.Minute)
+	if d := g.pass(); d != 0 {
+		t.Fatalf("stable run should not be re-checked, got %v", d)
+	}
+	if b = g.wantState("running"); b.RestartCount != 0 {
+		t.Fatalf("restart_count after a stable run = %d, want 0", b.RestartCount)
+	}
+
+	// A crash, then a setup failure while restarting: only the crash counts.
+	g.fd.crash(*b.ContainerID, 1, false)
+	g.pass()
+	g.fd.startErr = errors.New("oci runtime error")
+	g.advance(10 * time.Second)
+	g.pass()
+	g.advance(10 * time.Second)
+	g.pass()
+	g.fd.startErr = nil
+	g.advance(10 * time.Second)
+	g.pass()
+	if b = g.wantState("running"); b.RestartCount != 1 {
+		t.Fatalf("restart_count with setup retries = %d, want 1", b.RestartCount)
+	}
+	g.fd.crash(*b.ContainerID, 1, false)
+	g.pass()
+	if b = g.bot(); b.RestartCount != 2 {
+		t.Fatalf("second crash counted as %d, want 2 (setup retries must not count)", b.RestartCount)
+	}
+
+	// An explicit restart starts a fresh streak as soon as the new run is up.
+	g.desire("running", true)
+	g.pass()
+	if b = g.wantState("running"); b.RestartCount != 0 {
+		t.Fatalf("restart_count after an explicit restart = %d, want 0", b.RestartCount)
+	}
+}
+
+// A host port that another container (another panel, any tool) publishes is
+// a configuration problem: the start is refused (the holder's name stays out
+// of the tenant-visible error; it can be another tenant's container), it is
+// not retried or counted as a crash, and Start again tries once more.
+func TestPortConflictIsNotRetriedOrCountedAsCrash(t *testing.T) {
+	g := newRig(t, func(o *Options) { o.Network = "bridge" })
+	ctx := context.Background()
+	g.db.ReplaceBotPorts(ctx, botID, []domain.BotPort{{ContainerPort: 8080, HostPort: 20080, Protocol: "tcp", HostIP: "127.0.0.1", CreatedAtMS: 1}})
+	g.fd.published = []PublishedPort{{HostIP: "0.0.0.0", HostPort: 20080, Proto: "tcp", ContainerID: "abc", Container: "other-panel-runtime"}}
+	g.desire("running", false)
+	if d := g.pass(); d != 0 {
+		t.Fatalf("a port conflict must not schedule a retry, got %v", d)
+	}
+	b := g.wantState("failed")
+	if deref(b.StateReason) != domain.ReasonPortConflict || !strings.Contains(deref(b.LastError), "Port 20080 is already used by another container") ||
+		strings.Contains(deref(b.LastError), "other-panel-runtime") ||
+		b.RestartCount != 0 || b.NextRetryAtMS != nil || g.fd.starts != 0 {
+		t.Fatalf("reason=%q err=%q count=%d retry=%v starts=%d", deref(b.StateReason), deref(b.LastError), b.RestartCount, b.NextRetryAtMS, g.fd.starts)
+	}
+	// Resyncs and events do nothing until the user acts.
+	for i := 0; i < 3; i++ {
+		g.advance(time.Minute)
+		if d := g.pass(); d != 0 || g.fd.starts != 0 {
+			t.Fatalf("retried on its own: d=%v starts=%d", d, g.fd.starts)
+		}
+	}
+	// The other container goes away; Start again starts it.
+	g.fd.published = nil
+	g.desire("running", true)
+	g.pass()
+	if b = g.wantState("running"); b.RestartCount != 0 || b.StateReason != nil {
+		t.Fatalf("after Start again: count=%d reason=%q", b.RestartCount, deref(b.StateReason))
+	}
+	// Its own published port never counts as a conflict.
+	if msg, _ := g.r.portConflict(ctx, g.bot()); msg != "" {
+		t.Fatalf("own port reported as conflict: %s", msg)
+	}
+}
+
+// Docker's own "port is already allocated" start error (a port the listing
+// could not see) is classified the same way.
+func TestPortInUseStartErrorIsAConfigurationProblem(t *testing.T) {
+	g := newRig(t, func(o *Options) { o.Network = "bridge" })
+	g.db.ReplaceBotPorts(context.Background(), botID, []domain.BotPort{{ContainerPort: 8080, HostPort: 20081, Protocol: "tcp", HostIP: "127.0.0.1", CreatedAtMS: 1}})
+	g.fd.startErr = errors.New("Error response from daemon: driver failed programming external connectivity on endpoint x: Bind for 127.0.0.1:20081 failed: port is already allocated")
+	g.desire("running", false)
+	if d := g.pass(); d != 0 {
+		t.Fatalf("retry scheduled: %v", d)
+	}
+	b := g.wantState("failed")
+	if deref(b.StateReason) != domain.ReasonPortConflict || !strings.Contains(deref(b.LastError), "Port 20081 is already in use on this host") || b.RestartCount != 0 {
+		t.Fatalf("reason=%q err=%q count=%d", deref(b.StateReason), deref(b.LastError), b.RestartCount)
+	}
+	g.advance(time.Hour)
+	g.pass()
+	if g.wantState("failed"); len(g.fd.created) != 1 {
+		t.Fatalf("recreated on its own: %d", len(g.fd.created))
+	}
+}
+
+func TestIsPortInUse(t *testing.T) {
+	for msg, want := range map[string]int{
+		"Bind for 0.0.0.0:25565 failed: port is already allocated":                           25565,
+		"listen tcp4 0.0.0.0:25577: bind: address already in use":                            25577,
+		"Error starting userland proxy: listen udp [::]:19132: bind: address already in use": 19132,
+		"port is already allocated":                                                          0,
+	} {
+		if p, ok := IsPortInUse(errors.New(msg)); !ok || p != want {
+			t.Errorf("%q: %d %v, want %d", msg, p, ok, want)
+		}
+	}
+	if _, ok := IsPortInUse(errors.New("oci runtime error")); ok {
+		t.Error("unrelated error classified as a port conflict")
+	}
+	pubs := []PublishedPort{{HostIP: "127.0.0.1", HostPort: 1, Proto: "tcp", Container: "a"}, {HostIP: "", HostPort: 2, Proto: "udp", Container: "b", BotID: "me"}}
+	if _, busy := PortHolder(pubs, "0.0.0.0", 1, "", ""); !busy {
+		t.Error("wildcard request must overlap a specific address")
+	}
+	if _, busy := PortHolder(pubs, "10.0.0.1", 1, "", ""); busy {
+		t.Error("different specific addresses do not overlap")
+	}
+	if _, busy := PortHolder(pubs, "0.0.0.0", 1, "udp", ""); busy {
+		t.Error("tcp and udp do not overlap")
+	}
+	if _, busy := PortHolder(pubs, "0.0.0.0", 2, "", "me"); busy {
+		t.Error("the bot's own container must be ignored")
+	}
+}

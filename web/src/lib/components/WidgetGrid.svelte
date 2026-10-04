@@ -39,7 +39,7 @@
 						<p class="mt-2 flex items-center gap-2"><span class="size-2.5 rounded-pill" class:bg-ok={tone(w.data.state)==='good'} class:bg-warn={tone(w.data.state)==='warn'} class:bg-fail={tone(w.data.state)==='bad'} class:bg-muted={tone(w.data.state)==='neutral'}></span><span class="text-title font-medium">{text(w.data.text) || 'Unknown'}</span></p>
 					{:else if w.kind === 'progress' || w.kind === 'gauge'}
 						{@const value=number(w.data.value)}{@const max=Math.max(1,number(w.data.max,100))}
-						<div class="mt-3 h-2.5 overflow-hidden rounded-pill bg-paper-2"><div class="h-full bg-action" style={`width:${Math.max(0,Math.min(100,value/max*100))}%`}></div></div><p class="mt-2 text-small tabular-nums text-muted">{text(w.data.label)} {value.toLocaleString()} / {max.toLocaleString()} {text(w.data.unit)}</p>
+						<div class="mt-3 h-2.5 overflow-hidden rounded-pill bg-paper-2"><div class="h-full bg-data" style={`width:${Math.max(0,Math.min(100,value/max*100))}%`}></div></div><p class="mt-2 text-small tabular-nums text-muted">{text(w.data.label)} {value.toLocaleString()} / {max.toLocaleString()} {text(w.data.unit)}</p>
 					{:else if w.kind === 'text'}
 						<div class="mt-2 whitespace-pre-wrap break-words leading-relaxed">{text(w.data.text)}</div>
 					{:else if w.kind === 'markdown'}
@@ -52,9 +52,9 @@
 						{#if safeURL(w.data.url)}<img class="mt-3 max-h-80 w-full object-contain" src={safeURL(w.data.url)} alt={text(w.data.alt) || w.title} loading="lazy" referrerpolicy="no-referrer" />{:else}<p class="mt-2 text-small text-fail">The bot supplied an invalid image URL.</p>{/if}
 					{:else if w.kind === 'chart'}
 						{@const ps=rows(w.data.points).slice(-40)}{@const peak=Math.max(1,...ps.map((p:any)=>number(p?.value)))}
-						<div class="mt-3 flex h-32 items-end gap-1" aria-label={w.title}>{#each ps as p:any}<div class="min-w-1 flex-1 bg-action/70" style={`height:${Math.max(2,number(p?.value)/peak*100)}%`} title={`${text(p?.label)}: ${number(p?.value)} ${text(w.data.unit)}`}></div>{/each}</div>
+						<div class="mt-3 flex h-32 items-end gap-1" aria-label={w.title}>{#each ps as p:any}<div class="min-w-1 flex-1 bg-data/70" style={`height:${Math.max(2,number(p?.value)/peak*100)}%`} title={`${text(p?.label)}: ${number(p?.value)} ${text(w.data.unit)}`}></div>{/each}</div>
 					{:else if w.kind === 'line' || w.kind === 'area' || w.kind === 'sparkline'}
-						<svg class="mt-3 h-36 w-full overflow-visible text-action" viewBox="0 0 100 38" preserveAspectRatio="none" role="img" aria-label={w.title}><polyline points={points(w.data.points)} fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke" /></svg>
+						<svg class="mt-3 h-36 w-full overflow-visible text-data" viewBox="0 0 100 38" preserveAspectRatio="none" role="img" aria-label={w.title}><polyline points={points(w.data.points)} fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke" /></svg>
 					{:else if w.kind === 'donut'}
 						{@const parts=rows(w.data.values)}{@const total=Math.max(1,parts.reduce((n:number,p:any)=>n+number(p?.value),0))}<div class="mt-3 flex flex-wrap items-center gap-4"><div class="grid size-28 place-items-center rounded-pill border-[18px] border-action/70"><strong>{total.toLocaleString()}</strong></div><ul class="text-small">{#each parts.slice(0,8) as p:any}<li>{text(p?.label)} <strong>{number(p?.value).toLocaleString()}</strong></li>{/each}</ul></div>
 					{:else if w.kind === 'kv'}

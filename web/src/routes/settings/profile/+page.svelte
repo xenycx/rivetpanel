@@ -141,7 +141,7 @@
 {#if session.features.mail}
 	<SettingsSection title="Email" description="Bot alerts can also reach you by email at the address you sign in with.">
 		<div class="card grid gap-5 p-5">
-			<Switch bind:checked={alertsOn} disabled={alertsBusy} label="Email me bot alerts" onchange={() => savePref('alerts')}>Crashes, failed deployments and backups, and bots that stop reporting, for bots whose alerts are on.</Switch>
+			<Switch bind:checked={alertsOn} disabled={alertsBusy} label="Email me bot and server alerts" onchange={() => savePref('alerts')}>Crashes, failed deployments and backups, and bots that stop reporting, for the bots and servers whose notifications are on (Settings → Notifications on each).</Switch>
 			<Switch bind:checked={newsOn} disabled={alertsBusy} label="Email me news and announcements" onchange={() => savePref('news')}>Optional news from the administrators. Notices about policy, service and security, and security emails about your account, are always sent.</Switch>
 		</div>
 	</SettingsSection>

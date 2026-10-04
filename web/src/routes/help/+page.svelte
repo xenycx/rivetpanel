@@ -58,8 +58,8 @@
 
 <PublicShell>
 	<header class="flex flex-wrap items-end gap-3 border-b border-rule-soft pb-5">
-		<div class="min-w-0 flex-1">
-			<h1 class="text-page">Help center<span class="text-action">.</span></h1>
+		<div class="min-w-0 flex-1 basis-64">
+			<h1 class="text-page font-semibold">Help center</h1>
 			<p class="mt-0.5 text-muted">Answers written by the people who run this panel.</p>
 		</div>
 		{#if index?.manage}<a class="btn" href="/admin/kb"><Icon name="pencil" />Manage articles</a>{/if}
@@ -80,30 +80,36 @@
 		{#if results}
 			<section class="mt-6" aria-live="polite">
 				<h2 class="text-title font-semibold">{results.length ? `${results.length} result${results.length === 1 ? '' : 's'}` : 'No articles match'}</h2>
-				<ul class="mt-3 grid gap-2">
-					{#each results as a (a.id)}
-						<li class="card p-4"><a class="font-medium link" href="/help/{a.slug}">{a.title}</a>{#if a.excerpt}<p class="mt-1 text-small text-muted">{a.excerpt}</p>{/if}</li>
-					{/each}
-				</ul>
+				{#if results.length}
+					<ul class="list-card mt-3">
+						{#each results as a (a.id)}
+							<li class="px-4 py-3"><a class="font-medium hover:underline" href="/help/{a.slug}">{a.title}</a>{#if a.excerpt}<p class="mt-0.5 text-small text-muted">{a.excerpt}</p>{/if}</li>
+						{/each}
+					</ul>
+				{:else}
+					<p class="mt-1 text-small text-muted">Try fewer or different words{session.user ? ', or open a support ticket' : ''}.</p>
+				{/if}
 			</section>
 		{:else if !groups.length}
 			<div class="mt-6"><EmptyState title="No articles yet">{#if index.manage}Write the first one under Administration → Knowledgebase.{:else}Nothing has been published here yet.{/if}</EmptyState></div>
 		{:else}
 			<div class="mt-6 grid gap-5 md:grid-cols-2">
 				{#each groups as g (g.category.id)}
-					<section class="card p-5">
-						<h2 class="text-title font-semibold">{g.category.name}</h2>
-						{#if g.category.description}<p class="mt-0.5 text-small text-muted">{g.category.description}</p>{/if}
-						<ul class="mt-3 grid gap-1.5">
+					<section class="list-card">
+						<div class="px-4 py-3">
+							<h2 class="text-title font-semibold">{g.category.name}</h2>
+							{#if g.category.description}<p class="mt-0.5 text-small text-muted">{g.category.description}</p>{/if}
+						</div>
+						<ul class="grid gap-3 px-4 py-3">
 							{#each g.articles as a (a.id)}
 								<li>
-									<a class="link font-medium" href="/help/{a.slug}">{a.title}</a>
+									<a class="font-medium hover:underline" href="/help/{a.slug}">{a.title}</a>
 									{#if a.visibility !== 'public' && session.user}<span class="ml-1 text-[12px] text-muted">· {visibilityLabel[a.visibility]}</span>{/if}
 									{#if a.summary}<p class="text-small text-muted">{a.summary}</p>{/if}
 								</li>
 							{/each}
 						</ul>
-						<p class="mt-3 text-[12px] text-muted">Updated {fmtWhen(Math.max(...g.articles.map((a) => a.updated_at_ms)))}</p>
+						<p class="px-4 py-2 text-[12px] text-muted">Updated {fmtWhen(Math.max(...g.articles.map((a) => a.updated_at_ms)))}</p>
 					</section>
 				{/each}
 			</div>

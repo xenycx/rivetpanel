@@ -1,6 +1,7 @@
 package runner
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -88,5 +89,44 @@ ports: {extra: 2}
 	}
 	if _, ok := ie["OTHER"]; ok {
 		t.Fatal("undeclared variable passed to the install script")
+	}
+}
+
+func TestGameEnvJVMArgs(t *testing.T) {
+	spec, err := blueprint.Parse([]byte(`slug: java-test
+name: Java test
+category: Tests
+runtime: java
+images: [{label: "Java 21", ref: "eclipse-temurin:21-jre-alpine", java: 21}]
+startup: {command: "java -Xmx{{SERVER_MEMORY}}M {{SERVER_JVM_ARGS}} -jar server.jar", jvm_args: true}
+install: {script: "echo hi"}
+resources: {memory_mb: 1024, cpus: 1}
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	bot := domain.Bot{ID: "b1", MemoryBytes: 1 << 30, JVMArgs: "-XX:+UseG1GC  -Da=b"}
+	if env := gameEnv(spec, bot); env["SERVER_JVM_ARGS"] != "-XX:+UseG1GC -Da=b" {
+		t.Fatalf("jvm args: %q", env["SERVER_JVM_ARGS"])
+	}
+	// A value that fails validation (written around the service) is dropped.
+	bot.JVMArgs = "-Da=$(id)"
+	if env := gameEnv(spec, bot); env["SERVER_JVM_ARGS"] != "" {
+		t.Fatalf("unsafe value passed: %q", env["SERVER_JVM_ARGS"])
+	}
+	// The panel's value wins over a variable of the same name in the server's
+	// own environment.
+	bot.JVMArgs = ""
+	vars := gameVars(spec, bot, map[string]string{"SERVER_JVM_ARGS": "-Da=$(id)"})
+	if vars["SERVER_JVM_ARGS"] != "" {
+		t.Fatalf("own variable leaked: %q", vars["SERVER_JVM_ARGS"])
+	}
+	if l := envList(map[string]string{"SERVER_JVM_ARGS": "-Da=$(id)"}, gameEnv(spec, bot)); !slices.Contains(l, "SERVER_JVM_ARGS=") {
+		t.Fatalf("container env %v", l)
+	}
+	// Types without the setting do not get the variable.
+	spec.Startup.JVMArgs = false
+	if _, ok := gameEnv(spec, bot)["SERVER_JVM_ARGS"]; ok {
+		t.Fatal("variable set for a type without JVM arguments")
 	}
 }

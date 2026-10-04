@@ -58,10 +58,10 @@ func TestContainerPolicyValidation(t *testing.T) {
 		}
 	}
 	c, err := Load(env(map[string]string{"RIVET_CONTAINER_USER": "0:0", "RIVET_ALLOW_ROOT_CONTAINER_USER": "1", "RIVET_WORKSPACE_OWNER": "1000:1000"}))
-	if err != nil || !c.AllowRootUser || c.WorkspaceOwner != "1000:1000" {
+	if err != nil || !c.AllowRootUser || c.WorkspaceOwner != "1000:1000" || !c.ContainerUserSet || !c.WorkspaceOwnerSet {
 		t.Fatal(err, c)
 	}
-	if c, _ := Load(env(nil)); c.ContainerUser != "65532:65532" || c.ContainerNetwork != "bridge" || c.DockerHost != "unix:///var/run/docker.sock" {
+	if c, _ := Load(env(nil)); c.ContainerUser != "65532:65532" || c.ContainerUserSet || c.WorkspaceOwnerSet || c.ContainerNetwork != "bridge" || c.DockerHost != "unix:///var/run/docker.sock" {
 		t.Fatalf("defaults: %+v", c)
 	}
 }

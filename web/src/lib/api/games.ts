@@ -50,7 +50,37 @@ export type GameDetail = {
 	variables: GameVariable[];
 	update_available: boolean;
 	startup: string;
+	jvm: GameJVM;
 };
+export type JVMPreset = { id: string; name: string; args: string; min_java?: number; note?: string };
+/** Extra JVM options of a Java server (SERVER_JVM_ARGS). */
+export type GameJVM = {
+	supported: boolean;
+	args: string;
+	default: string;
+	/** Java major version of the server's image; 0 = decided at installation. */
+	java: number;
+	heap_mib: number;
+	pending_restart: boolean;
+	saved_generation: number;
+	set: boolean;
+	max_length: number;
+	presets: JVMPreset[];
+};
+
+/** Quick client-side hints; the server validates every option strictly. */
+export function checkJVMArgs(s: string, max: number): string {
+	if (s.length > max) return `At most ${max} characters.`;
+	for (const t of s.split(/\s+/).filter(Boolean)) {
+		const bad = t.match(/[^A-Za-z0-9._:+=,/@%-]/);
+		if (bad) return `${t} contains “${bad[0]}”. Only letters, digits and . _ : + = , / @ % - are allowed.`;
+		if (!t.startsWith('-')) return `${t} is not a JVM option (options start with -).`;
+		if (/^-Xm[xs]/.test(t)) return `${t}: the heap size is set by the panel from the memory limit. Change the memory instead.`;
+		if (['-jar', '-cp', '-classpath', '--class-path', '-m', '--module', '-p', '--module-path'].includes(t))
+			return `${t}: the server jar and class path are set by the server type.`;
+	}
+	return '';
+}
 export type GameStatus = {
 	online: boolean;
 	players: number;
@@ -71,13 +101,6 @@ export function resourceHref(b: Pick<Bot, 'id' | 'kind'>, tab?: string): string 
 	return tab ? `${base}?tab=${tab}` : base;
 }
 
-/** The address players type: the primary allocation's alias or IP and port. */
-export function joinAddress(b: Bot): string {
-	const a = b.allocations?.find((x) => x.primary);
-	if (!a) return '';
-	const host = a.alias || (a.ip === '0.0.0.0' || a.ip === '::' ? location.hostname : a.ip);
-	return a.port === 25565 ? host : `${host}:${a.port}`;
-}
 
 /** A short client-side check mirroring the blueprint rules (the server re-checks). */
 export function checkVariable(v: BlueprintVariable, value: string): string {

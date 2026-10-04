@@ -15,7 +15,29 @@ twelve accent colours and four corner styles (Square, Subtle, Default,
 Rounded); Square removes rounding everywhere, including badges and avatars.
 These are per-browser preferences.
 
-- **Fleet** (`/`): search, filters for state, runtime and owner, tags and
+- **New menu** (top bar, and the primary action of the overview header): everything the account's role and the panel's
+  enabled modules allow it to create, grouped: a Discord bot (GitHub,
+  template, ZIP upload, empty), a game server (Minecraft, Steam, every type),
+  a site, a workspace, a support ticket, API clients and keys, and for
+  administrators an invitation, a node, a server type (egg import), a help
+  article, a status incident and an announcement. The same entries appear as
+  "New …" actions in Go to (Ctrl+K), plus "Site from a template" and one
+  "New site from …" action per site template. The sidebar lists Overview, Game
+  servers, Bots, Sites, Templates, Activity and Support, then Settings and
+  Administration at the bottom; one **Help & resources** menu holds the
+  documentation, the help center, the public status page (when one is
+  published), the Automation API, Diagnostics (with `system.view`), this
+  product overview and the keyboard shortcuts. Notifications open from the
+  bell in the top bar.
+- **Overview** (`/dashboard`): a page header with one **New** action, four
+  capacity numbers with precise bars (administrators: host memory, CPU and
+  disk; everyone else: memory and CPU reserved and bots and servers against
+  the account limits; plus running out of total), then a table of game
+  servers (state, address, players, memory) and a table of Discord bots
+  (state, memory and CPU, restarts), the six most relevant of each, with
+  start/stop and an actions menu per row. Empty tables show a single quiet
+  row with a link to create one.
+- **Bots** (`/bots`): every Discord bot as a table with search, filters for state, runtime and owner, tags and
   favourites (all kept in the URL), a summary of running / needs attention /
   in progress / stopped bots, batch Start, Stop or Restart of up to 50 bots
   with a review step and a result per bot, and a Ctrl+K "Go to" palette that
@@ -25,15 +47,22 @@ These are per-browser preferences.
 - **New bot** (`/bots/new`): template, GitHub repository or empty bot; required
   values such as the token up front; review of memory, CPU and build memory;
   administrators can place an empty bot on an enabled, non-draining node.
-- **Bot page**: an identity card with shortcuts to the public page studio and
-  resource settings, one row of tabs (Manage, Overview, Files, Deploy, Startup,
-  Packages, Env, Network, Page, Health, Backups, Schedules, Access, Settings),
-  and a status strip with the exact lifecycle state, live CPU, memory, disk and
-  network readings, and Start, Restart, Stop and Kill. **Manage** is the
-  default: a terminal window with the live console and a line that goes to the
-  bot's standard input. A failed bot offers **Ask AI why**. Unsaved edits are
-  protected when navigating away; older `?tab=console`, `?tab=ai` and
-  `?tab=analytics` links still work.
+- **Bot and server page**: a header with the name, the exact lifecycle state
+  and Start, Restart, Stop and Kill; one compact line for a waiting, failing or
+  in-progress state; live CPU, memory, disk and network (plus a game server's
+  address and players) in one strip; and one row of tabs (Manage, Files,
+  Deploy, Startup, Packages, Env, Databases, Network, Page, Health, Backups,
+  Schedules, Access, Settings; game servers add Players, Properties and
+  Plugins or Mods and have no Deploy, Packages, Env, Page or Health tab). Tabs that do not fit the width move into a **More** menu,
+  and the open tab always stays visible. Memory and CPU are changed under
+  **Settings**. **Manage** is the default and holds what used to be Overview:
+  on wide screens a wide column with the console (with a line that goes to
+  standard input), the status, the first-run setup checklist (bots), recent
+  activity and the log history, and a narrow column with the source (for a
+  game server its type and installed version), backups and details. Phones
+  show one column, console first. A failed bot offers **Ask AI why**. Unsaved
+  edits are protected when navigating away; older `?tab=overview`,
+  `?tab=console`, `?tab=ai` and `?tab=analytics` links still work.
 - **Activity** (`/activity`): work (builds, deployments, backups, restores) and
   changes (who changed what; names only, never values).
 - **Workspace switcher** (sidebar): scopes the overview, Sites and new bots to
@@ -54,7 +83,12 @@ These are per-browser preferences.
 
 ## Game servers (preview)
 
-Game servers → New server creates Minecraft Java servers (Paper, Purpur,
+Game servers → New server (also New → Game server in the top bar) is a
+four-step guided flow: pick the game from searchable, grouped cards with game
+icons; choose the version (latest stable by default, pre-releases on request)
+and the game's own settings; set the name, memory (with presets and the
+type's suggestion), CPU, workspace and node; then review, accept the licence
+terms the game requires and create. It creates Minecraft Java servers (Paper, Purpur,
 Vanilla, Fabric, Forge, NeoForge, Folia, Velocity) and Steam dedicated servers
 (Valheim, Rust, Project Zomboid). Steam games are downloaded and updated with
 an anonymous SteamCMD login in a separate install container on the first
@@ -90,7 +124,7 @@ and a failed creation is removed again through the agent. Modrinth plugins and
 mods for a remote game server are verified completely at the panel (CDN
 allowlist, 256 MiB limit, SHA-512) in a temporary file and only then streamed
 to the node. SFTP works for remote servers through the agent (the panel's disk
-is never used for them), and the Add-ons tab shows remote add-on states and
+is never used for them), and the Databases tab shows remote database states and
 logs (agent protocol 6). The AI assistant's isolated diagnostics run on the
 server's node with the same sandbox; add-ons chosen at creation are checked
 for the node and their data is managed there; agents report CPU, memory and
@@ -210,6 +244,11 @@ draft. Unlike bot files, a save never changes production: **Publish draft**
 creates and activates an immutable site release. Generated pages instead use
 structured Page Studio settings plus bounded custom HTML and CSS.
 
+New standalone sites can start from a **site template** (landing page, docs
+and blog, portfolio, coming soon, game server community with live status from
+the public status page) instead of an empty folder; the template becomes the
+first release and is edited like any other site (`sites.md`).
+
 ## Package manager
 
 Reads and edits `package.json`, `requirements.txt` (or `pyproject.toml`
@@ -221,7 +260,23 @@ manifests are not edited by the panel.
 
 ## Templates
 
-Seven starters are embedded in the binary and copied into a new bot:
+**Templates** in the sidebar (`/templates`) gathers every starting point in
+three tabs, each shown only when its module is on, with one search box that
+also points to matches in the other tabs:
+
+- **Bot templates**: the starters below, with **Create bot** (`bots.create`).
+- **Game servers**: every server type the account may create (built-in
+  Minecraft and Steam types and Pterodactyl eggs imported by administrators,
+  marked "Imported"), with game icons, a short description and **Create
+  server**, which opens the new-server wizard on that type. Administrators
+  (`blueprints.manage`) also get **Import egg** and a link to Server types.
+- **Sites**: the five site templates with a scaled, sandboxed preview (no
+  scripts; a larger preview switches between a template's pages), tags and
+  **Create site** (`sites.create`), which asks for the name, address and
+  workspace like Sites → New site and publishes the template as the first
+  release.
+
+Seven bot starters are embedded in the binary and copied into a new bot:
 
 | Template | Runtime | Notes |
 | --- | --- | --- |
@@ -315,11 +370,11 @@ suggested build command before creating the bot**: it runs in the build
 container. Limits: archives up to 512 MiB compressed are read; at most 4,000
 paths and 48 MiB of source are inspected; 60 variables are listed.
 
-## Add-ons (databases)
+## Databases (add-ons)
 
 A bot can run up to four companion databases next to it: **PostgreSQL 17**,
 **Redis 7**, **MongoDB 7** and **MariaDB 11**. Add them while creating a bot
-(*Start, build and databases*) or on the bot's **Add-ons** tab (bot stopped).
+(*Start, build and databases*) or on the bot's **Databases** tab (bot stopped).
 
 * Each add-on is its own container with a memory limit (default 128–512 MiB),
   CPU and PID limits, a read-only root filesystem, all capabilities dropped,
@@ -442,7 +497,7 @@ repeated hours run once. One scheduler checks due rows every 30 seconds.
 
 ## Health and alerts
 
-**Health & alerts** shows application health as reported by the bot itself,
+A bot's **Health** tab shows application health as reported by the bot itself,
 separately from Docker's process state: every SDK push is a heartbeat and may
 say whether the bot is connected to Discord (`ready`). A bot that never reported
 is *unknown*, never *failed*.
@@ -454,11 +509,23 @@ an unhealthy transition; startup grace and transition-only restarts prevent a
 broken deployment from flapping continuously. Probe targets cannot name an
 arbitrary host, so this feature cannot be used for server-side request forgery.
 
-Per-bot Discord notification preferences: crashes, deployments, backup
-failures, recoveries, and an optional **heartbeat rule** that alerts once when a
-running bot stops reporting for 1 minute to 1 hour (and once when it recovers).
-A test message can be sent. Crash alerts are throttled to one per bot per 10
-minutes.
+Game servers have no Health tab, heartbeat or probe: their health is the
+process state and the game query (players, latency, version in the header).
+The API refuses a probe for a game server and ignores a heartbeat rule.
+
+**Settings → Notifications** (bots and game servers) chooses what the owner is
+told about: for bots crashes, deployments, backup failures, recoveries and an
+optional **heartbeat rule** that alerts once when a running bot stops reporting
+for 1 minute to 1 hour (and once when it recovers); for game servers crashes
+(including failed installs and starts) and backup failures. Messages go to the
+owner's account (the bell, email when alert emails are on, and the Discord
+channel the owner connected), not through a Discord bot. A test message can be
+sent to Discord. Crash alerts are throttled to one per bot per 10 minutes. A
+host port that another container holds is reported as **Port in use** instead
+of a crash: it is not retried, counted or alerted (see game servers →
+Allocations and ports). “Crashes in a row” clears after a minute of stable
+running and on Start/Restart, and never includes install, build or start
+retries.
 
 ## Notifications and support
 
@@ -498,7 +565,16 @@ Details, limits and authorization rules: `docs/support.md`.
   with level filter, search, live follow, copy and download. Secrets, tokens and
   passwords are redacted before a line is kept. The view starts empty after a
   restart; the complete log stays in journald (`journalctl -u rivetpanel`) or
-  `docker logs`.
+  `docker logs`, and in the panel's daily log files.
+
+**Daily log files and archive.** The panel writes its own log and every
+server's console output to one file per day and gzips each ended day into an
+archive folder at the configured archive time (default 00:00), deleting
+archives after the retention (default 30 days) or beyond a size cap. Days are
+listed and downloaded per server with console access and for the panel log
+with `system.view`. The same settings decide how long graph data is kept
+(telemetry, analytics tiers, status page). Details and limits:
+[logs.md](logs.md).
 
 ## Usage analytics
 
@@ -690,8 +766,8 @@ push every 30 seconds, never queue failed pushes and never crash the bot.
 ## Discord notifications
 
 If a user connects Discord with *Enable notifications*, alerts for their bots
-are posted to the webhook they chose, following each bot's preferences (see
-Health and alerts). Only Discord webhook URLs are ever called.
+are posted to the webhook they chose, following each bot's or server's
+choices under Settings → Notifications (see Health and alerts). Only Discord webhook URLs are ever called.
 
 ## Installation identity
 
@@ -712,8 +788,8 @@ continue; keep old key files while per-bot backups made before the reseal exist.
 `SHA256SUMS`.
 ## AI assistant
 
-One private AI chat opens from **Ask AI** on every page (bottom right, or the
-sparkle button in the header). It sees which bot, site, section and file you
+One private AI chat opens from the **Ask AI** (sparkle) button in the top bar
+on every page, or with Ctrl+.. It sees which bot, site, section and file you
 are looking at, can read a bot’s console output and build log, and can propose
 changes that wait for your approval. See [AI operator](ai-operator.md) for
 providers, permissions, approval modes, research, limits, data boundaries,

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { untrack } from 'svelte';
 	import { api, ApiError } from '$lib/api/client';
 	import type { Dep, Packages, PkgResult } from '$lib/api/types';
 	import { toast } from '$lib/ui/toast.svelte';
@@ -16,7 +16,7 @@
 	let notice = $state('');
 	let group = $state('');
 	let edits = $state<Record<string, string>>({});
-	const path = `/bots/${botId}/packages`;
+	const path = $derived(`/bots/${botId}/packages`);
 	const msg = (e: unknown) => (e instanceof ApiError ? e.message : 'The request failed.');
 
 	async function load() {
@@ -24,7 +24,11 @@
 		edits = Object.fromEntries((pk.deps ?? []).map((d) => [d.group + d.name, d.spec]));
 		group = pk.groups?.[0] ?? '';
 	}
-	onMount(() => load().catch((e) => (error = msg(e))));
+	// Loads the packages of the bot shown (again when another bot is opened here).
+	$effect(() => {
+		void path;
+		untrack(() => load().catch((e) => (error = msg(e))));
+	});
 
 	async function apply(ops: { action: string; name: string; spec?: string; group?: string }[], done: string) {
 		error = notice = '';

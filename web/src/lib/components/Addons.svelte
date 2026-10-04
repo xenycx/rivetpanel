@@ -10,6 +10,8 @@
 	import Skeleton from '$lib/components/ui/Skeleton.svelte';
 
 	let { bot, stopped, onChanged }: { bot: Bot; stopped: boolean; onChanged?: () => void } = $props();
+	const isGame = $derived(bot.kind === 'game');
+	const noun = $derived(isGame ? 'server' : 'bot');
 
 	let kinds = $state<AddonKind[]>([]);
 	let available = $state(true);
@@ -120,7 +122,7 @@
 
 	function stateText(a: BotAddon): { text: string; tone: string } {
 		const s = a.status;
-		if (!s.state) return { text: 'Starts with the bot', tone: 'text-muted' };
+		if (!s.state) return { text: `Starts with the ${noun}`, tone: 'text-muted' };
 		if (s.state === 'running') {
 			if (s.health === 'healthy') return { text: 'Running', tone: 'text-run' };
 			if (s.health === 'unhealthy') return { text: 'Unhealthy', tone: 'text-fail' };
@@ -132,17 +134,17 @@
 </script>
 
 <SettingsSection
-	title="Add-ons"
-	description="Databases that run next to this bot in their own containers. They are reachable only from this bot, by host name, on a private network without internet access, and start and stop with the bot. Their data is kept outside the bot's files and is not part of bot backups."
+	title="Databases"
+	description="Databases that run next to this {noun} in their own containers. They are reachable only from this {noun}, by host name, on a private network without internet access, and start and stop with the {noun}. Their data is kept outside the {noun}'s files and is not part of its backups."
 >
 	{#if !available}
-		<Notice>This panel runs without Docker, so add-ons are not available.</Notice>
+		<Notice>This panel runs without Docker, so databases are not available.</Notice>
 	{:else if list === null}
 		<Skeleton rows={2} />
 	{:else}
 		{#if error}<Notice tone="fail" class="mb-3" live>{error}</Notice>{/if}
 		{#if list.length === 0}
-			<p class="text-muted">No add-ons yet.</p>
+			<p class="text-muted">No databases yet.</p>
 		{/if}
 		<ul class="grid gap-3">
 			{#each list as a (a.kind)}
@@ -157,7 +159,7 @@
 					</div>
 					<p class="mt-1 text-muted">{a.description}</p>
 					<p class="mt-2 text-small text-muted">
-						The bot receives {#each a.variables as v, i (v)}<code>{v}</code>{i < a.variables.length - 1 ? ', ' : ''}{/each}. Reference them from your own variables as <code>{'${' + a.variables[0] + '}'}</code>.
+						The {noun} receives {#each a.variables as v, i (v)}<code>{v}</code>{i < a.variables.length - 1 ? ', ' : ''}{/each}.{#if isGame} Use Show connection to copy the host, user and password into a plugin's configuration file.{:else} Reference them from your own variables as <code>{'${' + a.variables[0] + '}'}</code>.{/if}
 					</p>
 					<div class="mt-3 flex flex-wrap gap-2">
 						{#if canEnv}<button class="btn btn-sm" onclick={() => reveal(a)}><Icon name={revealed[a.kind] ? 'eyeOff' : 'eye'} size={14} />{revealed[a.kind] ? 'Hide connection' : 'Show connection'}</button>{/if}
@@ -170,9 +172,9 @@
 									<button class="btn btn-sm btn-quiet" onclick={() => delete memEdit[a.kind]}>Cancel</button>
 								</span>
 							{:else}
-								<button class="btn btn-sm" disabled={!stopped} title={stopped ? '' : 'Stop the bot first'} onclick={() => (memEdit[a.kind] = Math.round(a.memory_bytes / MiB))}><Icon name="sliders" size={14} />Memory</button>
+								<button class="btn btn-sm" disabled={!stopped} title={stopped ? '' : `Stop the ${noun} first`} onclick={() => (memEdit[a.kind] = Math.round(a.memory_bytes / MiB))}><Icon name="sliders" size={14} />Memory</button>
 							{/if}
-							<button class="btn btn-sm btn-quiet text-fail" disabled={!stopped || busy === a.kind} title={stopped ? '' : 'Stop the bot first'} onclick={() => remove(a)}><Icon name="trash" size={14} />Remove</button>
+							<button class="btn btn-sm btn-quiet text-fail" disabled={!stopped || busy === a.kind} title={stopped ? '' : `Stop the ${noun} first`} onclick={() => remove(a)}><Icon name="trash" size={14} />Remove</button>
 						{/if}
 					</div>
 					{#if revealed[a.kind]}
@@ -189,7 +191,7 @@
 
 		{#if admin}
 			<h3 class="mt-6 font-semibold">Add a database</h3>
-			{#if !stopped}<p class="mt-1 text-small text-warn">Stop the bot to add or remove add-ons.</p>{/if}
+			{#if !stopped}<p class="mt-1 text-small text-warn">Stop the {noun} to add or remove databases.</p>{/if}
 			<div class="mt-3 grid gap-3 sm:grid-cols-2">
 				{#each kinds.filter((k) => !attached.has(k.id)) as k (k.id)}
 					<div class="flex flex-col rounded-tile border border-rule-soft bg-panel p-4">

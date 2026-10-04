@@ -22,7 +22,6 @@ import (
 	"github.com/xenycx/rivetpanel/internal/domain"
 	"github.com/xenycx/rivetpanel/internal/events"
 	"github.com/xenycx/rivetpanel/internal/filesystem"
-	"github.com/xenycx/rivetpanel/internal/migrations"
 	"github.com/xenycx/rivetpanel/internal/runtimes"
 	"github.com/xenycx/rivetpanel/internal/secrets"
 	"github.com/xenycx/rivetpanel/internal/service"
@@ -56,14 +55,7 @@ func newEnv(t *testing.T) *env {
 	t.Helper()
 	dir := t.TempDir()
 	ctx := context.Background()
-	db, err := sqlite.Open(ctx, filepath.Join(dir, "t.db"), 4)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { db.Close() })
-	if err := db.Migrate(ctx, migrations.FS); err != nil {
-		t.Fatal(err)
-	}
+	db := openTestDB(t, filepath.Join(dir, "t.db"))
 	db.EnsureLocalNode(ctx)
 	keys, err := secrets.LoadDir(filepath.Join(dir, "keys"), "k1", true)
 	if err != nil {

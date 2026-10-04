@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, untrack } from 'svelte';
 	import { api, ApiError, fetchText } from '$lib/api/client';
 	import { fmtTime } from '$lib/args';
 	import type { Analytics } from '$lib/api/types';
@@ -32,14 +32,22 @@
 
 	// Dashboard layout is a per-browser preference: which stats to show and what to call them.
 	type Layout = { hidden: string[]; labels: Record<string, string> };
-	const lsKey = `rivetpanel.analytics.${botId}`;
+	const lsKey = $derived(`rivetpanel.analytics.${botId}`);
 	let layout = $state<Layout>({ hidden: [], labels: {} });
-	try {
-		const raw = localStorage.getItem(lsKey);
-		if (raw) layout = { hidden: [], labels: {}, ...JSON.parse(raw) };
-	} catch {
-		/* storage unavailable: defaults */
+	function readLayout(key: string): Layout {
+		try {
+			const raw = localStorage.getItem(key);
+			if (raw) return { hidden: [], labels: {}, ...JSON.parse(raw) };
+		} catch {
+			/* storage unavailable: defaults */
+		}
+		return { hidden: [], labels: {} };
 	}
+	// The layout of the bot shown (again when another bot is opened here).
+	$effect.pre(() => {
+		const key = lsKey;
+		untrack(() => (layout = readLayout(key)));
+	});
 	function persist() {
 		try {
 			localStorage.setItem(lsKey, JSON.stringify(layout));
@@ -190,7 +198,7 @@
 					{#each data.commands as c (c.name)}
 						<li class="grid grid-cols-[8rem_1fr_auto] items-center gap-2">
 							<code class="truncate font-mono text-[13px]">/{c.name}</code>
-							<div class="h-2 bg-paper-2"><div class="h-2 bg-action" style="width: {(c.count / maxCmd) * 100}%"></div></div>
+							<div class="h-2 bg-paper-2"><div class="h-2 bg-data" style="width: {(c.count / maxCmd) * 100}%"></div></div>
 							<span class="tabular-nums text-muted">{c.count.toLocaleString()}</span>
 						</li>
 					{:else}<li class="text-muted">No commands reported in this window.</li>{/each}

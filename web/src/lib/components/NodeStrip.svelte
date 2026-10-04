@@ -56,7 +56,7 @@
 						<dt class="eyebrow">Disk</dt>
 						<dd class="mt-1 font-mono text-section font-semibold">{disk}%<span class="ml-2 text-small font-normal text-muted">{fmtBytes(last.disk_used_bytes)} of {fmtBytes(last.disk_total_bytes)}</span></dd>
 						<dd class="mt-4 h-1.5 overflow-hidden rounded-pill bg-rule-soft" role="meter" aria-label="Disk used" aria-valuemin="0" aria-valuemax="100" aria-valuenow={disk}>
-							<div class="h-full rounded-pill {disk >= 90 ? 'bg-fail' : disk >= 75 ? 'bg-warn' : 'bg-action'}" style="width: {disk}%"></div>
+							<div class="h-full rounded-pill {disk >= 90 ? 'bg-fail' : disk >= 75 ? 'bg-warn' : 'bg-ink/50'}" style="width: {disk}%"></div>
 						</dd>
 						<dd class="mt-1.5 text-small text-muted">{fmtBytes(last.disk_total_bytes - last.disk_used_bytes)} free</dd>
 					</div>

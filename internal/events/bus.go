@@ -15,6 +15,7 @@ type Status struct {
 	ObservedGeneration int64
 	ExitCode           *int64
 	LastError          string
+	Reason             string // domain.Reason* of the observation, when known
 }
 
 // Sub is one subscription. Read from C; call Close when done.

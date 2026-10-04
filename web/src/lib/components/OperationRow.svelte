@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { Operation } from '$lib/api/types';
 	import { fmtAgo, fmtWhen } from '$lib/args';
-	import { active, elapsed, kindNoun, opTone, statusText, triggerText } from '$lib/ops';
+	import { active, elapsed, opNoun, opOwnerHref, opTone, statusText, triggerText } from '$lib/ops';
 	import BuildOutput from '$lib/components/BuildOutput.svelte';
 	import Icon from '$lib/components/ui/Icon.svelte';
 
@@ -27,7 +27,7 @@
 	<div class="flex flex-wrap items-start gap-x-3 gap-y-1">
 		<div class="min-w-0 flex-1">
 			<p class="font-medium">
-				{kindNoun[op.kind]}{#if showBot}{' '}of <a class="link" href="/bots/{op.bot_id}">{op.bot_name}</a>{/if}{#if sha} <code class="text-small">{sha}</code>{/if}
+				{opNoun(op)}{#if showBot}{' '}of <a class="link" href={opOwnerHref(op)}>{op.bot_name}</a>{/if}{#if sha} <code class="text-small">{sha}</code>{/if}
 				<span class="ml-1 text-small font-normal {tone === 'fail' ? 'text-fail' : tone === 'run' ? 'text-run' : 'text-muted'}">{active(op) ? op.stage || statusText[op.status] : statusText[op.status]}</span>
 			</p>
 			<p class="text-small text-muted">

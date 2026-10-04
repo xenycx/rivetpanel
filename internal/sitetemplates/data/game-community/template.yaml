@@ -1,0 +1,7 @@
+id: game-community
+name: Game server community
+description: A home page for a game server community with the server address, rules, and live status from this panel's public status page.
+tags: [gaming, community, status, dark]
+accent: "#22c55e"
+theme: dark
+status_widget: true

@@ -3,14 +3,14 @@ package service
 import (
 	"context"
 	"errors"
-	"regexp"
 	"sort"
 	"strings"
 
 	"github.com/xenycx/rivetpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/lazyre"
 )
 
-var tagRe = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{0,23}$`)
+var tagRe = lazyre.New(`^[a-z0-9][a-z0-9._-]{0,23}$`)
 
 // SetTags replaces a bot's tags (full admin). Tags are lowercase words of up
 // to 24 characters; at most 8 per bot.

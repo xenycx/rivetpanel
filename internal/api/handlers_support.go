@@ -67,7 +67,7 @@ func toTicketMessage(m domain.TicketMessage, me string, staffView bool) ticketMe
 }
 
 func perUserLimit(name string, max int, per time.Duration, msg string) fiber.Handler {
-	return limiter.New(limiter.Config{
+	return newLimiter(limiter.Config{
 		Max: max, Expiration: per,
 		KeyGenerator: func(c fiber.Ctx) string { return name + ":" + currentUser(c).ID },
 		LimitReached: func(c fiber.Ctx) error { return fiber.NewError(fiber.StatusTooManyRequests, msg) },

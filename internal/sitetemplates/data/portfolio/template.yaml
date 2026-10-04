@@ -1,0 +1,6 @@
+id: portfolio
+name: Portfolio
+description: A personal page with a short introduction, a grid of selected work and a contact section.
+tags: [personal, one-page, light]
+accent: "#0f766e"
+theme: light

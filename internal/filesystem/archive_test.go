@@ -323,3 +323,29 @@ func TestDeployRejectsHostileTarballs(t *testing.T) {
 		t.Fatal("a forged manifest deleted a file outside the workspace")
 	}
 }
+
+// A workspace deployed before the RivetPanel rename has only the old
+// manifest: the next deploy still removes the files the repository dropped,
+// and the old manifest is replaced by the current one.
+func TestDeployReadsAndRemovesLegacyManifest(t *testing.T) {
+	w, root := newWS(t)
+	put(t, root, "index.js", "v1")
+	put(t, root, "old.js", "old")
+	put(t, root, "data.db", "keep")
+	put(t, root, LegacyDeployManifest, `["index.js","old.js"]`)
+	if _, err := w.DeployTarGz(bytes.NewReader(repoTar(t, map[string]string{"index.js": "v2", LegacyDeployManifest: `["data.db"]`})), "", DefaultBackupLimits); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "old.js")); err == nil {
+		t.Error("file listed in the legacy manifest survived")
+	}
+	if _, err := os.Stat(filepath.Join(root, LegacyDeployManifest)); err == nil {
+		t.Error("legacy manifest left behind (or taken from the repository)")
+	}
+	if b, _ := os.ReadFile(filepath.Join(root, "data.db")); string(b) != "keep" {
+		t.Error("untracked file touched")
+	}
+	if b, err := os.ReadFile(filepath.Join(root, DeployManifest)); err != nil || !strings.Contains(string(b), "index.js") {
+		t.Errorf("current manifest = %q, %v", b, err)
+	}
+}

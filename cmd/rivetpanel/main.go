@@ -6,7 +6,10 @@
 //	rivetpanel reset-password EMAIL  set a new password (RIVET_ADMIN_PASSWORD or a
 //	                               hidden prompt) and sign the account out everywhere
 //	rivetpanel reset-mfa EMAIL       remove two-step sign-in from an account
-//	rivetpanel keygen [ID]           create an encryption key file in the key dir
+//	rivetpanel keygen [--agent-ca] [ID]
+//	                               create an encryption key file and the agent
+//	                               certificate authority in the key dir
+//	                               (--agent-ca: only the certificate authority)
 //	rivetpanel backup [--include-keys] DEST
 //	rivetpanel backup-verify DIR     check a backup against its manifest checksums
 //	rivetpanel restore [--force] [--restore-keys] SRC   (panel must be stopped)
@@ -18,6 +21,8 @@
 //	                               from the administration page (recovery path)
 //	rivetpanel agent-token create|list|revoke|reissue|discard
 //	                               manage one-use agent enrollment
+//	rivetpanel health                ask the running panel's /api/v1/healthz
+//	                               (the container image's HEALTHCHECK)
 //	rivetpanel version               print the build version
 package main
 
@@ -62,6 +67,7 @@ import (
 	"github.com/xenycx/rivetpanel/internal/filesystem"
 	"github.com/xenycx/rivetpanel/internal/github"
 	"github.com/xenycx/rivetpanel/internal/hostmon"
+	"github.com/xenycx/rivetpanel/internal/logarchive"
 	"github.com/xenycx/rivetpanel/internal/logbuf"
 	"github.com/xenycx/rivetpanel/internal/migrations"
 	"github.com/xenycx/rivetpanel/internal/noderoute"
@@ -87,9 +93,14 @@ var restartRequested atomic.Bool
 
 const restartExitCode = 75 // EX_TEMPFAIL
 
+// panelLogSink writes the panel's own log lines to day files once the log
+// archive is set up (see service.LogArchiveService); until then, and when
+// an administrator turns it off, it drops them. stderr always gets them.
+var panelLogSink = &logarchive.Sink{}
+
 func main() {
 	logs := logbuf.New(logbuf.DefaultCapacity)
-	log := slog.New(logs.Handler(slog.NewJSONHandler(os.Stderr, nil)))
+	log := slog.New(logs.Handler(slog.NewJSONHandler(io.MultiWriter(os.Stderr, panelLogSink), nil)))
 	var err error
 	switch {
 	case len(os.Args) >= 2 && os.Args[1] == "create-admin":
@@ -114,6 +125,8 @@ func main() {
 		fmt.Println("rivetpanel", version)
 	case len(os.Args) >= 2 && os.Args[1] == "doctor":
 		err = doctorCmd()
+	case len(os.Args) >= 2 && os.Args[1] == "health":
+		err = healthCmd()
 	case len(os.Args) >= 2 && os.Args[1] == "env":
 		err = envCmd(os.Args[2:])
 	case len(os.Args) >= 2 && os.Args[1] == "agent-token":
@@ -154,14 +167,29 @@ func keygen(args []string) error {
 	if err != nil {
 		return err
 	}
-	id := cfg.ActiveKeyID
-	if len(args) > 0 {
-		id = args[0]
-	}
-	if err := secrets.GenerateKeyFile(cfg.KeyDir, id); err != nil {
+	fs := flag.NewFlagSet("keygen", flag.ContinueOnError)
+	caOnly := fs.Bool("agent-ca", false, "only create the agent certificate authority (existing installations)")
+	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	fmt.Printf("created %s/%s.key (mode 0600). Back it up separately from the database; without it, stored environment values cannot be decrypted.\n", cfg.KeyDir, id)
+	if !*caOnly {
+		id := cfg.ActiveKeyID
+		if fs.NArg() > 0 {
+			id = fs.Arg(0)
+		}
+		if err := secrets.GenerateKeyFile(cfg.KeyDir, id); err != nil {
+			return err
+		}
+		fmt.Printf("created %s/%s.key (mode 0600). Back it up separately from the database; without it, stored environment values cannot be decrypted.\n", cfg.KeyDir, id)
+	}
+	// The agent CA is created here, by the administrator, because the
+	// systemd unit keeps the key directory read-only for the running panel.
+	// LoadOrCreate keeps an existing CA.
+	caDir := filepath.Join(cfg.KeyDir, "agent-ca")
+	if _, err := agentcert.LoadOrCreate(caDir); err != nil {
+		return fmt.Errorf("agent certificate authority: %w", err)
+	}
+	fmt.Printf("agent certificate authority ready in %s (used only when remote nodes are enabled).\n", caDir)
 	return nil
 }
 
@@ -430,6 +458,9 @@ func loadCatalog(cfg config.Config) (*runtimes.Catalog, error) {
 }
 
 func serve(log *slog.Logger, logs *logbuf.Buffer) error {
+	// Before the heap grows: keep it out of transparent huge pages (see
+	// memory_linux.go).
+	thpOff := disableTransparentHugePages()
 	// A soft ceiling makes the collector work harder near the footprint target.
 	// It is not a hard cap (stacks, cgo-free runtime overhead and mapped files
 	// are outside it); an explicit GOMEMLIMIT always wins.
@@ -485,11 +516,14 @@ func serve(log *slog.Logger, logs *logbuf.Buffer) error {
 	} else if len(rolled) > 0 {
 		log.Warn("rolled back interrupted restores or deployments", "bots", rolled)
 	}
-	owner := cfg.WorkspaceOwner
-	if owner == "" {
-		owner = cfg.ContainerUser
+	// Without explicit settings, a panel that can neither run as root nor
+	// chown falls back to its own uid:gid so workspaces stay writable
+	// (development, or production with RIVET_ALLOW_SHARED_UID=1).
+	ownership := resolveOwnership(&cfg, wsm, log, true)
+	if err := sharedUIDError(ownership); err != nil {
+		return err
 	}
-	if uid, gid, err := runner.ParseUser(owner); err == nil {
+	if uid, gid, err := runner.ParseUser(ownership.Owner); err == nil {
 		wsm.SetOwner(uid, gid) // files the panel writes are usable by the bot immediately
 	}
 
@@ -535,22 +569,22 @@ func serve(log *slog.Logger, logs *logbuf.Buffer) error {
 		return fmt.Errorf("operation logs: %w", err)
 	}
 	ops := &service.Operations{Store: db, Bots: botSvc, Logs: opLogs, Log: log}
+	// Log files by day and their daily archive (see internal/logarchive);
+	// the settings also hold the retention of graph data.
+	logFiles, err := logarchive.New(filepath.Dir(cfg.DBPath))
+	if err != nil {
+		return fmt.Errorf("log archive: %w", err)
+	}
+	logArchive := &service.LogArchiveService{Store: db, Files: logFiles, Sink: panelLogSink, Bots: botSvc,
+		OpLogDir: filepath.Join(filepath.Dir(cfg.DBPath), "oplogs"), Defaults: service.DefaultLogSettings(cfg.TelemetryRetention), Log: log,
+		MinFreeDisk: cfg.MinFreeDisk}
+	if err := logArchive.Load(ctx); err != nil {
+		return fmt.Errorf("log archive settings: %w", err)
+	}
+	panelLogSink.Attach(ctx, logFiles)
+	telemetryRetention := func() time.Duration { return time.Duration(logArchive.Metrics().TelemetryHours) * time.Hour }
 	ops.Recover(ctx)
 	audit := &service.Audit{Store: db, Bots: botSvc, Log: log}
-	go func() {
-		t := time.NewTicker(time.Hour)
-		defer t.Stop()
-		for {
-			if err := audit.Prune(ctx); err != nil && ctx.Err() == nil {
-				log.Warn("prune activity record", "err", err)
-			}
-			select {
-			case <-ctx.Done():
-				return
-			case <-t.C:
-			}
-		}
-	}()
 	// Alerts and GitHub deployments are always wired; they report clearly
 	// when Discord or GitHub is not configured (yet).
 	// Email (Mailgun) is configured in Panel settings or the environment and
@@ -561,7 +595,6 @@ func serve(log *slog.Logger, logs *logbuf.Buffer) error {
 	// In-panel notifications (and their email) for alerts, deployments,
 	// backups, sharing, nodes, announcements and support tickets.
 	notices := &service.NotificationService{Store: db, Mail: mailSvc, Settings: settingsSvc, Log: log}
-	go pruneNotifications(ctx, log, notices)
 	alerts := &service.AlertService{Store: db, Keys: keys, Bots: db, Log: log, Prefs: db.GetAlertPrefs, Mail: mailSvc, Users: db, Notices: notices}
 	botSvc.Notices = notices
 	tickets := &service.TicketService{Store: db, Bots: botSvc, Notices: notices}
@@ -578,6 +611,9 @@ func serve(log *slog.Logger, logs *logbuf.Buffer) error {
 	var runnerDone chan struct{}
 	var dk *docker.Adapter
 	var rn *runner.Runner
+	// Deployment problems found at start (former installation, container
+	// paths, unencrypted public address) are logged and shown in Diagnostics.
+	deployChecks := listenCheck(log, cfg)
 	installID, err := db.InstallationID(ctx, time.Now().UnixMilli())
 	if err != nil {
 		return fmt.Errorf("installation identity: %w", err)
@@ -590,6 +626,12 @@ func serve(log *slog.Logger, logs *logbuf.Buffer) error {
 			return fmt.Errorf("docker client: %w", err)
 		}
 		defer dk.Close()
+		// In a container, bind sources must be Docker-host paths.
+		pathChecks, err := hostPathCheck(ctx, log, cfg, dk)
+		if err != nil {
+			return err
+		}
+		deployChecks = append(deployChecks, pathChecks...)
 		// Add-on (database) data lives next to the database, outside every
 		// bot workspace.
 		addonRoot, err := filepath.Abs(filepath.Join(filepath.Dir(cfg.DBPath), "addons"))
@@ -605,6 +647,9 @@ func serve(log *slog.Logger, logs *logbuf.Buffer) error {
 			return fmt.Errorf("runner: %w", err)
 		}
 		botSvc.Notifier, botSvc.Purger, botSvc.Killer = rn, rn, rn
+		// Allocations and starts skip host ports that any running container
+		// on this Docker host publishes (another panel, any other tool).
+		botSvc.LocalPublished = dk.PublishedPorts
 		botSvc.Stdin = dk
 		botSvc.AddonData, botSvc.AddonRuntime = addonData, addonRuntime{rn}
 		checks = append(checks, api.Check{Name: "docker", Fn: rn.Check})
@@ -623,8 +668,6 @@ func serve(log *slog.Logger, logs *logbuf.Buffer) error {
 			MemoryBytes: 768 << 20, NanoCPUs: 1e9, PidsLimit: 256, TmpfsBytes: 128 << 20}
 	}
 
-	go pruneSessions(ctx, log, db)
-
 	var consoleSvc *console.Service
 	if dk != nil || cfg.Modules.Enabled("agents") {
 		consoleSvc = &console.Service{Bus: bus}
@@ -633,7 +676,7 @@ func serve(log *slog.Logger, logs *logbuf.Buffer) error {
 		}
 	}
 	sampler := &telemetry.Sampler{Store: db, Reader: telemetry.ProcReader{}, NodeID: domain.LocalNodeID,
-		DiskPath: cfg.DataRoot, Interval: cfg.TelemetryInterval, Retention: cfg.TelemetryRetention, Log: log}
+		DiskPath: cfg.DataRoot, Interval: cfg.TelemetryInterval, Retention: cfg.TelemetryRetention, RetentionFunc: telemetryRetention, Log: log}
 	go sampler.Run(ctx)
 
 	var statsSrc api.StatsSource
@@ -669,12 +712,18 @@ func serve(log *slog.Logger, logs *logbuf.Buffer) error {
 		Interval: cfg.BackupInterval, Log: log, Ops: ops, Alerts: alerts, MinFreeDisk: cfg.MinFreeDisk}
 	backupSvc.Limits = filesystem.DefaultBackupLimits
 	backupSvc.Limits.MaxBytes = cfg.BackupMaxBytes
-	botSvc.OnDelete = backupSvc.PurgeBot
+	botSvc.OnDelete = func(id string) { backupSvc.PurgeBot(id); logArchive.PurgeBot(id) }
 	scheduler := &service.Scheduler{Store: db, Bots: botSvc, Backups: backupSvc, Deploy: deploySvc, Log: log}
 	health := &service.HealthService{Store: db, Bots: botSvc, Alerts: alerts, Log: log}
 	go health.Run(ctx)
 	analytics := &service.Analytics{Store: db, Heartbeat: health.Heartbeat}
-	go pruneTelemetry(ctx, log, analytics, cfg.TelemetryRetention)
+	// Pruning of old rows, one task at a time (see runMaintenance).
+	go runMaintenance(ctx, log, []maintenanceTask{
+		{name: "prune activity record", every: time.Hour, run: audit.Prune},
+		{name: "prune notifications", every: time.Hour, run: func(ctx context.Context) error { _, err := notices.Prune(ctx); return err }},
+		{name: "prune sessions", every: 15 * time.Minute, run: func(ctx context.Context) error { return pruneSessions(ctx, db) }},
+		{name: "prune bot telemetry", every: time.Hour, run: func(ctx context.Context) error { return analytics.Prune(ctx, telemetryRetention()) }},
+	}, nil)
 
 	var enabledOAuth []string
 	for _, p := range []string{"github", "discord"} {
@@ -695,7 +744,7 @@ func serve(log *slog.Logger, logs *logbuf.Buffer) error {
 			panelHost = u.Hostname()
 		}
 		sitesSvc = &service.SiteService{Store: db, Bots: botSvc, OAuth: oauthSvc, GH: &github.Client{}, Dir: cfg.SitesDir,
-			BaseURL: cfg.SitesBaseURL, ExtraDomains: cfg.SitesDomains, DNSTarget: cfg.SitesDNSTarget, PanelHost: panelHost, MaxBytes: cfg.SiteMaxBytes,
+			BaseURL: cfg.SitesBaseURL, ExtraDomains: cfg.SitesDomains, DNSTarget: cfg.SitesDNSTarget, PanelHost: panelHost, PanelURL: cfg.PublicURL, MaxBytes: cfg.SiteMaxBytes,
 			MaxPerUser: cfg.MaxSitesPerUser, Log: log}
 		if err := sitesSvc.Start(ctx); err != nil {
 			return err
@@ -713,8 +762,9 @@ func serve(log *slog.Logger, logs *logbuf.Buffer) error {
 		}()
 	}
 	migs, _ := fs.Glob(migrations.FS, "*.sql")
-	dsrc := diagSources{cfg: cfg, db: db, files: wsm, catalog: catalog, keys: keys, runnerStatus: runnerStatus,
-		oauth: enabledOAuth, knownSchema: migrationCount(migs)}
+	deployChecks = append(deployChecks, legacyChecks(ctx, log, cfg, dk)...)
+	dsrc := diagSources{cfg: cfg, db: db, files: wsm, catalog: catalog, keys: keys, runnerStatus: runnerStatus, ownership: ownership,
+		oauth: enabledOAuth, knownSchema: migrationCount(migs), deploy: deployChecks}
 	diagnostics := func(ctx context.Context) diag.Report { return diag.Run(ctx, version, started, probes(dsrc)) }
 	var aiLogs service.LogTail
 	if dk != nil {
@@ -745,7 +795,7 @@ func serve(log *slog.Logger, logs *logbuf.Buffer) error {
 	if cfg.Modules.Enabled("agents") {
 		ca, err := agentcert.LoadOrCreate(filepath.Join(cfg.KeyDir, "agent-ca"))
 		if err != nil {
-			return fmt.Errorf("agent certificate authority: %w", err)
+			return fmt.Errorf("agent certificate authority: %w (the key directory is read-only to the service; create the CA once as root with: rivetpanel keygen --agent-ca)", err)
 		}
 		enrollmentSvc = &service.AgentEnrollmentService{Store: db, CA: ca}
 		// Pushes that arrived while a node was offline run when it reconnects.
@@ -809,14 +859,14 @@ func serve(log *slog.Logger, logs *logbuf.Buffer) error {
 	// Knowledgebase and public status page (sampled every 5 minutes while
 	// the page is enabled; 90 days of daily counts are kept).
 	kbSvc := &service.KBService{Store: db}
-	statusSvc := &service.StatusService{Store: db, Bots: botSvc, Log: log}
+	statusSvc := &service.StatusService{Store: db, Bots: botSvc, Log: log, RetentionDays: func() int { return logArchive.Metrics().StatusDays }}
 	if router != nil {
 		statusSvc.NodeOnline = router.Online
 	}
 	go statusSvc.RunSampler(ctx, service.StatusSampleInterval)
 	// Usage analytics: one collector pass a minute, 5-minute buckets rolled
 	// up into hourly and daily rows (see service.UsageService).
-	usageSvc := &service.UsageService{Store: db, Bots: botSvc, LocalNode: domain.LocalNodeID, Log: log, WorkspaceUsage: wsm.Usage}
+	usageSvc := &service.UsageService{Store: db, Bots: botSvc, LocalNode: domain.LocalNodeID, Log: log, WorkspaceUsage: wsm.Usage, Retention: logArchive.Metrics}
 	usageSvc.StatsFor = func(nodeID string) service.UsageStats {
 		if router != nil && router.Remote(nodeID) {
 			if !router.Online(nodeID) {
@@ -829,6 +879,37 @@ func serve(log *slog.Logger, logs *logbuf.Buffer) error {
 		}
 		return nil
 	}
+	// Console output of local and remote servers is copied into day files
+	// (remote output streams through the agent; nothing changes on nodes).
+	if dk != nil || router != nil {
+		logArchive.Capture = &logarchive.Capturer{Store: logFiles,
+			Targets: func(ctx context.Context) ([]logarchive.Target, error) {
+				bots, err := db.ListBots(ctx, "")
+				if err != nil {
+					return nil, err
+				}
+				out := make([]logarchive.Target, 0, len(bots))
+				for _, b := range bots {
+					if b.ContainerID != nil && *b.ContainerID != "" {
+						out = append(out, logarchive.Target{BotID: b.ID, NodeID: b.NodeID, ContainerID: *b.ContainerID})
+					}
+				}
+				return out, nil
+			},
+			SourceFor: func(nodeID string) logarchive.Source {
+				if router != nil && router.Remote(nodeID) {
+					if !router.Online(nodeID) {
+						return nil
+					}
+					return router.Console(nodeID)
+				}
+				if dk != nil && (nodeID == "" || nodeID == domain.LocalNodeID) {
+					return dk
+				}
+				return nil
+			}}
+	}
+	go logArchive.Run(ctx, 30*time.Second)
 	usageDone := make(chan struct{})
 	go func() { defer close(usageDone); usageSvc.Run(ctx, service.UsageSampleInterval) }()
 	// Start backup scheduling only after node routing is final. Otherwise the
@@ -842,12 +923,16 @@ func serve(log *slog.Logger, logs *logbuf.Buffer) error {
 		Catalog: catalog, SecureCookies: cfg.Production, ProxyHeader: cfg.ProxyHeader, MetricsToken: cfg.MetricsToken, Modules: cfg.Modules, Checks: checks, Nodes: db, Files: wsm, MaxUpload: cfg.MaxUploadBytes,
 		Console: consoleSvc, BaseCtx: ctx, RunnerReady: runnerReady, Ops: ops, Audit: audit, Schedules: scheduler,
 		MFA: mfaSvc, Tokens: &service.TokenService{Store: db, Bots: botSvc}, Clients: &service.APIClientService{Store: db, Bots: botSvc}, Passkeys: &service.PasskeyService{Store: db, Auth: authSvc, MFA: mfaSvc, PublicURL: oauthSvc.CurrentPublicURL}, OIDC: &service.OIDCService{Store: db, Auth: authSvc, Keys: keys, PublicURL: oauthSvc.CurrentPublicURL, States: oauthSvc.States, Log: log}, Enrollment: enrollmentSvc, AgentControl: agentControl, Games: gameSvc, Router: router, Health: health,
-		Settings: settingsSvc, Notifications: notices, Tickets: tickets, KB: kbSvc, Status: statusSvc, Usage: usageSvc, Mail: mailSvc, Resets: resetSvc, Verify: verifySvc, MailPrefs: db, Sites: sitesSvc, AI: aiSvc, Env: envSvc, Host: monitor, Logs: logs, SetupCodeFile: setupCodeFile, OnSetupDone: func() { _ = os.Remove(setupCodeFile) }})
+		Settings: settingsSvc, Notifications: notices, Tickets: tickets, KB: kbSvc, Status: statusSvc, Usage: usageSvc, Mail: mailSvc, Resets: resetSvc, Verify: verifySvc, MailPrefs: db, Sites: sitesSvc, AI: aiSvc, Env: envSvc, Host: monitor, Logs: logs, LogArchive: logArchive, SetupCodeFile: setupCodeFile, OnSetupDone: func() { _ = os.Remove(setupCodeFile) }})
 	ln, err := net.Listen("tcp", cfg.Listen)
 	if err != nil {
 		return err
 	}
-	log.Info("listening", "addr", ln.Addr().String(), "db", cfg.DBPath, "runner", cfg.RunnerMode)
+	// Startup (migrations, blueprint checks, route registration) leaves a few
+	// MiB of garbage; return it now rather than holding it until the
+	// collector and scavenger catch up on an idle panel.
+	debug.FreeOSMemory()
+	log.Info("listening", "addr", ln.Addr().String(), "db", cfg.DBPath, "runner", cfg.RunnerMode, "thp_disabled", thpOff)
 
 	serveErr := make(chan error, 1)
 	go func() {
@@ -892,58 +977,12 @@ func serve(log *slog.Logger, logs *logbuf.Buffer) error {
 	return nil
 }
 
-// pruneTelemetry enforces bot telemetry retention hourly.
-func pruneTelemetry(ctx context.Context, log *slog.Logger, a *service.Analytics, retention time.Duration) {
-	t := time.NewTicker(time.Hour)
-	defer t.Stop()
-	for {
-		if err := a.Prune(ctx, retention); err != nil && ctx.Err() == nil {
-			log.Warn("prune bot telemetry", "err", err)
-		}
-		select {
-		case <-ctx.Done():
-			return
-		case <-t.C:
-		}
-	}
-}
-
 // pruneSessions deletes expired sessions in bounded batches.
-// pruneNotifications drops notifications older than the retention period,
-// at start and then every hour.
-func pruneNotifications(ctx context.Context, log *slog.Logger, n *service.NotificationService) {
-	t := time.NewTicker(time.Hour)
-	defer t.Stop()
+func pruneSessions(ctx context.Context, db *sqlite.DB) error {
 	for {
-		if _, err := n.Prune(ctx); err != nil && ctx.Err() == nil {
-			log.Warn("prune notifications", "err", err)
-		}
-		select {
-		case <-ctx.Done():
-			return
-		case <-t.C:
-		}
-	}
-}
-
-func pruneSessions(ctx context.Context, log *slog.Logger, db *sqlite.DB) {
-	t := time.NewTicker(15 * time.Minute)
-	defer t.Stop()
-	for {
-		for {
-			n, err := db.PruneSessions(ctx, time.Now().UnixMilli(), 500)
-			if err != nil {
-				log.Warn("prune sessions", "err", err)
-				break
-			}
-			if n < 500 {
-				break
-			}
-		}
-		select {
-		case <-ctx.Done():
-			return
-		case <-t.C:
+		n, err := db.PruneSessions(ctx, time.Now().UnixMilli(), 500)
+		if err != nil || n < 500 {
+			return err
 		}
 	}
 }
@@ -974,7 +1013,16 @@ func doctorCmd() error {
 	fmt.Println("configuration: ok")
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
-	db, err := openDB(ctx, cfg)
+	// Read-only: no directory or database is created and no migration runs,
+	// so a wrong path is reported instead of silently initialised.
+	for _, p := range []struct{ what, path, env string }{{"database", cfg.DBPath, "RIVET_DB_PATH"}, {"data root", cfg.DataRoot, "RIVET_DATA_ROOT"}} {
+		if _, err := os.Stat(p.path); err != nil {
+			fmt.Printf("FAIL  %-22s %s does not exist or cannot be read: %v\n", p.what, p.path, err)
+			fmt.Printf("      %-22s -> check %s, or start the panel once to initialise it\n", "", p.env)
+			return fmt.Errorf("%s not found", p.what)
+		}
+	}
+	db, err := sqlite.OpenReadOnly(ctx, cfg.DBPath)
 	if err != nil {
 		return err
 	}
@@ -984,16 +1032,19 @@ func doctorCmd() error {
 	if err != nil {
 		return err
 	}
-	wsm, err := filesystem.NewManager(cfg.DataRoot)
+	wsm, err := filesystem.NewManager(cfg.DataRoot) // exists (checked above): nothing is created
 	if err != nil {
 		return err
 	}
 	defer wsm.Close()
-	src := diagSources{cfg: cfg, db: db, files: wsm, catalog: catalog, keys: keys}
+	ownership := resolveOwnership(&cfg, wsm, nil, false)
+	quiet := slog.New(slog.NewTextHandler(io.Discard, nil))
+	src := diagSources{cfg: cfg, db: db, files: wsm, catalog: catalog, keys: keys, ownership: ownership, deploy: listenCheck(quiet, cfg)}
 	if cfg.RunnerMode == config.RunnerLocal {
 		dk, err := docker.New(cfg.DockerHost)
 		if err == nil {
 			defer dk.Close()
+			src.deploy = append(src.deploy, legacyChecks(ctx, quiet, cfg, dk)...)
 			src.runnerStatus = func(ctx context.Context) (runner.Status, bool) {
 				caps, err := dk.Capabilities(ctx)
 				if err == nil {
@@ -1002,6 +1053,9 @@ func doctorCmd() error {
 				return runner.Status{Ready: err, Capabilities: caps, Workers: cfg.RunnerWorkers}, true
 			}
 		}
+	}
+	if src.runnerStatus == nil { // no Docker client: environment and directories only
+		src.deploy = append(src.deploy, legacyChecks(ctx, quiet, cfg, nil)...)
 	}
 	migs, _ := fs.Glob(migrations.FS, "*.sql")
 	src.knownSchema = migrationCount(migs)
