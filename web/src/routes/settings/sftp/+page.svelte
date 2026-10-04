@@ -8,6 +8,7 @@
 	import { toast } from '$lib/ui/toast.svelte';
 	import Notice from '$lib/components/ui/Notice.svelte';
 	import AutomationTokens from '$lib/components/AutomationTokens.svelte';
+	import ApiClients from '$lib/components/ApiClients.svelte';
 	import Icon from '$lib/components/ui/Icon.svelte';
 	import SettingsSection from '$lib/components/ui/SettingsSection.svelte';
 
@@ -56,11 +57,11 @@
 	const host = location.hostname;
 </script>
 
-<svelte:head><title>SFTP & API keys · BotForge</title></svelte:head>
+<svelte:head><title>SFTP & API keys · RivetPanel</title></svelte:head>
 
 <SettingsSection title="SFTP access" description="Use any SFTP client (FileZilla, Cyberduck, sftp). You see one folder per bot you can edit.">
 	{#if sftp && !sftp.enabled}
-		<Notice>The SFTP server is turned off on this panel. The administrator can enable it with <code class="font-mono">BOTPANEL_SFTP_LISTEN</code>.</Notice>
+		<Notice>The SFTP server is turned off on this panel. The administrator can enable it with <code class="font-mono">RIVET_SFTP_LISTEN</code>.</Notice>
 	{:else if sftp}
 		<dl class="card grid grid-cols-[auto_minmax(0,1fr)] gap-x-6 gap-y-2.5 p-5">
 			<dt class="text-muted">Host</dt><dd><code class="copyable font-mono">{host}</code> <span class="text-small text-muted">connect to the server itself: SFTP does not go through a web proxy or tunnel</span></dd>
@@ -104,3 +105,4 @@
 </SettingsSection>
 
 {#if session.features.automation}<AutomationTokens />{/if}
+{#if session.features.api_clients}<ApiClients />{/if}

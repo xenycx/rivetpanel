@@ -6,8 +6,8 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 
-	"botpanel/internal/addons"
-	"botpanel/internal/service"
+	"github.com/xenycx/rivetpanel/internal/addons"
+	"github.com/xenycx/rivetpanel/internal/service"
 )
 
 func serviceAddon(in addonIn) service.AddonInput {
@@ -15,11 +15,11 @@ func serviceAddon(in addonIn) service.AddonInput {
 }
 
 // listAddonKinds returns the add-on catalog and whether this panel can run it.
-func (s *server) listAddonKinds(c fiber.Ctx) error {
+func (s *panel) listAddonKinds(c fiber.Ctx) error {
 	return c.JSON(fiber.Map{"addons": addons.List(), "available": s.bots.AddonData != nil})
 }
 
-func (s *server) listBotAddons(c fiber.Ctx) error {
+func (s *panel) listBotAddons(c fiber.Ctx) error {
 	as, err := s.bots.Addons(c.Context(), currentUser(c), strings.Clone(c.Params("id")))
 	if err != nil {
 		return err
@@ -27,7 +27,7 @@ func (s *server) listBotAddons(c fiber.Ctx) error {
 	return c.JSON(fiber.Map{"addons": as})
 }
 
-func (s *server) addBotAddon(c fiber.Ctx) error {
+func (s *panel) addBotAddon(c fiber.Ctx) error {
 	var in addonIn
 	if err := decode(c, &in); err != nil {
 		return err
@@ -39,7 +39,7 @@ func (s *server) addBotAddon(c fiber.Ctx) error {
 	return c.Status(fiber.StatusCreated).JSON(v)
 }
 
-func (s *server) patchBotAddon(c fiber.Ctx) error {
+func (s *panel) patchBotAddon(c fiber.Ctx) error {
 	var in struct {
 		MemoryBytes int64 `json:"memory_bytes"`
 	}
@@ -52,7 +52,7 @@ func (s *server) patchBotAddon(c fiber.Ctx) error {
 	return c.SendStatus(fiber.StatusNoContent)
 }
 
-func (s *server) deleteBotAddon(c fiber.Ctx) error {
+func (s *panel) deleteBotAddon(c fiber.Ctx) error {
 	if err := s.bots.RemoveAddon(c.Context(), currentUser(c), strings.Clone(c.Params("id")), strings.Clone(c.Params("kind"))); err != nil {
 		return err
 	}
@@ -60,7 +60,7 @@ func (s *server) deleteBotAddon(c fiber.Ctx) error {
 }
 
 // revealBotAddon returns the connection variables (including the password).
-func (s *server) revealBotAddon(c fiber.Ctx) error {
+func (s *panel) revealBotAddon(c fiber.Ctx) error {
 	vars, err := s.bots.AddonConnection(c.Context(), currentUser(c), strings.Clone(c.Params("id")), strings.Clone(c.Params("kind")))
 	if err != nil {
 		return err
@@ -69,7 +69,7 @@ func (s *server) revealBotAddon(c fiber.Ctx) error {
 	return c.JSON(fiber.Map{"variables": vars})
 }
 
-func (s *server) botAddonLogs(c fiber.Ctx) error {
+func (s *panel) botAddonLogs(c fiber.Ctx) error {
 	n, _ := strconv.Atoi(c.Query("lines", "200"))
 	out, err := s.bots.AddonLogs(c.Context(), currentUser(c), strings.Clone(c.Params("id")), strings.Clone(c.Params("kind")), n)
 	if err != nil {

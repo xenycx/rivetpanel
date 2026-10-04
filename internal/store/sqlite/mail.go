@@ -5,7 +5,7 @@ import (
 	"database/sql"
 	"errors"
 
-	"botpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/domain"
 )
 
 // CreatePasswordReset stores a reset link for a user, replacing any earlier

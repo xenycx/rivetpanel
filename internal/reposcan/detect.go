@@ -441,7 +441,7 @@ func detectCompose(s *Snapshot, p *Plan) {
 			case strings.Contains(img, "mariadb") || strings.Contains(img, "mysql"):
 				p.addAddon("mariadb")
 			case strings.Contains(img, "lavalink"):
-				p.note("The compose file runs Lavalink (music); BotForge has no Lavalink add-on yet, so point the bot at an external Lavalink server.")
+				p.note("The compose file runs Lavalink (music); RivetPanel has no Lavalink add-on yet, so point the bot at an external Lavalink server.")
 			}
 		}
 	}

@@ -1,6 +1,6 @@
 // discord.js starter. Set DISCORD_TOKEN in the panel's Environment tab.
 const { Client, GatewayIntentBits, Events } = require('discord.js');
-const { BotPanel } = require('./botpanel');
+const { RivetPanel } = require('./rivetpanel');
 
 const token = process.env.DISCORD_TOKEN;
 if (!token) {
@@ -9,7 +9,7 @@ if (!token) {
 }
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
-const panel = new BotPanel(client); // no-op until you generate a key on the Analytics tab
+const panel = new RivetPanel(client); // no-op until you generate a key on the Analytics tab
 
 client.once(Events.ClientReady, async (c) => {
   console.log(`Logged in as ${c.user.tag}`);

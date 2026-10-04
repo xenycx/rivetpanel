@@ -18,8 +18,9 @@ type fakeDocker struct {
 	seq   int
 	tail  string // returned by Tail
 
-	caps    Capabilities
-	capsErr error
+	caps      Capabilities
+	capsErr   error
+	capsCalls int
 
 	// fault injection
 	loseCreateResponses int // creates that succeed on the "daemon" but return an error
@@ -81,6 +82,7 @@ func newFake() *fakeDocker {
 func (f *fakeDocker) Capabilities(ctx context.Context) (Capabilities, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.capsCalls++
 	return f.caps, f.capsErr
 }
 

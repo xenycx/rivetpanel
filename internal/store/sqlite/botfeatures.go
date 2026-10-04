@@ -3,7 +3,7 @@ package sqlite
 import (
 	"context"
 
-	"botpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/domain"
 )
 
 // ---- backups ----
@@ -240,6 +240,64 @@ func (db *DB) RecordDeploy(ctx context.Context, botID string, sha *string, errMs
 	_, err := db.ExecContext(ctx, `UPDATE github_repos SET last_deployed_sha = COALESCE(?, last_deployed_sha),
 		last_deployed_at_ms = ?, last_error = ?, updated_at_ms = ? WHERE bot_id = ?`, sha, nowMS, errMsg, nowMS, botID)
 	return err
+}
+
+// PendingPush is a webhook push waiting for its server's node to reconnect.
+type PendingPush struct {
+	BotID, SHA, Link string
+	AtMS             int64
+}
+
+// SetPendingPush remembers the newest push for a bot whose node is offline
+// (a later push replaces an earlier one).
+func (db *DB) SetPendingPush(ctx context.Context, botID, sha, link string, nowMS int64) error {
+	_, err := db.ExecContext(ctx, `UPDATE github_repos SET pending_push_sha = ?, pending_push_link = ?, pending_push_at_ms = ?
+		WHERE bot_id = ?`, sha, link, nowMS, botID)
+	return err
+}
+
+// TakePendingPushes atomically returns and clears the pending pushes of the
+// servers on a node, so each pending push is run at most once.
+func (db *DB) TakePendingPushes(ctx context.Context, nodeID string) ([]PendingPush, error) {
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+	rows, err := tx.QueryContext(ctx, `SELECT r.bot_id, r.pending_push_sha, COALESCE(r.pending_push_link, ''), COALESCE(r.pending_push_at_ms, 0)
+		FROM github_repos r JOIN bots b ON b.id = r.bot_id
+		WHERE r.pending_push_sha IS NOT NULL AND b.node_id = ? AND b.desired_state != 'deleted'`, nodeID)
+	if err != nil {
+		return nil, err
+	}
+	var out []PendingPush
+	for rows.Next() {
+		var p PendingPush
+		if err := rows.Scan(&p.BotID, &p.SHA, &p.Link, &p.AtMS); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		out = append(out, p)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	for _, p := range out {
+		if _, err := tx.ExecContext(ctx, `UPDATE github_repos SET pending_push_sha = NULL, pending_push_link = NULL,
+			pending_push_at_ms = NULL WHERE bot_id = ?`, p.BotID); err != nil {
+			return nil, err
+		}
+	}
+	return out, tx.Commit()
+}
+
+// GetPendingPush reports a bot's pending push (ErrNotFound: none).
+func (db *DB) GetPendingPush(ctx context.Context, botID string) (PendingPush, error) {
+	var p PendingPush
+	err := db.QueryRowContext(ctx, `SELECT bot_id, pending_push_sha, COALESCE(pending_push_link, ''), COALESCE(pending_push_at_ms, 0)
+		FROM github_repos WHERE bot_id = ? AND pending_push_sha IS NOT NULL`, botID).Scan(&p.BotID, &p.SHA, &p.Link, &p.AtMS)
+	return p, mapErr(err)
 }
 
 // ---- ports ----

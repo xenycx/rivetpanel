@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"botpanel/internal/domain"
-	"botpanel/internal/service"
 	"github.com/fasthttp/websocket"
+	"github.com/xenycx/rivetpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/service"
 )
 
 func telemetryEnv(t *testing.T) (*env, *service.Analytics) {
@@ -58,7 +58,7 @@ func TestBotTelemetryEndToEnd(t *testing.T) {
 		t.Fatalf("%+v", k)
 	}
 	// The key is exposed to the bot as a (sealed) environment variable.
-	if !strings.Contains(string(owner.mustStatus(200, "GET", bot+"/env", nil)), "BOTPANEL_TELEMETRY_KEY") {
+	if !strings.Contains(string(owner.mustStatus(200, "GET", bot+"/env", nil)), "RIVET_TELEMETRY_KEY") {
 		t.Fatal("env var not set")
 	}
 	var stored string

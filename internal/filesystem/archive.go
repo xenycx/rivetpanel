@@ -18,7 +18,7 @@ import (
 
 // MetaDir holds panel metadata (environment snapshot) inside backup archives.
 // It is never written to the workspace.
-const MetaDir = ".botpanel"
+const MetaDir = ".rivetpanel"
 
 // BackupLimits bound archive creation and restoration.
 type BackupLimits struct {
@@ -121,6 +121,12 @@ func (w *Workspace) WriteTarGz(dst io.Writer, extra map[string][]byte, lim Backu
 		return 0, 0, walkErr
 	}
 	for name, data := range extra {
+		if name == "" || path.Clean(name) != name || !filepath.IsLocal(name) || strings.ContainsAny(name, "\\\x00") {
+			return 0, 0, reject("invalid backup metadata name")
+		}
+		if len(data) > maxMetaBytes {
+			return 0, 0, reject("backup metadata entry is too large")
+		}
 		hdr := &tar.Header{Name: path.Join(MetaDir, name), Mode: 0o600, Size: int64(len(data)), Typeflag: tar.TypeReg}
 		if err := tw.WriteHeader(hdr); err != nil {
 			return 0, 0, err
@@ -345,7 +351,7 @@ func mkdirAllIn(r *os.Root, p string) error {
 // DeployManifest is the workspace file listing the files of the last deploy,
 // so a later deploy can remove files the repository no longer contains while
 // leaving everything else (data, .env files, node_modules) alone.
-const DeployManifest = ".botpanel-deploy"
+const DeployManifest = ".rivetpanel-deploy"
 
 // DeployTarGz applies a repository tarball (GitHub layout: one top-level
 // directory) to the workspace. rootDir selects a subdirectory of the

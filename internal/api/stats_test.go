@@ -13,8 +13,8 @@ import (
 	"testing"
 	"time"
 
-	"botpanel/internal/domain"
-	"botpanel/internal/filesystem"
+	"github.com/xenycx/rivetpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/filesystem"
 )
 
 type fakeStats struct{ got chan string }

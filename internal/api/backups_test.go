@@ -12,16 +12,18 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
-	"botpanel/internal/domain"
-	"botpanel/internal/filesystem"
-	"botpanel/internal/service"
+	"github.com/xenycx/rivetpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/filesystem"
+	"github.com/xenycx/rivetpanel/internal/service"
 )
 
 var testClock atomic.Int64
@@ -108,10 +110,10 @@ func TestBackupLifecycle(t *testing.T) {
 		b, _ := io.ReadAll(tr)
 		found[h.Name] = string(b)
 	}
-	if found["index.js"] != "v1" || !strings.Contains(found[".botpanel/env.json"], "DISCORD_TOKEN") {
+	if found["index.js"] != "v1" || !strings.Contains(found[".rivetpanel/env.json"], "DISCORD_TOKEN") {
 		t.Fatalf("archive: %v", found)
 	}
-	if strings.Contains(found[".botpanel/env.json"], "tok-v1") || strings.Contains(string(body), "tok-v1") {
+	if strings.Contains(found[".rivetpanel/env.json"], "tok-v1") || strings.Contains(string(body), "tok-v1") {
 		t.Fatal("plaintext secret in the archive")
 	}
 
@@ -191,6 +193,109 @@ func TestBackupLifecycle(t *testing.T) {
 		t.Fatal("bot deletion left its backups on disk")
 	}
 	_ = bs
+}
+
+type remoteArchiveTx struct {
+	commit *filesystem.Commit
+	w      *filesystem.Workspace
+}
+
+type remoteArchives struct {
+	files *filesystem.Manager
+	mu    sync.Mutex
+	tx    map[string]remoteArchiveTx
+}
+
+func (r *remoteArchives) Backup(_ context.Context, _, botID string, extra map[string][]byte, limits filesystem.BackupLimits, dst io.Writer) error {
+	w, err := r.files.Open(botID)
+	if err != nil {
+		return err
+	}
+	defer w.Close()
+	_, _, err = w.WriteTarGz(dst, extra, limits)
+	return err
+}
+
+func (r *remoteArchives) BeginRestore(_ context.Context, _, botID string, src io.Reader, limits filesystem.BackupLimits) (string, error) {
+	w, err := r.files.Open(botID)
+	if err != nil {
+		return "", err
+	}
+	_, commit, err := w.RestoreTarGzCommit(src, limits)
+	if err != nil {
+		w.Close()
+		return "", err
+	}
+	id := fmt.Sprintf("tx-%d", time.Now().UnixNano())
+	r.mu.Lock()
+	r.tx[id] = remoteArchiveTx{commit: commit, w: w}
+	r.mu.Unlock()
+	return id, nil
+}
+
+func (r *remoteArchives) CompleteRestore(_ context.Context, _, _ string, id string, commit bool) error {
+	r.mu.Lock()
+	tx, ok := r.tx[id]
+	delete(r.tx, id)
+	r.mu.Unlock()
+	if !ok {
+		return domain.ErrNotFound
+	}
+	defer tx.w.Close()
+	if commit {
+		return tx.commit.Finish()
+	}
+	return tx.commit.Rollback()
+}
+
+func TestRemoteBackupAndRestoreUseAssignedNode(t *testing.T) {
+	e, bs, _ := backupEnv(t)
+	owner := e.user("remote-backup@x.io", domain.RoleUser)
+	id := owner.createBot("Remote backup")
+	base := "/api/v1/bots/" + id
+
+	remoteFiles, err := filesystem.NewManager(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { remoteFiles.Close() })
+	if err := remoteFiles.Create(id); err != nil {
+		t.Fatal(err)
+	}
+	remoteDir, _ := remoteFiles.Path(id)
+	if err := os.WriteFile(filepath.Join(remoteDir, "state.txt"), []byte("remote-v1"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	remoteNode := "11111111-1111-4111-8111-111111111111"
+	now := time.Now().UnixMilli()
+	if _, err := e.db.Exec(`INSERT INTO nodes (id, location_id, name, transport, endpoint, enabled, created_at_ms, updated_at_ms)
+		VALUES (?, ?, 'Backup agent', 'agent', NULL, 1, ?, ?)`, remoteNode, domain.LocalLocationID, now, now); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.db.Exec(`UPDATE bots SET node_id = ? WHERE id = ?`, remoteNode, id); err != nil {
+		t.Fatal(err)
+	}
+	e.bots.RemoteNode = func(nodeID string) bool { return nodeID == remoteNode }
+	bs.Remote = &remoteArchives{files: remoteFiles, tx: map[string]remoteArchiveTx{}}
+
+	var created backupDTO
+	json.Unmarshal(owner.mustStatus(http.StatusAccepted, http.MethodPost, base+"/backups", map[string]any{"include_env": false}), &created)
+	created = waitBackup(t, owner, base, created.ID)
+	if created.Status != "ready" {
+		t.Fatalf("remote backup = %+v", created)
+	}
+	if err := os.WriteFile(filepath.Join(remoteDir, "state.txt"), []byte("remote-v2"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	owner.mustStatus(http.StatusOK, http.MethodPost, base+"/backups/"+created.ID+"/restore", map[string]any{"restore_env": false})
+	got, err := os.ReadFile(filepath.Join(remoteDir, "state.txt"))
+	if err != nil || string(got) != "remote-v1" {
+		t.Fatalf("remote restored file = %q, %v", got, err)
+	}
+	local, _ := os.ReadFile(filepath.Join(e.dataDir, id, "state.txt"))
+	if string(local) == "remote-v1" {
+		t.Fatal("remote restore wrote into the panel's local workspace")
+	}
 }
 
 func botGen(t *testing.T, c *client, base string) int64 {
@@ -280,7 +385,7 @@ func TestRestoreWithUndecryptableEnvChangesNothing(t *testing.T) {
 	}
 }
 
-// rewriteEnvSnapshot returns the archive with garbage ciphertext in .botpanel/env.json.
+// rewriteEnvSnapshot returns the archive with garbage ciphertext in .rivetpanel/env.json.
 func rewriteEnvSnapshot(t *testing.T, gzData []byte) []byte {
 	t.Helper()
 	zr, err := gzip.NewReader(bytes.NewReader(gzData))
@@ -297,7 +402,7 @@ func rewriteEnvSnapshot(t *testing.T, gzData []byte) []byte {
 			break
 		}
 		b, _ := io.ReadAll(tr)
-		if h.Name == ".botpanel/env.json" {
+		if h.Name == ".rivetpanel/env.json" {
 			var snap map[string]any
 			json.Unmarshal(b, &snap)
 			for _, v := range snap["vars"].([]any) {

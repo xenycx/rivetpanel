@@ -1,4 +1,4 @@
-// Package config loads and validates BotPanel application configuration.
+// Package config loads and validates RivetPanel application configuration.
 package config
 
 import (
@@ -12,6 +12,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/xenycx/rivetpanel/internal/modules"
 )
 
 // RunnerMode selects how bot lifecycle work is executed.
@@ -39,6 +41,7 @@ type Config struct {
 	Production      bool
 	DBMaxOpenConns  int
 	ShutdownTimeout time.Duration
+	Modules         modules.Registry
 
 	KeyDir       string // directory of <id>.key files, outside SQLite
 	ActiveKeyID  string
@@ -108,6 +111,14 @@ type Config struct {
 	PortMin, PortMax int
 	PortPublicBind   bool
 
+	// Remote nodes (agents module). AgentListen is the mutually
+	// authenticated TLS listener agents dial; AgentAddress is the host:port
+	// announced to them at enrollment; AgentHosts are the names and
+	// addresses in the listener certificate.
+	AgentListen  string
+	AgentAddress string
+	AgentHosts   []string
+
 	// Static site hosting. SitesListen is a separate listener that only
 	// serves hosted sites (never the panel), so uploaded HTML and scripts
 	// never share the panel's origin; empty disables site hosting.
@@ -149,7 +160,7 @@ func (c Config) OAuthConfigured(provider string) bool {
 }
 
 // Load reads configuration from the environment. Production defaults use
-// system directories; set BOTPANEL_ENV=development to default to ./.dev-data
+// system directories; set RIVET_ENV=development to default to ./.dev-data
 // so nothing requires writes outside the working tree.
 func Load(getenv func(string) string) (Config, error) {
 	return LoadLookup(func(name string) (string, bool) {
@@ -174,23 +185,24 @@ type Lookup func(name string) (value string, set bool)
 // layered sources (the process environment plus overrides stored by the panel).
 func LoadLookup(look Lookup) (Config, error) {
 	getenv := func(name string) string { v, _ := look(name); return v }
-	env := strings.ToLower(strings.TrimSpace(getenv("BOTPANEL_ENV")))
+	env := strings.ToLower(strings.TrimSpace(getenv("RIVET_ENV")))
 	switch env {
 	case "", "production", "development":
 	default:
-		return Config{}, fmt.Errorf("BOTPANEL_ENV must be production or development, got %q", env)
+		return Config{}, fmt.Errorf("RIVET_ENV must be production or development, got %q", env)
 	}
 	dev := env == "development"
 
 	c := Config{
 		Listen:          "127.0.0.1:8080",
-		DBPath:          "/var/lib/botpanel/botpanel.db",
-		DataRoot:        "/var/lib/botpanel/bots",
+		DBPath:          "/var/lib/rivetpanel/rivetpanel.db",
+		DataRoot:        "/var/lib/rivetpanel/bots",
 		RunnerMode:      RunnerLocal,
 		Production:      !dev,
 		DBMaxOpenConns:  4,
 		ShutdownTimeout: 10 * time.Second,
-		KeyDir:          "/etc/botpanel/keys",
+		Modules:         modules.Default(),
+		KeyDir:          "/etc/rivetpanel/keys",
 		ActiveKeyID:     "k1",
 		SessionTTL:      7 * 24 * time.Hour,
 		HashWorkers:     1,
@@ -210,50 +222,71 @@ func LoadLookup(look Lookup) (Config, error) {
 		TelemetryInterval:  30 * time.Second,
 		TelemetryRetention: 7 * 24 * time.Hour,
 	}
+	moduleRegistry, err := modules.Parse(getenv("RIVET_MODULES"))
+	if err != nil {
+		return Config{}, fmt.Errorf("RIVET_MODULES: %w", err)
+	}
+	c.Modules = moduleRegistry
+	if c.Modules.Enabled("agents") {
+		c.AgentListen = fmt.Sprintf(":%d", 8444)
+	}
+	if v, ok := look("RIVET_AGENT_LISTEN"); ok {
+		c.AgentListen = v
+	}
+	if v, ok := look("RIVET_AGENT_ADDRESS"); ok {
+		c.AgentAddress = v
+	}
+	if v, ok := look("RIVET_AGENT_HOSTS"); ok {
+		for _, h := range strings.Split(v, ",") {
+			if h = strings.TrimSpace(h); h != "" {
+				c.AgentHosts = append(c.AgentHosts, h)
+			}
+		}
+	}
 	if dev {
 		c.KeyDir = filepath.Join(".dev-data", "keys")
-		c.DBPath = filepath.Join(".dev-data", "botpanel.db")
+		c.DBPath = filepath.Join(".dev-data", "rivetpanel.db")
 		c.DataRoot = filepath.Join(".dev-data", "bots")
 	}
-	c.BackupDir = "/var/lib/botpanel/backups"
+	c.BackupDir = "/var/lib/rivetpanel/backups"
 	if dev {
 		c.BackupDir = filepath.Join(".dev-data", "backups")
 	}
 	c.BackupInterval, c.BackupKeep, c.BackupMaxBytes = 24*time.Hour, 7, 2<<30
 
-	if v := getenv("BOTPANEL_LISTEN"); v != "" {
+	if v := getenv("RIVET_LISTEN"); v != "" {
 		c.Listen = v
 	}
-	if v := getenv("BOTPANEL_DB_PATH"); v != "" {
+	if v := getenv("RIVET_DB_PATH"); v != "" {
 		c.DBPath = v
 	}
-	if v := getenv("BOTPANEL_DATA_ROOT"); v != "" {
+	if v := getenv("RIVET_DATA_ROOT"); v != "" {
 		c.DataRoot = v
 	}
-	if v := getenv("BOTPANEL_RUNNER_MODE"); v != "" {
+	if v := getenv("RIVET_RUNNER_MODE"); v != "" {
 		c.RunnerMode = RunnerMode(strings.ToLower(v))
 	}
-	if v := getenv("BOTPANEL_DOCKER_HOST"); v != "" {
+	if v := getenv("RIVET_DOCKER_HOST"); v != "" {
 		c.DockerHost = v
 	}
-	if v := getenv("BOTPANEL_CONTAINER_USER"); v != "" {
+	if v := getenv("RIVET_CONTAINER_USER"); v != "" {
 		c.ContainerUser = v
 	}
-	if v := getenv("BOTPANEL_CONTAINER_NETWORK"); v != "" {
+	if v := getenv("RIVET_CONTAINER_NETWORK"); v != "" {
 		c.ContainerNetwork = v
 	}
-	if v := getenv("BOTPANEL_WORKSPACE_OWNER"); v != "" {
+	if v := getenv("RIVET_WORKSPACE_OWNER"); v != "" {
 		c.WorkspaceOwner = v
 	}
-	c.AllowRootUser = getenv("BOTPANEL_ALLOW_ROOT_CONTAINER_USER") == "1"
-	if v := getenv("BOTPANEL_RUNNER_WORKERS"); v != "" {
+	c.AllowRootUser = getenv("RIVET_ALLOW_ROOT_CONTAINER_USER") == "1"
+	if v := getenv("RIVET_RUNNER_WORKERS"); v != "" {
 		n, err := strconv.Atoi(v)
 		if err != nil {
-			return Config{}, fmt.Errorf("BOTPANEL_RUNNER_WORKERS: %w", err)
+			return Config{}, fmt.Errorf("RIVET_RUNNER_WORKERS: %w", err)
 		}
 		c.RunnerWorkers = n
 	}
-	for name, dst := range map[string]*int{"BOTPANEL_MAX_BUILDS": &c.MaxBuilds, "BOTPANEL_MAX_BOTS_PER_USER": &c.MaxBotsPerUser} {
+	for name, dst := range map[string]*int{"RIVET_MAX_BUILDS": &c.MaxBuilds, "RIVET_MAX_BOTS_PER_USER": &c.MaxBotsPerUser} {
 		if v := getenv(name); v != "" {
 			n, err := strconv.Atoi(v)
 			if err != nil {
@@ -262,8 +295,8 @@ func LoadLookup(look Lookup) (Config, error) {
 			*dst = n
 		}
 	}
-	for name, dst := range map[string]*int64{"BOTPANEL_USER_MEMORY_BYTES": &c.UserMemoryBytes, "BOTPANEL_NODE_MEMORY_BYTES": &c.NodeMemoryBytes,
-		"BOTPANEL_MIN_FREE_DISK_BYTES": &c.MinFreeDisk} {
+	for name, dst := range map[string]*int64{"RIVET_USER_MEMORY_BYTES": &c.UserMemoryBytes, "RIVET_NODE_MEMORY_BYTES": &c.NodeMemoryBytes,
+		"RIVET_MIN_FREE_DISK_BYTES": &c.MinFreeDisk} {
 		if v := getenv(name); v != "" {
 			n, err := strconv.ParseInt(v, 10, 64)
 			if err != nil {
@@ -272,21 +305,21 @@ func LoadLookup(look Lookup) (Config, error) {
 			*dst = n
 		}
 	}
-	if v := getenv("BOTPANEL_BUILD_TIMEOUT"); v != "" {
+	if v := getenv("RIVET_BUILD_TIMEOUT"); v != "" {
 		d, err := time.ParseDuration(v)
 		if err != nil {
-			return Config{}, fmt.Errorf("BOTPANEL_BUILD_TIMEOUT: %w", err)
+			return Config{}, fmt.Errorf("RIVET_BUILD_TIMEOUT: %w", err)
 		}
 		c.BuildTimeout = d
 	}
-	if v := getenv("BOTPANEL_MAX_UPLOAD_BYTES"); v != "" {
+	if v := getenv("RIVET_MAX_UPLOAD_BYTES"); v != "" {
 		n, err := strconv.ParseInt(v, 10, 64)
 		if err != nil {
-			return Config{}, fmt.Errorf("BOTPANEL_MAX_UPLOAD_BYTES: %w", err)
+			return Config{}, fmt.Errorf("RIVET_MAX_UPLOAD_BYTES: %w", err)
 		}
 		c.MaxUploadBytes = n
 	}
-	for name, dst := range map[string]*time.Duration{"BOTPANEL_TELEMETRY_INTERVAL": &c.TelemetryInterval, "BOTPANEL_TELEMETRY_RETENTION": &c.TelemetryRetention} {
+	for name, dst := range map[string]*time.Duration{"RIVET_TELEMETRY_INTERVAL": &c.TelemetryInterval, "RIVET_TELEMETRY_RETENTION": &c.TelemetryRetention} {
 		if v := getenv(name); v != "" {
 			d, err := time.ParseDuration(v)
 			if err != nil {
@@ -295,111 +328,111 @@ func LoadLookup(look Lookup) (Config, error) {
 			*dst = d
 		}
 	}
-	c.PublicURL = strings.TrimRight(strings.TrimSpace(getenv("BOTPANEL_PUBLIC_URL")), "/")
-	c.GitHubClientID = strings.TrimSpace(getenv("BOTPANEL_GITHUB_CLIENT_ID"))
-	c.GitHubSecret = strings.TrimSpace(getenv("BOTPANEL_GITHUB_CLIENT_SECRET"))
-	c.DiscordClientID = strings.TrimSpace(getenv("BOTPANEL_DISCORD_CLIENT_ID"))
-	c.DiscordSecret = strings.TrimSpace(getenv("BOTPANEL_DISCORD_CLIENT_SECRET"))
-	c.MailgunAPIKey = strings.TrimSpace(getenv("BOTPANEL_MAILGUN_API_KEY"))
-	c.MailgunDomain = strings.TrimSpace(getenv("BOTPANEL_MAILGUN_DOMAIN"))
-	c.MailgunRegion = strings.ToLower(strings.TrimSpace(getenv("BOTPANEL_MAILGUN_REGION")))
-	c.MailFrom = strings.TrimSpace(getenv("BOTPANEL_MAIL_FROM"))
-	c.ProxyHeader = strings.TrimSpace(getenv("BOTPANEL_PROXY_HEADER"))
-	c.MetricsToken = strings.TrimSpace(getenv("BOTPANEL_METRICS_TOKEN"))
-	if v := getenv("BOTPANEL_BACKUP_DIR"); v != "" {
+	c.PublicURL = strings.TrimRight(strings.TrimSpace(getenv("RIVET_PUBLIC_URL")), "/")
+	c.GitHubClientID = strings.TrimSpace(getenv("RIVET_GITHUB_CLIENT_ID"))
+	c.GitHubSecret = strings.TrimSpace(getenv("RIVET_GITHUB_CLIENT_SECRET"))
+	c.DiscordClientID = strings.TrimSpace(getenv("RIVET_DISCORD_CLIENT_ID"))
+	c.DiscordSecret = strings.TrimSpace(getenv("RIVET_DISCORD_CLIENT_SECRET"))
+	c.MailgunAPIKey = strings.TrimSpace(getenv("RIVET_MAILGUN_API_KEY"))
+	c.MailgunDomain = strings.TrimSpace(getenv("RIVET_MAILGUN_DOMAIN"))
+	c.MailgunRegion = strings.ToLower(strings.TrimSpace(getenv("RIVET_MAILGUN_REGION")))
+	c.MailFrom = strings.TrimSpace(getenv("RIVET_MAIL_FROM"))
+	c.ProxyHeader = strings.TrimSpace(getenv("RIVET_PROXY_HEADER"))
+	c.MetricsToken = strings.TrimSpace(getenv("RIVET_METRICS_TOKEN"))
+	if v := getenv("RIVET_BACKUP_DIR"); v != "" {
 		c.BackupDir = v
 	}
-	if v := getenv("BOTPANEL_BACKUP_INTERVAL"); v != "" {
+	if v := getenv("RIVET_BACKUP_INTERVAL"); v != "" {
 		d, err := time.ParseDuration(v)
 		if err != nil {
-			return Config{}, fmt.Errorf("BOTPANEL_BACKUP_INTERVAL: %w", err)
+			return Config{}, fmt.Errorf("RIVET_BACKUP_INTERVAL: %w", err)
 		}
 		c.BackupInterval = d
 	}
-	if v := getenv("BOTPANEL_BACKUP_KEEP"); v != "" {
+	if v := getenv("RIVET_BACKUP_KEEP"); v != "" {
 		n, err := strconv.Atoi(v)
 		if err != nil {
-			return Config{}, fmt.Errorf("BOTPANEL_BACKUP_KEEP: %w", err)
+			return Config{}, fmt.Errorf("RIVET_BACKUP_KEEP: %w", err)
 		}
 		c.BackupKeep = n
 	}
-	if v := getenv("BOTPANEL_BACKUP_MAX_BYTES"); v != "" {
+	if v := getenv("RIVET_BACKUP_MAX_BYTES"); v != "" {
 		n, err := strconv.ParseInt(v, 10, 64)
 		if err != nil {
-			return Config{}, fmt.Errorf("BOTPANEL_BACKUP_MAX_BYTES: %w", err)
+			return Config{}, fmt.Errorf("RIVET_BACKUP_MAX_BYTES: %w", err)
 		}
 		c.BackupMaxBytes = n
 	}
 	c.PortMin, c.PortMax = 20000, 29999
-	if v := strings.TrimSpace(getenv("BOTPANEL_PORT_RANGE")); v != "" {
+	if v := strings.TrimSpace(getenv("RIVET_PORT_RANGE")); v != "" {
 		lo, hi, ok := strings.Cut(v, "-")
 		a, e1 := strconv.Atoi(lo)
 		b, e2 := strconv.Atoi(hi)
 		if !ok || e1 != nil || e2 != nil {
-			return Config{}, fmt.Errorf("BOTPANEL_PORT_RANGE %q must look like 20000-29999", v)
+			return Config{}, fmt.Errorf("RIVET_PORT_RANGE %q must look like 20000-29999", v)
 		}
 		c.PortMin, c.PortMax = a, b
 	}
-	c.PortPublicBind = getenv("BOTPANEL_PORT_PUBLIC_BIND") == "1"
-	c.SitesDir, c.SiteMaxBytes, c.MaxSitesPerUser = "/var/lib/botpanel/sites", 100<<20, 10
+	c.PortPublicBind = getenv("RIVET_PORT_PUBLIC_BIND") == "1"
+	c.SitesDir, c.SiteMaxBytes, c.MaxSitesPerUser = "/var/lib/rivetpanel/sites", 100<<20, 10
 	if dev {
 		c.SitesDir = filepath.Join(".dev-data", "sites")
 		c.SitesListen, c.SitesBaseURL = "127.0.0.1:8081", "http://localhost:8081"
 	}
-	if v, ok := look("BOTPANEL_SITES_LISTEN"); ok {
+	if v, ok := look("RIVET_SITES_LISTEN"); ok {
 		c.SitesListen = v
 	}
-	if v := strings.TrimRight(strings.TrimSpace(getenv("BOTPANEL_SITES_BASE_URL")), "/"); v != "" {
+	if v := strings.TrimRight(strings.TrimSpace(getenv("RIVET_SITES_BASE_URL")), "/"); v != "" {
 		c.SitesBaseURL = v
 	}
-	for _, d := range strings.Split(getenv("BOTPANEL_SITES_DOMAINS"), ",") {
+	for _, d := range strings.Split(getenv("RIVET_SITES_DOMAINS"), ",") {
 		if d = strings.TrimSuffix(strings.ToLower(strings.TrimSpace(d)), "."); d != "" {
 			c.SitesDomains = append(c.SitesDomains, d)
 		}
 	}
-	if v := strings.TrimSpace(getenv("BOTPANEL_SITES_DIR")); v != "" {
+	if v := strings.TrimSpace(getenv("RIVET_SITES_DIR")); v != "" {
 		c.SitesDir = v
 	}
-	c.SitesDNSTarget = strings.ToLower(strings.TrimSpace(getenv("BOTPANEL_SITES_DNS_TARGET")))
-	if v := getenv("BOTPANEL_SITE_MAX_BYTES"); v != "" {
+	c.SitesDNSTarget = strings.ToLower(strings.TrimSpace(getenv("RIVET_SITES_DNS_TARGET")))
+	if v := getenv("RIVET_SITE_MAX_BYTES"); v != "" {
 		n, err := strconv.ParseInt(v, 10, 64)
 		if err != nil {
-			return Config{}, fmt.Errorf("BOTPANEL_SITE_MAX_BYTES: %w", err)
+			return Config{}, fmt.Errorf("RIVET_SITE_MAX_BYTES: %w", err)
 		}
 		c.SiteMaxBytes = n
 	}
-	if v := getenv("BOTPANEL_MAX_SITES_PER_USER"); v != "" {
+	if v := getenv("RIVET_MAX_SITES_PER_USER"); v != "" {
 		n, err := strconv.Atoi(v)
 		if err != nil {
-			return Config{}, fmt.Errorf("BOTPANEL_MAX_SITES_PER_USER: %w", err)
+			return Config{}, fmt.Errorf("RIVET_MAX_SITES_PER_USER: %w", err)
 		}
 		c.MaxSitesPerUser = n
 	}
-	c.SFTPListen = strings.TrimSpace(getenv("BOTPANEL_SFTP_LISTEN"))
-	c.SFTPHostKey = strings.TrimSpace(getenv("BOTPANEL_SFTP_HOST_KEY"))
+	c.SFTPListen = strings.TrimSpace(getenv("RIVET_SFTP_LISTEN"))
+	c.SFTPHostKey = strings.TrimSpace(getenv("RIVET_SFTP_HOST_KEY"))
 	if c.SFTPHostKey == "" {
 		c.SFTPHostKey = filepath.Join(filepath.Dir(c.DBPath), "sftp_host_ed25519")
 	}
 	c.SFTPMaxFile = 256 << 20
-	if v := getenv("BOTPANEL_SFTP_MAX_FILE_BYTES"); v != "" {
+	if v := getenv("RIVET_SFTP_MAX_FILE_BYTES"); v != "" {
 		n, err := strconv.ParseInt(v, 10, 64)
 		if err != nil {
-			return Config{}, fmt.Errorf("BOTPANEL_SFTP_MAX_FILE_BYTES: %w", err)
+			return Config{}, fmt.Errorf("RIVET_SFTP_MAX_FILE_BYTES: %w", err)
 		}
 		c.SFTPMaxFile = n
 	}
-	c.OAuthAllowSignup = getenv("BOTPANEL_OAUTH_ALLOW_SIGNUP") == "1"
-	c.OAuthAllowSignupSet = strings.TrimSpace(getenv("BOTPANEL_OAUTH_ALLOW_SIGNUP")) != ""
-	if v := getenv("BOTPANEL_KEY_DIR"); v != "" {
+	c.OAuthAllowSignup = getenv("RIVET_OAUTH_ALLOW_SIGNUP") == "1"
+	c.OAuthAllowSignupSet = strings.TrimSpace(getenv("RIVET_OAUTH_ALLOW_SIGNUP")) != ""
+	if v := getenv("RIVET_KEY_DIR"); v != "" {
 		c.KeyDir = v
 	}
-	if v := getenv("BOTPANEL_ACTIVE_KEY_ID"); v != "" {
+	if v := getenv("RIVET_ACTIVE_KEY_ID"); v != "" {
 		c.ActiveKeyID = v
 	}
-	if v := getenv("BOTPANEL_RUNTIMES_DIR"); v != "" {
+	if v := getenv("RIVET_RUNTIMES_DIR"); v != "" {
 		c.RuntimesDir = v
 	}
-	for name, dst := range map[string]*int64{"BOTPANEL_MAX_BOT_MEMORY_BYTES": &c.MaxBotMemory, "BOTPANEL_MAX_BOT_NANO_CPUS": &c.MaxBotCPUs} {
+	for name, dst := range map[string]*int64{"RIVET_MAX_BOT_MEMORY_BYTES": &c.MaxBotMemory, "RIVET_MAX_BOT_NANO_CPUS": &c.MaxBotCPUs} {
 		if v := getenv(name); v != "" {
 			n, err := strconv.ParseInt(v, 10, 64)
 			if err != nil {
@@ -408,24 +441,24 @@ func LoadLookup(look Lookup) (Config, error) {
 			*dst = n
 		}
 	}
-	if v := getenv("BOTPANEL_SESSION_TTL"); v != "" {
+	if v := getenv("RIVET_SESSION_TTL"); v != "" {
 		d, err := time.ParseDuration(v)
 		if err != nil {
-			return Config{}, fmt.Errorf("BOTPANEL_SESSION_TTL: %w", err)
+			return Config{}, fmt.Errorf("RIVET_SESSION_TTL: %w", err)
 		}
 		c.SessionTTL = d
 	}
-	if v := getenv("BOTPANEL_DB_MAX_CONNS"); v != "" {
+	if v := getenv("RIVET_DB_MAX_CONNS"); v != "" {
 		n, err := strconv.Atoi(v)
 		if err != nil {
-			return Config{}, fmt.Errorf("BOTPANEL_DB_MAX_CONNS: %w", err)
+			return Config{}, fmt.Errorf("RIVET_DB_MAX_CONNS: %w", err)
 		}
 		c.DBMaxOpenConns = n
 	}
-	if v := getenv("BOTPANEL_SHUTDOWN_TIMEOUT"); v != "" {
+	if v := getenv("RIVET_SHUTDOWN_TIMEOUT"); v != "" {
 		d, err := time.ParseDuration(v)
 		if err != nil {
-			return Config{}, fmt.Errorf("BOTPANEL_SHUTDOWN_TIMEOUT: %w", err)
+			return Config{}, fmt.Errorf("RIVET_SHUTDOWN_TIMEOUT: %w", err)
 		}
 		c.ShutdownTimeout = d
 	}
@@ -443,14 +476,14 @@ func (c Config) validateSites() []error {
 	if _, _, err := net.SplitHostPort(c.SitesListen); err != nil {
 		errs = append(errs, fmt.Errorf("sites listen address %q: %w", c.SitesListen, err))
 	} else if c.SitesListen == c.Listen {
-		errs = append(errs, errors.New("BOTPANEL_SITES_LISTEN must differ from BOTPANEL_LISTEN: sites never share the panel's listener"))
+		errs = append(errs, errors.New("RIVET_SITES_LISTEN must differ from RIVET_LISTEN: sites never share the panel's listener"))
 	}
 	u, err := url.Parse(c.SitesBaseURL)
 	switch {
 	case c.SitesBaseURL == "":
-		errs = append(errs, errors.New("BOTPANEL_SITES_BASE_URL is required when BOTPANEL_SITES_LISTEN is set (for example https://sites.example.com)"))
+		errs = append(errs, errors.New("RIVET_SITES_BASE_URL is required when RIVET_SITES_LISTEN is set (for example https://sites.example.com)"))
 	case err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Hostname() == "" || (u.Path != "" && u.Path != "/") || u.RawQuery != "" || u.User != nil:
-		errs = append(errs, fmt.Errorf("BOTPANEL_SITES_BASE_URL %q must be an origin such as https://sites.example.com", c.SitesBaseURL))
+		errs = append(errs, fmt.Errorf("RIVET_SITES_BASE_URL %q must be an origin such as https://sites.example.com", c.SitesBaseURL))
 	case c.PublicURL != "":
 		if p, err := url.Parse(c.PublicURL); err == nil {
 			ph, sh := strings.ToLower(p.Hostname()), strings.ToLower(u.Hostname())
@@ -467,17 +500,17 @@ func (c Config) validateSites() []error {
 		errs = append(errs, errors.New("sites directory is empty or invalid"))
 	}
 	if c.SiteMaxBytes < 1<<20 || c.SiteMaxBytes > 4<<30 {
-		errs = append(errs, errors.New("BOTPANEL_SITE_MAX_BYTES must be between 1 MiB and 4 GiB"))
+		errs = append(errs, errors.New("RIVET_SITE_MAX_BYTES must be between 1 MiB and 4 GiB"))
 	}
 	if c.MaxSitesPerUser < 0 {
-		errs = append(errs, errors.New("BOTPANEL_MAX_SITES_PER_USER cannot be negative (0 means unlimited)"))
+		errs = append(errs, errors.New("RIVET_MAX_SITES_PER_USER cannot be negative (0 means unlimited)"))
 	}
 	return errs
 }
 
 var hostLabelRe = regexp.MustCompile(`^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$`)
 
-// validateSitesDomains checks BOTPANEL_SITES_DOMAINS: host names that overlap
+// validateSitesDomains checks RIVET_SITES_DOMAINS: host names that overlap
 // neither each other, the primary sites domain, nor the panel's host (a site
 // could set cookies for any parent of its own host).
 func (c Config) validateSitesDomains() []error {
@@ -495,15 +528,15 @@ func (c Config) validateSitesDomains() []error {
 			valid = valid && hostLabelRe.MatchString(l)
 		}
 		if !valid {
-			errs = append(errs, fmt.Errorf("BOTPANEL_SITES_DOMAINS: %q is not a host name such as pages.example.net (use punycode for international names)", d))
+			errs = append(errs, fmt.Errorf("RIVET_SITES_DOMAINS: %q is not a host name such as pages.example.net (use punycode for international names)", d))
 			continue
 		}
 		if panel != "" && overlaps(d, panel) {
-			errs = append(errs, fmt.Errorf("BOTPANEL_SITES_DOMAINS: %q overlaps the panel's host; use a separate domain", d))
+			errs = append(errs, fmt.Errorf("RIVET_SITES_DOMAINS: %q overlaps the panel's host; use a separate domain", d))
 		}
 		for _, o := range seen {
 			if o != "" && overlaps(d, o) {
-				errs = append(errs, fmt.Errorf("BOTPANEL_SITES_DOMAINS: %q overlaps %q; a sites domain cannot be, or be above or below, another", d, o))
+				errs = append(errs, fmt.Errorf("RIVET_SITES_DOMAINS: %q overlaps %q; a sites domain cannot be, or be above or below, another", d, o))
 			}
 		}
 		seen = append(seen, d)
@@ -548,7 +581,7 @@ func (c Config) Validate() error {
 	if uid, gid, ok := parseUser(c.ContainerUser); !ok {
 		errs = append(errs, fmt.Errorf("container user %q must be numeric uid:gid", c.ContainerUser))
 	} else if (uid == 0 || gid == 0) && !c.AllowRootUser {
-		errs = append(errs, errors.New("container user must be nonroot (set BOTPANEL_ALLOW_ROOT_CONTAINER_USER=1 only with a rootless daemon)"))
+		errs = append(errs, errors.New("container user must be nonroot (set RIVET_ALLOW_ROOT_CONTAINER_USER=1 only with a rootless daemon)"))
 	}
 	if c.WorkspaceOwner != "" {
 		if _, _, ok := parseUser(c.WorkspaceOwner); !ok {
@@ -563,13 +596,13 @@ func (c Config) Validate() error {
 		errs = append(errs, errors.New("runner workers must be between 1 and 16"))
 	}
 	if c.MaxBuilds < 1 || c.MaxBuilds > 16 {
-		errs = append(errs, errors.New("BOTPANEL_MAX_BUILDS must be between 1 and 16"))
+		errs = append(errs, errors.New("RIVET_MAX_BUILDS must be between 1 and 16"))
 	}
 	if c.MaxBotsPerUser < 0 || c.UserMemoryBytes < 0 || c.NodeMemoryBytes < 0 || c.MinFreeDisk < 0 {
 		errs = append(errs, errors.New("capacity budgets cannot be negative (0 means unlimited)"))
 	}
 	if c.NodeMemoryBytes > 0 && c.NodeMemoryBytes < c.MaxBotMemory {
-		errs = append(errs, errors.New("BOTPANEL_NODE_MEMORY_BYTES is smaller than BOTPANEL_MAX_BOT_MEMORY_BYTES; the largest bot could never start"))
+		errs = append(errs, errors.New("RIVET_NODE_MEMORY_BYTES is smaller than RIVET_MAX_BOT_MEMORY_BYTES; the largest bot could never start"))
 	}
 	if c.BuildTimeout < time.Minute || c.BuildTimeout > 2*time.Hour {
 		errs = append(errs, errors.New("build timeout must be between 1m and 2h"))
@@ -589,30 +622,30 @@ func (c Config) Validate() error {
 		errs = append(errs, errors.New("backup directory is empty or invalid"))
 	}
 	if c.BackupInterval != 0 && (c.BackupInterval < time.Hour || c.BackupInterval > 90*24*time.Hour) {
-		errs = append(errs, errors.New("BOTPANEL_BACKUP_INTERVAL must be 0 (off) or between 1h and 90d"))
+		errs = append(errs, errors.New("RIVET_BACKUP_INTERVAL must be 0 (off) or between 1h and 90d"))
 	}
 	if c.BackupKeep < 1 || c.BackupKeep > 45 {
-		errs = append(errs, errors.New("BOTPANEL_BACKUP_KEEP must be between 1 and 45"))
+		errs = append(errs, errors.New("RIVET_BACKUP_KEEP must be between 1 and 45"))
 	}
 	if c.BackupMaxBytes < 1<<20 {
-		errs = append(errs, errors.New("BOTPANEL_BACKUP_MAX_BYTES must be at least 1 MiB"))
+		errs = append(errs, errors.New("RIVET_BACKUP_MAX_BYTES must be at least 1 MiB"))
 	}
 	if c.PortMin < 1024 || c.PortMax > 65535 || c.PortMin > c.PortMax {
-		errs = append(errs, errors.New("BOTPANEL_PORT_RANGE must lie within 1024-65535 and be ordered"))
+		errs = append(errs, errors.New("RIVET_PORT_RANGE must lie within 1024-65535 and be ordered"))
 	}
 	if c.SFTPListen != "" {
 		if _, port, err := net.SplitHostPort(c.SFTPListen); err != nil || port == "" || port == "0" {
-			errs = append(errs, fmt.Errorf("BOTPANEL_SFTP_LISTEN %q must be host:port", c.SFTPListen))
+			errs = append(errs, fmt.Errorf("RIVET_SFTP_LISTEN %q must be host:port", c.SFTPListen))
 		}
 		if c.SFTPMaxFile < 1<<20 || c.SFTPMaxFile > 64<<30 {
-			errs = append(errs, errors.New("BOTPANEL_SFTP_MAX_FILE_BYTES must be between 1 MiB and 64 GiB"))
+			errs = append(errs, errors.New("RIVET_SFTP_MAX_FILE_BYTES must be between 1 MiB and 64 GiB"))
 		}
 	}
 	if c.ProxyHeader != "" && strings.Trim(c.ProxyHeader, "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-") != "" {
-		errs = append(errs, errors.New("BOTPANEL_PROXY_HEADER must be a header name such as X-Forwarded-For"))
+		errs = append(errs, errors.New("RIVET_PROXY_HEADER must be a header name such as X-Forwarded-For"))
 	}
 	if c.MetricsToken != "" && len(c.MetricsToken) < 24 {
-		errs = append(errs, errors.New("BOTPANEL_METRICS_TOKEN must be at least 24 characters"))
+		errs = append(errs, errors.New("RIVET_METRICS_TOKEN must be at least 24 characters"))
 	}
 	if c.ShutdownTimeout <= 0 {
 		errs = append(errs, errors.New("shutdown timeout must be positive"))
@@ -651,13 +684,13 @@ func (c Config) validateOAuth() []error {
 	u, err := url.Parse(c.PublicURL)
 	switch {
 	case c.PublicURL == "":
-		errs = append(errs, errors.New("BOTPANEL_PUBLIC_URL is required when OAuth is configured (e.g. https://panel.example.com)"))
+		errs = append(errs, errors.New("RIVET_PUBLIC_URL is required when OAuth is configured (e.g. https://panel.example.com)"))
 	case err != nil || u.Host == "" || u.Path != "" || u.RawQuery != "" || u.Fragment != "" || u.User != nil:
-		errs = append(errs, fmt.Errorf("BOTPANEL_PUBLIC_URL %q must be a bare origin like https://panel.example.com", c.PublicURL))
+		errs = append(errs, fmt.Errorf("RIVET_PUBLIC_URL %q must be a bare origin like https://panel.example.com", c.PublicURL))
 	case u.Scheme != "https" && !(u.Scheme == "http" && isLoopbackHost(u.Hostname())):
-		errs = append(errs, errors.New("BOTPANEL_PUBLIC_URL must use https (http is only allowed for localhost)"))
+		errs = append(errs, errors.New("RIVET_PUBLIC_URL must use https (http is only allowed for localhost)"))
 	case c.Production && u.Scheme != "https":
-		errs = append(errs, errors.New("BOTPANEL_PUBLIC_URL must use https in production"))
+		errs = append(errs, errors.New("RIVET_PUBLIC_URL must use https in production"))
 	}
 	return errs
 }

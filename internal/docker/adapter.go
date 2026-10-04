@@ -26,8 +26,8 @@ import (
 	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/docker/go-connections/nat"
 
-	"botpanel/internal/domain"
-	"botpanel/internal/runner"
+	"github.com/xenycx/rivetpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/runner"
 )
 
 const (
@@ -275,6 +275,23 @@ func (a *Adapter) Kill(ctx context.Context, id string) error {
 	}
 	if err != nil && strings.Contains(err.Error(), "is not running") {
 		return nil // already dead: the goal is met
+	}
+	return err
+}
+
+// Signal sends a stop signal (for a graceful stop) to a container's main
+// process. Only the signals blueprints may name are accepted.
+func (a *Adapter) Signal(ctx context.Context, id, sig string) error {
+	switch sig {
+	case "SIGINT", "SIGTERM", "SIGQUIT", "SIGHUP":
+	default:
+		return fmt.Errorf("signal %q is not allowed", sig)
+	}
+	ctx, cancel := within(ctx, opTimeout)
+	defer cancel()
+	err := a.cli.ContainerKill(ctx, id, sig)
+	if errdefs.IsNotFound(err) {
+		return runner.ErrNoContainer
 	}
 	return err
 }

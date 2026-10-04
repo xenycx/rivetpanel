@@ -58,7 +58,7 @@
 		vars = (await api<{ vars: EnvVar[] }>('PUT', path, { vars: v })).vars;
 	}
 
-	const system = (n: string) => /^BOTPANEL_/.test(n);
+	const system = (n: string) => /^RIVET_/.test(n);
 	const userVars = $derived((vars ?? []).filter((v) => !system(v.name) && (!search || v.name.toLowerCase().includes(search.toLowerCase()))));
 	const systemVars = $derived((vars ?? []).filter((v) => system(v.name)));
 	const missing = $derived(template && vars ? template.env.filter((t) => !vars!.some((v) => v.name === t.name)) : []);
@@ -125,7 +125,7 @@
 		e.preventDefault();
 		const n = addName.trim();
 		if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(n)) return (addProblem = 'Use letters, digits and underscores, starting with a letter.');
-		if (/^(BOTPANEL_|LD_)|^PATH$/i.test(n)) return (addProblem = 'This name is reserved by the panel.');
+		if (/^(RIVET_|LD_)|^PATH$/i.test(n)) return (addProblem = 'This name is reserved by the panel.');
 		busy = true;
 		try {
 			const existed = vars?.some((v) => v.name === n);
@@ -157,7 +157,7 @@
 	}
 	const parsed = $derived(parseDotenv(importText));
 	const parsedNames = $derived(Object.keys(parsed));
-	const reserved = $derived(parsedNames.filter((n) => /^(BOTPANEL_|LD_)|^PATH$/i.test(n)));
+	const reserved = $derived(parsedNames.filter((n) => /^(RIVET_|LD_)|^PATH$/i.test(n)));
 	async function applyImport() {
 		const v = { ...parsed };
 		for (const n of reserved) delete v[n];

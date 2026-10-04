@@ -17,10 +17,10 @@ import (
 
 	"golang.org/x/net/dns/dnsmessage"
 
-	operator "botpanel/internal/ai"
-	"botpanel/internal/domain"
-	"botpanel/internal/filesystem"
-	"botpanel/internal/service"
+	operator "github.com/xenycx/rivetpanel/internal/ai"
+	"github.com/xenycx/rivetpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/filesystem"
+	"github.com/xenycx/rivetpanel/internal/service"
 )
 
 // fakeProvider is a scripted OpenAI-compatible streaming endpoint. Each
@@ -616,7 +616,7 @@ func TestAIResearchBlocksInternalAddresses(t *testing.T) {
 	t.Cleanup(search.Close)
 
 	fp := &fakeProvider{steps: []func(http.ResponseWriter){
-		toolStep("c1", "web_search", map[string]any{"query": "botforge"}),
+		toolStep("c1", "web_search", map[string]any{"query": "rivetpanel"}),
 		toolStep("c2", "web_search", map[string]any{"query": "redirect"}),
 		toolStep("c3", "web_fetch", map[string]any{"url": "http://rebind.test:" + port + "/"}),
 		toolStep("c4", "web_fetch", map[string]any{"url": "http://100.64.0.1/"}),

@@ -15,9 +15,9 @@ import (
 	"sync"
 	"testing"
 
-	"botpanel/internal/domain"
-	"botpanel/internal/service"
-	"botpanel/internal/sitehost"
+	"github.com/xenycx/rivetpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/service"
+	"github.com/xenycx/rivetpanel/internal/sitehost"
 )
 
 type fakeTXT struct {
@@ -279,7 +279,7 @@ func TestSiteCustomDomains(t *testing.T) {
 		RecValue string  `json:"record_target"`
 	}
 	json.Unmarshal(c.mustStatus(201, "POST", base, map[string]string{"domain": " WWW.Example.COM. "}), &d)
-	if d.Domain != "www.example.com" || d.Verified || d.TXTName != "_botforge-verify.www.example.com" || !strings.HasPrefix(d.TXTValue, "botforge-verify=") ||
+	if d.Domain != "www.example.com" || d.Verified || d.TXTName != "_rivetpanel-verify.www.example.com" || !strings.HasPrefix(d.TXTValue, "rivetpanel-verify=") ||
 		d.RecType != "CNAME" || d.RecValue != "blog.sites.test" {
 		t.Fatalf("domain = %+v", d)
 	}
@@ -405,7 +405,7 @@ func TestSiteBaseDomains(t *testing.T) {
 	json.Unmarshal(c.mustStatus(201, "POST", "/api/v1/sites", map[string]string{"name": "Blog", "slug": "blog"}), &blog)
 	c.raw("POST", "/api/v1/sites/"+blog.ID+"/upload", zipOf(t, map[string]string{"index.html": "first"}), "application/zip")
 	json.Unmarshal(c.mustStatus(201, "POST", "/api/v1/sites/"+blog.ID+"/domains", map[string]string{"domain": "www.custom.dev"}), &struct{}{})
-	r.dns.set("_botforge-verify.www.custom.dev", "")
+	r.dns.set("_rivetpanel-verify.www.custom.dev", "")
 
 	// Overlapping, panel and malformed domains are refused.
 	for _, bad := range []string{"sites.test", "a.sites.test", "example.com", "x.panel.example.com", "localhost", "nodot"} {
@@ -413,7 +413,7 @@ func TestSiteBaseDomains(t *testing.T) {
 	}
 	var pages baseDTO
 	json.Unmarshal(admin.mustStatus(201, "POST", api, map[string]string{"domain": "Pages.Test", "label": "Pages"}), &pages)
-	if pages.Domain != "pages.test" || pages.Serving || pages.TXTName != "_botforge-domain.pages.test" || !strings.HasPrefix(pages.TXTValue, "botforge-domain=") || pages.RecType != "A" {
+	if pages.Domain != "pages.test" || pages.Serving || pages.TXTName != "_rivetpanel-domain.pages.test" || !strings.HasPrefix(pages.TXTValue, "rivetpanel-domain=") || pages.RecType != "A" {
 		t.Fatalf("added = %+v", pages)
 	}
 	// Unverified: no sites can be placed there, nothing is served.

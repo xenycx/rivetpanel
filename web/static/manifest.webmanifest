@@ -1,6 +1,6 @@
 {
-  "name": "BotForge",
-  "short_name": "BotForge",
+  "name": "RivetPanel",
+  "short_name": "RivetPanel",
   "description": "Run and manage Discord bots on this server.",
   "start_url": "/",
   "display": "standalone",

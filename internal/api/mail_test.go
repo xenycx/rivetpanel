@@ -12,10 +12,10 @@ import (
 	"testing"
 	"time"
 
-	"botpanel/internal/domain"
-	"botpanel/internal/mail"
-	"botpanel/internal/oauth"
-	"botpanel/internal/service"
+	"github.com/xenycx/rivetpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/mail"
+	"github.com/xenycx/rivetpanel/internal/oauth"
+	"github.com/xenycx/rivetpanel/internal/service"
 )
 
 // fakeMailgun records the messages the panel sends and answers the two
@@ -91,7 +91,7 @@ func mailEnv(t *testing.T) (*env, *fakeMailgun, *service.MailService) {
 func configureMail(t *testing.T, admin *client, extra map[string]any) {
 	t.Helper()
 	body := map[string]any{"mailgun_api_key": "key-good", "mailgun_domain": "mg.example.com", "mailgun_region": "eu",
-		"mail_from": "BotForge <noreply@mg.example.com>", "public_url": "https://panel.example.com"}
+		"mail_from": "RivetPanel <noreply@mg.example.com>", "public_url": "https://panel.example.com"}
 	for k, v := range extra {
 		body[k] = v
 	}
@@ -145,7 +145,7 @@ func TestAdminTestEmail(t *testing.T) {
 		t.Fatalf("result: %s", raw)
 	}
 	m := fm.next(t)
-	if m["to"] != "dest@example.com" || m["from"] != "BotForge <noreply@mg.example.com>" || !strings.Contains(m["subject"], "test") {
+	if m["to"] != "dest@example.com" || m["from"] != "RivetPanel <noreply@mg.example.com>" || !strings.Contains(m["subject"], "test") {
 		t.Fatalf("message: %v", m)
 	}
 	// A wrong key is explained, not leaked.

@@ -19,7 +19,7 @@ import (
 	"strings"
 	"time"
 
-	"botpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/domain"
 )
 
 // MaxLogoBytes bounds a custom logo (the browser resizes it first).
@@ -87,7 +87,7 @@ func discordToken(env map[string]string) (name, token string) {
 	}
 	sort.Strings(names)
 	for _, n := range names {
-		if v := clean(env[n]); !strings.HasPrefix(n, "BOTPANEL_") && discordTokenRe.MatchString(v) {
+		if v := clean(env[n]); !strings.HasPrefix(n, "RIVET_") && discordTokenRe.MatchString(v) {
 			return n, v
 		}
 	}
@@ -118,7 +118,7 @@ func (s *BotService) FetchDiscordIdentity(ctx context.Context, actor domain.User
 	defer cancel()
 	req, _ := http.NewRequestWithContext(rctx, http.MethodGet, strings.TrimRight(api, "/")+"/users/@me", nil)
 	req.Header.Set("Authorization", "Bot "+tok)
-	req.Header.Set("User-Agent", "DiscordBot (https://github.com/xenycx/botforge, 1)")
+	req.Header.Set("User-Agent", "DiscordBot (https://github.com/xenycx/rivetpanel, 1)")
 	res, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return domain.Bot{}, domain.Invalid("Discord could not be reached; try again later")

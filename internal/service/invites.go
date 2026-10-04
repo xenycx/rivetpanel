@@ -9,8 +9,8 @@ import (
 
 	"github.com/google/uuid"
 
-	"botpanel/internal/auth"
-	"botpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/auth"
+	"github.com/xenycx/rivetpanel/internal/domain"
 )
 
 const invitePrefix = "bpi_"
@@ -87,5 +87,13 @@ func (s *BotService) AcceptInvite(ctx context.Context, actor domain.User, tok st
 	if err != nil {
 		return domain.Invite{}, err
 	}
-	return s.Store.AcceptInvite(ctx, h, actor.ID, s.now())
+	inv, err := s.Store.AcceptInvite(ctx, h, actor.ID, s.now())
+	if err == nil {
+		link := ""
+		if b, err := s.Store.GetBot(ctx, inv.BotID); err == nil {
+			link = BotLink(b)
+		}
+		s.noticeAccess(ctx, actor, inv.CreatedBy, actorName(actor)+" accepted your invitation to "+inv.BotName, "", link)
+	}
+	return inv, err
 }

@@ -6,7 +6,7 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 
-	"botpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/domain"
 )
 
 // logoIn carries a base64 PNG or JPEG (resized by the browser).
@@ -32,7 +32,7 @@ func sendImage(c fiber.Ctx, data []byte, contentType string) error {
 	return c.Send(data)
 }
 
-func (s *server) getBotLogo(c fiber.Ctx) error {
+func (s *panel) getBotLogo(c fiber.Ctx) error {
 	l, err := s.bots.Logo(c.Context(), currentUser(c), strings.Clone(c.Params("id")))
 	if err != nil {
 		return err
@@ -40,7 +40,7 @@ func (s *server) getBotLogo(c fiber.Ctx) error {
 	return sendImage(c, l.Data, l.ContentType)
 }
 
-func (s *server) putBotLogo(c fiber.Ctx) error {
+func (s *panel) putBotLogo(c fiber.Ctx) error {
 	var in logoIn
 	if err := decode(c, &in); err != nil {
 		return err
@@ -56,7 +56,7 @@ func (s *server) putBotLogo(c fiber.Ctx) error {
 	return s.sendBot(c, id)
 }
 
-func (s *server) deleteBotLogo(c fiber.Ctx) error {
+func (s *panel) deleteBotLogo(c fiber.Ctx) error {
 	id := strings.Clone(c.Params("id"))
 	if err := s.bots.SetLogo(c.Context(), currentUser(c), id, nil); err != nil {
 		return err
@@ -65,7 +65,7 @@ func (s *server) deleteBotLogo(c fiber.Ctx) error {
 }
 
 // discordBotLogo fetches the bot user's avatar from Discord with the bot's token.
-func (s *server) discordBotLogo(c fiber.Ctx) error {
+func (s *panel) discordBotLogo(c fiber.Ctx) error {
 	b, err := s.bots.FetchDiscordIdentity(c.Context(), currentUser(c), strings.Clone(c.Params("id")))
 	if err != nil {
 		return err
@@ -73,7 +73,7 @@ func (s *server) discordBotLogo(c fiber.Ctx) error {
 	return c.JSON(s.viewBot(c, b))
 }
 
-func (s *server) sendBot(c fiber.Ctx, id string) error {
+func (s *panel) sendBot(c fiber.Ctx, id string) error {
 	b, err := s.bots.Get(c.Context(), currentUser(c), id)
 	if err != nil {
 		return err
@@ -81,7 +81,7 @@ func (s *server) sendBot(c fiber.Ctx, id string) error {
 	return c.JSON(s.viewBot(c, b))
 }
 
-func (s *server) getSiteIcon(c fiber.Ctx) error {
+func (s *panel) getSiteIcon(c fiber.Ctx) error {
 	icon, err := s.sites.Icon(c.Context(), currentUser(c), strings.Clone(c.Params("sid")))
 	if err != nil {
 		return err
@@ -92,7 +92,7 @@ func (s *server) getSiteIcon(c fiber.Ctx) error {
 	return sendImage(c, icon.Data, icon.ContentType)
 }
 
-func (s *server) putSiteLogo(c fiber.Ctx) error {
+func (s *panel) putSiteLogo(c fiber.Ctx) error {
 	var in logoIn
 	if err := decode(c, &in); err != nil {
 		return err
@@ -104,9 +104,9 @@ func (s *server) putSiteLogo(c fiber.Ctx) error {
 	return s.siteLogo(c, data)
 }
 
-func (s *server) deleteSiteLogo(c fiber.Ctx) error { return s.siteLogo(c, nil) }
+func (s *panel) deleteSiteLogo(c fiber.Ctx) error { return s.siteLogo(c, nil) }
 
-func (s *server) siteLogo(c fiber.Ctx, data []byte) error {
+func (s *panel) siteLogo(c fiber.Ctx, data []byte) error {
 	id := strings.Clone(c.Params("sid"))
 	if err := s.sites.SetLogo(c.Context(), currentUser(c), id, data); err != nil {
 		return err

@@ -13,12 +13,12 @@ import (
 	"testing"
 	"time"
 
-	"botpanel/internal/domain"
-	"botpanel/internal/filesystem"
-	"botpanel/internal/migrations"
-	"botpanel/internal/runtimes"
-	"botpanel/internal/store/sqlite"
-	rtdefaults "botpanel/runtimes"
+	"github.com/xenycx/rivetpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/filesystem"
+	"github.com/xenycx/rivetpanel/internal/migrations"
+	"github.com/xenycx/rivetpanel/internal/runtimes"
+	"github.com/xenycx/rivetpanel/internal/store/sqlite"
+	rtdefaults "github.com/xenycx/rivetpanel/runtimes"
 )
 
 const botID = "11111111-2222-4333-8444-555555555555"
@@ -158,6 +158,22 @@ func deref(s *string) string {
 	return *s
 }
 
+func TestRunBacksOffWhenWatchEnds(t *testing.T) {
+	g := newRig(t)
+	close(g.fd.events) // every event watch ends immediately
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	if err := g.r.Run(ctx); err != nil {
+		t.Fatal(err)
+	}
+	g.fd.mu.Lock()
+	calls := g.fd.capsCalls
+	g.fd.mu.Unlock()
+	if calls > 2 {
+		t.Fatalf("capability probe ran %d times after the event stream closed; reconnect loop did not back off", calls)
+	}
+}
+
 func TestStartCreatesHardenedContainerAndObservesRunning(t *testing.T) {
 	g := newRig(t)
 	g.desire("running", false)
@@ -172,7 +188,7 @@ func TestStartCreatesHardenedContainerAndObservesRunning(t *testing.T) {
 		t.Fatalf("created %d containers", len(g.fd.created))
 	}
 	s := g.fd.created[0]
-	if s.Name != "botpanel-"+botID+"-runtime" || s.Role != RoleRuntime || s.Generation != b.Generation {
+	if s.Name != "rivetpanel-"+botID+"-runtime" || s.Role != RoleRuntime || s.Generation != b.Generation {
 		t.Fatalf("%+v", s)
 	}
 	if !strings.Contains(s.Image, "@sha256:") {
@@ -429,7 +445,7 @@ func TestOrphanContainerSweep(t *testing.T) {
 func TestForeignNameConflictIsReportedNotDuplicated(t *testing.T) {
 	g := newRig(t)
 	g.fd.mu.Lock()
-	g.fd.conts["foreign"] = &ContainerInfo{ID: "foreign", Name: "botpanel-" + botID + "-runtime", State: "running", Labels: map[string]string{}}
+	g.fd.conts["foreign"] = &ContainerInfo{ID: "foreign", Name: "rivetpanel-" + botID + "-runtime", State: "running", Labels: map[string]string{}}
 	g.fd.mu.Unlock()
 	g.desire("running", false)
 	if d := g.pass(); d <= 0 {

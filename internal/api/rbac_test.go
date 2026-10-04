@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"botpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/domain"
 )
 
 func TestSubUserPermissions(t *testing.T) {

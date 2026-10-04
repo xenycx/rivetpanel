@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"botpanel/internal/domain"
-	"botpanel/internal/service"
+	"github.com/xenycx/rivetpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/service"
 )
 
 func scheduleEnv(t *testing.T) (*env, *service.Scheduler, *atomicClock) {

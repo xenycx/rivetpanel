@@ -4,7 +4,7 @@ import (
 	"context"
 	"database/sql"
 
-	"botpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/domain"
 )
 
 // Settings returns every stored panel setting.

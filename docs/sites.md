@@ -1,6 +1,6 @@
 # Static site hosting
 
-BotForge can host static websites next to your bots: a bot's dashboard, its
+RivetPanel can host static websites next to your bots: a bot's dashboard, its
 documentation, a landing page or an invite page. A site is a set of files
 (HTML, CSS, JavaScript, images) served exactly as uploaded. There is no
 server-side code and no build step on the server: build locally or in CI and
@@ -40,7 +40,7 @@ Studio's cross-origin preview. They never execute in the authenticated panel.
 
 ## How it is served (and why separately)
 
-Sites are served by a **separate listener** (`BOTPANEL_SITES_LISTEN`) that
+Sites are served by a **separate listener** (`RIVET_SITES_LISTEN`) that
 never serves the panel, and always on **different host names** from the panel.
 Site files are arbitrary user HTML and scripts; on the panel's origin they
 could read CSRF tokens, register service workers or act as the signed-in
@@ -48,7 +48,7 @@ user. On their own host names they cannot.
 
 * Default address: `<slug>.<sites domain>`, for example
   `https://docs.sites.example.com`. The sites domain is the host of
-  `BOTPANEL_SITES_BASE_URL` unless the site was placed under another sites
+  `RIVET_SITES_BASE_URL` unless the site was placed under another sites
   domain (see [Addresses and sites domains](#addresses-and-sites-domains)).
 * Custom domains: any number of verified host names per site (up to 10).
 * The listener maps the request's `Host` to the site's current **release** and
@@ -65,7 +65,7 @@ user. On their own host names they cannot.
   missing pages.
 
 Recommendation: use a **separate registrable domain** for sites (like
-`github.io` vs `github.com`), for example `example-sites.net`. BotForge
+`github.io` vs `github.com`), for example `example-sites.net`. RivetPanel
 refuses configurations where the panel's host would be a site host name, and
 in production refuses a panel host equal to the sites domain. A sites domain
 that merely shares a parent with the panel (panel `panel.example.com`, sites
@@ -76,18 +76,18 @@ that merely shares a parent with the panel (panel `panel.example.com`, sites
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
-| `BOTPANEL_SITES_LISTEN` | off (development: `127.0.0.1:8081`) | address of the sites listener; empty disables hosting |
-| `BOTPANEL_SITES_BASE_URL` | development: `http://localhost:8081` | origin whose host is the primary sites domain, e.g. `https://sites.example.com`; its scheme and port apply to every sites domain |
-| `BOTPANEL_SITES_DOMAINS` | none | further sites domains, comma-separated (e.g. `pages.example.net,example-sites.org`), trusted without a DNS record |
-| `BOTPANEL_SITES_DIR` | `/var/lib/botpanel/sites` | releases, one directory per site |
-| `BOTPANEL_SITE_MAX_BYTES` | 104857600 (100 MiB) | largest release, uncompressed (1 MiB–4 GiB) |
-| `BOTPANEL_MAX_SITES_PER_USER` | 10 | sites an account may create; 0 = unlimited; administrators are exempt |
-| `BOTPANEL_SITES_DNS_TARGET` | the site's default host | host name shown as the CNAME target for custom domains |
+| `RIVET_SITES_LISTEN` | off (development: `127.0.0.1:8081`) | address of the sites listener; empty disables hosting |
+| `RIVET_SITES_BASE_URL` | development: `http://localhost:8081` | origin whose host is the primary sites domain, e.g. `https://sites.example.com`; its scheme and port apply to every sites domain |
+| `RIVET_SITES_DOMAINS` | none | further sites domains, comma-separated (e.g. `pages.example.net,example-sites.org`), trusted without a DNS record |
+| `RIVET_SITES_DIR` | `/var/lib/rivetpanel/sites` | releases, one directory per site |
+| `RIVET_SITE_MAX_BYTES` | 104857600 (100 MiB) | largest release, uncompressed (1 MiB–4 GiB) |
+| `RIVET_MAX_SITES_PER_USER` | 10 | sites an account may create; 0 = unlimited; administrators are exempt |
+| `RIVET_SITES_DNS_TARGET` | the site's default host | host name shown as the CNAME target for custom domains |
 
-ZIP uploads are also bounded by `BOTPANEL_MAX_UPLOAD_BYTES` (compressed size).
+ZIP uploads are also bounded by `RIVET_MAX_UPLOAD_BYTES` (compressed size).
 Five releases are kept per site (the serving one is never pruned).
 
-In development (`BOTPANEL_ENV=development`) hosting is on by default and sites
+In development (`RIVET_ENV=development`) hosting is on by default and sites
 are reachable at `http://<slug>.localhost:8081` (browsers resolve
 `*.localhost` to the local machine).
 
@@ -95,19 +95,19 @@ are reachable at `http://<slug>.localhost:8081` (browsers resolve
 
 1. Create a wildcard DNS record `*.sites.example.com` pointing at the server.
 2. Terminate TLS in a reverse proxy on the same host and forward site traffic
-   to `BOTPANEL_SITES_LISTEN`. Keep forwarding the panel host to
-   `BOTPANEL_LISTEN` as before.
+   to `RIVET_SITES_LISTEN`. Keep forwarding the panel host to
+   `RIVET_LISTEN` as before.
 
 With **Caddy**, on-demand TLS obtains certificates for the wildcard subdomains
 and for verified custom domains as visitors arrive. The sites listener answers
-Caddy's permission check at `/.well-known/botforge/tls-allowed?domain=…`
+Caddy's permission check at `/.well-known/rivetpanel/tls-allowed?domain=…`
 (loopback peers only), so certificates are only requested for host names a
 live site answers on:
 
 ```
 {
     on_demand_tls {
-        ask http://127.0.0.1:8081/.well-known/botforge/tls-allowed
+        ask http://127.0.0.1:8081/.well-known/rivetpanel/tls-allowed
     }
 }
 
@@ -167,13 +167,13 @@ Behind Cloudflare with SSL mode *Full (strict)*, create a Cloudflare Origin
 Certificate for both names in that zone, install it on the server, and list it
 under `tls.certificates` in Traefik's dynamic configuration. For domains not
 on Cloudflare, use Traefik's ACME DNS-01 resolver for the wildcard, or Caddy's
-on-demand TLS above. BotForge does not install certificates or edit the proxy
+on-demand TLS above. RivetPanel does not install certificates or edit the proxy
 configuration.
 
 Per sites domain, at its DNS provider:
 
 1. `A *` (and `A @`) → the server's address, proxied when on Cloudflare.
-2. `TXT _botforge-domain` → `botforge-domain=<token>` (not needed for domains
+2. `TXT _rivetpanel-domain` → `rivetpanel-domain=<token>` (not needed for domains
    in the environment file).
 3. Cloudflare: SSL/TLS mode *Full (strict)*. Universal SSL covers the apex and
    one wildcard level, which is all sites use.
@@ -181,7 +181,7 @@ Per sites domain, at its DNS provider:
    certificate on the server.
 
 Enforcement boundary: TLS is terminated and certificates are issued by the
-reverse proxy. BotForge only answers whether a host name is allowed.
+reverse proxy. RivetPanel only answers whether a host name is allowed.
 
 ## Addresses and sites domains
 
@@ -200,14 +200,14 @@ not already used under that sites domain.
 **Sites domains.** Administrators manage them in **Administration → Sites and
 domains → Sites domains**:
 
-* The host of `BOTPANEL_SITES_BASE_URL` and every `BOTPANEL_SITES_DOMAINS`
+* The host of `RIVET_SITES_BASE_URL` and every `RIVET_SITES_DOMAINS`
   entry are added at start-up, marked *Environment*, and trusted without a DNS
   record. The base URL's host is the first **primary** domain (the default for
   new sites). If that host changes while it is still primary, the domain is
   renamed, and its sites move with it, as before this feature existed.
 * **Add a domain** (for example one donated for the project) and create the
-  records shown: `TXT _botforge-domain.<domain>` with the value
-  `botforge-domain=<token>`, which proves control, and `*.<domain>` (plus
+  records shown: `TXT _rivetpanel-domain.<domain>` with the value
+  `rivetpanel-domain=<token>`, which proves control, and `*.<domain>` (plus
   optionally `<domain>`) pointing at this server. Then press **Check DNS
   now**. No site can use the domain, and nothing is served under it, until the
   TXT record matches. Verified domains are re-checked every six hours; a
@@ -234,10 +234,10 @@ have to be set up in the reverse proxy (below).
 1. Add the domain on the site's page (for example `www.example.com`).
    Internationalized names are stored in punycode.
 2. Create the two records it shows at your DNS provider:
-   * `TXT _botforge-verify.www.example.com` with the value
-     `botforge-verify=<token>`: proves you control the domain.
+   * `TXT _rivetpanel-verify.www.example.com` with the value
+     `rivetpanel-verify=<token>`: proves you control the domain.
    * `CNAME www.example.com` → the site's default host (or
-     `BOTPANEL_SITES_DNS_TARGET`), or an `A`/`AAAA` record with the server's
+     `RIVET_SITES_DNS_TARGET`), or an `A`/`AAAA` record with the server's
      address. Root domains need an ALIAS/ANAME or `A` record.
 3. Press **Check DNS now**. The domain is served only after the TXT record
    matches.
@@ -303,7 +303,7 @@ Uploaded content is not scanned for malware. These are listed in
 | `DELETE /sites/{id}/domains/{domain}` | remove it |
 | `GET /admin/sites`, `PATCH /admin/sites/{id}` `{disabled}` | administrators: list, suspend or restore |
 | `GET /admin/site-base-domains`, `POST /admin/site-base-domains` `{domain, label?, dns_target?}` | administrators: list sites domains with their DNS records, add one |
-| `POST /admin/site-base-domains/{domain}/verify` | check its `_botforge-domain` TXT record now |
+| `POST /admin/site-base-domains/{domain}/verify` | check its `_rivetpanel-domain` TXT record now |
 | `PATCH /admin/site-base-domains/{domain}` `{enabled?, primary?, label?, dns_target?}` | turn on or off, make primary, rename the label, set the DNS target shown |
 | `POST /admin/site-base-domains/{domain}/move-sites` `{to}` | move every site to another sites domain (all or nothing) |
 | `DELETE /admin/site-base-domains/{domain}` | remove an unused, non-primary domain not set in the environment file |

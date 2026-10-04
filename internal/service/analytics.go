@@ -13,9 +13,9 @@ import (
 	"sync"
 	"time"
 
-	"botpanel/internal/auth"
-	"botpanel/internal/domain"
-	"botpanel/internal/store/sqlite"
+	"github.com/xenycx/rivetpanel/internal/auth"
+	"github.com/xenycx/rivetpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/store/sqlite"
 )
 
 // AnalyticsStore is the persistence surface for bot-pushed telemetry.

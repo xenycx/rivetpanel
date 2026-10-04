@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"botpanel/internal/auth"
-	"botpanel/internal/domain"
-	"botpanel/internal/service"
+	"github.com/xenycx/rivetpanel/internal/auth"
+	"github.com/xenycx/rivetpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/service"
 )
 
 func mfaEnv(t *testing.T) (*env, *atomicClock) {

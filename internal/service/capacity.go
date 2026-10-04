@@ -3,8 +3,8 @@ package service
 import (
 	"fmt"
 
-	"botpanel/internal/domain"
-	"botpanel/internal/filesystem"
+	"github.com/xenycx/rivetpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/filesystem"
 )
 
 // diskPreflight refuses work that writes large files (archives, staging,

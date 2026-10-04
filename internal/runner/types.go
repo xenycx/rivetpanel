@@ -13,19 +13,19 @@ import (
 
 // Labels applied to every managed container.
 const (
-	LabelManaged = "botpanel.managed"
-	LabelBot     = "botpanel.bot_id"
-	LabelNode    = "botpanel.node_id"
+	LabelManaged = "rivetpanel.managed"
+	LabelBot     = "rivetpanel.bot_id"
+	LabelNode    = "rivetpanel.node_id"
 	// LabelInstall scopes containers to one installation (database), so two
 	// panels sharing a Docker daemon never touch each other's containers.
-	LabelInstall    = "botpanel.install"
-	LabelGeneration = "botpanel.generation"
-	LabelRole       = "botpanel.role"
-	LabelSpec       = "botpanel.spec"
+	LabelInstall    = "rivetpanel.install"
+	LabelGeneration = "rivetpanel.generation"
+	LabelRole       = "rivetpanel.role"
+	LabelSpec       = "rivetpanel.spec"
 	// LabelAddon names the add-on kind of a RoleAddon container.
-	LabelAddon = "botpanel.addon"
+	LabelAddon = "rivetpanel.addon"
 	// LabelNetwork marks a per-bot private network created by the runner.
-	LabelNetwork = "botpanel.network"
+	LabelNetwork = "rivetpanel.network"
 )
 
 // Role distinguishes build containers from long-running bot containers.

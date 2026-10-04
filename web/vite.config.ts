@@ -5,7 +5,7 @@ import { defineConfig } from 'vite';
 export default defineConfig({
 	plugins: [tailwindcss(), sveltekit()],
 	server: {
-		// `npm run dev` proxies the API to a locally running `botpanel`.
+		// `npm run dev` proxies the API to a locally running `rivetpanel`.
 		proxy: { '/api': 'http://127.0.0.1:8080' }
 	}
 });

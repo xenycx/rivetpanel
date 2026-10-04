@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"botpanel/internal/domain"
-	"botpanel/internal/events"
+	"github.com/xenycx/rivetpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/events"
 )
 
 type fakeConn struct {
@@ -70,6 +70,7 @@ type fakeSource struct {
 	logCalls []logCall
 	stdin    *stdinRec
 	attaches []string
+	offline  bool // Logs fails like a disconnected remote node
 }
 
 type logCall struct {
@@ -97,6 +98,9 @@ func (f *fakeSource) Logs(ctx context.Context, cid string, since time.Time, tail
 	f.container(cid)
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if f.offline {
+		return nil, fmt.Errorf("%w: agent not connected", ErrSourceOffline)
+	}
 	f.logCalls = append(f.logCalls, logCall{cid, since, tail})
 	return f.readers[cid], nil
 }
@@ -367,6 +371,42 @@ func TestReattachesWhenStreamBreaksButContainerStillRuns(t *testing.T) {
 	w.Close()
 	go nw.Write(line(1, t0.Add(time.Second), "two\n"))
 	s.next(t, logWith("two"))
+}
+
+// A remote node going offline must not make the console give up on the
+// container: it reports the outage once and reattaches when the node is back.
+func TestOfflineNodeKeepsWaitingForTheSameContainer(t *testing.T) {
+	src := newSource()
+	box := runningBot("c1")
+	s := start(t, cfg{box: box, src: src, opts: Options{StatusPoll: 20 * time.Millisecond}})
+	w := src.container("c1")
+	go w.Write(line(1, t0, "one\n"))
+	s.next(t, logWith("one"))
+	src.mu.Lock()
+	src.offline = true
+	r, nw := io.Pipe()
+	src.readers["c1"], src.streams["c1"] = r, nw
+	src.mu.Unlock()
+	w.Close() // the agent connection dropped
+	s.next(t, errCode("node_offline"))
+	time.Sleep(100 * time.Millisecond) // several polls while offline
+	for _, m := range s.drain() {
+		if m.Type == "error" {
+			t.Fatalf("offline reported more than once: %+v", m)
+		}
+	}
+	src.mu.Lock()
+	src.offline = false
+	src.mu.Unlock()
+	s.next(t, func(m Outgoing) bool { return m.Type == "node" && m.Code == "online" })
+	go nw.Write(line(1, t0.Add(time.Second), "two\n"))
+	s.next(t, logWith("two"))
+	src.mu.Lock()
+	last := src.logCalls[len(src.logCalls)-1]
+	src.mu.Unlock()
+	if last.cid != "c1" || !last.since.Equal(t0) {
+		t.Fatalf("reattach = %+v, want c1 since the last delivered line", last)
+	}
 }
 
 func TestStatusEventsAreForwarded(t *testing.T) {

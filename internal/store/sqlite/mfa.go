@@ -4,7 +4,7 @@ import (
 	"context"
 	"database/sql"
 
-	"botpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/domain"
 )
 
 // GetMFA returns a user's enrollment (enabled or pending).

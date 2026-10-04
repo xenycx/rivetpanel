@@ -8,18 +8,18 @@ import (
 )
 
 // TestLiveMailgun talks to the real Mailgun API. It is skipped unless
-// BOTPANEL_TEST_MAILGUN_KEY and BOTPANEL_TEST_MAILGUN_DOMAIN are set, and it
+// RIVET_TEST_MAILGUN_KEY and RIVET_TEST_MAILGUN_DOMAIN are set, and it
 // always uses test mode, so nothing is delivered.
 //
-//	BOTPANEL_TEST_MAILGUN_KEY=... BOTPANEL_TEST_MAILGUN_DOMAIN=mg.example.com \
-//	BOTPANEL_TEST_MAILGUN_REGION=eu go test ./internal/mail -run Live -v
+//	RIVET_TEST_MAILGUN_KEY=... RIVET_TEST_MAILGUN_DOMAIN=mg.example.com \
+//	RIVET_TEST_MAILGUN_REGION=eu go test ./internal/mail -run Live -v
 func TestLiveMailgun(t *testing.T) {
-	cfg := Config{APIKey: os.Getenv("BOTPANEL_TEST_MAILGUN_KEY"), Domain: os.Getenv("BOTPANEL_TEST_MAILGUN_DOMAIN"),
-		Region: os.Getenv("BOTPANEL_TEST_MAILGUN_REGION")}
+	cfg := Config{APIKey: os.Getenv("RIVET_TEST_MAILGUN_KEY"), Domain: os.Getenv("RIVET_TEST_MAILGUN_DOMAIN"),
+		Region: os.Getenv("RIVET_TEST_MAILGUN_REGION")}
 	if cfg.APIKey == "" || cfg.Domain == "" {
-		t.Skip("set BOTPANEL_TEST_MAILGUN_KEY and BOTPANEL_TEST_MAILGUN_DOMAIN to run")
+		t.Skip("set RIVET_TEST_MAILGUN_KEY and RIVET_TEST_MAILGUN_DOMAIN to run")
 	}
-	cfg.From = "BotForge <botforge@" + cfg.Domain + ">"
+	cfg.From = "RivetPanel <rivetpanel@" + cfg.Domain + ">"
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	c := &Client{}

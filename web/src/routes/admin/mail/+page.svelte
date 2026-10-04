@@ -7,7 +7,7 @@
 	import Icon from '$lib/components/ui/Icon.svelte';
 	import Notice from '$lib/components/ui/Notice.svelte';
 
-	type Result = { recipients: number; sent: number; failed: number; skipped: number; error?: string };
+	type Result = { recipients: number; sent: number; failed: number; skipped: number; error?: string; in_panel?: number };
 	const starter = `<h2>Policy update</h2>
 <p>Hello,</p>
 <p>We are updating our terms. The changes take effect on <strong>1 November</strong>.</p>
@@ -26,8 +26,12 @@
 	let error = $state('');
 	let result = $state<Result | null>(null);
 	let testedOk = $state(false);
+	// Channels: email (needs Mailgun) and the in-panel notification inbox.
+	let emailOn = $state(session.features.mail);
+	let inPanel = $state(true);
 
-	const reach = $derived(counts[`${audience}_${kind}`] ?? 0);
+	const reach = $derived(emailOn ? (counts[`${audience}_${kind}`] ?? 0) : (counts[`${audience}_notice`] ?? 0));
+	const ready = $derived((emailOn && testedOk) || (!emailOn && inPanel && !!subject.trim() && !!html.trim()));
 	// Scripts cannot run in the preview: the frame is sandboxed with no permissions.
 	const preview = $derived(`<!doctype html><meta charset="utf-8"><base target="_blank"><body style="margin:0;background:#f4f5f7;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#1c2330"><div style="max-width:600px;margin:0 auto;padding:16px"><div style="background:#fff;border:1px solid #e3e6ec;border-radius:10px;padding:24px;font-size:14px;line-height:1.55">${html}</div></div>`);
 
@@ -40,7 +44,7 @@
 	});
 
 	$effect(() => {
-		void subject; void html; void kind; void audience;
+		void subject; void html; void kind; void audience; void emailOn;
 		testedOk = false;
 	});
 
@@ -49,7 +53,7 @@
 	}
 
 	async function post(test: boolean) {
-		return api<Result>('POST', '/admin/mail/announcements', { subject, html, audience, kind, test });
+		return api<Result>('POST', '/admin/mail/announcements', { subject, html, audience, kind, test, email: emailOn, in_panel: inPanel });
 	}
 
 	async function sendTest() {
@@ -70,11 +74,12 @@
 	async function send() {
 		const ok = await confirmDialog({
 			title: `Send to ${reach} ${reach === 1 ? 'person' : 'people'}?`,
-			body: 'This emails every account in the audience now and cannot be undone.',
+			body: emailOn ? 'This emails every account in the audience now and cannot be undone.' : 'This posts it to the notification inbox of every account in the audience.',
 			details: [
 				['Subject', subject],
 				['Kind', kind === 'notice' ? 'Notice (sent to everyone in the audience)' : 'News (skips people who turned news off)'],
-				['Audience', audience === 'all' ? 'Every enabled account' : 'Administrators only']
+				['Audience', audience === 'all' ? 'Every enabled account' : 'Administrators only'],
+				['Channels', [emailOn && 'email', inPanel && 'notification inbox'].filter(Boolean).join(' and ')]
 			],
 			confirmLabel: `Send to ${reach}`
 		});
@@ -93,18 +98,19 @@
 	}
 </script>
 
-<svelte:head><title>Announcements · BotForge</title></svelte:head>
+<svelte:head><title>Announcements · RivetPanel</title></svelte:head>
 
 <h2 class="text-section">Announcements</h2>
-<p class="mt-1 max-w-3xl text-muted">Email news or policy updates to the people with accounts on this panel. Write the message in HTML, check it in the preview, send yourself a test, then send it.</p>
+<p class="mt-1 max-w-3xl text-muted">Send news or policy updates to the people with accounts on this panel, by email and/or to their notification inbox (the bell). Write the message in HTML, check it in the preview, send yourself a test email, then send it.</p>
 
 {#if !session.features.mail}
-	<Notice tone="warn" class="mt-4" title="Email is not set up">Add your Mailgun key, domain and sender in <a class="link" href="/admin/settings">Panel settings</a> first.</Notice>
-{:else}
+	<Notice tone="warn" class="mt-4" title="Email is not set up">Announcements can only go to the notification inbox. To email them, add your Mailgun key, domain and sender in <a class="link" href="/admin/settings">Panel settings</a>.</Notice>
+{/if}
 	{#if error}<Notice tone="fail" class="mt-4" live>{error}</Notice>{/if}
 	{#if result}
 		<Notice tone={result.failed ? 'warn' : 'success'} class="mt-4" title={result.failed ? 'Sent with problems' : 'Announcement sent'} live>
-			Mailgun accepted it for {result.sent} of {result.recipients} {result.recipients === 1 ? 'person' : 'people'}{#if result.skipped}; {result.skipped} skipped because they turned news off{/if}.
+			{#if result.recipients}Mailgun accepted it for {result.sent} of {result.recipients} {result.recipients === 1 ? 'person' : 'people'}{#if result.skipped}; {result.skipped} skipped because they turned news off{/if}.{/if}
+			{#if result.in_panel}Posted to the notification inbox of {result.in_panel} {result.in_panel === 1 ? 'account' : 'accounts'} (unless they turned announcements off).{/if}
 			{#if result.failed}{result.failed} could not be sent: {result.error}. Mailgun accepting a message does not guarantee delivery; check its logs for bounces.{/if}
 		</Notice>
 	{/if}
@@ -130,16 +136,21 @@
 					<span class="help">Reaches {reach} {reach === 1 ? 'person' : 'people'}. Each recipient sees only their own address.</span>
 				</label>
 			</div>
+			<fieldset class="flex flex-wrap gap-x-6 gap-y-2">
+				<legend class="label">Send by</legend>
+				<label class="flex items-center gap-2"><input type="checkbox" bind:checked={emailOn} disabled={!session.features.mail} />Email</label>
+				<label class="flex items-center gap-2"><input type="checkbox" bind:checked={inPanel} />Notification inbox (plain text)</label>
+			</fieldset>
 			<label class="block">
 				<span class="flex items-center justify-between"><span class="label">Message (HTML)</span>{#if !html}<button type="button" class="link text-small" onclick={() => (html = starter)}>Insert an example</button>{/if}</span>
 				<textarea class="field min-h-72 font-mono text-small" spellcheck="false" bind:value={html} placeholder="<h2>Title</h2><p>Your message…</p>"></textarea>
 				<span class="help">Use simple HTML with inline styles; email apps ignore most CSS and all scripts. Scripts, frames, forms and event handlers are removed when sending. Keep images hosted elsewhere and under 80 KB of HTML.</span>
 			</label>
 			<div class="mt-auto flex flex-wrap items-center justify-end gap-2 border-t border-rule-soft pt-4">
-				<button class="btn" onclick={sendTest} disabled={!!busy || !subject.trim() || !html.trim()}><Icon name="send" size={14} />{busy === 'test' ? 'Sending…' : 'Send test to me'}</button>
-				<button class="btn btn-primary" onclick={send} disabled={!!busy || !testedOk || reach === 0} title={testedOk ? '' : 'Send yourself a test of this exact message first'}>{busy === 'send' ? 'Sending…' : `Send to ${reach}`}</button>
+				{#if emailOn}<button class="btn" onclick={sendTest} disabled={!!busy || !subject.trim() || !html.trim()}><Icon name="send" size={14} />{busy === 'test' ? 'Sending…' : 'Send test to me'}</button>{/if}
+				<button class="btn btn-primary" onclick={send} disabled={!!busy || !ready || reach === 0 || (!emailOn && !inPanel)} title={ready || !emailOn ? '' : 'Send yourself a test of this exact message first'}>{busy === 'send' ? 'Sending…' : `Send to ${reach}`}</button>
 			</div>
-			{#if !testedOk && subject.trim() && html.trim()}<p class="help text-right">Send yourself a test of this exact message to unlock sending.</p>{/if}
+			{#if emailOn && !testedOk && subject.trim() && html.trim()}<p class="help text-right">Send yourself a test of this exact message to unlock sending.</p>{/if}
 		</section>
 
 		<section class="card flex flex-col p-5 sm:p-6">
@@ -152,4 +163,3 @@
 			{/if}
 		</section>
 	</div>
-{/if}

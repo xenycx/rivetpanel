@@ -23,9 +23,9 @@ import (
 	"github.com/google/uuid"
 	"golang.org/x/net/idna"
 
-	"botpanel/internal/domain"
-	"botpanel/internal/filesystem"
-	"botpanel/internal/github"
+	"github.com/xenycx/rivetpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/filesystem"
+	"github.com/xenycx/rivetpanel/internal/github"
 )
 
 // SiteStore is the persistence surface of static site hosting.
@@ -77,10 +77,10 @@ const (
 	MaxBaseDomains    = 50
 	keepReleases      = 5 // the serving release plus up to four for rollback
 	maxSiteFiles      = 20000
-	domainTXTPrefix   = "_botforge-verify."
-	domainTXTValue    = "botforge-verify="
-	baseTXTPrefix     = "_botforge-domain."
-	baseTXTValue      = "botforge-domain="
+	domainTXTPrefix   = "_rivetpanel-verify."
+	domainTXTValue    = "rivetpanel-verify="
+	baseTXTPrefix     = "_rivetpanel-domain."
+	baseTXTValue      = "rivetpanel-domain="
 )
 
 // SiteService manages static sites. Files are served by the separate sites
@@ -464,7 +464,7 @@ func (s *SiteService) List(ctx context.Context, actor domain.User) ([]domain.Sit
 
 // ListAll returns every site (administrators only).
 func (s *SiteService) ListAll(ctx context.Context, actor domain.User) ([]domain.Site, error) {
-	if !actor.IsAdmin() {
+	if !actor.Can(domain.PermSitesManage) {
 		return nil, domain.ErrForbidden
 	}
 	return s.Store.ListAllSites(ctx)
@@ -510,7 +510,7 @@ var (
 	slugRe        = regexp.MustCompile(`^[a-z0-9](?:[a-z0-9-]{1,38}[a-z0-9])$`)
 	slugRun       = regexp.MustCompile(`[^a-z0-9]+`)
 	reservedSlugs = map[string]bool{"www": true, "api": true, "admin": true, "panel": true, "mail": true, "ftp": true, "sites": true,
-		"static": true, "assets": true, "cdn": true, "app": true, "status": true, "docs": true, "localhost": true, "botforge": true}
+		"static": true, "assets": true, "cdn": true, "app": true, "status": true, "docs": true, "localhost": true, "rivetpanel": true}
 )
 
 // CreateSiteInput describes a new site. Slug "" derives one from the name.
@@ -995,7 +995,7 @@ func (s *SiteService) PublishDraft(ctx context.Context, actor domain.User, id st
 
 // SetDisabled suspends or restores a site (panel administrators only).
 func (s *SiteService) SetDisabled(ctx context.Context, actor domain.User, id string, disabled bool) error {
-	if !actor.IsAdmin() {
+	if !actor.Can(domain.PermSitesManage) {
 		return domain.ErrForbidden
 	}
 	if _, err := uuid.Parse(id); err != nil {
@@ -1489,14 +1489,14 @@ func (s *SiteService) ServingBaseDomains(ctx context.Context) ([]domain.SiteBase
 
 // ListBaseDomains returns every base domain (administrators only).
 func (s *SiteService) ListBaseDomains(ctx context.Context, actor domain.User) ([]domain.SiteBaseDomain, error) {
-	if !actor.IsAdmin() {
+	if !actor.Can(domain.PermSitesManage) {
 		return nil, domain.ErrForbidden
 	}
 	return s.Store.ListBaseDomains(ctx)
 }
 
 func (s *SiteService) adminBaseDomain(ctx context.Context, actor domain.User, name string) (domain.SiteBaseDomain, error) {
-	if !actor.IsAdmin() {
+	if !actor.Can(domain.PermSitesManage) {
 		return domain.SiteBaseDomain{}, domain.ErrForbidden
 	}
 	return s.Store.GetBaseDomain(ctx, strings.ToLower(strings.TrimSpace(name)))
@@ -1533,7 +1533,7 @@ type BaseDomainInput struct {
 // AddBaseDomain registers a domain sites can live under. It is served once a
 // TXT record proves the administrator controls it.
 func (s *SiteService) AddBaseDomain(ctx context.Context, actor domain.User, in BaseDomainInput) (domain.SiteBaseDomain, error) {
-	if !actor.IsAdmin() {
+	if !actor.Can(domain.PermSitesManage) {
 		return domain.SiteBaseDomain{}, domain.ErrForbidden
 	}
 	d, err := NormalizeDomain(in.Domain)
@@ -1701,7 +1701,7 @@ func (s *SiteService) DeleteBaseDomain(ctx context.Context, actor domain.User, n
 	case b.Primary:
 		return domain.Invalid("the primary sites domain cannot be removed; make another one primary first")
 	case b.FromConfig:
-		return domain.Invalid(b.Domain + " is set in the environment file (BOTPANEL_SITES_BASE_URL or BOTPANEL_SITES_DOMAINS); remove it there, or turn it off here")
+		return domain.Invalid(b.Domain + " is set in the environment file (RIVET_SITES_BASE_URL or RIVET_SITES_DOMAINS); remove it there, or turn it off here")
 	case b.Sites > 0:
 		return domain.Invalid(fmt.Sprintf("%d site(s) still use %s; move them to another sites domain first", b.Sites, b.Domain))
 	}

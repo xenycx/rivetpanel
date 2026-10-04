@@ -3,7 +3,7 @@
 import { api } from '$lib/api/client';
 import type { Workspace } from '$lib/api/types';
 
-const KEY = 'botforge.workspace';
+const KEY = 'rivetpanel.workspace';
 
 function readSelected(): string {
 	try {

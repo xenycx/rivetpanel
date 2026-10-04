@@ -14,6 +14,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 
@@ -466,6 +467,21 @@ func revisionOf(st fs.FileInfo) string {
 	return fmt.Sprintf("%x-%x-%x", ino, st.Size(), st.ModTime().UnixNano())
 }
 
+// RevisionSize returns the file size recorded in a revision (see
+// revisionOf), so a caller that wrote a file elsewhere can check that the
+// whole file arrived.
+func RevisionSize(rev string) (int64, bool) {
+	parts := strings.Split(rev, "-")
+	if len(parts) != 3 {
+		return 0, false
+	}
+	n, err := strconv.ParseInt(parts[1], 16, 64)
+	if err != nil || n < 0 {
+		return 0, false
+	}
+	return n, true
+}
+
 // RevisionOf returns the revision of an open file.
 func RevisionOf(f *os.File) (string, error) {
 	st, err := f.Stat()
@@ -683,4 +699,26 @@ func (m *Manager) ProbeOwnership(uid, gid int) error {
 	f.Close()
 	defer m.root.Remove(name)
 	return m.root.Lchown(name, uid, gid)
+}
+
+// ReadFile reads one file of a bot's workspace (at most max bytes).
+func (m *Manager) ReadFile(botID, rel string, max int64) ([]byte, error) {
+	w, err := m.Open(botID)
+	if err != nil {
+		return nil, err
+	}
+	defer w.Close()
+	return w.Read(rel, max)
+}
+
+// WriteFile atomically replaces one file of a bot's workspace from r. When r
+// fails (for example a download whose checksum does not match), the original
+// file is left untouched.
+func (m *Manager) WriteFile(botID, rel string, r io.Reader, max int64) error {
+	w, err := m.Open(botID)
+	if err != nil {
+		return err
+	}
+	defer w.Close()
+	return w.Write(rel, r, max)
 }

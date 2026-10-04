@@ -35,9 +35,9 @@
 	const errors = $derived(snap && snap.logs.errors > 0 && Date.now() - snap.logs.last_error_ms < 3600_000 ? snap.logs.errors : 0);
 </script>
 
-<svelte:head><title>Host · BotForge</title></svelte:head>
+<svelte:head><title>Host · RivetPanel</title></svelte:head>
 <h2 class="text-section">Host</h2>
-<p class="mt-1 max-w-3xl text-muted">The machine that runs the bots, BotForge itself and what each bot uses. Samples are taken every 30 seconds and kept for the retention set on the Environment page (7 days by default).</p>
+<p class="mt-1 max-w-3xl text-muted">The machine that runs the bots, RivetPanel itself and what each bot uses. Samples are taken every 30 seconds and kept for the retention set on the Environment page (7 days by default).</p>
 
 <nav class="mt-4 flex gap-0.5 overflow-x-auto border-b border-rule-soft [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" aria-label="Host sections">
 	{#each tabs as t (t.id)}

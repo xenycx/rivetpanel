@@ -4,13 +4,13 @@
 //
 // Run with a disposable daemon:
 //
-//	BOTPANEL_TEST_DOCKER_HOST=unix:///path/docker.sock \
-//	BOTPANEL_TEST_IMAGE_PREFIX=mirror.gcr.io/library/ \   # optional registry mirror
-//	BOTPANEL_TEST_ROOTLESS=1 \                            # if the daemon is rootless
+//	RIVET_TEST_DOCKER_HOST=unix:///path/docker.sock \
+//	RIVET_TEST_IMAGE_PREFIX=mirror.gcr.io/library/ \   # optional registry mirror
+//	RIVET_TEST_ROOTLESS=1 \                            # if the daemon is rootless
 //	go test -tags integration ./tests/integration -timeout 40m
 //
 // Every container is created under a random node ID and labelled
-// botpanel.managed; tests remove only containers carrying that node label.
+// rivetpanel.managed; tests remove only containers carrying that node label.
 package integration
 
 import (
@@ -32,16 +32,16 @@ import (
 	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/google/uuid"
 
-	"botpanel/internal/docker"
-	"botpanel/internal/domain"
-	"botpanel/internal/filesystem"
-	"botpanel/internal/migrations"
-	"botpanel/internal/runner"
-	"botpanel/internal/runtimes"
-	"botpanel/internal/secrets"
-	"botpanel/internal/service"
-	"botpanel/internal/store/sqlite"
-	rtdefaults "botpanel/runtimes"
+	"github.com/xenycx/rivetpanel/internal/docker"
+	"github.com/xenycx/rivetpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/filesystem"
+	"github.com/xenycx/rivetpanel/internal/migrations"
+	"github.com/xenycx/rivetpanel/internal/runner"
+	"github.com/xenycx/rivetpanel/internal/runtimes"
+	"github.com/xenycx/rivetpanel/internal/secrets"
+	"github.com/xenycx/rivetpanel/internal/service"
+	"github.com/xenycx/rivetpanel/internal/store/sqlite"
+	rtdefaults "github.com/xenycx/rivetpanel/runtimes"
 )
 
 type stack struct {
@@ -64,9 +64,9 @@ type stack struct {
 }
 
 func dockerHost(t *testing.T) string {
-	h := os.Getenv("BOTPANEL_TEST_DOCKER_HOST")
+	h := os.Getenv("RIVET_TEST_DOCKER_HOST")
 	if h == "" {
-		t.Skip("BOTPANEL_TEST_DOCKER_HOST not set; skipping Docker integration tests")
+		t.Skip("RIVET_TEST_DOCKER_HOST not set; skipping Docker integration tests")
 	}
 	return h
 }
@@ -74,7 +74,7 @@ func dockerHost(t *testing.T) string {
 // catalog returns the embedded catalog with image references rewritten to the
 // optional test registry prefix.
 func catalog(t *testing.T) *runtimes.Catalog {
-	prefix := os.Getenv("BOTPANEL_TEST_IMAGE_PREFIX")
+	prefix := os.Getenv("RIVET_TEST_IMAGE_PREFIX")
 	m := fstest.MapFS{}
 	entries, _ := rtdefaults.FS.ReadDir(".")
 	for _, e := range entries {
@@ -136,7 +136,7 @@ func newStackWith(t *testing.T, so stackOpts, mods ...func(*runner.Options)) *st
 	now := time.Now().UnixMilli()
 	if nodeID == "" {
 		nodeID = uuid.NewString()
-		db.ExecContext(ctx, `INSERT INTO nodes (id,name,transport,created_at_ms,updated_at_ms) VALUES (?,?, 'local', ?, ?)`, nodeID, "it-"+nodeID[:8], now, now)
+		db.ExecContext(ctx, `INSERT INTO nodes (id,location_id,name,transport,created_at_ms,updated_at_ms) VALUES (?,?,?, 'local', ?, ?)`, nodeID, domain.LocalLocationID, "it-"+nodeID[:8], now, now)
 	}
 	u := domain.User{ID: uuid.NewString(), Email: "it@example.com", PasswordHash: "x", Role: domain.RoleUser, CreatedAtMS: now, UpdatedAtMS: now}
 	if so.user != nil {
@@ -167,7 +167,7 @@ func newStackWith(t *testing.T, so stackOpts, mods ...func(*runner.Options)) *st
 	}
 	user := fmt.Sprintf("%d:%d", os.Getuid(), os.Getgid())
 	owner := user
-	if os.Getenv("BOTPANEL_TEST_ROOTLESS") == "1" {
+	if os.Getenv("RIVET_TEST_ROOTLESS") == "1" {
 		// Container root is the unprivileged host user under a rootless daemon,
 		// so workspaces stay owned by the host user.
 		user = "0:0"

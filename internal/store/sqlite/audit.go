@@ -4,7 +4,7 @@ import (
 	"context"
 	"strings"
 
-	"botpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/domain"
 )
 
 func (db *DB) InsertAudit(ctx context.Context, e domain.AuditEvent) error {

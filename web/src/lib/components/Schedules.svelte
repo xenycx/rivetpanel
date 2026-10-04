@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { api, ApiError } from '$lib/api/client';
-	import { can, Perm, type Bot, type Schedule, type ScheduleAction } from '$lib/api/types';
+	import { can, Perm, type Bot, type Schedule, type ScheduleAction, type ScheduleTask, type TaskAction } from '$lib/api/types';
 	import { fmtAgo, fmtWhen } from '$lib/args';
 	import { session } from '$lib/session.svelte';
 	import { confirmDialog } from '$lib/ui/dialogs.svelte';
@@ -26,10 +26,45 @@
 		{ id: 'restart', label: 'Restart', hint: 'Only if the bot is running', perm: Perm.power, feature: 'runner' },
 		{ id: 'start', label: 'Start', hint: 'Starts the bot, or retries it after it gave up', perm: Perm.power, feature: 'runner' },
 		{ id: 'stop', label: 'Stop', hint: 'Stops the bot', perm: Perm.power, feature: 'runner' },
-		{ id: 'deploy', label: 'Deploy from GitHub', hint: 'Deploys the newest commit of the linked branch', perm: Perm.files, feature: 'deploy' }
+		{ id: 'deploy', label: 'Deploy from GitHub', hint: 'Deploys the newest commit of the linked branch', perm: Perm.files, feature: 'deploy' },
+		{ id: 'chain', label: 'Task chain', hint: 'Several steps in order, with waits: console commands, power actions and backups', perm: Perm.power, feature: 'runner' }
 	];
-	const offered = $derived(actions.filter((a) => can(bot, a.perm) && (!a.feature || session.features[a.feature])));
+	const isGame = $derived(bot.kind === 'game');
+	const offered = $derived(actions.filter((a) => can(bot, a.perm) && (!a.feature || session.features[a.feature]) && !(isGame && a.id === 'deploy')));
+	const taskLabels: Record<TaskAction, string> = { command: 'Send command', start: 'Start', stop: 'Stop', restart: 'Restart', kill: 'Kill', backup: 'Back up' };
+	let tasks = $state<ScheduleTask[]>([]);
+	const presets: { label: string; tasks: ScheduleTask[] }[] = [
+		{
+			label: 'Warned restart',
+			tasks: [
+				{ action: 'command', payload: 'say The server restarts in 5 minutes', delay_seconds: 0, continue_on_failure: true },
+				{ action: 'command', payload: 'say The server restarts in 1 minute', delay_seconds: 240, continue_on_failure: true },
+				{ action: 'command', payload: 'save-all', delay_seconds: 50, continue_on_failure: true },
+				{ action: 'restart', payload: '', delay_seconds: 10, continue_on_failure: false }
+			]
+		},
+		{
+			label: 'Save, then back up',
+			tasks: [
+				{ action: 'command', payload: 'save-all', delay_seconds: 0, continue_on_failure: true },
+				{ action: 'backup', payload: '', delay_seconds: 15, continue_on_failure: false }
+			]
+		}
+	];
+	const chainDelay = $derived(tasks.reduce((n, t) => n + (Number(t.delay_seconds) || 0), 0));
+	function addTask() {
+		tasks = [...tasks, { action: 'command', payload: '', delay_seconds: 0, continue_on_failure: false }];
+	}
+	function moveTask(i: number, d: number) {
+		const j = i + d;
+		if (j < 0 || j >= tasks.length) return;
+		const next = [...tasks];
+		[next[i], next[j]] = [next[j], next[i]];
+		tasks = next;
+	}
 	const actionLabel = (a: ScheduleAction) => actions.find((x) => x.id === a)?.label ?? a;
+	const scheduleTitle = (s: Schedule) =>
+		s.action === 'chain' ? `${s.tasks.length} ${s.tasks.length === 1 ? 'task' : 'tasks'}: ${s.tasks.map((t) => (t.action === 'command' ? `“${t.payload}”` : taskLabels[t.action].toLowerCase())).join(' → ')}` : actionLabel(s.action);
 
 	async function load() {
 		try {
@@ -130,11 +165,13 @@
 		everyHours = 6;
 		custom = '0 3 * * *';
 		tz = localZone;
+		tasks = [];
 		open = true;
 	}
 	function openEdit(s: Schedule) {
 		editing = s;
 		action = s.action;
+		tasks = s.tasks.map((t) => ({ ...t }));
 		tz = s.timezone;
 		load2editor(s);
 		open = true;
@@ -166,7 +203,8 @@
 		e.preventDefault();
 		saving = true;
 		try {
-			const body = { action, spec, timezone: tz };
+			const body: Record<string, unknown> = { action, spec, timezone: tz };
+			if (action === 'chain') body.tasks = tasks.map((t) => ({ ...t, delay_seconds: Number(t.delay_seconds) || 0 }));
 			if (editing) await api('PATCH', `${path}/${editing.id}`, body);
 			else await api('POST', path, { ...body, enabled: true });
 			open = false;
@@ -233,7 +271,7 @@
 </script>
 
 <div class="flex flex-wrap items-center gap-2">
-	<p class="max-w-prose flex-1 text-muted">Run backups, restarts, starts, stops or deployments on a timetable. Each schedule runs with its creator's permissions at the time it runs.</p>
+	<p class="max-w-prose flex-1 text-muted">Run backups, restarts, starts, stops{isGame ? ', console commands' : ' or deployments'} on a timetable, alone or as a task chain. Each schedule runs with its creator's permissions at the time it runs.</p>
 	{#if offered.length}<button class="btn btn-primary" onclick={openNew}><Icon name="plus" />Add schedule</button>{/if}
 </div>
 
@@ -248,7 +286,7 @@
 				<li class="spine flex flex-wrap items-center gap-x-4 gap-y-2 py-3 pr-3 pl-5" data-tone={tone(s)}>
 					<div class="min-w-0 flex-1 basis-64">
 						<p class="font-medium">
-							{actionLabel(s.action)} <span class="font-normal text-muted">·</span> {describeSpec(s.spec)}
+							{scheduleTitle(s)} <span class="font-normal text-muted">·</span> {describeSpec(s.spec)}
 							{#if !s.enabled}<span class="ml-1 rounded-control border border-rule px-1.5 py-px text-small font-normal text-muted">Paused</span>{/if}
 						</p>
 						<p class="text-small text-muted">
@@ -291,6 +329,41 @@
 				{/each}
 			</div>
 		</fieldset>
+
+		{#if action === 'chain'}
+			<fieldset class="grid gap-2">
+				<legend class="label">Tasks, in order</legend>
+				{#if tasks.length === 0}
+					<div class="flex flex-wrap items-center gap-2 text-small text-muted">
+						Start from
+						{#each presets as p (p.label)}<button type="button" class="btn btn-sm" onclick={() => (tasks = p.tasks.map((t) => ({ ...t })))}>{p.label}</button>{/each}
+						or add tasks one by one.
+					</div>
+				{/if}
+				{#each tasks as t, i (i)}
+					<div class="grid gap-2 rounded-control border border-rule-soft p-2.5 sm:grid-cols-[auto_9rem_1fr_7rem_auto] sm:items-center">
+						<span class="text-small font-medium text-muted">{i + 1}.</span>
+						<select class="field" bind:value={t.action} aria-label="Task {i + 1} action">
+							{#each Object.entries(taskLabels) as [k, l] (k)}<option value={k}>{l}</option>{/each}
+						</select>
+						{#if t.action === 'command'}
+							<input class="field font-mono" bind:value={t.payload} placeholder="say Hello" maxlength="1000" required aria-label="Task {i + 1} command" />
+						{:else}<span class="text-small text-muted">{t.action === 'backup' ? 'Files and sealed variables' : 'Power action'}</span>{/if}
+						<label class="flex items-center gap-1.5 text-small"><span class="text-muted">after</span><input class="field w-20" type="number" min="0" max="3600" bind:value={t.delay_seconds} aria-label="Wait before task {i + 1}, seconds" /><span class="text-muted">s</span></label>
+						<div class="flex items-center gap-1">
+							<button type="button" class="btn btn-quiet btn-icon btn-sm" aria-label="Move task {i + 1} up" disabled={i === 0} onclick={() => moveTask(i, -1)}><Icon name="chevronDown" size={14} class="rotate-180" /></button>
+							<button type="button" class="btn btn-quiet btn-icon btn-sm" aria-label="Move task {i + 1} down" disabled={i === tasks.length - 1} onclick={() => moveTask(i, 1)}><Icon name="chevronDown" size={14} /></button>
+							<button type="button" class="btn btn-quiet btn-icon btn-sm text-fail" aria-label="Remove task {i + 1}" onclick={() => (tasks = tasks.filter((_, j) => j !== i))}><Icon name="x" size={14} /></button>
+						</div>
+						<label class="flex items-center gap-2 text-small text-muted sm:col-span-5"><input type="checkbox" bind:checked={t.continue_on_failure} />Continue with the next task if this one fails</label>
+					</div>
+				{/each}
+				<div class="flex flex-wrap items-center gap-3">
+					<button type="button" class="btn btn-sm" disabled={tasks.length >= 20} onclick={addTask}><Icon name="plus" size={14} />Add task</button>
+					<span class="text-small {chainDelay > 3600 ? 'text-fail' : 'text-muted'}">Total wait {Math.floor(chainDelay / 60)} min {chainDelay % 60} s (at most 60 min)</span>
+				</div>
+			</fieldset>
+		{/if}
 
 		<div class="grid gap-3 sm:grid-cols-2">
 			<label class="block">
@@ -344,6 +417,6 @@
 	</form>
 	{#snippet footer()}
 		<button class="btn" onclick={() => (open = false)}>Cancel</button>
-		<button class="btn btn-primary" type="submit" form="sched-form" disabled={saving || !!previewError}>{editing ? 'Save schedule' : 'Add schedule'}</button>
+		<button class="btn btn-primary" type="submit" form="sched-form" disabled={saving || !!previewError || (action === 'chain' && (tasks.length === 0 || chainDelay > 3600))}>{editing ? 'Save schedule' : 'Add schedule'}</button>
 	{/snippet}
 </Dialog>

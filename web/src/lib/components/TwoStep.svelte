@@ -108,8 +108,8 @@
 	}
 	function downloadCodes() {
 		const a = document.createElement('a');
-		a.href = URL.createObjectURL(new Blob([`BotForge recovery codes for ${session.user?.email}\nEach code works once.\n\n${codes.join('\n')}\n`], { type: 'text/plain' }));
-		a.download = 'botforge-recovery-codes.txt';
+		a.href = URL.createObjectURL(new Blob([`RivetPanel recovery codes for ${session.user?.email}\nEach code works once.\n\n${codes.join('\n')}\n`], { type: 'text/plain' }));
+		a.download = 'rivetpanel-recovery-codes.txt';
 		a.click();
 		URL.revokeObjectURL(a.href);
 	}
@@ -181,7 +181,7 @@
 			<button class="btn btn-sm" onclick={copyCodes}><Icon name="copy" size={14} />Copy</button>
 			<button class="btn btn-sm" onclick={downloadCodes}><Icon name="download" size={14} />Download</button>
 		</div>
-		<p class="mt-3 text-small text-muted">Lost both? An administrator with shell access can run <code>botpanel reset-mfa EMAIL</code>.</p>
+		<p class="mt-3 text-small text-muted">Lost both? An administrator with shell access can run <code>rivetpanel reset-mfa EMAIL</code>.</p>
 	{/if}
 	{#snippet footer()}
 		{#if stage === 'codes'}

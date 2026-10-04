@@ -4,7 +4,7 @@ import (
 	"errors"
 	"testing"
 
-	"botpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/domain"
 )
 
 func TestPhaseOf(t *testing.T) {

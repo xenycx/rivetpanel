@@ -12,15 +12,17 @@ import (
 	"github.com/gofiber/fiber/v3"
 	"github.com/gofiber/fiber/v3/middleware/limiter"
 
-	"botpanel/internal/console"
-	"botpanel/internal/diag"
-	"botpanel/internal/domain"
-	"botpanel/internal/filesystem"
-	"botpanel/internal/hostmon"
-	"botpanel/internal/logbuf"
-	"botpanel/internal/pkgmgr"
-	"botpanel/internal/runtimes"
-	"botpanel/internal/service"
+	"github.com/xenycx/rivetpanel/internal/console"
+	"github.com/xenycx/rivetpanel/internal/diag"
+	"github.com/xenycx/rivetpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/filesystem"
+	"github.com/xenycx/rivetpanel/internal/hostmon"
+	"github.com/xenycx/rivetpanel/internal/logbuf"
+	"github.com/xenycx/rivetpanel/internal/modules"
+	"github.com/xenycx/rivetpanel/internal/noderoute"
+	"github.com/xenycx/rivetpanel/internal/pkgmgr"
+	"github.com/xenycx/rivetpanel/internal/runtimes"
+	"github.com/xenycx/rivetpanel/internal/service"
 )
 
 // Pinger reports whether a dependency is reachable.
@@ -43,35 +45,49 @@ type Deps struct {
 
 	Auth          *service.AuthService // nil disables the authenticated API (tests/foundation)
 	Bots          *service.BotService
-	OAuth         *service.OAuthService         // nil disables OAuth routes
-	SFTP          *SFTPInfo                     // nil when the SFTP server is disabled
-	Analytics     *service.Analytics            // nil disables bot telemetry routes
-	PublicURL     string                        // externally reachable origin, handed to bots
-	Registry      *pkgmgr.Registry              // package registry client; default used when nil
-	Stats         StatsSource                   // Docker stats stream; nil disables live gauges
-	Backups       *service.BackupService        // nil disables the backup routes
-	Deploy        *service.DeployService        // nil disables GitHub deployment routes
-	Ops           *service.Operations           // nil disables operation history routes
-	Audit         *service.Audit                // nil disables the activity record
-	Schedules     *service.Scheduler            // nil disables scheduled actions
-	MFA           *service.MFAService           // nil disables two-step sign-in
-	Tokens        *service.TokenService         // nil disables the automation API
-	Health        *service.HealthService        // nil disables application health and alert rules
-	Settings      *service.SettingsService      // nil disables the setup wizard and panel settings
-	Mail          *service.MailService          // nil disables email (alerts, invitations, notices)
-	Resets        *service.PasswordResetService // nil disables "Forgot password?"
-	MailPrefs     MailPrefs                     // per-account alert-email switch; nil hides it
-	Sites         *service.SiteService          // nil (or not started) disables static site hosting
-	AI            *service.AIService            // nil disables the AI operator
-	Env           *service.PanelEnvService      // nil disables the environment editor
-	Host          *hostmon.Monitor              // nil disables the host monitoring routes
-	Logs          *logbuf.Buffer                // nil disables the panel log viewer
-	SetupCodeFile string                        // shown by the setup wizard
-	OnSetupDone   func()                        // called after the first administrator is created
+	OAuth         *service.OAuthService             // nil disables OAuth routes
+	SFTP          *SFTPInfo                         // nil when the SFTP server is disabled
+	Analytics     *service.Analytics                // nil disables bot telemetry routes
+	PublicURL     string                            // externally reachable origin, handed to bots
+	Registry      *pkgmgr.Registry                  // package registry client; default used when nil
+	Stats         StatsSource                       // Docker stats stream; nil disables live gauges
+	Backups       *service.BackupService            // nil disables the backup routes
+	Deploy        *service.DeployService            // nil disables GitHub deployment routes
+	Ops           *service.Operations               // nil disables operation history routes
+	Audit         *service.Audit                    // nil disables the activity record
+	Schedules     *service.Scheduler                // nil disables scheduled actions
+	MFA           *service.MFAService               // nil disables two-step sign-in
+	Tokens        *service.TokenService             // nil disables the automation API
+	Clients       *service.APIClientService         // nil disables API clients (bearer access to the whole API)
+	OIDC          *service.OIDCService              // nil disables OpenID Connect sign-in
+	Passkeys      *service.PasskeyService           // nil disables passkeys (WebAuthn)
+	Enrollment    *service.AgentEnrollmentService   // nil disables agent enrollment
+	AgentControl  AgentControl                      // nil when no agent listener is running
+	Games         *service.GameService              // nil disables game servers
+	Router        *noderoute.Router                 // per-node routing (remote agents); nil = local only
+	Health        *service.HealthService            // nil disables application health and alert rules
+	Settings      *service.SettingsService          // nil disables the setup wizard and panel settings
+	Mail          *service.MailService              // nil disables email (alerts, invitations, notices)
+	Notifications *service.NotificationService      // nil disables the in-panel notification inbox
+	Tickets       *service.TicketService            // nil disables support tickets
+	KB            *service.KBService                // nil disables the knowledgebase (help center)
+	Status        *service.StatusService            // nil disables the status page
+	Usage         *service.UsageService             // nil disables usage analytics
+	Resets        *service.PasswordResetService     // nil disables "Forgot password?"
+	Verify        *service.EmailVerificationService // nil disables email verification links
+	MailPrefs     MailPrefs                         // per-account alert-email switch; nil hides it
+	Sites         *service.SiteService              // nil (or not started) disables static site hosting
+	AI            *service.AIService                // nil disables the AI operator
+	Env           *service.PanelEnvService          // nil disables the environment editor
+	Host          *hostmon.Monitor                  // nil disables the host monitoring routes
+	Logs          *logbuf.Buffer                    // nil disables the panel log viewer
+	SetupCodeFile string                            // shown by the setup wizard
+	OnSetupDone   func()                            // called after the first administrator is created
 	Catalog       *runtimes.Catalog
 	SecureCookies bool   // Secure flag on the session cookie (production)
 	ProxyHeader   string // trusted client-IP header from a loopback reverse proxy; empty = none
 	MetricsToken  string // bearer token for /metrics; empty disables it
+	Modules       modules.Registry
 
 	Nodes        NodeStore           // nil disables node/telemetry routes
 	Files        *filesystem.Manager // nil disables the file manager
@@ -97,7 +113,7 @@ type Check struct {
 	Fn   func(ctx context.Context) error
 }
 
-type server struct {
+type panel struct {
 	log           *slog.Logger
 	files         *filesystem.Manager
 	maxUpload     int64
@@ -120,10 +136,24 @@ type server struct {
 	schedules     *service.Scheduler
 	mfa           *service.MFAService
 	tokens        *service.TokenService
+	clients       *service.APIClientService
+	oidc          *service.OIDCService
+	passkeys      *service.PasskeyService
+	enrollment    *service.AgentEnrollmentService
+	agentControl  AgentControl
+	games         *service.GameService
+	trustedFiles  bool // rivet-agent file routes (see NodeFiles)
+	router        *noderoute.Router
 	health        *service.HealthService
 	settings      *service.SettingsService
 	mail          *service.MailService
+	notifications *service.NotificationService
+	tickets       *service.TicketService
+	kb            *service.KBService
+	status        *service.StatusService
+	usage         *service.UsageService
 	resets        *service.PasswordResetService
+	verify        *service.EmailVerificationService
 	mailPrefs     MailPrefs
 	sites         *service.SiteService
 	ai            *service.AIService
@@ -139,6 +169,7 @@ type server struct {
 	runnerReady   func(ctx context.Context) error
 	buildMemory   int64
 	diagnostics   func(ctx context.Context) diag.Report
+	modules       modules.Registry
 }
 
 const readyTimeout = 2 * time.Second
@@ -150,7 +181,7 @@ func New(d Deps) *fiber.App {
 		maxUpload = defaultMaxUpload
 	}
 	cfg := fiber.Config{
-		AppName:      "botpanel",
+		AppName:      "rivetpanel",
 		ErrorHandler: errorHandler(d.Log),
 		// Bodies are streamed so uploads never sit in memory; every route other
 		// than the two upload routes is capped at 1 MiB by smallBody below.
@@ -167,6 +198,9 @@ func New(d Deps) *fiber.App {
 		cfg.ProxyHeader, cfg.TrustProxy = d.ProxyHeader, true
 		cfg.TrustProxyConfig = fiber.TrustProxyConfig{Loopback: true}
 	}
+	if len(d.Modules) == 0 {
+		d.Modules = modules.Default()
+	}
 	app := fiber.New(cfg)
 
 	metrics := newPanelMetrics()
@@ -175,6 +209,16 @@ func New(d Deps) *fiber.App {
 	}
 	app.Use(securityHeaders, metrics.observe, smallBody)
 	app.Get("/metrics", metrics.handler(d))
+	if d.Enrollment != nil {
+		agent := app.Group("/api/agent/v1")
+		agent.Post("/enroll", limiter.New(limiter.Config{
+			Max: 10, Expiration: time.Minute,
+			KeyGenerator: func(c fiber.Ctx) string { return "agent-enroll:" + c.IP() },
+			LimitReached: func(c fiber.Ctx) error {
+				return fiber.NewError(fiber.StatusTooManyRequests, "too many enrollment attempts; try again later")
+			},
+		}), enrollAgent(d.Enrollment))
+	}
 
 	v1 := app.Group("/api/v1")
 	v1.Get("/healthz", func(c fiber.Ctx) error {
@@ -203,7 +247,7 @@ func New(d Deps) *fiber.App {
 		return c.JSON(fiber.Map{"status": "ok", "checks": checks})
 	})
 	if d.Auth != nil && d.Bots != nil {
-		s := &server{log: d.Log, auth: d.Auth, bots: d.Bots, oauth: d.OAuth, sftp: d.SFTP, analytics: d.Analytics, publicURL: d.PublicURL, registry: d.Registry, stats: d.Stats, backups: d.Backups, deploy: d.Deploy, ops: d.Ops, audit: d.Audit, schedules: d.Schedules, mfa: d.MFA, tokens: d.Tokens, health: d.Health, settings: d.Settings, mail: d.Mail, resets: d.Resets, mailPrefs: d.MailPrefs, sites: d.Sites, ai: d.AI, env: d.Env, host: d.Host, logs: d.Logs, setupCodeFile: d.SetupCodeFile, onSetupDone: d.OnSetupDone, statsLimit: console.NewLimiter(0, 0, 0), catalog: d.Catalog, secureCookies: d.SecureCookies,
+		s := &panel{log: d.Log, auth: d.Auth, bots: d.Bots, oauth: d.OAuth, sftp: d.SFTP, analytics: d.Analytics, publicURL: d.PublicURL, registry: d.Registry, stats: d.Stats, backups: d.Backups, deploy: d.Deploy, ops: d.Ops, audit: d.Audit, schedules: d.Schedules, mfa: d.MFA, tokens: d.Tokens, clients: d.Clients, oidc: d.OIDC, passkeys: d.Passkeys, enrollment: d.Enrollment, agentControl: d.AgentControl, games: d.Games, router: d.Router, health: d.Health, settings: d.Settings, mail: d.Mail, notifications: d.Notifications, tickets: d.Tickets, kb: d.KB, status: d.Status, usage: d.Usage, resets: d.Resets, verify: d.Verify, mailPrefs: d.MailPrefs, sites: d.Sites, ai: d.AI, env: d.Env, host: d.Host, logs: d.Logs, setupCodeFile: d.SetupCodeFile, onSetupDone: d.OnSetupDone, statsLimit: console.NewLimiter(0, 0, 0), catalog: d.Catalog, secureCookies: d.SecureCookies, modules: d.Modules,
 			console: d.Console, consoleLimit: d.ConsoleLimit, baseCtx: d.BaseCtx, nodes: d.Nodes, files: d.Files, maxUpload: d.MaxUpload,
 			runnerReady: d.RunnerReady, buildMemory: d.BuildMemory, diagnostics: d.Diagnostics}
 		if s.buildMemory == 0 {
@@ -225,6 +269,7 @@ func New(d Deps) *fiber.App {
 	}
 	// Unknown API paths are JSON errors, never the HTML fallback.
 	app.All("/api/v1/*", func(c fiber.Ctx) error { return fiber.ErrNotFound })
+	app.All("/api/agent/*", func(c fiber.Ctx) error { return fiber.ErrNotFound })
 	app.All("/api", func(c fiber.Ctx) error { return fiber.ErrNotFound })
 	app.All("/api/*", func(c fiber.Ctx) error { return fiber.ErrNotFound })
 
@@ -268,7 +313,7 @@ type MailPrefs interface {
 	SetUserEmailNews(ctx context.Context, userID string, on bool) error
 }
 
-func (s *server) routes(v1 fiber.Router) {
+func (s *panel) routes(v1 fiber.Router) {
 	v1.Use(s.checkOrigin)
 	v1.Post("/auth/login", limiter.New(limiter.Config{
 		Max: 10, Expiration: time.Minute,
@@ -336,6 +381,12 @@ func (s *server) routes(v1 fiber.Router) {
 	v1.Post("/registration", oauthLimit, s.registerAccount)
 	v1.Get("/auth/:provider/login", oauthLimit, s.oauthLogin)
 	v1.Get("/auth/:provider/callback", oauthLimit, s.oauthCallback)
+	if s.oidc != nil {
+		s.oidcRoutes(v1, oauthLimit)
+	}
+	if s.passkeys != nil {
+		s.passkeyPublicRoutes(v1)
+	}
 
 	if s.analytics != nil {
 		// Bots authenticate with a bearer key, not a session, so there is no
@@ -353,10 +404,17 @@ func (s *server) routes(v1 fiber.Router) {
 		}))
 	}
 
+	s.publicVerifyRoutes(v1)
+	if s.kb != nil {
+		s.kbPublicRoutes(v1)
+	}
+	if s.status != nil {
+		s.statusPublicRoutes(v1)
+	}
 	if s.tokens != nil {
 		s.automationRoutes(v1)
 	}
-	authed := v1.Group("", s.requireAuth, s.auditMW)
+	authed := v1.Group("", s.requireAuth, clientLimit(), s.auditMW)
 	if s.ai != nil {
 		s.aiRoutes(authed)
 	}
@@ -383,25 +441,45 @@ func (s *server) routes(v1 fiber.Router) {
 		authed.Get("/github/lookup", ghLimit, s.githubLookup)
 		authed.Post("/github/analyze", ghLimit, s.analyzeGitHub)
 		authed.Get("/github/recipes", s.listRecipes)
-		authed.Get("/bots/:id/github", s.getGitHub)
-		authed.Put("/bots/:id/github", s.putGitHub)
-		authed.Delete("/bots/:id/github", s.deleteGitHub)
-		authed.Post("/bots/:id/github/deploy", s.deployGitHub)
-		authed.Get("/bots/:id/github/preview", s.previewGitHub)
+		authed.Get("/bots/:id/github", s.requirePerm(domain.PermBotsDeploy), s.getGitHub)
+		authed.Put("/bots/:id/github", s.requirePerm(domain.PermBotsDeploy), s.putGitHub)
+		authed.Delete("/bots/:id/github", s.requirePerm(domain.PermBotsDeploy), s.deleteGitHub)
+		authed.Post("/bots/:id/github/deploy", s.requirePerm(domain.PermBotsDeploy), s.deployGitHub)
+		authed.Get("/bots/:id/github/preview", s.requirePerm(domain.PermBotsDeploy), s.previewGitHub)
 		authed.Get("/me/github/owners", s.githubOwners)
-		authed.Get("/bots/:id/github/push-plan", s.pushPlan)
-		authed.Post("/bots/:id/github/publish", s.publishGitHub)
-		authed.Post("/bots/:id/github/push", s.pushGitHub)
+		authed.Get("/bots/:id/github/push-plan", s.requirePerm(domain.PermBotsDeploy), s.pushPlan)
+		authed.Post("/bots/:id/github/publish", s.requirePerm(domain.PermBotsDeploy), s.publishGitHub)
+		authed.Post("/bots/:id/github/push", s.requirePerm(domain.PermBotsDeploy), s.pushGitHub)
 	}
 	if s.tokens != nil {
 		authed.Get("/me/tokens", s.listTokens)
-		authed.Post("/me/tokens", s.createToken)
+		authed.Post("/me/tokens", s.requirePerm(domain.PermAPIKeys), s.createToken)
 		authed.Delete("/me/tokens/:id", s.deleteToken)
+	}
+	if s.clients != nil {
+		s.apiClientRoutes(authed)
+	}
+	if s.notifications != nil {
+		s.notificationRoutes(authed)
+	}
+	if s.tickets != nil {
+		s.ticketRoutes(authed)
+	}
+	if s.kb != nil {
+		s.kbManageRoutes(authed)
+	}
+	if s.status != nil {
+		s.statusManageRoutes(authed)
+	}
+	if s.oidc != nil {
+		s.oidcAuthedRoutes(authed)
+	} else {
+		authed.Get("/me/identities", s.listIdentities)
 	}
 	authed.Get("/me/capacity", s.capacity)
 	authed.Get("/me/sftp", s.sftpInfo)
 	authed.Get("/me/api-keys", s.listAPIKeys)
-	authed.Post("/me/api-keys", s.createAPIKey)
+	authed.Post("/me/api-keys", s.requirePerm(domain.PermAPIKeys), s.createAPIKey)
 	authed.Delete("/me/api-keys/:id", s.deleteAPIKey)
 	authed.Get("/me/connections", s.listConnections)
 	authed.Post("/me/connections/:provider/start", s.startConnection)
@@ -431,11 +509,16 @@ func (s *server) routes(v1 fiber.Router) {
 		authed.Post("/me/mfa/disable", passwordLimit, s.mfaDisable)
 		authed.Post("/me/mfa/recovery-codes", passwordLimit, s.mfaRecoveryCodes)
 	}
+	if s.passkeys != nil {
+		s.passkeyRoutes(authed, passwordLimit)
+	}
 	authed.Get("/auth/me", s.me)
+	s.verifyRoutes(authed)
 	authed.Get("/runtimes", s.listRuntimes)
+	authed.Get("/modules", s.listModules)
 
 	authed.Get("/workspaces", s.listWorkspaces)
-	authed.Post("/workspaces", s.createWorkspace)
+	authed.Post("/workspaces", s.requirePerm(domain.PermWorkspacesCreate), s.createWorkspace)
 	authed.Get("/workspaces/:wid", s.getWorkspace)
 	authed.Patch("/workspaces/:wid", s.patchWorkspace)
 	authed.Delete("/workspaces/:wid", s.deleteWorkspace)
@@ -443,16 +526,16 @@ func (s *server) routes(v1 fiber.Router) {
 	authed.Patch("/workspaces/:wid/members/:uid", s.patchWorkspaceMember)
 	authed.Delete("/workspaces/:wid/members/:uid", s.removeWorkspaceMember)
 	authed.Put("/bots/:id/workspace", s.moveBot)
-	authed.Get("/admin/workspaces", s.requireAdmin, s.adminListWorkspaces)
-	authed.Get("/admin/workspaces/:wid", s.requireAdmin, s.adminGetWorkspace)
-	authed.Get("/admin/users/:id", s.requireAdmin, s.adminGetUser)
+	authed.Get("/admin/workspaces", s.requirePerm(domain.PermWorkspacesView), s.adminListWorkspaces)
+	authed.Get("/admin/workspaces/:wid", s.requirePerm(domain.PermWorkspacesView), s.adminGetWorkspace)
+	authed.Get("/admin/users/:id", s.requirePerm(domain.PermUsersView), s.adminGetUser)
 
 	authed.Get("/sites-info", s.sitesInfo)
 	if s.sites.Enabled() {
 		authed.Get("/bots/:id/site", s.getBotSite)
-		authed.Post("/bots/:id/site", s.createBotSite)
+		authed.Post("/bots/:id/site", s.requirePerm(domain.PermSitesCreate), s.createBotSite)
 		authed.Get("/sites", s.listSites)
-		authed.Post("/sites", s.createSite)
+		authed.Post("/sites", s.requirePerm(domain.PermSitesCreate), s.createSite)
 		authed.Get("/sites/:sid", s.getSite)
 		authed.Patch("/sites/:sid", s.patchSite)
 		authed.Delete("/sites/:sid", s.deleteSite)
@@ -473,34 +556,34 @@ func (s *server) routes(v1 fiber.Router) {
 		authed.Post("/sites/:sid/domains", s.addSiteDomain)
 		authed.Post("/sites/:sid/domains/:domain/verify", s.verifySiteDomain)
 		authed.Delete("/sites/:sid/domains/:domain", s.removeSiteDomain)
-		authed.Get("/admin/sites", s.requireAdmin, s.adminListSites)
-		authed.Patch("/admin/sites/:sid", s.requireAdmin, s.adminPatchSite)
-		authed.Get("/admin/site-base-domains", s.requireAdmin, s.adminListBaseDomains)
-		authed.Post("/admin/site-base-domains", s.requireAdmin, s.adminAddBaseDomain)
-		authed.Post("/admin/site-base-domains/:domain/verify", s.requireAdmin, s.adminVerifyBaseDomain)
-		authed.Post("/admin/site-base-domains/:domain/move-sites", s.requireAdmin, s.adminMoveBaseDomainSites)
-		authed.Patch("/admin/site-base-domains/:domain", s.requireAdmin, s.adminPatchBaseDomain)
-		authed.Delete("/admin/site-base-domains/:domain", s.requireAdmin, s.adminDeleteBaseDomain)
+		authed.Get("/admin/sites", s.requirePerm(domain.PermSitesManage), s.adminListSites)
+		authed.Patch("/admin/sites/:sid", s.requirePerm(domain.PermSitesManage), s.adminPatchSite)
+		authed.Get("/admin/site-base-domains", s.requirePerm(domain.PermSitesManage), s.adminListBaseDomains)
+		authed.Post("/admin/site-base-domains", s.requirePerm(domain.PermSitesManage), s.adminAddBaseDomain)
+		authed.Post("/admin/site-base-domains/:domain/verify", s.requirePerm(domain.PermSitesManage), s.adminVerifyBaseDomain)
+		authed.Post("/admin/site-base-domains/:domain/move-sites", s.requirePerm(domain.PermSitesManage), s.adminMoveBaseDomainSites)
+		authed.Patch("/admin/site-base-domains/:domain", s.requirePerm(domain.PermSitesManage), s.adminPatchBaseDomain)
+		authed.Delete("/admin/site-base-domains/:domain", s.requirePerm(domain.PermSitesManage), s.adminDeleteBaseDomain)
 	}
 
-	admin := authed.Group("/users", s.requireAdmin)
-	admin.Post("", s.createUser)
-	admin.Get("", s.listUsers)
-	admin.Patch("/:id", s.patchUser)
-	authed.Get("/admin/account-invites", s.requireAdmin, s.listAccountInvites)
-	authed.Post("/admin/account-invites", s.requireAdmin, s.createAccountInvite)
-	authed.Delete("/admin/account-invites/:id", s.requireAdmin, s.deleteAccountInvite)
+	authed.Post("/users", s.requirePerm(domain.PermUsersManage), s.createUser)
+	authed.Get("/users", s.requirePerm(domain.PermUsersView), s.listUsers)
+	authed.Patch("/users/:id", s.requirePerm(domain.PermUsersManage), s.patchUser)
+	authed.Get("/admin/account-invites", s.requirePerm(domain.PermUsersManage), s.listAccountInvites)
+	authed.Post("/admin/account-invites", s.requirePerm(domain.PermUsersManage), s.createAccountInvite)
+	authed.Delete("/admin/account-invites/:id", s.requirePerm(domain.PermUsersManage), s.deleteAccountInvite)
+	s.roleRoutes(authed)
 
 	if s.diagnostics != nil {
-		authed.Get("/admin/diagnostics", s.requireAdmin, s.getDiagnostics)
+		authed.Get("/admin/diagnostics", s.requirePerm(domain.PermSystemView), s.getDiagnostics)
 	}
 	if s.settings != nil {
-		authed.Get("/admin/settings", s.requireAdmin, s.getSettings)
-		authed.Put("/admin/settings", s.requireAdmin, s.putSettings)
+		authed.Get("/admin/settings", s.requirePerm(domain.PermSettingsManage), s.getSettings)
+		authed.Put("/admin/settings", s.requirePerm(domain.PermSettingsManage), s.putSettings)
 		if s.mail != nil {
-			authed.Post("/admin/settings/mail/test", s.requireAdmin, s.testMail)
-			authed.Get("/admin/mail/audience", s.requireAdmin, s.mailAudience)
-			authed.Post("/admin/mail/announcements", s.requireAdmin, s.sendAnnouncement)
+			authed.Post("/admin/settings/mail/test", s.requirePerm(domain.PermSettingsManage), s.testMail)
+			authed.Get("/admin/mail/audience", s.requirePerm(domain.PermMailAnnounce), s.mailAudience)
+			authed.Post("/admin/mail/announcements", s.requirePerm(domain.PermMailAnnounce), s.sendAnnouncement)
 		}
 	}
 	if s.env != nil {
@@ -509,35 +592,48 @@ func (s *server) routes(v1 fiber.Router) {
 		authed.Post("/admin/environment/restart", s.requireAdmin, s.restartPanel)
 	}
 	if s.nodes != nil {
-		nodes := authed.Group("/nodes", s.requireAdmin)
+		nodes := authed.Group("/nodes", s.requirePerm(domain.PermNodesManage))
 		nodes.Get("", s.listNodes)
+		nodes.Patch("/:id", s.patchNode)
+		nodes.Delete("/:id", s.deleteNode)
+		nodes.Post("/:id/revoke-certificates", s.revokeNodeCertificates)
+		nodes.Get("/locations", s.listLocations)
+		nodes.Post("/locations", s.createLocation)
+		nodes.Patch("/locations/:id", s.patchLocation)
+		nodes.Delete("/locations/:id", s.deleteLocation)
+		if s.enrollment != nil {
+			nodes.Post("/enrollments", s.createAgentEnrollment)
+			nodes.Post("/:id/enrollment", s.reissueAgentEnrollment)
+		}
 		nodes.Get("/:id/telemetry", s.nodeTelemetry)
 		nodes.Get("/:id/history", s.nodeHistory)
 	}
 	if s.host != nil {
-		authed.Get("/admin/host", s.requireAdmin, s.hostSnapshot)
-		authed.Get("/admin/host/bots", s.requireAdmin, s.hostBots)
+		authed.Get("/admin/host", s.requirePerm(domain.PermSystemView), s.hostSnapshot)
+		authed.Get("/admin/host/bots", s.requirePerm(domain.PermSystemView), s.hostBots)
 	}
 	if s.logs != nil {
-		authed.Get("/admin/logs", s.requireAdmin, s.panelLogs)
+		authed.Get("/admin/logs", s.requirePerm(domain.PermSystemView), s.panelLogs)
 	}
 
-	authed.Post("/bots", s.createBot)
-	authed.Post("/bots/batch", s.batchBots)
+	s.gameRoutes(authed)
+	authed.Post("/bots/:id/command", s.requirePerm(domain.PermBotsPower), s.sendCommand)
+	authed.Post("/bots", s.requirePerm(domain.PermBotsCreate), s.createBot)
+	authed.Post("/bots/batch", s.requirePerm(domain.PermBotsPower), s.batchBots)
 	authed.Get("/bots", s.listBots)
 	authed.Get("/bots/:id", s.getBot)
 	authed.Patch("/bots/:id", s.patchBot)
-	authed.Delete("/bots/:id", s.deleteBot)
-	authed.Post("/bots/:id/start", s.lifecycle(func(b *service.BotService, c fiber.Ctx, id string) (domain.Bot, error) {
+	authed.Delete("/bots/:id", s.requirePerm(domain.PermBotsDelete), s.deleteBot)
+	authed.Post("/bots/:id/start", s.requirePerm(domain.PermBotsPower), s.lifecycle(func(b *service.BotService, c fiber.Ctx, id string) (domain.Bot, error) {
 		return b.Start(c.Context(), currentUser(c), id)
 	}))
-	authed.Post("/bots/:id/stop", s.lifecycle(func(b *service.BotService, c fiber.Ctx, id string) (domain.Bot, error) {
+	authed.Post("/bots/:id/stop", s.requirePerm(domain.PermBotsPower), s.lifecycle(func(b *service.BotService, c fiber.Ctx, id string) (domain.Bot, error) {
 		return b.Stop(c.Context(), currentUser(c), id)
 	}))
-	authed.Post("/bots/:id/restart", s.lifecycle(func(b *service.BotService, c fiber.Ctx, id string) (domain.Bot, error) {
+	authed.Post("/bots/:id/restart", s.requirePerm(domain.PermBotsPower), s.lifecycle(func(b *service.BotService, c fiber.Ctx, id string) (domain.Bot, error) {
 		return b.Restart(c.Context(), currentUser(c), id)
 	}))
-	authed.Post("/bots/:id/kill", s.lifecycle(func(b *service.BotService, c fiber.Ctx, id string) (domain.Bot, error) {
+	authed.Post("/bots/:id/kill", s.requirePerm(domain.PermBotsPower), s.lifecycle(func(b *service.BotService, c fiber.Ctx, id string) (domain.Bot, error) {
 		return b.Kill(c.Context(), currentUser(c), id)
 	}))
 	authed.Put("/bots/:id/ports", s.setPorts)
@@ -555,23 +651,30 @@ func (s *server) routes(v1 fiber.Router) {
 	authed.Put("/bots/:id/tags", s.setTags)
 	authed.Put("/bots/:id/favorite", s.setFavorite)
 	if s.console != nil {
-		authed.Get("/bots/:id/console", s.consoleGuard, fws.New(s.consoleWS, fws.Config{
+		authed.Get("/bots/:id/console", s.requirePerm(domain.PermBotsConsole), s.consoleGuard, fws.New(s.consoleWS, fws.Config{
 			ReadBufferSize: 1024, WriteBufferSize: 4096, AllowEmptyOrigin: true,
 		}))
 	}
 	if s.files != nil {
 		authed.Get("/bots/:id/stats/stream", s.statsStream)
-		authed.Get("/bots/:id/packages", s.listPackages)
-		authed.Put("/bots/:id/packages", s.editPackages)
-		authed.Get("/bots/:id/packages/search", registryLimit, s.searchPackages)
-		authed.Get("/bots/:id/packages/latest", registryLimit, s.latestPackage)
-		authed.Get("/bots/:id/files", s.listFiles)
-		authed.Get("/bots/:id/files/content", s.readFile)
-		authed.Put("/bots/:id/files/content", s.writeFile)
-		authed.Delete("/bots/:id/files", s.deleteFile)
-		authed.Post("/bots/:id/files/mkdir", s.mkdirFile)
-		authed.Post("/bots/:id/files/move", s.moveFile)
-		authed.Post("/bots/:id/files/extract", s.extractZip)
+		authed.Get("/bots/:id/packages", s.requirePerm(domain.PermBotsFiles), s.listPackages)
+		authed.Put("/bots/:id/packages", s.requirePerm(domain.PermBotsFiles), s.editPackages)
+		authed.Get("/bots/:id/packages/search", s.requirePerm(domain.PermBotsFiles), registryLimit, s.searchPackages)
+		authed.Get("/bots/:id/packages/latest", s.requirePerm(domain.PermBotsFiles), registryLimit, s.latestPackage)
+		authed.Get("/bots/:id/files", s.requirePerm(domain.PermBotsFiles), s.forwardFiles, s.listFiles)
+		authed.Get("/bots/:id/files/content", s.requirePerm(domain.PermBotsFiles), s.forwardFiles, s.readFile)
+		authed.Put("/bots/:id/files/content", s.requirePerm(domain.PermBotsFiles), s.forwardFiles, s.writeFile)
+		authed.Delete("/bots/:id/files", s.requirePerm(domain.PermBotsFiles), s.forwardFiles, s.deleteFile)
+		authed.Post("/bots/:id/files/mkdir", s.requirePerm(domain.PermBotsFiles), s.forwardFiles, s.mkdirFile)
+		authed.Post("/bots/:id/files/move", s.requirePerm(domain.PermBotsFiles), s.forwardFiles, s.moveFile)
+		authed.Post("/bots/:id/files/extract", s.requirePerm(domain.PermBotsFiles), s.forwardFiles, s.extractZip)
+		authed.Post("/bots/:id/files/compress", s.requirePerm(domain.PermBotsFiles), s.forwardFiles, s.compressFiles)
+		authed.Post("/bots/:id/files/decompress", s.requirePerm(domain.PermBotsFiles), s.forwardFiles, s.decompressFile)
+		authed.Get("/bots/:id/files/zip", s.requirePerm(domain.PermBotsFiles), s.forwardFiles, s.downloadZip)
+	}
+	if s.usage != nil {
+		authed.Get("/bots/:id/usage", s.botUsage)
+		authed.Get("/admin/analytics", s.requirePerm(domain.PermAnalyticsView), s.adminAnalytics)
 	}
 	if s.analytics != nil {
 		authed.Get("/sdk/:lang", s.sdkFile)
@@ -581,13 +684,13 @@ func (s *server) routes(v1 fiber.Router) {
 		authed.Delete("/bots/:id/telemetry-key", s.revokeTelemetryKey)
 	}
 	if s.backups != nil {
-		authed.Get("/bots/:id/backups", s.listBackups)
-		authed.Post("/bots/:id/backups", s.createBackup)
-		authed.Get("/bots/:id/backups/:bid/download", s.downloadBackup)
-		authed.Post("/bots/:id/backups/:bid/restore", s.restoreBackup)
-		authed.Delete("/bots/:id/backups/:bid", s.deleteBackup)
-		authed.Patch("/bots/:id/backups/:bid", s.patchBackup)
-		authed.Post("/bots/:id/backups/:bid/verify", s.verifyBackup)
+		authed.Get("/bots/:id/backups", s.requirePerm(domain.PermBotsBackups), s.listBackups)
+		authed.Post("/bots/:id/backups", s.requirePerm(domain.PermBotsBackups), s.createBackup)
+		authed.Get("/bots/:id/backups/:bid/download", s.requirePerm(domain.PermBotsBackups), s.downloadBackup)
+		authed.Post("/bots/:id/backups/:bid/restore", s.requirePerm(domain.PermBotsBackups), s.restoreBackup)
+		authed.Delete("/bots/:id/backups/:bid", s.requirePerm(domain.PermBotsBackups), s.deleteBackup)
+		authed.Patch("/bots/:id/backups/:bid", s.requirePerm(domain.PermBotsBackups), s.patchBackup)
+		authed.Post("/bots/:id/backups/:bid/verify", s.requirePerm(domain.PermBotsBackups), s.verifyBackup)
 	}
 	if s.ops != nil {
 		authed.Get("/operations", s.listActivity)
@@ -614,25 +717,27 @@ func (s *server) routes(v1 fiber.Router) {
 		authed.Get("/activity/changes", s.visibleAudit)
 		authed.Get("/bots/:id/changes", s.botAudit)
 	}
-	authed.Post("/bots/:id/transfer", s.transferBot)
-	authed.Get("/bots/:id/invites", s.listInvites)
-	authed.Post("/bots/:id/invites", s.createInvite)
-	authed.Delete("/bots/:id/invites/:iid", s.deleteInvite)
+	authed.Post("/bots/:id/transfer", s.requirePerm(domain.PermBotsShare), s.transferBot)
+	authed.Get("/bots/:id/invites", s.requirePerm(domain.PermBotsShare), s.listInvites)
+	authed.Post("/bots/:id/invites", s.requirePerm(domain.PermBotsShare), s.createInvite)
+	authed.Delete("/bots/:id/invites/:iid", s.requirePerm(domain.PermBotsShare), s.deleteInvite)
 	authed.Post("/invites/preview", s.previewInvite)
 	authed.Post("/invites/accept", s.acceptInvite)
 	authed.Get("/bots/:id/users", s.listSubUsers)
-	authed.Put("/bots/:id/users", s.shareBot)
+	authed.Put("/bots/:id/users", s.requirePerm(domain.PermBotsShare), s.shareBot)
 	authed.Delete("/bots/:id/users/:uid", s.unshareBot)
-	authed.Get("/bots/:id/env", s.listEnv)
-	authed.Put("/bots/:id/env", s.setEnv)
-	authed.Post("/bots/:id/env/:name/reveal", s.revealEnv)
-	authed.Delete("/bots/:id/env/:name", s.deleteEnv)
+	authed.Get("/bots/:id/env", s.requirePerm(domain.PermBotsEnv), s.listEnv)
+	authed.Put("/bots/:id/env", s.requirePerm(domain.PermBotsEnv), s.setEnv)
+	authed.Post("/bots/:id/env/:name/reveal", s.requirePerm(domain.PermBotsEnv), s.revealEnv)
+	authed.Delete("/bots/:id/env/:name", s.requirePerm(domain.PermBotsEnv), s.deleteEnv)
 }
 
 // currentPublicURL follows changes made on the settings page.
-func (s *server) currentPublicURL() string {
-	if u := s.oauth.CurrentPublicURL(); u != "" {
-		return u
+func (s *panel) currentPublicURL() string {
+	if s.oauth != nil {
+		if u := s.oauth.CurrentPublicURL(); u != "" {
+			return u
+		}
 	}
 	return s.publicURL
 }

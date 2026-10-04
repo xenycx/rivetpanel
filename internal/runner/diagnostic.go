@@ -14,10 +14,10 @@ import (
 
 	"github.com/google/uuid"
 
-	operator "botpanel/internal/ai"
-	"botpanel/internal/domain"
-	"botpanel/internal/filesystem"
-	"botpanel/internal/runtimes"
+	operator "github.com/xenycx/rivetpanel/internal/ai"
+	"github.com/xenycx/rivetpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/filesystem"
+	"github.com/xenycx/rivetpanel/internal/runtimes"
 )
 
 // Diagnostic executes administrator-approved direct argv in a disposable,
@@ -98,7 +98,7 @@ func (d *Diagnostic) RunDiagnostic(ctx context.Context, botID, runtimeID string,
 	if user == "" {
 		user = "1000:1000"
 	}
-	spec := ContainerSpec{Name: "botpanel-diag-" + uuid.NewString(), Role: RoleDiagnostic, BotID: botID, NodeID: d.NodeID, InstallID: d.InstallID, Image: image, Argv: append([]string(nil), argv...), Env: envList(rt.Env), WorkspaceHostPath: scratch, User: user, Network: "none", MemoryBytes: mem, NanoCPUs: cpu, PidsLimit: pids, TmpfsBytes: tmp}
+	spec := ContainerSpec{Name: "rivetpanel-diag-" + uuid.NewString(), Role: RoleDiagnostic, BotID: botID, NodeID: d.NodeID, InstallID: d.InstallID, Image: image, Argv: append([]string(nil), argv...), Env: envList(rt.Env), WorkspaceHostPath: scratch, User: user, Network: "none", MemoryBytes: mem, NanoCPUs: cpu, PidsLimit: pids, TmpfsBytes: tmp}
 	id, err := d.Docker.Create(rctx, spec)
 	if err != nil {
 		return out, err
@@ -239,7 +239,7 @@ func copyDiagnosticSnapshot(m *filesystem.Manager, botID, dst string) error {
 				continue
 			}
 			base := path.Base(p)
-			if x.IsDir && (base == ".git" || base == ".botpanel" || base == ".botforge") {
+			if x.IsDir && (base == ".git" || base == ".rivetpanel") {
 				continue
 			}
 			target := filepath.Join(dst, filepath.FromSlash(p))
@@ -278,6 +278,28 @@ func copyDiagnosticSnapshot(m *filesystem.Manager, botID, dst string) error {
 	}
 	return walk(".")
 }
+
+// CleanDiagnosticScratch removes snapshot copies left in root by diagnostic
+// runs that were interrupted (the process stopped mid-run). Only the run-*
+// directories RunDiagnostic creates are touched.
+func CleanDiagnosticScratch(root string, log interface{ Warn(string, ...any) }) {
+	if root == "" {
+		return
+	}
+	es, err := os.ReadDir(root)
+	if err != nil {
+		return
+	}
+	for _, e := range es {
+		if !e.IsDir() || !strings.HasPrefix(e.Name(), "run-") {
+			continue
+		}
+		if err := os.RemoveAll(filepath.Join(root, e.Name())); err != nil && log != nil {
+			log.Warn("could not remove a leftover diagnostic snapshot", "dir", e.Name(), "err", err)
+		}
+	}
+}
+
 func clipDiagnostic(v string, n int) string {
 	if len(v) <= n {
 		return v

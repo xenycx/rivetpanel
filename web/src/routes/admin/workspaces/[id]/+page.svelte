@@ -37,7 +37,7 @@
 	}
 </script>
 
-<svelte:head><title>{v?.workspace.name ?? 'Workspace'} · Administration · BotForge</title></svelte:head>
+<svelte:head><title>{v?.workspace.name ?? 'Workspace'} · Administration · RivetPanel</title></svelte:head>
 
 <a href="/admin/workspaces" class="mb-4 inline-flex items-center gap-1 text-small text-muted hover:text-ink"><Icon name="chevronLeft" size={14} />All workspaces</a>
 {#if error}<Notice tone="fail" live>{error}</Notice>{/if}

@@ -4,7 +4,7 @@ import (
 	"context"
 	"strings"
 
-	"botpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/domain"
 )
 
 // maxOpsPerBot bounds the retained history per bot.

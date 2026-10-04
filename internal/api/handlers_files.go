@@ -13,11 +13,12 @@ import (
 	"sort"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/gofiber/fiber/v3"
 
-	"botpanel/internal/domain"
-	"botpanel/internal/filesystem"
+	"github.com/xenycx/rivetpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/filesystem"
 )
 
 const (
@@ -51,7 +52,20 @@ func mapFSError(err error) error {
 
 // filesFor authorizes the actor for the bot and opens its workspace. Changes
 // are refused (409) while a deployment or restore replaces the files.
-func (s *server) filesFor(c fiber.Ctx) (*filesystem.Workspace, error) {
+func (s *panel) filesFor(c fiber.Ctx) (*filesystem.Workspace, error) {
+	if s.trustedFiles {
+		// rivet-agent: the panel authorized this request before forwarding it.
+		// A new server's directory is created on first use.
+		id := strings.Clone(c.Params("id"))
+		if _, err := s.files.Path(id); err != nil {
+			_ = s.files.Create(id)
+		}
+		w, err := s.files.Open(id)
+		if err != nil {
+			return nil, mapFSError(err)
+		}
+		return w, nil
+	}
 	if siteID := strings.Clone(c.Params("sid")); siteID != "" && s.sites != nil {
 		w, err := s.sites.Draft(c.Context(), currentUser(c), siteID)
 		if err != nil {
@@ -78,7 +92,7 @@ func (s *server) filesFor(c fiber.Ctx) (*filesystem.Workspace, error) {
 	return w, nil
 }
 
-func (s *server) publishSiteFiles(c fiber.Ctx) error {
+func (s *panel) publishSiteFiles(c fiber.Ctx) error {
 	r, err := s.sites.PublishDraft(c.Context(), currentUser(c), strings.Clone(c.Params("sid")))
 	if err != nil {
 		return mapFSError(err)
@@ -100,7 +114,7 @@ type entryDTO struct {
 	Size int64  `json:"size"`
 }
 
-func (s *server) listFiles(c fiber.Ctx) error {
+func (s *panel) listFiles(c fiber.Ctx) error {
 	w, err := s.filesFor(c)
 	if err != nil {
 		return err
@@ -136,7 +150,7 @@ func (s *server) listFiles(c fiber.Ctx) error {
 
 // readFile serves file bytes strictly as inert data: never HTML, never
 // sniffed, never rendered in the panel's origin.
-func (s *server) readFile(c fiber.Ctx) error {
+func (s *panel) readFile(c fiber.Ctx) error {
 	w, err := s.filesFor(c)
 	if err != nil {
 		return err
@@ -178,7 +192,7 @@ func bodyReader(c fiber.Ctx) io.Reader {
 	return bytes.NewReader(c.Body())
 }
 
-func (s *server) checkLength(c fiber.Ctx) error {
+func (s *panel) checkLength(c fiber.Ctx) error {
 	if n := c.RequestCtx().Request.Header.ContentLength(); int64(n) > s.maxUpload {
 		return fiber.NewError(fiber.StatusRequestEntityTooLarge, "upload is too large")
 	}
@@ -188,7 +202,7 @@ func (s *server) checkLength(c fiber.Ctx) error {
 // writeFile replaces a file atomically. Editors send If-Match with the
 // revision they loaded; a mismatch (someone else changed the file) is 412 and
 // nothing is written. If-None-Match: * creates only when absent.
-func (s *server) writeFile(c fiber.Ctx) error {
+func (s *panel) writeFile(c fiber.Ctx) error {
 	if err := s.checkLength(c); err != nil {
 		return err
 	}
@@ -213,7 +227,7 @@ func (s *server) writeFile(c fiber.Ctx) error {
 	return c.SendStatus(fiber.StatusNoContent)
 }
 
-func (s *server) preconditions(c fiber.Ctx, w *filesystem.Workspace, p string) error {
+func (s *panel) preconditions(c fiber.Ctx, w *filesystem.Workspace, p string) error {
 	match, none := strings.Trim(c.Get(fiber.HeaderIfMatch), `" `), strings.TrimSpace(c.Get(fiber.HeaderIfNoneMatch))
 	if match == "" && none == "" {
 		return nil
@@ -232,7 +246,7 @@ func (s *server) preconditions(c fiber.Ctx, w *filesystem.Workspace, p string) e
 	return nil
 }
 
-func (s *server) mkdirFile(c fiber.Ctx) error {
+func (s *panel) mkdirFile(c fiber.Ctx) error {
 	var in struct {
 		Path string `json:"path"`
 	}
@@ -250,7 +264,7 @@ func (s *server) mkdirFile(c fiber.Ctx) error {
 	return c.SendStatus(fiber.StatusNoContent)
 }
 
-func (s *server) moveFile(c fiber.Ctx) error {
+func (s *panel) moveFile(c fiber.Ctx) error {
 	var in struct {
 		From string `json:"from"`
 		To   string `json:"to"`
@@ -269,7 +283,7 @@ func (s *server) moveFile(c fiber.Ctx) error {
 	return c.SendStatus(fiber.StatusNoContent)
 }
 
-func (s *server) deleteFile(c fiber.Ctx) error {
+func (s *panel) deleteFile(c fiber.Ctx) error {
 	w, err := s.filesFor(c)
 	if err != nil {
 		return err
@@ -279,6 +293,18 @@ func (s *server) deleteFile(c fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
+	// recursive=false deletes only a file, a symlink or an empty directory;
+	// the emptiness check is the filesystem's own (rmdir), so nothing added
+	// to the directory concurrently can be deleted with it.
+	if c.Query("recursive") == "false" {
+		if err := w.RemoveOne(p); err != nil {
+			if errors.Is(err, syscall.ENOTEMPTY) || errors.Is(err, syscall.EEXIST) {
+				return fiber.NewError(fiber.StatusConflict, "directory is not empty")
+			}
+			return mapFSError(err)
+		}
+		return c.SendStatus(fiber.StatusNoContent)
+	}
 	if err := w.Remove(p); err != nil {
 		return mapFSError(err)
 	}
@@ -286,7 +312,7 @@ func (s *server) deleteFile(c fiber.Ctx) error {
 }
 
 // extractZip unpacks an uploaded zip into a directory of the workspace.
-func (s *server) extractZip(c fiber.Ctx) error {
+func (s *panel) extractZip(c fiber.Ctx) error {
 	if err := s.checkLength(c); err != nil {
 		return err
 	}
@@ -322,4 +348,118 @@ func (s *server) extractZip(c fiber.Ctx) error {
 		return mapFSError(err)
 	}
 	return c.JSON(fiber.Map{"extracted": n})
+}
+
+// compressFiles writes a zip of the given paths into the workspace.
+func (s *panel) compressFiles(c fiber.Ctx) error {
+	var in struct {
+		Paths []string `json:"paths"`
+		Dest  string   `json:"dest"`
+	}
+	if err := decode(c, &in); err != nil {
+		return err
+	}
+	if len(in.Paths) == 0 || len(in.Paths) > 100 {
+		return domain.Invalid("choose 1 to 100 files or folders")
+	}
+	w, err := s.filesFor(c)
+	if err != nil {
+		return err
+	}
+	defer w.Close()
+	dest := strings.TrimSpace(in.Dest)
+	if dest == "" {
+		dest = path.Join(path.Dir(path.Clean(in.Paths[0])), filesystem.ArchiveName(in.Paths, time.Now()))
+	}
+	if !strings.HasSuffix(strings.ToLower(dest), ".zip") {
+		return domain.Invalid("the archive name must end in .zip")
+	}
+	if ok, _ := w.Exists(dest); ok {
+		return domain.Invalid(dest + " already exists")
+	}
+	pr, pw := io.Pipe()
+	go func() {
+		_, err := w.WriteZip(pw, in.Paths, filesystem.DefaultZipLimits)
+		pw.CloseWithError(err)
+	}()
+	if err := w.Write(dest, pr, filesystem.DefaultZipLimits.MaxBytes); err != nil {
+		pr.CloseWithError(err)
+		return mapFSError(err)
+	}
+	return c.Status(fiber.StatusCreated).JSON(fiber.Map{"path": dest})
+}
+
+// decompressFile extracts an archive that is already in the workspace.
+func (s *panel) decompressFile(c fiber.Ctx) error {
+	var in struct {
+		Path string `json:"path"`
+		Dir  string `json:"dir"`
+	}
+	if err := decode(c, &in); err != nil {
+		return err
+	}
+	w, err := s.filesFor(c)
+	if err != nil {
+		return err
+	}
+	defer w.Close()
+	dir := in.Dir
+	if dir == "" {
+		dir = path.Dir(path.Clean(in.Path))
+	}
+	n, err := w.ExtractArchive(in.Path, dir, filesystem.LargeExtractLimits)
+	if err != nil {
+		return mapFSError(err)
+	}
+	return c.JSON(fiber.Map{"extracted": n, "dir": dir})
+}
+
+// downloadZip streams a folder (or file) as a zip.
+func (s *panel) downloadZip(c fiber.Ctx) error {
+	w, err := s.filesFor(c)
+	if err != nil {
+		return err
+	}
+	p, err := queryPath(c, ".")
+	if err != nil {
+		w.Close()
+		return err
+	}
+	if ok, err := w.Exists(p); err != nil || !ok {
+		w.Close()
+		return fiber.ErrNotFound
+	}
+	name := filesystem.ArchiveName([]string{p}, time.Now())
+	c.Set(fiber.HeaderContentType, "application/zip")
+	c.Set("X-Content-Type-Options", "nosniff")
+	c.Set(fiber.HeaderCacheControl, "no-store")
+	c.Set(fiber.HeaderContentDisposition, "attachment; filename*=UTF-8''"+url.PathEscape(name))
+	pr, pw := io.Pipe()
+	go func() {
+		defer w.Close()
+		_, err := w.WriteZip(pw, []string{p}, filesystem.DefaultZipLimits)
+		pw.CloseWithError(err)
+	}()
+	return c.SendStream(pr)
+}
+
+// NodeFiles registers the server file routes on r without authorization, for
+// rivet-agent. The panel authorizes every request (identity, permission and
+// the deployment/restore lock) before it forwards it over the authenticated
+// agent connection, so these routes must never be exposed elsewhere.
+func NodeFiles(r fiber.Router, files *filesystem.Manager, maxUpload int64) {
+	if maxUpload <= 0 {
+		maxUpload = defaultMaxUpload
+	}
+	s := &panel{files: files, maxUpload: maxUpload, trustedFiles: true}
+	r.Get("/bots/:id/files", s.listFiles)
+	r.Get("/bots/:id/files/content", s.readFile)
+	r.Put("/bots/:id/files/content", s.writeFile)
+	r.Delete("/bots/:id/files", s.deleteFile)
+	r.Post("/bots/:id/files/mkdir", s.mkdirFile)
+	r.Post("/bots/:id/files/move", s.moveFile)
+	r.Post("/bots/:id/files/extract", s.extractZip)
+	r.Post("/bots/:id/files/compress", s.compressFiles)
+	r.Post("/bots/:id/files/decompress", s.decompressFile)
+	r.Get("/bots/:id/files/zip", s.downloadZip)
 }

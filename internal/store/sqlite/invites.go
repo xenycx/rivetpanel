@@ -5,7 +5,7 @@ import (
 	"database/sql"
 	"errors"
 
-	"botpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/domain"
 )
 
 const inviteCols = `i.id, i.bot_id, b.name, i.permissions, i.created_by, COALESCE(u.email, ''), i.created_at_ms, i.expires_at_ms, i.used_by, i.used_at_ms`

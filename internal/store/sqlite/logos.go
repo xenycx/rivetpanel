@@ -4,7 +4,7 @@ import (
 	"context"
 	"database/sql"
 
-	"botpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/domain"
 )
 
 func (db *DB) setLogo(ctx context.Context, table, id string, l *domain.Logo, nowMS int64) error {

@@ -4,7 +4,7 @@ import (
 	"context"
 	"database/sql"
 
-	"botpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/domain"
 )
 
 const accountInviteCols = `id, COALESCE(email,''), role, created_by, created_at_ms, expires_at_ms`
@@ -57,7 +57,7 @@ func (db *DB) UseAccountInvite(ctx context.Context, hash []byte, u domain.User, 
 		return domain.Invalid("this invitation was sent to a different email address")
 	}
 	u.Role = role
-	if _, err := tx.ExecContext(ctx, `INSERT INTO users (`+userCols+`) VALUES (?,?,?,?,?,?,?,?,?)`, u.ID, u.Email, u.DisplayName, u.AvatarJPEG, u.PasswordHash, u.Role, boolInt(u.Disabled), u.CreatedAtMS, u.UpdatedAtMS); err != nil {
+	if _, err := tx.ExecContext(ctx, `INSERT INTO users (`+userCols+`) VALUES (?,?,?,?,?,?,?,?,?,?)`, u.ID, u.Email, u.DisplayName, u.AvatarJPEG, u.PasswordHash, u.Role, boolInt(u.Disabled), u.CreatedAtMS, u.UpdatedAtMS, boolInt(u.EmailVerified)); err != nil {
 		return mapErr(err)
 	}
 	if err := createPersonalWorkspace(ctx, tx, u); err != nil {

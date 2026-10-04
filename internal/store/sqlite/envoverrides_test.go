@@ -4,16 +4,16 @@ import (
 	"context"
 	"testing"
 
-	"botpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/domain"
 )
 
 func TestEnvOverridesKeepEmptyValuesAndRemoveByName(t *testing.T) {
 	db := open(t)
 	ctx := context.Background()
 	err := db.PutEnvOverrides(ctx, []domain.Setting{
-		{Key: "BOTPANEL_SFTP_LISTEN", Value: ""}, // "switch it off": an empty value is an override, not a deletion
-		{Key: "BOTPANEL_MAX_BUILDS", Value: "3"},
-		{Key: "BOTPANEL_METRICS_TOKEN", Cipher: []byte{1}, Nonce: []byte{2}, KeyID: "k1"},
+		{Key: "RIVET_SFTP_LISTEN", Value: ""}, // "switch it off": an empty value is an override, not a deletion
+		{Key: "RIVET_MAX_BUILDS", Value: "3"},
+		{Key: "RIVET_METRICS_TOKEN", Cipher: []byte{1}, Nonce: []byte{2}, KeyID: "k1"},
 	}, nil, "admin", 10)
 	if err != nil {
 		t.Fatal(err)
@@ -22,24 +22,24 @@ func TestEnvOverridesKeepEmptyValuesAndRemoveByName(t *testing.T) {
 	if err != nil || len(got) != 3 {
 		t.Fatalf("%v %v", got, err)
 	}
-	if v, ok := got["BOTPANEL_SFTP_LISTEN"]; !ok || v.Value != "" || v.Cipher != nil {
+	if v, ok := got["RIVET_SFTP_LISTEN"]; !ok || v.Value != "" || v.Cipher != nil {
 		t.Fatalf("empty override lost: %+v", v)
 	}
-	if v := got["BOTPANEL_METRICS_TOKEN"]; v.Value != "" || len(v.Cipher) != 1 || v.KeyID != "k1" {
+	if v := got["RIVET_METRICS_TOKEN"]; v.Value != "" || len(v.Cipher) != 1 || v.KeyID != "k1" {
 		t.Fatalf("sealed override: %+v", v)
 	}
 	// Replacing and removing in one write.
-	if err := db.PutEnvOverrides(ctx, []domain.Setting{{Key: "BOTPANEL_MAX_BUILDS", Value: "4"}}, []string{"BOTPANEL_SFTP_LISTEN"}, "admin", 20); err != nil {
+	if err := db.PutEnvOverrides(ctx, []domain.Setting{{Key: "RIVET_MAX_BUILDS", Value: "4"}}, []string{"RIVET_SFTP_LISTEN"}, "admin", 20); err != nil {
 		t.Fatal(err)
 	}
 	got, _ = db.EnvOverrides(ctx)
-	if len(got) != 2 || got["BOTPANEL_MAX_BUILDS"].Value != "4" {
+	if len(got) != 2 || got["RIVET_MAX_BUILDS"].Value != "4" {
 		t.Fatalf("%+v", got)
 	}
 	// Sealed overrides are part of key verification and rotation.
 	n := 0
 	if err := db.WalkSealed(ctx, func(r SealedRow) error {
-		if r.NS == "env" && r.Name == "BOTPANEL_METRICS_TOKEN" {
+		if r.NS == "env" && r.Name == "RIVET_METRICS_TOKEN" {
 			n++
 		}
 		return nil

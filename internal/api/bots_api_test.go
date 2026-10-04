@@ -17,17 +17,17 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 
-	"botpanel/internal/auth"
-	"botpanel/internal/console"
-	"botpanel/internal/domain"
-	"botpanel/internal/events"
-	"botpanel/internal/filesystem"
-	"botpanel/internal/migrations"
-	"botpanel/internal/runtimes"
-	"botpanel/internal/secrets"
-	"botpanel/internal/service"
-	"botpanel/internal/store/sqlite"
-	rtdefaults "botpanel/runtimes"
+	"github.com/xenycx/rivetpanel/internal/auth"
+	"github.com/xenycx/rivetpanel/internal/console"
+	"github.com/xenycx/rivetpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/events"
+	"github.com/xenycx/rivetpanel/internal/filesystem"
+	"github.com/xenycx/rivetpanel/internal/migrations"
+	"github.com/xenycx/rivetpanel/internal/runtimes"
+	"github.com/xenycx/rivetpanel/internal/secrets"
+	"github.com/xenycx/rivetpanel/internal/service"
+	"github.com/xenycx/rivetpanel/internal/store/sqlite"
+	rtdefaults "github.com/xenycx/rivetpanel/runtimes"
 )
 
 type recorder struct {
@@ -48,6 +48,8 @@ type env struct {
 	auth    *service.AuthService
 	bots    *service.BotService
 	dataDir string
+	// consoleLimit counts live console sessions (serve waits for them).
+	consoleLimit *console.Limiter
 }
 
 func newEnv(t *testing.T) *env {
@@ -84,9 +86,11 @@ func newEnv(t *testing.T) *env {
 	src, bus := newWSSource(), events.NewBus()
 	bs.Bus = bus
 	csvc := &console.Service{Src: src, Bus: bus, Opts: console.Options{AccessRecheck: 50 * time.Millisecond, StatusPoll: 20 * time.Millisecond}}
+	limit := console.NewLimiter(0, 0, 2)
 	app := New(Deps{Log: slog.New(slog.NewTextHandler(io.Discard, nil)), DB: db, Auth: as, Bots: bs, Catalog: cat, SecureCookies: true,
-		Console: csvc, ConsoleLimit: console.NewLimiter(0, 0, 2), Nodes: db, Files: wsm, MaxUpload: 2 << 20})
-	return &env{src, bus, rec, t, app, db, as, bs, data}
+		Console: csvc, ConsoleLimit: limit, Nodes: db, Files: wsm, MaxUpload: 2 << 20,
+		Clients: &service.APIClientService{Store: db, Bots: bs}})
+	return &env{src, bus, rec, t, app, db, as, bs, data, limit}
 }
 
 type client struct {
@@ -476,7 +480,7 @@ func TestEnvValidation(t *testing.T) {
 		"equals":     {"A=B": "x"},
 		"path":       {"PATH": "/tmp"},
 		"ld preload": {"LD_PRELOAD": "/x.so"},
-		"reserved":   {"BOTPANEL_KEY": "x"},
+		"reserved":   {"RIVET_KEY": "x"},
 		"nul":        {"A": "a\u0000b"},
 		"huge":       {"A": strings.Repeat("x", 40000)},
 	} {

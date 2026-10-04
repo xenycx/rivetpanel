@@ -20,9 +20,9 @@ import (
 	"testing"
 	"time"
 
-	"botpanel/internal/filesystem"
-	"botpanel/internal/github"
-	"botpanel/internal/service"
+	"github.com/xenycx/rivetpanel/internal/filesystem"
+	"github.com/xenycx/rivetpanel/internal/github"
+	"github.com/xenycx/rivetpanel/internal/service"
 )
 
 // fakeGHAPI serves the GitHub REST endpoints the deploy service uses.

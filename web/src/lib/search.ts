@@ -52,7 +52,7 @@ export const pages: Entry[] = [
 	{ key: 'p-activity', group: 'page', label: 'Activity', hint: 'Work in progress and recent changes', icon: 'activity', href: '/activity', words: 'audit log history operations changes builds deployments' },
 	{ key: 'p-docs', group: 'page', label: 'Documentation', hint: 'Guides and limits', icon: 'book', href: '/docs', words: 'help manual guide docs how to' },
 	{ key: 'p-api', group: 'page', label: 'Automation API', hint: 'OpenAPI description', icon: 'code', href: '/api/v1/automation/openapi.yaml', words: 'openapi rest tokens swagger' },
-	{ key: 'p-about', group: 'page', label: 'What BotForge does', hint: 'Overview of the product', icon: 'info', href: '/', words: 'about landing features' },
+	{ key: 'p-about', group: 'page', label: 'What RivetPanel does', hint: 'Overview of the product', icon: 'info', href: '/', words: 'about landing features' },
 
 	{ key: 's-profile', group: 'settings', label: 'Profile', hint: 'Name and picture', icon: 'users', href: '/settings/profile', words: 'account avatar display name email' },
 	{ key: 's-appearance', group: 'settings', label: 'Appearance', hint: 'Theme, accent colour and corners', icon: 'sliders', href: '/settings/appearance', words: 'dark light theme accent color colour radius corners' },
@@ -66,12 +66,14 @@ export const adminPages: Entry[] = [
 	{ key: 'a-users', group: 'admin', label: 'Users', hint: 'Administration · accounts and invitations', icon: 'users', href: '/admin/users', words: 'accounts people invite register roles disable admin' },
 	{ key: 'a-workspaces', group: 'admin', label: 'Workspaces', hint: 'Administration · every workspace', icon: 'building', href: '/admin/workspaces', words: 'teams members' },
 	{ key: 'a-sites', group: 'admin', label: 'Sites and domains', hint: 'Administration · hosted sites', icon: 'globe', href: '/admin/sites', words: 'static hosting custom domain dns suspend' },
+	{ key: 'a-analytics', group: 'admin', label: 'Analytics', hint: 'Administration · usage trends across the panel', icon: 'chart', href: '/admin/analytics', words: 'usage trends statistics stats reports top consumers deployments backups uptime accounts tickets csv export' },
 	{ key: 'a-host', group: 'admin', label: 'Host', hint: 'Administration · CPU, memory, disk, network', icon: 'chart', href: '/admin/host', words: 'resources monitoring cpu memory ram disk network load swap capacity server machine usage' },
 	{ key: 'a-host-bots', group: 'admin', label: 'Resource use per bot', hint: 'Host · what each bot consumes', icon: 'chart', href: '/admin/host?tab=bots', words: 'top cpu memory network pids consumers heavy' },
 	{ key: 'a-host-capacity', group: 'admin', label: 'Capacity and budgets', hint: 'Host · memory reserved, limits', icon: 'chart', href: '/admin/host?tab=capacity', words: 'budget admission memory limit node reserved' },
-	{ key: 'a-logs', group: 'admin', label: 'Panel logs', hint: 'Host · what BotForge itself logged', icon: 'terminal', href: '/admin/host?tab=logs', words: 'log errors warnings server output debug journal' },
-	{ key: 'a-env', group: 'admin', label: 'Environment', hint: 'Administration · BOTPANEL_ variables', icon: 'sliders', href: '/admin/environment', words: 'env variables configuration config settings limits restart environment file botpanel' },
+	{ key: 'a-logs', group: 'admin', label: 'Panel logs', hint: 'Host · what RivetPanel itself logged', icon: 'terminal', href: '/admin/host?tab=logs', words: 'log errors warnings server output debug journal' },
+	{ key: 'a-env', group: 'admin', label: 'Environment', hint: 'Administration · RIVET_ variables', icon: 'sliders', href: '/admin/environment', words: 'env variables configuration config settings limits restart environment file rivetpanel' },
 	{ key: 'a-settings', group: 'admin', label: 'Panel settings', hint: 'Administration · address, sign-in, AI', icon: 'gear', href: '/admin/settings', words: 'public url oauth github discord registration signup' },
+	{ key: 'a-modules', group: 'admin', label: 'Modules', hint: 'Administration · stable and preview capabilities', icon: 'layers', href: '/admin/modules', words: 'features preview experimental agents games identity support extensions virtual machines' },
 	{ key: 'a-ai', group: 'admin', label: 'AI operator providers', hint: 'Panel settings · models and API keys', icon: 'sparkle', href: '/admin/settings#ai-providers', words: 'ai assistant llm deepseek openai provider model api key chat' },
 	{ key: 'a-research', group: 'admin', label: 'AI web research', hint: 'Panel settings · SearxNG / Risa search', icon: 'search', href: '/admin/settings#ai-research', words: 'ai search searxng risa web fetch' },
 	{ key: 'a-diag', group: 'admin', label: 'Diagnostics', hint: 'Administration · health checks', icon: 'shield', href: '/admin/diagnostics', words: 'doctor status checks problems docker keys backups report' }
@@ -81,7 +83,7 @@ export const adminPages: Entry[] = [
 export const docs: Entry[] = [
 	['version', 'Version and implementation status'], ['quickstart', 'Quick start'], ['deploy', 'Deployment and GitHub'], ['publish', 'Publishing a bot to GitHub'],
 	['workspaces', 'Workspaces and roles'], ['sites', 'Bot Sites and public pages'], ['appearance', 'Appearance'], ['ai', 'AI assistant'], ['widgets', 'Dashboard and public widgets'],
-	['widget-data', 'Widget data shapes'], ['telemetry', 'Telemetry limits'], ['health', 'Health and alerts'], ['security', 'Security and isolation'], ['backups', 'Backups and restore'],
+	['widget-data', 'Widget data shapes'], ['telemetry', 'Telemetry limits'], ['health', 'Health and alerts'], ['usage', 'Usage analytics'], ['security', 'Security and isolation'], ['backups', 'Backups and restore'],
 	['automation', 'Automation API'], ['admin-tools', 'Host, logs and environment'], ['operations', 'Operations guide']
 ].map(([id, title]) => ({ key: `d-${id}`, group: 'docs', label: title, hint: 'Documentation', icon: 'book' as IconName, href: `/docs#${id}` }));
 
@@ -98,6 +100,7 @@ export const botTabs: { id: string; label: string; icon: IconName; words: string
 	{ id: 'network', label: 'Network', icon: 'network', words: 'ports publish outbound' },
 	{ id: 'page', label: 'Public page', icon: 'globe', words: 'site studio widgets analytics' },
 	{ id: 'alerts', label: 'Health and alerts', icon: 'activity', words: 'probe discord webhook notify uptime' },
+	{ id: 'usage', label: 'Analytics', icon: 'chart', words: 'usage cpu memory network uptime crashes deployments backups history trends csv' },
 	{ id: 'backups', label: 'Backups', icon: 'archive', words: 'restore snapshot download' },
 	{ id: 'schedules', label: 'Schedules', icon: 'clock', words: 'cron restart timer' },
 	{ id: 'users', label: 'Access', icon: 'users', words: 'share invite permissions' },

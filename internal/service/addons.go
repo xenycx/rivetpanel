@@ -6,10 +6,11 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
-	"botpanel/internal/addons"
-	"botpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/addons"
+	"github.com/xenycx/rivetpanel/internal/domain"
 )
 
 // AddonData removes and measures add-on data directories (addons.DataRoot).
@@ -29,6 +30,16 @@ type AddonState struct {
 type AddonRuntime interface {
 	AddonStates(ctx context.Context, botID string) (map[string]AddonState, error)
 	AddonLogs(ctx context.Context, botID, kind string, lines int) (string, error)
+}
+
+// NodeAddons observes the add-on containers of servers on remote nodes
+// through their rivet-agent. Optional: without it remote add-on logs are
+// refused and their states are unknown.
+type NodeAddons interface {
+	AddonStates(ctx context.Context, nodeID, botID string) (map[string]AddonState, error)
+	AddonLogs(ctx context.Context, nodeID, botID, kind string, lines int) (string, error)
+	// RemoveAddonData deletes one add-on's data on the node.
+	RemoveAddonData(ctx context.Context, nodeID, botID, kind string) error
 }
 
 // AddonInput selects an add-on to attach. MemoryBytes 0 uses the kind's default.
@@ -54,11 +65,46 @@ type AddonView struct {
 
 const maxAddonsPerBot = 4
 
-func (s *BotService) addonsEnabled() error {
+// addonsAvailable reports whether add-ons can run where a server on nodeID
+// runs: this panel's Docker runner for its own node, or the node's agent for
+// a remote node. Every built-in add-on kind is supported on agent nodes (the
+// agent's runner uses the same add-on definitions, private network and a data
+// directory beside its server files); the add-on's data then lives on the
+// node and is managed through its agent.
+func (s *BotService) addonsAvailable(nodeID string) error {
+	if s.remote(nodeID) {
+		if s.RemoteAddons == nil {
+			return domain.Invalid("add-ons are not available for servers on remote nodes on this panel")
+		}
+		return nil
+	}
 	if s.AddonData == nil {
 		return domain.Invalid("add-ons are not available on this panel (no Docker runner)")
 	}
 	return nil
+}
+
+// addonSupportedOnNode refuses an add-on kind a remote node cannot run. All
+// built-in kinds qualify today; the check keeps a future kind that needs
+// panel-only facilities from being attached to a remote server.
+func addonSupportedOnNode(k addons.Kind) error {
+	if k.Image == "" || k.DataPath == "" {
+		return domain.Invalid(k.DisplayName + " is not available for servers on remote nodes")
+	}
+	return nil
+}
+
+// clearAddonData deletes data an earlier add-on of this kind may have left
+// (it cannot be opened with a new password): on the node for a remote
+// server, which must then be online, otherwise on this panel.
+func (s *BotService) clearAddonData(ctx context.Context, b domain.Bot, kind string) error {
+	if s.remote(b.NodeID) {
+		if _, _, err := s.RemoteFiles(b, "Add-ons"); err != nil {
+			return err
+		}
+		return s.RemoteAddons.RemoveAddonData(ctx, b.NodeID, b.ID, kind)
+	}
+	return s.AddonData.Remove(b.ID, kind)
 }
 
 func addonView(a domain.BotAddon, k addons.Kind) AddonView {
@@ -73,7 +119,12 @@ func (s *BotService) Addons(ctx context.Context, actor domain.User, botID string
 		return nil, err
 	}
 	var states map[string]AddonState
-	if s.AddonRuntime != nil && len(b.Addons) > 0 {
+	remote := s.remote(b.NodeID)
+	switch {
+	case len(b.Addons) == 0:
+	case remote && s.RemoteAddons != nil:
+		states, _ = s.RemoteAddons.AddonStates(ctx, b.NodeID, b.ID) // offline: state unknown
+	case !remote && s.AddonRuntime != nil:
 		states, _ = s.AddonRuntime.AddonStates(ctx, b.ID)
 	}
 	out := make([]AddonView, 0, len(b.Addons))
@@ -85,7 +136,7 @@ func (s *BotService) Addons(ctx context.Context, actor domain.User, botID string
 		}
 		v := addonView(a, k)
 		v.Status = states[a.Kind]
-		if s.AddonData != nil {
+		if s.AddonData != nil && !remote { // a remote add-on's data is on its node
 			v.DataBytes = s.AddonData.Usage(b.ID, a.Kind)
 		}
 		out = append(out, v)
@@ -102,20 +153,27 @@ func (s *BotService) AddAddon(ctx context.Context, actor domain.User, botID stri
 	if err := s.Coord.Blocked(b.ID); err != nil {
 		return AddonView{}, err
 	}
-	a, k, err := s.addAddon(ctx, b, in, true)
+	a, k, err := s.addAddon(ctx, b, in, true, false)
 	if err != nil {
 		return AddonView{}, err
 	}
 	return addonView(a, k), nil
 }
 
-func (s *BotService) addAddon(ctx context.Context, b domain.Bot, in AddonInput, budget bool) (domain.BotAddon, addons.Kind, error) {
-	if err := s.addonsEnabled(); err != nil {
+// addAddon attaches an add-on. fresh is a server created in this request:
+// no data of an earlier add-on can exist for it.
+func (s *BotService) addAddon(ctx context.Context, b domain.Bot, in AddonInput, budget, fresh bool) (domain.BotAddon, addons.Kind, error) {
+	if err := s.addonsAvailable(b.NodeID); err != nil {
 		return domain.BotAddon{}, addons.Kind{}, err
 	}
 	k, ok := addons.Get(strings.ToLower(strings.TrimSpace(in.Kind)))
 	if !ok {
 		return domain.BotAddon{}, addons.Kind{}, domain.Invalid(fmt.Sprintf("unknown add-on %q", in.Kind))
+	}
+	if s.remote(b.NodeID) {
+		if err := addonSupportedOnNode(k); err != nil {
+			return domain.BotAddon{}, addons.Kind{}, err
+		}
 	}
 	if len(b.Addons) >= maxAddonsPerBot {
 		return domain.BotAddon{}, addons.Kind{}, domain.Invalid(fmt.Sprintf("a bot can have at most %d add-ons", maxAddonsPerBot))
@@ -152,8 +210,14 @@ func (s *BotService) addAddon(ctx context.Context, b domain.Bot, in AddonInput, 
 	}
 	// A previous add-on of this kind may have left data behind (it was
 	// removed with "keep data"); a new password cannot open it.
-	if err := s.AddonData.Remove(b.ID, k.ID); err != nil {
-		return domain.BotAddon{}, addons.Kind{}, err
+	if !fresh {
+		if err := s.clearAddonData(ctx, b, k.ID); err != nil {
+			return domain.BotAddon{}, addons.Kind{}, err
+		}
+	} else if !s.remote(b.NodeID) {
+		if err := s.AddonData.Remove(b.ID, k.ID); err != nil {
+			return domain.BotAddon{}, addons.Kind{}, err
+		}
 	}
 	if err := s.Store.CreateBotAddon(ctx, a, pw, s.now()); err != nil {
 		if errors.Is(err, domain.ErrConflict) {
@@ -198,17 +262,28 @@ func (s *BotService) RemoveAddon(ctx context.Context, actor domain.User, botID, 
 	if err != nil {
 		return err
 	}
-	if err := s.addonsEnabled(); err != nil {
+	if err := s.addonsAvailable(b.NodeID); err != nil {
 		return err
 	}
 	if err := s.Coord.Blocked(b.ID); err != nil {
 		return err
+	}
+	remote := s.remote(b.NodeID)
+	if remote {
+		// The data is on the node: refuse while it is offline rather than
+		// leave it behind.
+		if _, _, err := s.RemoteFiles(b, "Add-ons"); err != nil {
+			return err
+		}
 	}
 	if err := s.Store.DeleteBotAddon(ctx, b.ID, kind, s.now()); err != nil {
 		return err
 	}
 	if s.Notifier != nil {
 		s.Notifier.Notify(b.ID) // removes the stopped add-on container
+	}
+	if remote {
+		return s.RemoteAddons.RemoveAddonData(ctx, b.NodeID, b.ID, kind)
 	}
 	return s.AddonData.Remove(b.ID, kind)
 }
@@ -245,13 +320,19 @@ func (s *BotService) AddonLogs(ctx context.Context, actor domain.User, botID, ki
 	if err != nil {
 		return "", err
 	}
+	if !slices.ContainsFunc(b.Addons, func(a domain.BotAddon) bool { return a.Kind == kind }) {
+		return "", domain.ErrNotFound
+	}
+	lines = min(max(lines, 1), 500)
+	if s.remote(b.NodeID) {
+		// Never the panel's own containers: the add-on runs on the node.
+		if s.RemoteAddons == nil {
+			return "", domain.Invalid("add-on logs are not available for servers on remote nodes on this panel")
+		}
+		return s.RemoteAddons.AddonLogs(ctx, b.NodeID, b.ID, kind, lines)
+	}
 	if s.AddonRuntime == nil {
 		return "", domain.ErrRunnerUnavailable
 	}
-	for _, a := range b.Addons {
-		if a.Kind == kind {
-			return s.AddonRuntime.AddonLogs(ctx, b.ID, kind, min(max(lines, 1), 500))
-		}
-	}
-	return "", domain.ErrNotFound
+	return s.AddonRuntime.AddonLogs(ctx, b.ID, kind, lines)
 }

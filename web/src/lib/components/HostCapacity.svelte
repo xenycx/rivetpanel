@@ -14,7 +14,7 @@
 			/* the budgets below still show */
 		}
 		try {
-			const names = new Set(['BOTPANEL_NODE_MEMORY_BYTES', 'BOTPANEL_USER_MEMORY_BYTES', 'BOTPANEL_MAX_BOTS_PER_USER', 'BOTPANEL_MAX_BUILDS', 'BOTPANEL_MIN_FREE_DISK_BYTES', 'BOTPANEL_MAX_BOT_MEMORY_BYTES', 'BOTPANEL_MAX_SITES_PER_USER']);
+			const names = new Set(['RIVET_NODE_MEMORY_BYTES', 'RIVET_USER_MEMORY_BYTES', 'RIVET_MAX_BOTS_PER_USER', 'RIVET_MAX_BUILDS', 'RIVET_MIN_FREE_DISK_BYTES', 'RIVET_MAX_BOT_MEMORY_BYTES', 'RIVET_MAX_SITES_PER_USER']);
 			vars = (await api<EnvView>('GET', '/admin/environment')).vars.filter((v) => names.has(v.name));
 		} catch {
 			/* optional */
@@ -26,7 +26,7 @@
 		if (v.kind === 'bytes' && Number.isFinite(n)) return fmtBytes(n);
 		return v.value;
 	};
-	const scope: Record<string, string> = { BOTPANEL_NODE_MEMORY_BYTES: 'Host', BOTPANEL_USER_MEMORY_BYTES: 'Account', BOTPANEL_MAX_BOTS_PER_USER: 'Account', BOTPANEL_MAX_BUILDS: 'Host', BOTPANEL_MIN_FREE_DISK_BYTES: 'Host', BOTPANEL_MAX_BOT_MEMORY_BYTES: 'Bot', BOTPANEL_MAX_SITES_PER_USER: 'Account' };
+	const scope: Record<string, string> = { RIVET_NODE_MEMORY_BYTES: 'Host', RIVET_USER_MEMORY_BYTES: 'Account', RIVET_MAX_BOTS_PER_USER: 'Account', RIVET_MAX_BUILDS: 'Host', RIVET_MIN_FREE_DISK_BYTES: 'Host', RIVET_MAX_BOT_MEMORY_BYTES: 'Bot', RIVET_MAX_SITES_PER_USER: 'Account' };
 	const srcText = { default: 'Default', environment: 'Environment file', panel: 'Set here' } as const;
 </script>
 

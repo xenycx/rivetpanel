@@ -22,7 +22,7 @@ func TestGitignoreRules(t *testing.T) {
 	for _, tc := range []struct {
 		path string
 		want bool
-	}{{".env", true}, {".env.production", true}, {".env.example", false}, {"a/.env", true}, {"x.pyc", true}, {".botpanel-deploy", true}} {
+	}{{".env", true}, {".env.production", true}, {".env.example", false}, {"a/.env", true}, {"x.pyc", true}, {".rivetpanel-deploy", true}} {
 		if got := builtinIgnored(tc.path, false); got != tc.want {
 			t.Errorf("builtin %s = %v", tc.path, got)
 		}

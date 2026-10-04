@@ -292,7 +292,7 @@ func (r *Research) Fetch(ctx context.Context, raw string) (title, text string, e
 	defer client.CloseIdleConnections()
 	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, raw, nil)
 	req.Header.Set("Accept", "text/html,application/json,text/plain;q=0.9")
-	req.Header.Set("User-Agent", "BotForge-Research/1.0")
+	req.Header.Set("User-Agent", "RivetPanel-Research/1.0")
 	resp, e := client.Do(req)
 	if e != nil {
 		if errors.Is(e, errBlockedAddress) {

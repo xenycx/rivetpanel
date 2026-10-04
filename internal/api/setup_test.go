@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	"botpanel/internal/domain"
-	"botpanel/internal/oauth"
-	"botpanel/internal/service"
+	"github.com/xenycx/rivetpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/oauth"
+	"github.com/xenycx/rivetpanel/internal/service"
 )
 
 func setupEnv(t *testing.T, env service.EnvSettings) (*env, *service.SettingsService, *service.OAuthService) {

@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"time"
 
 	"go.yaml.in/yaml/v3"
 )
@@ -52,6 +53,9 @@ type Runtime struct {
 	// DiagnosticCommands are administrator-approved direct-argv prefixes. The
 	// AI may append safe workspace paths, but can never introduce a shell.
 	DiagnosticCommands [][]string `yaml:"diagnostic_commands"`
+	// BuildTimeout overrides the runner's build timeout for one stage (set
+	// by the runner for game installs such as SteamCMD; never from YAML).
+	BuildTimeout time.Duration `yaml:"-"`
 }
 
 // ImageRef is the execution image reference, pinned by digest when known.

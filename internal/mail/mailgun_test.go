@@ -29,7 +29,7 @@ func fake(t *testing.T, status int, reply string, seen *http.Request, form *map[
 	return &Client{BaseURL: srv.URL}
 }
 
-var cfg = Config{APIKey: "key-secret", Domain: "mg.example.com", Region: RegionEU, From: "BotForge <noreply@mg.example.com>"}
+var cfg = Config{APIKey: "key-secret", Domain: "mg.example.com", Region: RegionEU, From: "RivetPanel <noreply@mg.example.com>"}
 
 func TestSendBuildsMailgunRequest(t *testing.T) {
 	var req http.Request
@@ -121,7 +121,7 @@ func TestValidators(t *testing.T) {
 	if d, err := ValidateDomain(" MG.Example.com "); err != nil || d != "mg.example.com" {
 		t.Fatal(d, err)
 	}
-	if _, err := ValidateFrom("BotForge <noreply@example.com>"); err != nil {
+	if _, err := ValidateFrom("RivetPanel <noreply@example.com>"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := ValidateFrom("x\r\nBcc: a@b.co"); err == nil {

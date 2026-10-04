@@ -19,12 +19,12 @@
 	let customize = $state(false);
 	let newKey = $state('');
 	const langs = [
-		{ id: 'discordjs', label: 'discord.js', file: 'botpanel.js' },
-		{ id: 'discordpy', label: 'discord.py', file: 'botpanel.py' },
-		{ id: 'go', label: 'Go', file: 'botpanel/botpanel.go' },
-		{ id: 'rust', label: 'Rust', file: 'src/botpanel.rs' },
-		{ id: 'java', label: 'Java', file: 'BotPanel.java' },
-		{ id: 'ruby', label: 'Ruby', file: 'botpanel.rb' }
+		{ id: 'discordjs', label: 'discord.js', file: 'rivetpanel.js' },
+		{ id: 'discordpy', label: 'discord.py', file: 'rivetpanel.py' },
+		{ id: 'go', label: 'Go', file: 'rivetpanel/rivetpanel.go' },
+		{ id: 'rust', label: 'Rust', file: 'src/rivetpanel.rs' },
+		{ id: 'java', label: 'Java', file: 'RivetPanel.java' },
+		{ id: 'ruby', label: 'Ruby', file: 'rivetpanel.rb' }
 	] as const;
 	let lang = $state<(typeof langs)[number]['id']>('discordjs');
 	let snippet = $state('');
@@ -32,7 +32,7 @@
 
 	// Dashboard layout is a per-browser preference: which stats to show and what to call them.
 	type Layout = { hidden: string[]; labels: Record<string, string> };
-	const lsKey = `botpanel.analytics.${botId}`;
+	const lsKey = `rivetpanel.analytics.${botId}`;
 	let layout = $state<Layout>({ hidden: [], labels: {} });
 	try {
 		const raw = localStorage.getItem(lsKey);
@@ -138,7 +138,7 @@
 	<div class="mt-3 rounded-tile border border-rule-soft bg-panel p-4">
 		<h2 class="text-title font-semibold">Send stats from your bot</h2>
 		<ol class="mt-2 list-decimal space-y-1 pl-5">
-			<li>Generate a key{#if !stopped} <span class="text-warn">(stop the bot first: the key is stored in its environment)</span>{/if}. It is added to the bot as <code class="font-mono">BOTPANEL_TELEMETRY_KEY</code>, together with <code class="font-mono">BOTPANEL_URL</code> when the panel's public address is configured.</li>
+			<li>Generate a key{#if !stopped} <span class="text-warn">(stop the bot first: the key is stored in its environment)</span>{/if}. It is added to the bot as <code class="font-mono">RIVET_TELEMETRY_KEY</code>, together with <code class="font-mono">RIVET_URL</code> when the panel's public address is configured.</li>
 			<li>Copy the snippet below into your bot and call it as shown at the top of the file.</li>
 			<li>Start the bot. Stats appear within a minute. Pushes are limited to 60 per minute and one sample per stat every 10 seconds.</li>
 		</ol>

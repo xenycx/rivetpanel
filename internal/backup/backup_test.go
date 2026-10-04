@@ -12,10 +12,11 @@ import (
 	"testing"
 	"time"
 
-	"botpanel/internal/domain"
-	"botpanel/internal/migrations"
-	"botpanel/internal/secrets"
-	"botpanel/internal/store/sqlite"
+	"github.com/xenycx/rivetpanel/internal/agentcert"
+	"github.com/xenycx/rivetpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/migrations"
+	"github.com/xenycx/rivetpanel/internal/secrets"
+	"github.com/xenycx/rivetpanel/internal/store/sqlite"
 )
 
 const botA = "11111111-2222-4333-8444-555555555555"
@@ -30,7 +31,7 @@ type world struct {
 func newWorld(t *testing.T) *world {
 	t.Helper()
 	dir := t.TempDir()
-	w := &world{dir: dir, dbPath: filepath.Join(dir, "live", "botpanel.db"), dataRoot: filepath.Join(dir, "live", "bots"), keyDir: filepath.Join(dir, "live", "keys")}
+	w := &world{dir: dir, dbPath: filepath.Join(dir, "live", "rivetpanel.db"), dataRoot: filepath.Join(dir, "live", "bots"), keyDir: filepath.Join(dir, "live", "keys")}
 	ctx := context.Background()
 	db, err := sqlite.Open(ctx, w.dbPath, 4)
 	if err != nil {
@@ -84,7 +85,7 @@ func TestBackupRestoreRoundTrip(t *testing.T) {
 
 	// Restore into a completely fresh location, restoring keys from a separate copy.
 	fresh := filepath.Join(w.dir, "fresh")
-	o := RestoreOptions{DBPath: filepath.Join(fresh, "botpanel.db"), DataRoot: filepath.Join(fresh, "bots"), KeyDir: filepath.Join(fresh, "keys")}
+	o := RestoreOptions{DBPath: filepath.Join(fresh, "rivetpanel.db"), DataRoot: filepath.Join(fresh, "bots"), KeyDir: filepath.Join(fresh, "keys")}
 	if _, err := Restore(ctx, bdir, o); err != nil {
 		t.Fatal(err)
 	}
@@ -296,3 +297,66 @@ func TestSetuidBitsAreDropped(t *testing.T) {
 }
 
 var _ = io.EOF
+
+func TestAgentCAIsBackedUpAndRestoredWithKeys(t *testing.T) {
+	w := newWorld(t)
+	ctx := context.Background()
+	caDir := filepath.Join(w.keyDir, agentCADir)
+	ca, err := agentcert.LoadOrCreate(caDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Without --include-keys the CA stays out of the backup.
+	plain := filepath.Join(w.dir, "plain")
+	if m, err := Create(ctx, w.src(), plain, false, time.Now()); err != nil || m.IncludesAgentCA {
+		t.Fatalf("%+v %v", m, err)
+	}
+	if _, err := os.Stat(filepath.Join(plain, keysDirName, agentCADir)); err == nil {
+		t.Fatal("agent CA copied without --include-keys")
+	}
+
+	bdir := filepath.Join(w.dir, "b")
+	m, err := Create(ctx, w.src(), bdir, true, time.Now())
+	if err != nil || !m.IncludesAgentCA {
+		t.Fatalf("%+v %v", m, err)
+	}
+	if fi, err := os.Stat(filepath.Join(bdir, keysDirName, agentCADir, "ca.key")); err != nil || fi.Mode().Perm() != 0o600 {
+		t.Fatalf("backup CA key: %v %v", fi, err)
+	}
+	fresh := filepath.Join(w.dir, "fresh")
+	o := RestoreOptions{DBPath: filepath.Join(fresh, "db"), DataRoot: filepath.Join(fresh, "bots"), KeyDir: filepath.Join(fresh, "keys"), RestoreKeys: true}
+	if _, err := Restore(ctx, bdir, o); err != nil {
+		t.Fatal(err)
+	}
+	restored, err := agentcert.LoadOrCreate(filepath.Join(o.KeyDir, agentCADir))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(restored.CertificatePEM(), ca.CertificatePEM()) {
+		t.Fatal("restored agent CA has a different identity")
+	}
+
+	// A second restore must not silently replace the CA.
+	o2 := RestoreOptions{DBPath: filepath.Join(w.dir, "x", "db"), DataRoot: filepath.Join(w.dir, "x", "bots"), KeyDir: o.KeyDir, RestoreKeys: true}
+	if _, err := Restore(ctx, bdir, o2); err == nil || !strings.Contains(err.Error(), "agent CA") {
+		t.Fatalf("existing agent CA overwritten: %v", err)
+	}
+	if _, err := os.Stat(o2.DBPath); err == nil {
+		t.Fatal("database written although restore was refused")
+	}
+
+	// Tampering with the CA is detected.
+	os.WriteFile(filepath.Join(bdir, keysDirName, agentCADir, "ca.crt"), []byte("forged"), 0o644)
+	if _, err := Verify(bdir); err == nil || !strings.Contains(err.Error(), "checksum") {
+		t.Fatalf("tampered CA not detected: %v", err)
+	}
+}
+
+func TestPartialAgentCAIsRefused(t *testing.T) {
+	w := newWorld(t)
+	os.MkdirAll(filepath.Join(w.keyDir, agentCADir), 0o700)
+	os.WriteFile(filepath.Join(w.keyDir, agentCADir, "ca.crt"), []byte("x"), 0o644)
+	if _, err := Create(context.Background(), w.src(), filepath.Join(w.dir, "b"), true, time.Now()); err == nil || !strings.Contains(err.Error(), "incomplete") {
+		t.Fatalf("partial agent CA backed up: %v", err)
+	}
+}

@@ -10,9 +10,9 @@ import (
 
 	"github.com/google/uuid"
 
-	"botpanel/internal/domain"
-	"botpanel/internal/oauth"
-	"botpanel/internal/secrets"
+	"github.com/xenycx/rivetpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/oauth"
+	"github.com/xenycx/rivetpanel/internal/secrets"
 )
 
 // OAuthStore is the persistence surface OAuthService needs.
@@ -246,7 +246,9 @@ func (s *OAuthService) signup(ctx context.Context, acct domain.OAuthAccount, ide
 		return domain.User{}, &OAuthError{Code: OAuthEmailUnverified}
 	}
 	now := s.now().UnixMilli()
-	u := domain.User{ID: uuid.NewString(), Email: email, Role: domain.RoleUser, CreatedAtMS: now, UpdatedAtMS: now}
+	// The provider only ever hands over an address it has verified (see
+	// oauth.Identity), so the account starts verified.
+	u := domain.User{ID: uuid.NewString(), Email: email, Role: domain.RoleUser, CreatedAtMS: now, UpdatedAtMS: now, EmailVerified: true}
 	acct.UserID = u.ID
 	if err := s.sealToken(&acct, tok); err != nil {
 		return domain.User{}, err

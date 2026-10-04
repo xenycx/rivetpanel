@@ -12,7 +12,7 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 
-	"botpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/domain"
 )
 
 // StatsSource follows a container's Docker stats stream.
@@ -35,9 +35,29 @@ type diskCache struct {
 }
 
 type diskEntry struct {
-	at   time.Time
-	used int64
-	err  error
+	at          time.Time
+	used        int64
+	total, free uint64
+	err         error
+}
+
+// node returns a remote node's disk (the volume holding its servers' files)
+// as its agent reports it, refreshed at most every diskRefresh.
+func (d *diskCache) node(key string, f func() (total, free uint64, err error)) (uint64, uint64) {
+	d.mu.Lock()
+	if e, ok := d.m[key]; ok && time.Since(e.at) < diskRefresh {
+		d.mu.Unlock()
+		return e.total, e.free
+	}
+	d.mu.Unlock()
+	total, free, err := f()
+	d.mu.Lock()
+	if d.m == nil || len(d.m) > 1000 {
+		d.m = map[string]diskEntry{}
+	}
+	d.m[key] = diskEntry{at: time.Now(), total: total, free: free, err: err}
+	d.mu.Unlock()
+	return total, free
 }
 
 func (d *diskCache) get(botID string, f func() (int64, error)) (int64, error) {
@@ -52,7 +72,7 @@ func (d *diskCache) get(botID string, f func() (int64, error)) (int64, error) {
 	if d.m == nil || len(d.m) > 1000 {
 		d.m = map[string]diskEntry{}
 	}
-	d.m[botID] = diskEntry{time.Now(), used, err}
+	d.m[botID] = diskEntry{at: time.Now(), used: used, err: err}
 	d.mu.Unlock()
 	return used, err
 }
@@ -70,12 +90,16 @@ type gaugeEvent struct {
 	DiskUsedBytes int64   `json:"disk_used_bytes"`
 	DiskTotal     uint64  `json:"disk_total_bytes"` // node filesystem
 	DiskFree      uint64  `json:"disk_free_bytes"`
+	// DiskScope is "workspace" (DiskUsedBytes is the bot's files) or "node"
+	// (a remote server: only its node's volume is known, not the bot's own
+	// usage).
+	DiskScope string `json:"disk_scope"`
 }
 
 // statsStream serves live resource gauges as Server-Sent Events. While the bot
 // runs it relays Docker's stats stream (about one frame per second); otherwise
 // it reports running=false and keeps polling for a start.
-func (s *server) statsStream(c fiber.Ctx) error {
+func (s *panel) statsStream(c fiber.Ctx) error {
 	if s.stats == nil {
 		return fiber.ErrNotFound
 	}
@@ -111,7 +135,7 @@ func (s *server) statsStream(c fiber.Ctx) error {
 			}
 			return !gone
 		}
-		total, free, _ := s.files.Statfs()
+		localTotal, localFree, _ := s.files.Statfs()
 		lastAuth := time.Now()
 		for ctx.Err() == nil {
 			// Session, permission and bot state are re-checked regularly so
@@ -125,9 +149,23 @@ func (s *server) statsStream(c fiber.Ctx) error {
 				return
 			}
 			lastAuth = time.Now()
-			disk, _ := s.disk.get(botID, func() (int64, error) { return s.files.Usage(botID) })
+			remote := s.router != nil && s.router.Remote(cur.NodeID)
+			var disk int64
+			total, free := localTotal, localFree
+			if !remote {
+				disk, _ = s.disk.get(botID, func() (int64, error) { return s.files.Usage(botID) })
+			} else {
+				// The node's own disk, never the panel's (zero = unknown).
+				total, free = s.disk.node("node:"+cur.NodeID, func() (uint64, uint64, error) {
+					t, err := s.router.Telemetry(ctx, cur.NodeID)
+					return t.DiskTotalBytes, t.DiskFreeBytes, err
+				})
+			}
 			base := gaugeEvent{CPULimitCores: float64(cur.NanoCPUs) / 1e9, MemLimitBytes: cur.MemoryBytes,
-				DiskUsedBytes: disk, DiskTotal: total, DiskFree: free}
+				DiskUsedBytes: disk, DiskTotal: total, DiskFree: free, DiskScope: "workspace"}
+			if remote {
+				base.DiskScope = "node"
+			}
 			if cur.ObservedState != "running" || cur.ContainerID == nil {
 				if !send(base) {
 					return
@@ -139,7 +177,11 @@ func (s *server) statsStream(c fiber.Ctx) error {
 				}
 				continue
 			}
-			err = s.stats.StreamStats(ctx, *cur.ContainerID, func(m domain.ResourceSample) bool {
+			src := StatsSource(s.stats)
+			if remote {
+				src = s.router.StatsFor(cur.NodeID)
+			}
+			err = src.StreamStats(ctx, *cur.ContainerID, func(m domain.ResourceSample) bool {
 				ev := base
 				ev.Running = true
 				ev.CPUCores, ev.MemUsedBytes, ev.PIDs, ev.NetRxBytes, ev.NetTxBytes = m.CPUCores, m.MemUsedBytes, m.PIDs, m.NetRxBytes, m.NetTxBytes
@@ -149,8 +191,10 @@ func (s *server) statsStream(c fiber.Ctx) error {
 				if ev.CPULimitCores > 0 {
 					ev.CPUPercent = min(100, m.CPUCores/ev.CPULimitCores*100)
 				}
-				if d, err := s.disk.get(botID, func() (int64, error) { return s.files.Usage(botID) }); err == nil {
-					ev.DiskUsedBytes = d
+				if !remote {
+					if d, err := s.disk.get(botID, func() (int64, error) { return s.files.Usage(botID) }); err == nil {
+						ev.DiskUsedBytes = d
+					}
 				}
 				if !send(ev) {
 					return false

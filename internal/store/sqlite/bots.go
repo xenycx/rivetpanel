@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 
-	"botpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/domain"
 )
 
 const botCols = `id, owner_id, node_id, name, runtime, image_ref, argv_json, memory_bytes, nano_cpus, pids_limit,
@@ -14,7 +14,7 @@ const botCols = `id, owner_id, node_id, name, runtime, image_ref, argv_json, mem
 	restart_policy, restart_max_attempts, restart_backoff_initial_ms, restart_backoff_max_ms, auto_backup,
 	restart_count, next_retry_at_ms, state_reason, last_started_at_ms,
 	discord_user_id, discord_username, discord_avatar_url, COALESCE(workspace_id, ''), COALESCE(build_command, ''),
-	COALESCE(logo_updated_at_ms, 0)`
+	COALESCE(logo_updated_at_ms, 0), kind, COALESCE(blueprint_id, ''), COALESCE(blueprint_revision, 0), image_choice, install_state, installed_version`
 
 func scanBot(row interface{ Scan(...any) error }) (domain.Bot, error) {
 	var b domain.Bot
@@ -28,7 +28,7 @@ func scanBot(row interface{ Scan(...any) error }) (domain.Bot, error) {
 		&b.RestartPolicy, &b.RestartMaxAttempts, &b.RestartBackoffInitialMS, &b.RestartBackoffMaxMS, &autoBackup,
 		&b.RestartCount, &b.NextRetryAtMS, &b.StateReason, &b.LastStartedAtMS,
 		&b.DiscordUserID, &b.DiscordUsername, &b.DiscordAvatarURL, &b.WorkspaceID, &b.BuildCommand,
-		&b.LogoUpdatedMS)
+		&b.LogoUpdatedMS, &b.Kind, &b.BlueprintID, &b.BlueprintRevision, &b.ImageChoice, &b.InstallState, &b.InstalledVersion)
 	if err != nil {
 		return b, mapErr(err)
 	}
@@ -91,14 +91,17 @@ func (db *DB) CreateBot(ctx context.Context, b domain.Bot) error {
 	_, err = db.ExecContext(ctx, `INSERT INTO bots (id, owner_id, node_id, name, runtime, image_ref, argv_json,
 		memory_bytes, nano_cpus, pids_limit, created_at_ms, updated_at_ms,
 		entrypoint_json, source_type, template_id, network_enabled, bandwidth_kbps,
-		restart_policy, restart_max_attempts, restart_backoff_initial_ms, restart_backoff_max_ms, workspace_id, build_command)
+		restart_policy, restart_max_attempts, restart_backoff_initial_ms, restart_backoff_max_ms, workspace_id, build_command,
+		kind, blueprint_id, blueprint_revision, image_choice, install_state)
 		VALUES (?,?,?,?,?,?,?,?,?,?,?,?, ?,?,?,?,?, ?,?,?,?,
-			COALESCE(NULLIF(?, ''), (SELECT id FROM workspaces WHERE owner_id = ?2 AND personal = 1)), NULLIF(?, ''))`,
+			COALESCE(NULLIF(?, ''), (SELECT id FROM workspaces WHERE owner_id = ?2 AND personal = 1)), NULLIF(?, ''),
+			?, NULLIF(?, ''), NULLIF(?, 0), ?, ?)`,
 		b.ID, b.OwnerID, b.NodeID, b.Name, b.Runtime, b.ImageRef, string(argv), b.MemoryBytes, b.NanoCPUs,
 		b.PidsLimit, b.CreatedAtMS, b.UpdatedAtMS,
 		entry, defaultStr(b.SourceType, "manual"), b.TemplateID, boolInt(!b.NetworkDisabled), b.BandwidthKbps,
 		defaultStr(b.RestartPolicy, domain.RestartOnFailure), defaultInt(b.RestartMaxAttempts, 5),
-		defaultInt(b.RestartBackoffInitialMS, 2000), defaultInt(b.RestartBackoffMaxMS, 300000), b.WorkspaceID, b.BuildCommand)
+		defaultInt(b.RestartBackoffInitialMS, 2000), defaultInt(b.RestartBackoffMaxMS, 300000), b.WorkspaceID, b.BuildCommand,
+		defaultStr(b.Kind, domain.KindBot), b.BlueprintID, b.BlueprintRevision, b.ImageChoice, defaultStr(b.InstallState, domain.InstallNone))
 	return mapErr(err)
 }
 
@@ -110,6 +113,11 @@ func (db *DB) GetBot(ctx context.Context, id string) (domain.Bot, error) {
 	}
 	if b.Ports, err = db.ListBotPorts(ctx, id); err != nil {
 		return b, err
+	}
+	if b.IsGame() {
+		if b.Allocations, err = db.ListBotAllocations(ctx, id); err != nil {
+			return b, err
+		}
 	}
 	b.Addons, err = db.ListBotAddons(ctx, id)
 	return b, err
@@ -259,6 +267,18 @@ func (db *DB) MarkBotDeleted(ctx context.Context, id string, nowMS int64) error 
 
 // DeleteBotRow removes a bot that has already been marked deleted.
 func (db *DB) DeleteBotRow(ctx context.Context, id string) error {
-	_, err := db.ExecContext(ctx, `DELETE FROM bots WHERE id = ? AND desired_state = 'deleted'`, id)
-	return err
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	// Allocations return to the pool with the server.
+	if _, err := tx.ExecContext(ctx, `UPDATE allocations SET bot_id = NULL, is_primary = 0
+		WHERE bot_id = ? AND EXISTS (SELECT 1 FROM bots WHERE id = ? AND desired_state = 'deleted')`, id, id); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM bots WHERE id = ? AND desired_state = 'deleted'`, id); err != nil {
+		return err
+	}
+	return tx.Commit()
 }

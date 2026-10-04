@@ -32,7 +32,9 @@
 	const meters = $derived([
 		{ k: 'CPU', p: live ? Math.min(100, g!.cpu_percent) : 0, v: live ? `${g!.cpu_percent.toFixed(1)}%` : '0.0%' },
 		{ k: 'MEM', p: live ? pct(g!.mem_used_bytes, g!.mem_limit_bytes) : 0, v: live ? fmtBytes(g!.mem_used_bytes) : '0 B' },
-		{ k: 'DISK', p: g ? pct(g.disk_used_bytes, g.disk_used_bytes + g.disk_free_bytes) : 0, v: g ? fmtBytes(g.disk_used_bytes) : '–' }
+		g?.disk_scope === 'node'
+			? { k: 'NODE DISK', p: pct(g.disk_total_bytes - g.disk_free_bytes, g.disk_total_bytes), v: g.disk_total_bytes > 0 ? `${fmtBytes(g.disk_free_bytes)} free` : '–' }
+			: { k: 'DISK', p: g ? pct(g.disk_used_bytes, g.disk_used_bytes + g.disk_free_bytes) : 0, v: g ? fmtBytes(g.disk_used_bytes) : '–' }
 	]);
 
 	// Which controls make sense now. A bot that gave up or exited cleanly is

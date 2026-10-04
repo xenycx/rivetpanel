@@ -155,7 +155,7 @@
 	}
 </script>
 
-<svelte:head><title>Sites · Administration · BotForge</title></svelte:head>
+<svelte:head><title>Sites · Administration · RivetPanel</title></svelte:head>
 
 <h2 class="text-section">Sites and domains</h2>
 <p class="mt-1 max-w-3xl text-muted">Every hosted site on this panel. Suspending a site stops it from being served on all its addresses without deleting anything.</p>
@@ -163,7 +163,7 @@
 
 {#if info && !info.enabled}
 	<Notice class="mt-4" title="Site hosting is off">
-		Set <code>BOTPANEL_SITES_LISTEN</code> (for example <code>127.0.0.1:8081</code>) and <code>BOTPANEL_SITES_BASE_URL</code> (for example <code>https://sites.example.com</code>), route <code>*.sites.example.com</code> and custom domains to that listener in your reverse proxy, then restart. See <a href="/docs#sites">the hosting guide</a>.
+		Set <code>RIVET_SITES_LISTEN</code> (for example <code>127.0.0.1:8081</code>) and <code>RIVET_SITES_BASE_URL</code> (for example <code>https://sites.example.com</code>), route <code>*.sites.example.com</code> and custom domains to that listener in your reverse proxy, then restart. See <a href="/docs#sites">the hosting guide</a>.
 	</Notice>
 {:else if sites === null && !error}
 	<div class="mt-4"><Skeleton rows={3} /></div>

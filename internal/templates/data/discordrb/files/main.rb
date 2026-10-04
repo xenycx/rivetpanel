@@ -9,11 +9,11 @@ end
 
 require 'bundler/setup'
 require 'discordrb' # prints a note that voice needs libsodium; text commands work without it
-require_relative 'botpanel'
+require_relative 'rivetpanel'
 
 $stdout.sync = true
 bot = Discordrb::Bot.new(token: token, intents: [:servers])
-panel = BotPanel.new(bot) # no-op until you generate a key on the Analytics tab
+panel = RivetPanel.new(bot) # no-op until you generate a key on the Analytics tab
 
 bot.ready do
   puts "Logged in as #{bot.profile.username}"

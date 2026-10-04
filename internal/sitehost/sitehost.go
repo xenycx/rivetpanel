@@ -22,7 +22,7 @@ import (
 	"strings"
 	"time"
 
-	"botpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/domain"
 )
 
 // Router resolves hosts to releases (service.SiteService).
@@ -40,7 +40,7 @@ type Handler struct {
 }
 
 // TLSAskPath answers on-demand TLS permission checks (Caddy's "ask").
-const TLSAskPath = "/.well-known/botforge/tls-allowed"
+const TLSAskPath = "/.well-known/rivetpanel/tls-allowed"
 
 // NewServer returns an HTTP server with conservative timeouts.
 func NewServer(h *Handler) *http.Server {
@@ -157,8 +157,8 @@ func (h *Handler) publicPage(w http.ResponseWriter, r *http.Request, route domai
 		`:root{--accent:` + html.EscapeString(p.Accent) + `}` + p.CSS + `</style></head><body><div class="aurora" aria-hidden="true"></div><main>` +
 		`<header class="hero"><div class="identity">` + avatar + `<span><strong>` + html.EscapeString(identity) + `</strong><small>Discord bot</small></span></div>` +
 		`<h1>` + html.EscapeString(title) + `</h1><p class="lede">` + html.EscapeString(p.Description) + `</p></header>` +
-		`<section class="author-content">` + p.HTML + `</section><section id="widgets" class="widget-section" hidden><div class="section-head"><h2>Live from the bot</h2><p>Updated by the bot through BotForge</p></div><nav id="groups" aria-label="Widget groups"></nav><div id="grid" class="grid"></div></section>` +
-		`<footer>Powered by <span>BotForge</span></footer></main><script>const W=` + string(data) + `;` + publicPageJS + `</script></body></html>`))
+		`<section class="author-content">` + p.HTML + `</section><section id="widgets" class="widget-section" hidden><div class="section-head"><h2>Live from the bot</h2><p>Updated by the bot through RivetPanel</p></div><nav id="groups" aria-label="Widget groups"></nav><div id="grid" class="grid"></div></section>` +
+		`<footer>Powered by <span>RivetPanel</span></footer></main><script>const W=` + string(data) + `;` + publicPageJS + `</script></body></html>`))
 }
 
 const publicPageCSS = `

@@ -47,7 +47,7 @@
 	});
 </script>
 
-<svelte:head><title>Workspaces · Administration · BotForge</title></svelte:head>
+<svelte:head><title>Workspaces · Administration · RivetPanel</title></svelte:head>
 
 <h2 class="text-section">Workspaces</h2>
 <p class="mt-1 max-w-prose text-muted">Every account's personal workspace and every team, with what runs in it. Open one to see its members, bots, sites and recent deployments.</p>

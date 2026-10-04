@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"botpanel/internal/domain"
-	"botpanel/internal/runner"
-	"botpanel/internal/telemetry"
+	"github.com/xenycx/rivetpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/runner"
+	"github.com/xenycx/rivetpanel/internal/telemetry"
 )
 
 type fakeBots []domain.Bot

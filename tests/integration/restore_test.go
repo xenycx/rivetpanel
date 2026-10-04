@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"botpanel/internal/backup"
-	"botpanel/internal/secrets"
+	"github.com/xenycx/rivetpanel/internal/backup"
+	"github.com/xenycx/rivetpanel/internal/secrets"
 )
 
 // TestBackupDisasterRestoreEndToEnd: a real bot with a secret is backed up,

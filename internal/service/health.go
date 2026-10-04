@@ -13,7 +13,7 @@ import (
 	"sync"
 	"time"
 
-	"botpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/domain"
 )
 
 // HealthStore is the persistence application health and alert rules need.
@@ -381,13 +381,13 @@ func (h *HealthService) Evaluate(ctx context.Context) {
 		case stale && !w.Health.StaleAlerted:
 			_ = h.Store.SetStaleAlerted(ctx, w.Bot.ID, true)
 			if h.Alerts != nil {
-				h.Alerts.Send(ctx, w.Bot.OwnerID, "💤 "+w.Bot.Name+" stopped reporting",
-					fmt.Sprintf("No heartbeat for more than %s while the container is running. The bot may be stuck or disconnected from Discord.", after))
+				h.Alerts.Notify(ctx, w.Bot.OwnerID, domain.NotifyBotAlerts, "💤 "+w.Bot.Name+" stopped reporting",
+					fmt.Sprintf("No heartbeat for more than %s while the container is running. The bot may be stuck or disconnected from Discord.", after), BotLink(w.Bot))
 			}
 		case !stale && w.Health.StaleAlerted:
 			_ = h.Store.SetStaleAlerted(ctx, w.Bot.ID, false)
 			if h.Alerts != nil && w.Prefs.Recovery && w.Bot.ObservedState == "running" {
-				h.Alerts.Send(ctx, w.Bot.OwnerID, "✅ "+w.Bot.Name+" is reporting again", "Heartbeats resumed.")
+				h.Alerts.Notify(ctx, w.Bot.OwnerID, domain.NotifyBotAlerts, "✅ "+w.Bot.Name+" is reporting again", "Heartbeats resumed.", BotLink(w.Bot))
 			}
 		}
 	}

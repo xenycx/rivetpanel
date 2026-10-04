@@ -118,10 +118,10 @@
 
 <Dialog bind:open title={created ? 'Copy your token' : 'New automation token'} size="md">
 	{#if created}
-		<p>It is shown only once. Store it as a secret in your CI (for example <code>BOTPANEL_TOKEN</code>).</p>
+		<p>It is shown only once. Store it as a secret in your CI (for example <code>RIVET_TOKEN</code>).</p>
 		<p class="my-3 rounded-control border border-rule bg-paper px-3 py-2 font-mono text-small break-all select-all">{created}</p>
 		<p class="eyebrow">Try it</p>
-		<pre class="mt-1 overflow-x-auto rounded-control bg-term p-3 font-mono text-small text-term-ink">curl -H "Authorization: Bearer $BOTPANEL_TOKEN" \
+		<pre class="mt-1 overflow-x-auto rounded-control bg-term p-3 font-mono text-small text-term-ink">curl -H "Authorization: Bearer $RIVET_TOKEN" \
   {origin}/api/v1/automation/bots</pre>
 	{:else}
 		<form id="tok-form" class="grid gap-4" onsubmit={create}>

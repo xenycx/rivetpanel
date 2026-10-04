@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"botpanel/internal/runtimes"
-	rtdefaults "botpanel/runtimes"
+	"github.com/xenycx/rivetpanel/internal/runtimes"
+	rtdefaults "github.com/xenycx/rivetpanel/runtimes"
 )
 
 func nodeRuntime(t *testing.T) runtimes.Runtime {
@@ -74,7 +74,7 @@ func TestDiagnosticPolicyPythonEvalAndAlias(t *testing.T) {
 // every AI diagnostic die with exit code 137).
 func TestReconcilerLeavesDiagnosticContainersAlone(t *testing.T) {
 	g := newRig(t, func(o *Options) { o.InstallID = "install-1" })
-	g.fd.conts["diag1"] = &ContainerInfo{ID: "diag1", Name: "botpanel-diag-1", State: "running", StartedAt: g.now,
+	g.fd.conts["diag1"] = &ContainerInfo{ID: "diag1", Name: "rivetpanel-diag-1", State: "running", StartedAt: g.now,
 		Labels: map[string]string{LabelManaged: "true", LabelBot: botID, LabelNode: g.r.opts.NodeID, LabelRole: string(RoleDiagnostic), LabelInstall: "install-1"}}
 	g.desire("running", false)
 	g.pass()

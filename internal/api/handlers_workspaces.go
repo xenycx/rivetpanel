@@ -5,8 +5,8 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 
-	"botpanel/internal/domain"
-	"botpanel/internal/service"
+	"github.com/xenycx/rivetpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/service"
 )
 
 type workspaceDTO struct {
@@ -50,7 +50,7 @@ func toWorkspaceList(ws []domain.WorkspaceSummary) []workspaceDTO {
 	return out
 }
 
-func (s *server) listWorkspaces(c fiber.Ctx) error {
+func (s *panel) listWorkspaces(c fiber.Ctx) error {
 	ws, err := s.bots.ListWorkspaces(c.Context(), currentUser(c))
 	if err != nil {
 		return err
@@ -58,7 +58,7 @@ func (s *server) listWorkspaces(c fiber.Ctx) error {
 	return c.JSON(fiber.Map{"workspaces": toWorkspaceList(ws)})
 }
 
-func (s *server) createWorkspace(c fiber.Ctx) error {
+func (s *panel) createWorkspace(c fiber.Ctx) error {
 	var in struct {
 		Name string `json:"name"`
 	}
@@ -76,7 +76,7 @@ func (s *server) createWorkspace(c fiber.Ctx) error {
 	return c.Status(fiber.StatusCreated).JSON(s.workspaceDetail(d))
 }
 
-func (s *server) workspaceDetail(d service.WorkspaceDetail) fiber.Map {
+func (s *panel) workspaceDetail(d service.WorkspaceDetail) fiber.Map {
 	members := make([]memberDTO, len(d.Members))
 	for i, m := range d.Members {
 		members[i] = toMember(m)
@@ -84,7 +84,7 @@ func (s *server) workspaceDetail(d service.WorkspaceDetail) fiber.Map {
 	return fiber.Map{"workspace": toWorkspace(d.WorkspaceSummary), "members": members}
 }
 
-func (s *server) getWorkspace(c fiber.Ctx) error {
+func (s *panel) getWorkspace(c fiber.Ctx) error {
 	d, err := s.bots.GetWorkspace(c.Context(), currentUser(c), strings.Clone(c.Params("wid")))
 	if err != nil {
 		return err
@@ -92,7 +92,7 @@ func (s *server) getWorkspace(c fiber.Ctx) error {
 	return c.JSON(s.workspaceDetail(d))
 }
 
-func (s *server) patchWorkspace(c fiber.Ctx) error {
+func (s *panel) patchWorkspace(c fiber.Ctx) error {
 	var in struct {
 		Name string `json:"name"`
 	}
@@ -106,14 +106,14 @@ func (s *server) patchWorkspace(c fiber.Ctx) error {
 	return s.getWorkspace(c)
 }
 
-func (s *server) deleteWorkspace(c fiber.Ctx) error {
+func (s *panel) deleteWorkspace(c fiber.Ctx) error {
 	if err := s.bots.DeleteWorkspace(c.Context(), currentUser(c), strings.Clone(c.Params("wid"))); err != nil {
 		return err
 	}
 	return c.SendStatus(fiber.StatusNoContent)
 }
 
-func (s *server) addWorkspaceMember(c fiber.Ctx) error {
+func (s *panel) addWorkspaceMember(c fiber.Ctx) error {
 	var in struct {
 		Email string `json:"email"`
 		Role  string `json:"role"`
@@ -128,7 +128,7 @@ func (s *server) addWorkspaceMember(c fiber.Ctx) error {
 	return c.JSON(toMember(m))
 }
 
-func (s *server) patchWorkspaceMember(c fiber.Ctx) error {
+func (s *panel) patchWorkspaceMember(c fiber.Ctx) error {
 	var in struct {
 		Role string `json:"role"`
 	}
@@ -142,14 +142,14 @@ func (s *server) patchWorkspaceMember(c fiber.Ctx) error {
 	return c.JSON(toMember(m))
 }
 
-func (s *server) removeWorkspaceMember(c fiber.Ctx) error {
+func (s *panel) removeWorkspaceMember(c fiber.Ctx) error {
 	if err := s.bots.RemoveWorkspaceMember(c.Context(), currentUser(c), strings.Clone(c.Params("wid")), strings.Clone(c.Params("uid"))); err != nil {
 		return err
 	}
 	return c.SendStatus(fiber.StatusNoContent)
 }
 
-func (s *server) moveBot(c fiber.Ctx) error {
+func (s *panel) moveBot(c fiber.Ctx) error {
 	var in struct {
 		WorkspaceID string `json:"workspace_id"`
 	}
@@ -170,7 +170,7 @@ type adminBotDTO struct {
 }
 
 // adminBots renders bots with owner emails for administrator views.
-func (s *server) adminBots(c fiber.Ctx, bots []domain.Bot) ([]adminBotDTO, error) {
+func (s *panel) adminBots(c fiber.Ctx, bots []domain.Bot) ([]adminBotDTO, error) {
 	emails := map[string]string{}
 	out := make([]adminBotDTO, 0, len(bots))
 	for _, b := range bots {
@@ -185,7 +185,7 @@ func (s *server) adminBots(c fiber.Ctx, bots []domain.Bot) ([]adminBotDTO, error
 }
 
 // recentOps renders operations, tolerating a panel without operation history.
-func (s *server) recentOps(list func() ([]domain.Operation, error)) ([]opDTO, error) {
+func (s *panel) recentOps(list func() ([]domain.Operation, error)) ([]opDTO, error) {
 	out := []opDTO{}
 	if s.ops == nil {
 		return out, nil
@@ -202,7 +202,7 @@ func (s *server) recentOps(list func() ([]domain.Operation, error)) ([]opDTO, er
 
 // adminListWorkspaces lists every workspace, or with ?user= the workspaces an
 // account belongs to (with that account's role).
-func (s *server) adminListWorkspaces(c fiber.Ctx) error {
+func (s *panel) adminListWorkspaces(c fiber.Ctx) error {
 	actor := currentUser(c)
 	var ws []domain.WorkspaceSummary
 	var err error
@@ -219,7 +219,7 @@ func (s *server) adminListWorkspaces(c fiber.Ctx) error {
 
 // adminGetWorkspace is the administrator's view of one workspace: members,
 // bots with their owners, hosted sites and recent deployments.
-func (s *server) adminGetWorkspace(c fiber.Ctx) error {
+func (s *panel) adminGetWorkspace(c fiber.Ctx) error {
 	actor := currentUser(c)
 	id := strings.Clone(c.Params("wid"))
 	d, err := s.bots.GetWorkspace(c.Context(), actor, id)
@@ -246,7 +246,7 @@ func (s *server) adminGetWorkspace(c fiber.Ctx) error {
 
 // adminGetUser is the administrator's view of one account: its workspaces,
 // the bots it owns and their recent deployments.
-func (s *server) adminGetUser(c fiber.Ctx) error {
+func (s *panel) adminGetUser(c fiber.Ctx) error {
 	actor := currentUser(c)
 	id := strings.Clone(c.Params("id"))
 	u, err := s.bots.Store.GetUserByID(c.Context(), id)

@@ -7,8 +7,8 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 
-	"botpanel/internal/domain"
-	"botpanel/internal/service"
+	"github.com/xenycx/rivetpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/service"
 )
 
 type backupDTO struct {
@@ -31,7 +31,7 @@ func toBackup(b domain.Backup) backupDTO {
 		b.Label, b.VerifiedAtMS, b.VerifyError, b.Consistent}
 }
 
-func (s *server) listBackups(c fiber.Ctx) error {
+func (s *panel) listBackups(c fiber.Ctx) error {
 	h, bs, err := s.backups.Health(c.Context(), currentUser(c), strings.Clone(c.Params("id")))
 	if err != nil {
 		return err
@@ -52,7 +52,7 @@ func (s *server) listBackups(c fiber.Ctx) error {
 	}})
 }
 
-func (s *server) patchBackup(c fiber.Ctx) error {
+func (s *panel) patchBackup(c fiber.Ctx) error {
 	var in struct {
 		Label string `json:"label"`
 	}
@@ -66,7 +66,7 @@ func (s *server) patchBackup(c fiber.Ctx) error {
 	return c.JSON(toBackup(b))
 }
 
-func (s *server) verifyBackup(c fiber.Ctx) error {
+func (s *panel) verifyBackup(c fiber.Ctx) error {
 	b, err := s.backups.Verify(c.Context(), currentUser(c), strings.Clone(c.Params("id")), strings.Clone(c.Params("bid")))
 	if err != nil {
 		return err
@@ -74,7 +74,7 @@ func (s *server) verifyBackup(c fiber.Ctx) error {
 	return c.JSON(toBackup(b))
 }
 
-func (s *server) createBackup(c fiber.Ctx) error {
+func (s *panel) createBackup(c fiber.Ctx) error {
 	in := struct {
 		IncludeEnv *bool  `json:"include_env"`
 		Label      string `json:"label"`
@@ -98,7 +98,7 @@ var unsafeFile = regexp.MustCompile(`[^A-Za-z0-9._-]+`)
 
 // downloadBackup streams the archive as an attachment. It is served as opaque
 // gzip data, never as something a browser would render.
-func (s *server) downloadBackup(c fiber.Ctx) error {
+func (s *panel) downloadBackup(c fiber.Ctx) error {
 	id := strings.Clone(c.Params("id"))
 	f, b, err := s.backups.Open(c.Context(), currentUser(c), id, strings.Clone(c.Params("bid")))
 	if err != nil {
@@ -124,7 +124,7 @@ func (s *server) downloadBackup(c fiber.Ctx) error {
 	return c.SendStream(f, int(st.Size()))
 }
 
-func (s *server) restoreBackup(c fiber.Ctx) error {
+func (s *panel) restoreBackup(c fiber.Ctx) error {
 	in := struct {
 		RestoreEnv *bool `json:"restore_env"`
 	}{}
@@ -141,7 +141,7 @@ func (s *server) restoreBackup(c fiber.Ctx) error {
 	return c.JSON(s.viewBot(c, b))
 }
 
-func (s *server) deleteBackup(c fiber.Ctx) error {
+func (s *panel) deleteBackup(c fiber.Ctx) error {
 	if err := s.backups.Delete(c.Context(), currentUser(c), strings.Clone(c.Params("id")), strings.Clone(c.Params("bid"))); err != nil {
 		return err
 	}

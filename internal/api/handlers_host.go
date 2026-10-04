@@ -7,19 +7,19 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 
-	"botpanel/internal/domain"
-	"botpanel/internal/logbuf"
+	"github.com/xenycx/rivetpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/logbuf"
 )
 
 // hostSnapshot is the Host page's overview: machine, panel process, storage
 // and Docker. Administrators only; it names paths and counts, never values.
-func (s *server) hostSnapshot(c fiber.Ctx) error {
+func (s *panel) hostSnapshot(c fiber.Ctx) error {
 	c.Set(fiber.HeaderCacheControl, "no-store")
 	return c.JSON(s.host.Snapshot(c.Context()))
 }
 
 // hostBots lists every bot with live resource use for the running ones.
-func (s *server) hostBots(c fiber.Ctx) error {
+func (s *panel) hostBots(c fiber.Ctx) error {
 	rep, err := s.host.Bots(c.Context())
 	if err != nil {
 		return err
@@ -45,7 +45,7 @@ type historyPoint struct {
 }
 
 // nodeHistory returns downsampled samples for a chart range.
-func (s *server) nodeHistory(c fiber.Ctx) error {
+func (s *panel) nodeHistory(c fiber.Ctx) error {
 	id := strings.Clone(c.Params("id"))
 	if _, err := s.nodes.GetNode(c.Context(), id); err != nil {
 		return err
@@ -70,7 +70,7 @@ func (s *server) nodeHistory(c fiber.Ctx) error {
 
 // panelLogs returns the panel's recent log lines from memory. ?after=<seq>
 // returns only newer lines so the page can follow the log cheaply.
-func (s *server) panelLogs(c fiber.Ctx) error {
+func (s *panel) panelLogs(c fiber.Ctx) error {
 	q := logbuf.Query{MinLevel: c.Query("level"), Search: c.Query("q")}
 	switch q.MinLevel {
 	case "", "debug", "info", "warn", "error":
@@ -109,7 +109,7 @@ func (s *server) panelLogs(c fiber.Ctx) error {
 			b.WriteByte('\n')
 		}
 		c.Set(fiber.HeaderContentType, "text/plain; charset=utf-8")
-		c.Set(fiber.HeaderContentDisposition, `attachment; filename="botpanel-log-`+time.Now().UTC().Format("20060102-150405")+`.log"`)
+		c.Set(fiber.HeaderContentDisposition, `attachment; filename="rivetpanel-log-`+time.Now().UTC().Format("20060102-150405")+`.log"`)
 		return c.SendString(b.String())
 	}
 	return c.JSON(fiber.Map{"entries": entries, "stats": s.logs.Stats()})

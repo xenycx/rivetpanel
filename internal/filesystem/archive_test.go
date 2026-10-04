@@ -89,7 +89,7 @@ func TestBackupRoundTrip(t *testing.T) {
 		names = append(names, h.Name)
 	}
 	all := strings.Join(names, " ")
-	if strings.Contains(all, "node_modules") || strings.Contains(all, ".tmp-") || !strings.Contains(all, ".botpanel/env.json") {
+	if strings.Contains(all, "node_modules") || strings.Contains(all, ".tmp-") || !strings.Contains(all, ".rivetpanel/env.json") {
 		t.Fatalf("archive contents: %s", all)
 	}
 
@@ -131,6 +131,16 @@ func TestBackupRoundTrip(t *testing.T) {
 		return false
 	}() {
 		t.Error("staging directory left behind")
+	}
+}
+
+func TestBackupMetadataIsBoundedAndContained(t *testing.T) {
+	w, _ := newWS(t)
+	if _, _, err := w.WriteTarGz(io.Discard, map[string][]byte{"../outside": []byte("x")}, DefaultBackupLimits); err == nil {
+		t.Fatal("unsafe metadata name accepted")
+	}
+	if _, _, err := w.WriteTarGz(io.Discard, map[string][]byte{"large": make([]byte, maxMetaBytes+1)}, DefaultBackupLimits); err == nil {
+		t.Fatal("oversized metadata accepted")
 	}
 }
 
@@ -290,7 +300,7 @@ func TestDeployRejectsHostileTarballs(t *testing.T) {
 	// The manifest, and symlinks that leave the workspace, are not deployable.
 	w, root := newWS(t)
 	data := targz(t, []tar.Header{
-		{Name: "o-r-1/.botpanel-deploy", Typeflag: tar.TypeReg, Mode: 0o644},
+		{Name: "o-r-1/.rivetpanel-deploy", Typeflag: tar.TypeReg, Mode: 0o644},
 		{Name: "o-r-1/l", Typeflag: tar.TypeSymlink, Linkname: "/etc/passwd"},
 		{Name: "o-r-1/ok", Typeflag: tar.TypeReg, Mode: 0o644},
 	}, []string{`["../../etc/passwd"]`, "", "1"})
@@ -300,11 +310,11 @@ func TestDeployRejectsHostileTarballs(t *testing.T) {
 	if _, err := os.Lstat(filepath.Join(root, "l")); err == nil {
 		t.Error("escaping symlink deployed")
 	}
-	if b, _ := os.ReadFile(filepath.Join(root, ".botpanel-deploy")); strings.Contains(string(b), "etc/passwd") {
+	if b, _ := os.ReadFile(filepath.Join(root, ".rivetpanel-deploy")); strings.Contains(string(b), "etc/passwd") {
 		t.Error("archive controlled the manifest")
 	}
 	// A forged old manifest cannot make a later deploy delete outside the workspace.
-	os.WriteFile(filepath.Join(root, ".botpanel-deploy"), []byte(`["../outside.txt","/etc/hostname","ok"]`), 0o644)
+	os.WriteFile(filepath.Join(root, ".rivetpanel-deploy"), []byte(`["../outside.txt","/etc/hostname","ok"]`), 0o644)
 	os.WriteFile(filepath.Join(filepath.Dir(root), "outside.txt"), []byte("safe"), 0o644)
 	if _, err := w.DeployTarGz(bytes.NewReader(repoTar(t, map[string]string{"z": "1"})), "", DefaultBackupLimits); err != nil {
 		t.Fatal(err)

@@ -11,47 +11,48 @@ import (
 	fws "github.com/gofiber/contrib/v3/websocket"
 	"github.com/gofiber/fiber/v3"
 
-	"botpanel/internal/domain"
-	"botpanel/internal/service"
+	"github.com/xenycx/rivetpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/service"
 )
 
-func (s *server) aiRoutes(r fiber.Router) {
+func (s *panel) aiRoutes(r fiber.Router) {
 	r.Get("/ai/providers", s.aiAvailableProviders)
-	r.Get("/admin/ai/providers", s.requireAdmin, s.aiProviders)
-	r.Post("/admin/ai/providers", s.requireAdmin, s.aiCreateProvider)
-	r.Patch("/admin/ai/providers/:provider", s.requireAdmin, s.aiPatchProvider)
-	r.Delete("/admin/ai/providers/:provider", s.requireAdmin, s.aiDeleteProvider)
-	r.Post("/admin/ai/providers/:provider/test", s.requireAdmin, s.aiTestProvider)
-	r.Get("/admin/ai/providers/:provider/models", s.requireAdmin, s.aiProviderModels)
-	r.Get("/admin/ai/search", s.requireAdmin, s.aiSearchSettings)
-	r.Put("/admin/ai/search", s.requireAdmin, s.aiPutSearchSettings)
-	r.Post("/admin/ai/search/test", s.requireAdmin, s.aiTestSearch)
+	r.Get("/admin/ai/providers", s.requirePerm(domain.PermAIManage), s.aiProviders)
+	r.Post("/admin/ai/providers", s.requirePerm(domain.PermAIManage), s.aiCreateProvider)
+	r.Patch("/admin/ai/providers/:provider", s.requirePerm(domain.PermAIManage), s.aiPatchProvider)
+	r.Delete("/admin/ai/providers/:provider", s.requirePerm(domain.PermAIManage), s.aiDeleteProvider)
+	r.Post("/admin/ai/providers/:provider/test", s.requirePerm(domain.PermAIManage), s.aiTestProvider)
+	r.Get("/admin/ai/providers/:provider/models", s.requirePerm(domain.PermAIManage), s.aiProviderModels)
+	r.Get("/admin/ai/search", s.requirePerm(domain.PermAIManage), s.aiSearchSettings)
+	r.Put("/admin/ai/search", s.requirePerm(domain.PermAIManage), s.aiPutSearchSettings)
+	r.Post("/admin/ai/search/test", s.requirePerm(domain.PermAIManage), s.aiTestSearch)
 
+	ai := s.requirePerm(domain.PermAIUse)
 	// One chat for the whole panel. The bot or site a message is about travels
 	// with the message, not with the conversation.
-	r.Get("/ai/conversations", s.aiMyConversations)
-	r.Post("/ai/conversations", s.aiCreateConversation)
+	r.Get("/ai/conversations", ai, s.aiMyConversations)
+	r.Post("/ai/conversations", ai, s.aiCreateConversation)
 
 	// Per-target conversations predate the global chat and keep working.
-	r.Get("/bots/:id/ai/conversations", s.aiListBotConversations)
-	r.Post("/bots/:id/ai/conversations", s.aiCreateBotConversation)
-	r.Get("/sites/:sid/ai/conversations", s.aiListSiteConversations)
-	r.Post("/sites/:sid/ai/conversations", s.aiCreateSiteConversation)
-	r.Get("/ai/conversations/:conversation", s.aiConversation)
-	r.Patch("/ai/conversations/:conversation", s.aiPatchConversation)
-	r.Delete("/ai/conversations/:conversation", s.aiDeleteConversation)
-	r.Get("/ai/conversations/:conversation/runs", s.aiConversationRuns)
-	r.Post("/ai/conversations/:conversation/messages", s.aiMessage)
-	r.Get("/ai/runs/:run", s.aiRun)
-	r.Get("/ai/runs/:run/stream", s.aiStreamGuard, fws.New(s.aiStream, fws.Config{ReadBufferSize: 1024, WriteBufferSize: 4096}))
-	r.Post("/ai/runs/:run/cancel", s.aiCancel)
-	r.Post("/ai/tool-calls/:call/decision", s.aiDecision)
-	r.Post("/ai/tool-calls/:call/secure-input", s.aiSecureInput)
-	r.Get("/ai/change-sets/:change", s.aiChangeSet)
-	r.Post("/ai/change-sets/:change/revert", s.aiRevertChangeSet)
+	r.Get("/bots/:id/ai/conversations", ai, s.aiListBotConversations)
+	r.Post("/bots/:id/ai/conversations", ai, s.aiCreateBotConversation)
+	r.Get("/sites/:sid/ai/conversations", ai, s.aiListSiteConversations)
+	r.Post("/sites/:sid/ai/conversations", ai, s.aiCreateSiteConversation)
+	r.Get("/ai/conversations/:conversation", ai, s.aiConversation)
+	r.Patch("/ai/conversations/:conversation", ai, s.aiPatchConversation)
+	r.Delete("/ai/conversations/:conversation", ai, s.aiDeleteConversation)
+	r.Get("/ai/conversations/:conversation/runs", ai, s.aiConversationRuns)
+	r.Post("/ai/conversations/:conversation/messages", ai, s.aiMessage)
+	r.Get("/ai/runs/:run", ai, s.aiRun)
+	r.Get("/ai/runs/:run/stream", ai, s.aiStreamGuard, fws.New(s.aiStream, fws.Config{ReadBufferSize: 1024, WriteBufferSize: 4096}))
+	r.Post("/ai/runs/:run/cancel", ai, s.aiCancel)
+	r.Post("/ai/tool-calls/:call/decision", ai, s.aiDecision)
+	r.Post("/ai/tool-calls/:call/secure-input", ai, s.aiSecureInput)
+	r.Get("/ai/change-sets/:change", ai, s.aiChangeSet)
+	r.Post("/ai/change-sets/:change/revert", ai, s.aiRevertChangeSet)
 }
 
-func (s *server) aiAvailableProviders(c fiber.Ctx) error {
+func (s *panel) aiAvailableProviders(c fiber.Ctx) error {
 	v, e := s.ai.AvailableProviders(c.Context())
 	if e != nil {
 		return e
@@ -59,14 +60,14 @@ func (s *server) aiAvailableProviders(c fiber.Ctx) error {
 	return c.JSON(fiber.Map{"providers": v})
 }
 
-func (s *server) aiProviders(c fiber.Ctx) error {
+func (s *panel) aiProviders(c fiber.Ctx) error {
 	v, e := s.ai.Providers(c.Context(), currentUser(c))
 	if e != nil {
 		return e
 	}
 	return c.JSON(fiber.Map{"providers": v})
 }
-func (s *server) aiCreateProvider(c fiber.Ctx) error {
+func (s *panel) aiCreateProvider(c fiber.Ctx) error {
 	var in service.AIProviderInput
 	if e := decode(c, &in); e != nil {
 		return e
@@ -77,7 +78,7 @@ func (s *server) aiCreateProvider(c fiber.Ctx) error {
 	}
 	return c.Status(fiber.StatusCreated).JSON(v)
 }
-func (s *server) aiPatchProvider(c fiber.Ctx) error {
+func (s *panel) aiPatchProvider(c fiber.Ctx) error {
 	var in service.AIProviderInput
 	if e := decode(c, &in); e != nil {
 		return e
@@ -88,34 +89,34 @@ func (s *server) aiPatchProvider(c fiber.Ctx) error {
 	}
 	return c.JSON(v)
 }
-func (s *server) aiDeleteProvider(c fiber.Ctx) error {
+func (s *panel) aiDeleteProvider(c fiber.Ctx) error {
 	if e := s.ai.DeleteProvider(c.Context(), currentUser(c), strings.Clone(c.Params("provider"))); e != nil {
 		return e
 	}
 	return c.SendStatus(fiber.StatusNoContent)
 }
-func (s *server) aiTestProvider(c fiber.Ctx) error {
+func (s *panel) aiTestProvider(c fiber.Ctx) error {
 	v, e := s.ai.TestProvider(c.Context(), currentUser(c), strings.Clone(c.Params("provider")))
 	if e != nil {
 		return e
 	}
 	return c.JSON(v)
 }
-func (s *server) aiProviderModels(c fiber.Ctx) error {
+func (s *panel) aiProviderModels(c fiber.Ctx) error {
 	v, e := s.ai.ProviderModels(c.Context(), currentUser(c), strings.Clone(c.Params("provider")))
 	if e != nil {
 		return e
 	}
 	return c.JSON(fiber.Map{"models": v})
 }
-func (s *server) aiSearchSettings(c fiber.Ctx) error {
+func (s *panel) aiSearchSettings(c fiber.Ctx) error {
 	v, e := s.ai.SearchSettings(c.Context(), currentUser(c))
 	if e != nil {
 		return e
 	}
 	return c.JSON(v)
 }
-func (s *server) aiPutSearchSettings(c fiber.Ctx) error {
+func (s *panel) aiPutSearchSettings(c fiber.Ctx) error {
 	var in service.AISearchInput
 	if e := decode(c, &in); e != nil {
 		return e
@@ -126,7 +127,7 @@ func (s *server) aiPutSearchSettings(c fiber.Ctx) error {
 	}
 	return c.JSON(v)
 }
-func (s *server) aiTestSearch(c fiber.Ctx) error {
+func (s *panel) aiTestSearch(c fiber.Ctx) error {
 	v, e := s.ai.TestSearch(c.Context(), currentUser(c))
 	if e != nil {
 		// Our own refusals keep their status; anything else is the search
@@ -169,7 +170,7 @@ func runJSON(v domain.AIRun) fiber.Map {
 	_ = json.Unmarshal([]byte(v.PlanJSON), &plan)
 	return fiber.Map{"id": v.ID, "conversation_id": v.ConversationID, "user_id": v.UserID, "bot_id": v.BotID, "site_id": v.SiteID, "provider_id": v.ProviderID, "model": v.Model, "mode": v.Mode, "status": v.Status, "limits": limits, "plan": plan, "auto_approved_at_ms": v.AutoApprovedAtMS, "input_tokens": v.InputTokens, "output_tokens": v.OutputTokens, "error_code": v.ErrorCode, "error_message": v.ErrorMessage, "created_at_ms": v.CreatedAtMS, "started_at_ms": v.StartedAtMS, "finished_at_ms": v.FinishedAtMS}
 }
-func (s *server) aiMyConversations(c fiber.Ctx) error {
+func (s *panel) aiMyConversations(c fiber.Ctx) error {
 	v, e := s.ai.MyConversations(c.Context(), currentUser(c))
 	if e != nil {
 		return e
@@ -180,7 +181,7 @@ func (s *server) aiMyConversations(c fiber.Ctx) error {
 	}
 	return c.JSON(fiber.Map{"conversations": out})
 }
-func (s *server) aiCreateConversation(c fiber.Ctx) error {
+func (s *panel) aiCreateConversation(c fiber.Ctx) error {
 	var in aiConversationInput
 	if e := decode(c, &in); e != nil {
 		return e
@@ -191,7 +192,7 @@ func (s *server) aiCreateConversation(c fiber.Ctx) error {
 	}
 	return c.Status(fiber.StatusCreated).JSON(conversationJSON(v))
 }
-func (s *server) aiListBotConversations(c fiber.Ctx) error {
+func (s *panel) aiListBotConversations(c fiber.Ctx) error {
 	id := strings.Clone(c.Params("id"))
 	v, e := s.ai.ListConversations(c.Context(), currentUser(c), &id, nil)
 	if e != nil {
@@ -203,7 +204,7 @@ func (s *server) aiListBotConversations(c fiber.Ctx) error {
 	}
 	return c.JSON(fiber.Map{"conversations": out})
 }
-func (s *server) aiCreateBotConversation(c fiber.Ctx) error {
+func (s *panel) aiCreateBotConversation(c fiber.Ctx) error {
 	var in aiConversationInput
 	if e := decode(c, &in); e != nil {
 		return e
@@ -215,7 +216,7 @@ func (s *server) aiCreateBotConversation(c fiber.Ctx) error {
 	}
 	return c.Status(fiber.StatusCreated).JSON(conversationJSON(v))
 }
-func (s *server) aiListSiteConversations(c fiber.Ctx) error {
+func (s *panel) aiListSiteConversations(c fiber.Ctx) error {
 	id := strings.Clone(c.Params("sid"))
 	v, e := s.ai.ListConversations(c.Context(), currentUser(c), nil, &id)
 	if e != nil {
@@ -227,7 +228,7 @@ func (s *server) aiListSiteConversations(c fiber.Ctx) error {
 	}
 	return c.JSON(fiber.Map{"conversations": out})
 }
-func (s *server) aiCreateSiteConversation(c fiber.Ctx) error {
+func (s *panel) aiCreateSiteConversation(c fiber.Ctx) error {
 	var in aiConversationInput
 	if e := decode(c, &in); e != nil {
 		return e
@@ -239,7 +240,7 @@ func (s *server) aiCreateSiteConversation(c fiber.Ctx) error {
 	}
 	return c.Status(fiber.StatusCreated).JSON(conversationJSON(v))
 }
-func (s *server) aiConversation(c fiber.Ctx) error {
+func (s *panel) aiConversation(c fiber.Ctx) error {
 	v, m, e := s.ai.Conversation(c.Context(), currentUser(c), strings.Clone(c.Params("conversation")))
 	if e != nil {
 		return e
@@ -253,7 +254,7 @@ func (s *server) aiConversation(c fiber.Ctx) error {
 
 // aiConversationRuns restores the run inspector: the latest runs with their
 // tool calls (approvals and secure-input requests included) and change sets.
-func (s *server) aiConversationRuns(c fiber.Ctx) error {
+func (s *panel) aiConversationRuns(c fiber.Ctx) error {
 	limit := 5
 	if v := c.Query("limit"); v != "" {
 		n, e := strconv.Atoi(v)
@@ -274,7 +275,7 @@ func (s *server) aiConversationRuns(c fiber.Ctx) error {
 	}
 	return c.JSON(fiber.Map{"runs": out})
 }
-func (s *server) aiPatchConversation(c fiber.Ctx) error {
+func (s *panel) aiPatchConversation(c fiber.Ctx) error {
 	var in aiPatchConversationInput
 	if e := decode(c, &in); e != nil {
 		return e
@@ -285,13 +286,13 @@ func (s *server) aiPatchConversation(c fiber.Ctx) error {
 	}
 	return c.JSON(conversationJSON(v))
 }
-func (s *server) aiDeleteConversation(c fiber.Ctx) error {
+func (s *panel) aiDeleteConversation(c fiber.Ctx) error {
 	if e := s.ai.DeleteConversation(c.Context(), currentUser(c), strings.Clone(c.Params("conversation"))); e != nil {
 		return e
 	}
 	return c.SendStatus(fiber.StatusNoContent)
 }
-func (s *server) aiMessage(c fiber.Ctx) error {
+func (s *panel) aiMessage(c fiber.Ctx) error {
 	var in aiMessageInput
 	if e := decode(c, &in); e != nil {
 		return e
@@ -302,14 +303,14 @@ func (s *server) aiMessage(c fiber.Ctx) error {
 	}
 	return c.Status(fiber.StatusAccepted).JSON(runJSON(r))
 }
-func (s *server) aiRun(c fiber.Ctx) error {
+func (s *panel) aiRun(c fiber.Ctx) error {
 	r, e := s.ai.Run(c.Context(), currentUser(c), strings.Clone(c.Params("run")))
 	if e != nil {
 		return e
 	}
 	return c.JSON(runJSON(r))
 }
-func (s *server) aiCancel(c fiber.Ctx) error {
+func (s *panel) aiCancel(c fiber.Ctx) error {
 	if e := s.ai.Cancel(c.Context(), currentUser(c), strings.Clone(c.Params("run"))); e != nil {
 		return e
 	}
@@ -320,7 +321,7 @@ type aiDecisionInput struct {
 	Approve bool `json:"approve"`
 }
 
-func (s *server) aiDecision(c fiber.Ctx) error {
+func (s *panel) aiDecision(c fiber.Ctx) error {
 	var in aiDecisionInput
 	if e := decode(c, &in); e != nil {
 		return e
@@ -335,7 +336,7 @@ type aiSecureInput struct {
 	Values map[string]string `json:"values"`
 }
 
-func (s *server) aiSecureInput(c fiber.Ctx) error {
+func (s *panel) aiSecureInput(c fiber.Ctx) error {
 	var in aiSecureInput
 	if e := decode(c, &in); e != nil {
 		return e
@@ -349,7 +350,7 @@ func (s *server) aiSecureInput(c fiber.Ctx) error {
 	}
 	return c.JSON(fiber.Map{"configured": names})
 }
-func (s *server) aiChangeSet(c fiber.Ctx) error {
+func (s *panel) aiChangeSet(c fiber.Ctx) error {
 	v, e := s.ai.ChangeSet(c.Context(), currentUser(c), strings.Clone(c.Params("change")))
 	if e != nil {
 		return e
@@ -360,7 +361,7 @@ func (s *server) aiChangeSet(c fiber.Ctx) error {
 	}
 	return c.JSON(fiber.Map{"id": v.ID, "run_id": v.RunID, "target_kind": v.TargetKind, "target_id": v.TargetID, "status": v.Status, "summary": v.Summary, "created_at_ms": v.CreatedAtMS, "applied_at_ms": v.AppliedAtMS, "reverted_at_ms": v.RevertedAtMS, "files": files})
 }
-func (s *server) aiRevertChangeSet(c fiber.Ctx) error {
+func (s *panel) aiRevertChangeSet(c fiber.Ctx) error {
 	if e := s.ai.RevertChangeSet(c.Context(), currentUser(c), strings.Clone(c.Params("change"))); e != nil {
 		return e
 	}
@@ -375,7 +376,7 @@ type aiWSParams struct {
 
 const aiWSKey = "ai.ws.params"
 
-func (s *server) aiStreamGuard(c fiber.Ctx) error {
+func (s *panel) aiStreamGuard(c fiber.Ctx) error {
 	if !fws.IsWebSocketUpgrade(c) {
 		return fiber.ErrUpgradeRequired
 	}
@@ -393,7 +394,7 @@ func (s *server) aiStreamGuard(c fiber.Ctx) error {
 	c.Locals(aiWSKey, aiWSParams{id, currentUser(c), after})
 	return c.Next()
 }
-func (s *server) aiStream(c *fws.Conn) {
+func (s *panel) aiStream(c *fws.Conn) {
 	defer c.Close()
 	p, ok := c.Locals(aiWSKey).(aiWSParams)
 	if !ok {

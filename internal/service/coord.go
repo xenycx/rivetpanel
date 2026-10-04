@@ -4,11 +4,11 @@ import (
 	"context"
 	"sync"
 
-	"botpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/domain"
 )
 
 // Coordinator gives each bot at most one workspace-changing operation at a
-// time (deployment, restore, backup). It is in-process state: BotPanel is a
+// time (deployment, restore, backup). It is in-process state: RivetPanel is a
 // single process that owns its data directory. Exclusive claims (deploy,
 // restore) also block file edits, environment edits and Start, so nothing
 // changes the workspace underneath them; Stop, Kill, Delete and Unlink always

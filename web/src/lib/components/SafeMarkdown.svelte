@@ -1,11 +1,19 @@
 <script lang="ts">
-	let { source = '' }: { source?: string } = $props();
+	// Renders a Markdown subset as Svelte text nodes: raw HTML in the source is
+	// shown literally, never interpreted. Links must be http(s) URLs; with
+	// relativeLinks also same-site paths ("/support", never "//host").
+	let { source = '', relativeLinks = false }: { source?: string; relativeLinks?: boolean } = $props();
+	const tail = String.raw`|\*\*[^*\n]+?\*\*|__[^_\n]+?__|(?<![\w*])\*(?=\S)[^*\n]+?(?<=\S)\*(?![\w*])|(?<![\w_])_(?=\S)[^_\n]+?(?<=\S)_(?![\w_]))`;
+	// \x60 is a backtick (code spans).
+	const reAbs = new RegExp(String.raw`(\x60[^\x60\n]+\x60|\[[^\]\n]+\]\((https?:\/\/[^\s)]+)\)` + tail, 'gi');
+	const reRel = new RegExp(String.raw`(\x60[^\x60\n]+\x60|\[[^\]\n]+\]\((https?:\/\/[^\s)]+|\/(?![\/\\])[^\s)"'<>\\\x60]*)\)` + tail, 'gi');
 	type Inline = { kind: 'text' | 'code' | 'link' | 'strong' | 'em'; text: string; href?: string };
 	type Block = { kind: 'p' | 'h' | 'code' | 'list' | 'quote' | 'table'; text?: string; lang?: string; items?: string[]; rows?: string[][] };
 	function inline(text: string): Inline[] {
 		const out: Inline[] = [];
 		// Earliest match wins, so emphasis markers inside `code` stay literal.
-		const re = /(`[^`\n]+`|\[[^\]\n]+\]\((https?:\/\/[^\s)]+)\)|\*\*[^*\n]+?\*\*|__[^_\n]+?__|(?<![\w*])\*(?=\S)[^*\n]+?(?<=\S)\*(?![\w*])|(?<![\w_])_(?=\S)[^_\n]+?(?<=\S)_(?![\w_]))/gi;
+		const re = relativeLinks ? reRel : reAbs;
+		re.lastIndex = 0;
 		let at = 0;
 		for (const m of text.matchAll(re)) {
 			if ((m.index ?? 0) > at) out.push({ kind: 'text', text: text.slice(at, m.index) });
@@ -47,6 +55,7 @@
 		{#if s.kind === 'code'}<code>{s.text}</code>
 		{:else if s.kind === 'strong'}<strong class="font-semibold">{@render spans(s.text)}</strong>
 		{:else if s.kind === 'em'}<em>{@render spans(s.text)}</em>
+		{:else if s.kind === 'link' && s.href?.startsWith('/')}<a class="link" href={s.href}>{s.text}</a>
 		{:else if s.kind === 'link'}<a class="link" href={s.href} target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer">{s.text}</a>
 		{:else}{s.text}{/if}
 	{/each}

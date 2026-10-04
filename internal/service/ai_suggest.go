@@ -5,8 +5,8 @@ import (
 	"errors"
 	"time"
 
-	operator "botpanel/internal/ai"
-	"botpanel/internal/domain"
+	operator "github.com/xenycx/rivetpanel/internal/ai"
+	"github.com/xenycx/rivetpanel/internal/domain"
 )
 
 // ErrNoAIProvider means no enabled AI provider is configured.

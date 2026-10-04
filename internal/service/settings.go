@@ -9,14 +9,16 @@ import (
 	"log/slog"
 	"net"
 	"net/url"
+	"slices"
 	"strings"
 	"sync"
 	"time"
 
-	"botpanel/internal/domain"
-	"botpanel/internal/mail"
-	"botpanel/internal/oauth"
-	"botpanel/internal/secrets"
+	"github.com/xenycx/rivetpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/mail"
+	"github.com/xenycx/rivetpanel/internal/oauth"
+	"github.com/xenycx/rivetpanel/internal/secrets"
+	"github.com/xenycx/rivetpanel/internal/store/sqlite"
 )
 
 // SettingsStore is the persistence the settings need.
@@ -169,6 +171,9 @@ type SettingsInput struct {
 	AllowSignup              *bool
 	MailKey, MailDomain      *string
 	MailRegion, MailFrom     *string
+	// UnverifiedRestrict replaces the permissions withheld from accounts
+	// whose email address is not verified (empty = policy off).
+	UnverifiedRestrict *[]string
 }
 
 // MailConfig is the effective Mailgun configuration (settings under the
@@ -220,7 +225,7 @@ var oauthIDRe = func(s string) bool {
 
 // Update validates and stores settings, then applies them (administrators).
 func (s *SettingsService) Update(ctx context.Context, actor domain.User, in SettingsInput) error {
-	if !actor.IsAdmin() {
+	if !actor.Can(domain.PermSettingsManage) {
 		return domain.ErrForbidden
 	}
 	return s.update(ctx, in)
@@ -314,6 +319,18 @@ func (s *SettingsService) update(ctx context.Context, in SettingsInput) error {
 			set = append(set, domain.Setting{Key: SetMailKey, Cipher: sl.Ciphertext, Nonce: sl.Nonce, KeyID: sl.KeyID})
 		}
 	}
+	if in.UnverifiedRestrict != nil {
+		var keep []string
+		for _, p := range *in.UnverifiedRestrict {
+			if !domain.ValidPermission(p) {
+				return domain.Invalid("unknown permission " + strings.ToValidUTF8(p, "?"))
+			}
+			if !slices.Contains(keep, p) {
+				keep = append(keep, p)
+			}
+		}
+		set = append(set, domain.Setting{Key: sqlite.UnverifiedPolicyKey, Value: strings.Join(keep, ",")})
+	}
 	if in.AllowSignup != nil {
 		v := ""
 		if *in.AllowSignup {
@@ -347,11 +364,12 @@ type SettingsView struct {
 	MailKeySet, MailEnabled        bool
 	MailDomain, MailRegion         string
 	MailFrom                       string
+	UnverifiedRestrict             []string
 }
 
 // View returns the current settings without secret values (administrators).
 func (s *SettingsService) View(ctx context.Context, actor domain.User) (SettingsView, error) {
-	if !actor.IsAdmin() {
+	if !actor.Can(domain.PermSettingsManage) {
 		return SettingsView{}, domain.ErrForbidden
 	}
 	return s.view(ctx)
@@ -362,7 +380,15 @@ func (s *SettingsService) view(ctx context.Context) (SettingsView, error) {
 	if err != nil {
 		return SettingsView{}, err
 	}
-	return SettingsView{PublicURL: e.PublicURL, GitHubID: e.GitHubID, DiscordID: e.DiscordID, GitHubSecretSet: e.GitHubSecret != "",
+	stored, err := s.Store.Settings(ctx)
+	if err != nil {
+		return SettingsView{}, err
+	}
+	restrict := sqlite.SplitPermissionList(stored[sqlite.UnverifiedPolicyKey].Value)
+	if restrict == nil {
+		restrict = []string{}
+	}
+	return SettingsView{UnverifiedRestrict: restrict, PublicURL: e.PublicURL, GitHubID: e.GitHubID, DiscordID: e.DiscordID, GitHubSecretSet: e.GitHubSecret != "",
 		DiscordSecSet: e.DiscordSecret != "", AllowSignup: e.AllowSignup, Locked: e.Locked,
 		GitHubEnabled: s.OAuth.Enabled("github"), DiscordEnabled: s.OAuth.Enabled("discord"),
 		MailKeySet: e.MailKey != "", MailEnabled: (mail.Config{APIKey: e.MailKey, Domain: e.MailDomain, From: e.MailFrom}).Configured(),

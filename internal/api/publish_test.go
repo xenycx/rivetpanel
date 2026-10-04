@@ -16,9 +16,9 @@ import (
 	"testing"
 	"time"
 
-	"botpanel/internal/filesystem"
-	"botpanel/internal/github"
-	"botpanel/internal/service"
+	"github.com/xenycx/rivetpanel/internal/filesystem"
+	"github.com/xenycx/rivetpanel/internal/github"
+	"github.com/xenycx/rivetpanel/internal/service"
 )
 
 // gitFake is an in-memory GitHub with the repository and Git Data endpoints

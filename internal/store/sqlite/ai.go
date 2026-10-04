@@ -5,7 +5,7 @@ import (
 	"database/sql"
 	"errors"
 
-	"botpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/domain"
 )
 
 const aiProviderCols = `id,name,enabled,is_default,base_url,chat_path,models_path,default_model,context_size,

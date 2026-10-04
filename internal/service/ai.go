@@ -19,10 +19,10 @@ import (
 
 	"github.com/google/uuid"
 
-	operator "botpanel/internal/ai"
-	"botpanel/internal/domain"
-	"botpanel/internal/filesystem"
-	"botpanel/internal/secrets"
+	operator "github.com/xenycx/rivetpanel/internal/ai"
+	"github.com/xenycx/rivetpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/filesystem"
+	"github.com/xenycx/rivetpanel/internal/secrets"
 )
 
 const (
@@ -67,6 +67,31 @@ type AIStore interface {
 
 type DiagnosticRunner interface {
 	RunDiagnostic(context.Context, string, string, []string) (domain.DiagnosticResult, error)
+}
+
+// diagnosticAvailable refuses a diagnostic that cannot run where b's files
+// are: no local runner, or a remote node that is offline or not reachable for
+// diagnostics on this panel.
+func (s *AIService) diagnosticAvailable(b domain.Bot) error {
+	if !s.Bots.remote(b.NodeID) {
+		if s.Diagnostic == nil {
+			return domain.Invalid("diagnostic runner is unavailable")
+		}
+		return nil
+	}
+	if s.RemoteDiagnostic == nil {
+		return domain.Invalid("isolated diagnostics are not available for servers on remote nodes on this panel")
+	}
+	_, _, err := s.Bots.RemoteFiles(b, "Isolated diagnostics")
+	return err
+}
+
+// NodeDiagnostics runs an isolated diagnostic on a server's remote node
+// (noderoute.Router): the node validates the command against its runtime
+// catalog and runs the same sandboxed container on its own Docker, using a
+// copy of the workspace it holds.
+type NodeDiagnostics interface {
+	RunDiagnostic(ctx context.Context, nodeID, botID, runtimeID string, argv []string) (domain.DiagnosticResult, error)
 }
 
 // LogTail reads the last lines of a bot container's output without following
@@ -170,9 +195,12 @@ type AIService struct {
 	Provider   *operator.Client
 	Research   *operator.Research
 	Diagnostic DiagnosticRunner
-	Logs       LogTail // nil: the read_logs tool reports that logs are unavailable
-	Log        *slog.Logger
-	Now        func() time.Time
+	// RemoteDiagnostic runs diagnostics for servers on remote nodes; nil
+	// refuses them.
+	RemoteDiagnostic NodeDiagnostics
+	Logs             LogTail // nil: the read_logs tool reports that logs are unavailable
+	Log              *slog.Logger
+	Now              func() time.Time
 	// Limits overrides DefaultAIRunLimits when Rounds is set.
 	Limits AIRunLimits
 	// StreamGrace is how long a finished run's event stream stays available
@@ -369,7 +397,7 @@ func providerView(p domain.AIProviderProfile) AIProviderView {
 	return AIProviderView{p.ID, p.Name, p.BaseURL, p.ChatPath, p.ModelsPath, p.DefaultModel, p.Enabled, p.Default, len(p.KeyCipher) > 0, p.ContextSize, p.MaxOutputTokens, p.TimeoutMS, p.Temperature, p.InputPriceMicros, p.OutputPriceMicros, p.CreatedAtMS, p.UpdatedAtMS}
 }
 func (s *AIService) Providers(ctx context.Context, actor domain.User) ([]AIProviderView, error) {
-	if !actor.IsAdmin() {
+	if !actor.Can(domain.PermAIManage) {
 		return nil, domain.ErrForbidden
 	}
 	ps, e := s.Store.ListAIProviders(ctx)
@@ -457,7 +485,7 @@ func urlParse(raw string) (string, error) {
 }
 
 func (s *AIService) PutProvider(ctx context.Context, actor domain.User, id string, in AIProviderInput) (AIProviderView, error) {
-	if !actor.IsAdmin() {
+	if !actor.Can(domain.PermAIManage) {
 		return AIProviderView{}, domain.ErrForbidden
 	}
 	if err := validateProvider(in); err != nil {
@@ -497,7 +525,7 @@ func (s *AIService) PutProvider(ctx context.Context, actor domain.User, id strin
 	return providerView(p), nil
 }
 func (s *AIService) DeleteProvider(ctx context.Context, actor domain.User, id string) error {
-	if !actor.IsAdmin() {
+	if !actor.Can(domain.PermAIManage) {
 		return domain.ErrForbidden
 	}
 	return s.Store.DeleteAIProvider(ctx, id)
@@ -522,7 +550,7 @@ func (s *AIService) providerConfig(ctx context.Context, id string) (domain.AIPro
 	return p, operator.Config{BaseURL: p.BaseURL, ChatPath: p.ChatPath, ModelsPath: p.ModelsPath, Key: key, Model: p.DefaultModel, Timeout: time.Duration(p.TimeoutMS) * time.Millisecond, MaxTokens: p.MaxOutputTokens, Temperature: p.Temperature}, nil
 }
 func (s *AIService) ProviderModels(ctx context.Context, actor domain.User, id string) ([]string, error) {
-	if !actor.IsAdmin() {
+	if !actor.Can(domain.PermAIManage) {
 		return nil, domain.ErrForbidden
 	}
 	_, cfg, e := s.providerConfig(ctx, id)
@@ -533,7 +561,7 @@ func (s *AIService) ProviderModels(ctx context.Context, actor domain.User, id st
 	return s.Provider.Models(ctx, cfg)
 }
 func (s *AIService) TestProvider(ctx context.Context, actor domain.User, id string) (map[string]bool, error) {
-	if !actor.IsAdmin() {
+	if !actor.Can(domain.PermAIManage) {
 		return nil, domain.ErrForbidden
 	}
 	_, cfg, e := s.providerConfig(ctx, id)
@@ -618,14 +646,14 @@ func (s *AIService) searchConfig(ctx context.Context) (AISearchView, operator.Se
 	return v, operator.SearchConfig{BaseURL: v.BaseURL, Keys: keys, Results: v.Results, Language: v.Language, Categories: v.Categories, TimeRange: v.TimeRange, SafeSearch: v.SafeSearch}, nil
 }
 func (s *AIService) SearchSettings(ctx context.Context, actor domain.User) (AISearchView, error) {
-	if !actor.IsAdmin() {
+	if !actor.Can(domain.PermAIManage) {
 		return AISearchView{}, domain.ErrForbidden
 	}
 	v, _, e := s.searchConfig(ctx)
 	return v, e
 }
 func (s *AIService) PutSearchSettings(ctx context.Context, actor domain.User, in AISearchInput) (AISearchView, error) {
-	if !actor.IsAdmin() {
+	if !actor.Can(domain.PermAIManage) {
 		return AISearchView{}, domain.ErrForbidden
 	}
 	if _, e := urlParse(in.BaseURL); e != nil {
@@ -670,7 +698,7 @@ func (s *AIService) PutSearchSettings(ctx context.Context, actor domain.User, in
 	return s.SearchSettings(ctx, actor)
 }
 func (s *AIService) TestSearch(ctx context.Context, actor domain.User) (operator.SearchResponse, error) {
-	if !actor.IsAdmin() {
+	if !actor.Can(domain.PermAIManage) {
 		return operator.SearchResponse{}, domain.ErrForbidden
 	}
 	v, c, e := s.searchConfig(ctx)
@@ -680,7 +708,7 @@ func (s *AIService) TestSearch(ctx context.Context, actor domain.User) (operator
 	if !v.SearchEnabled {
 		return operator.SearchResponse{}, domain.Invalid("web search is disabled")
 	}
-	return s.Research.Search(ctx, c, "BotForge hosting")
+	return s.Research.Search(ctx, c, "RivetPanel hosting")
 }
 
 // effective is the conversation as one run sees it: the run's own target
@@ -1295,17 +1323,36 @@ func (s *AIService) reauthorize(ctx context.Context, actor domain.User, c domain
 	return s.authorizeTarget(ctx, fresh, c, mutate)
 }
 
-func (s *AIService) targetWorkspace(ctx context.Context, actor domain.User, c domain.AIConversation, scope string, mutate bool) (*filesystem.Workspace, string, string, error) {
+func (s *AIService) targetWorkspace(ctx context.Context, actor domain.User, c domain.AIConversation, scope string, mutate bool) (aiFiles, string, string, error) {
 	if c.BotID != nil && scope != "linked_site" {
 		perm := 0
 		if mutate {
 			perm = domain.PermEditFiles
 		}
-		if _, e := s.Bots.Authorize(ctx, actor, *c.BotID, perm); e != nil {
+		b, e := s.Bots.Authorize(ctx, actor, *c.BotID, perm)
+		if e != nil {
 			return nil, "", "", e
 		}
-		w, e := s.Files.Open(*c.BotID)
-		return w, "bot", *c.BotID, e
+		if mutate {
+			// A deployment or restore is replacing the files right now.
+			if e := s.Bots.FilesBlocked(b.ID); e != nil {
+				return nil, "", "", e
+			}
+		}
+		// A bot on a remote node is reached through its agent only; the
+		// panel's own disk is never read or written for it.
+		nf, remote, e := s.Bots.RemoteFiles(b, "The AI assistant's file tools")
+		if e != nil {
+			return nil, "", "", e
+		}
+		if remote {
+			return newRemoteAIFiles(ctx, nf, b.NodeID, b.ID), "bot", b.ID, nil
+		}
+		w, e := s.Files.Open(b.ID)
+		if e != nil {
+			return nil, "", "", e
+		}
+		return localAIFiles{w}, "bot", b.ID, nil
 	}
 	siteID := ""
 	if c.SiteID != nil {
@@ -1325,7 +1372,10 @@ func (s *AIService) targetWorkspace(ctx context.Context, actor domain.User, c do
 		return nil, "", "", e
 	}
 	w, e := s.Sites.Draft(ctx, actor, siteID)
-	return w, "site", siteID, e
+	if e != nil {
+		return nil, "", "", e
+	}
+	return localAIFiles{w}, "site", siteID, nil
 }
 
 func (s *AIService) redactor(ctx context.Context, c domain.AIConversation) *operator.Redactor {
@@ -1519,9 +1569,6 @@ func (s *AIService) executeTool(ctx context.Context, actor domain.User, c domain
 	case "propose_file_change":
 		return s.fileChange(ctx, actor, c, run, call, budget, str("scope"), str("path"), str("content"), str("summary"), a["delete"])
 	case "run_diagnostic":
-		if s.Diagnostic == nil {
-			return "", false, domain.Invalid("diagnostic runner is unavailable")
-		}
 		if c.BotID == nil {
 			return "", false, domain.Invalid("standalone sites do not have a runtime diagnostic image")
 		}
@@ -1530,8 +1577,14 @@ func (s *AIService) executeTool(ctx context.Context, actor domain.User, c domain
 			return "", false, domain.Invalid("argv is invalid")
 		}
 		label := red.Text(clipService(strings.Join(argv, " "), 200))
-		if _, e := s.Bots.Authorize(ctx, actor, *c.BotID, domain.PermEditFiles); e != nil {
+		db, e := s.Bots.Authorize(ctx, actor, *c.BotID, domain.PermEditFiles)
+		if e != nil {
 			s.audit(ctx, actor, run, "bot", *c.BotID, "ai.diagnostic", label, "denied")
+			return "", false, e
+		}
+		// A remote server's diagnostic runs on its node (its files are
+		// there); the panel's own disk and Docker are never used for it.
+		if e := s.diagnosticAvailable(db); e != nil {
 			return "", false, e
 		}
 		if e := budget.diagnostic(); e != nil {
@@ -1546,9 +1599,17 @@ func (s *AIService) executeTool(ctx context.Context, actor domain.User, c domain
 			s.audit(ctx, actor, run, "bot", *c.BotID, "ai.diagnostic", label, "denied")
 			return "", false, e
 		}
+		if e := s.diagnosticAvailable(b); e != nil {
+			return "", false, e // moved to another node, or its node went offline
+		}
 		budget.diagnostics++
 		start := time.Now()
-		res, e := s.Diagnostic.RunDiagnostic(ctx, *c.BotID, b.Runtime, argv)
+		var res domain.DiagnosticResult
+		if s.Bots.remote(b.NodeID) {
+			res, e = s.RemoteDiagnostic.RunDiagnostic(ctx, b.NodeID, *c.BotID, b.Runtime, argv)
+		} else {
+			res, e = s.Diagnostic.RunDiagnostic(ctx, *c.BotID, b.Runtime, argv)
+		}
 		dur := time.Since(start)
 		ms := dur.Milliseconds()
 		call.DurationMS = &ms
@@ -1674,8 +1735,13 @@ func (s *AIService) awaitMutation(ctx context.Context, run *domain.AIRun, call *
 	return ok
 }
 
-func searchWorkspace(w *filesystem.Workspace, q string) ([]string, error) {
+// maxAISearchReads bounds how many files one search reads (each is a request
+// to the node for a remote bot).
+const maxAISearchReads = 2000
+
+func searchWorkspace(w aiFiles, q string) ([]string, error) {
 	var out []string
+	reads := 0
 	var walk func(string) error
 	walk = func(dir string) error {
 		es, e := w.List(dir)
@@ -1701,6 +1767,10 @@ func searchWorkspace(w *filesystem.Workspace, q string) ([]string, error) {
 			if x.Size > maxAIFile {
 				continue
 			}
+			if reads >= maxAISearchReads {
+				return nil
+			}
+			reads++
 			b, e := w.Read(p, maxAIFile)
 			if e != nil || !utf8.Valid(b) || bytes.IndexByte(b, 0) >= 0 {
 				continue
@@ -1854,7 +1924,7 @@ func (s *AIService) fileChange(ctx context.Context, actor domain.User, c domain.
 	now := s.now()
 	change.AppliedAtMS = &now
 	if !del {
-		r, e := w.Revision(p)
+		r, e := commit.Revision(p)
 		if e != nil {
 			_ = commit.Rollback()
 			return "", false, e
@@ -1866,6 +1936,12 @@ func (s *AIService) fileChange(ctx context.Context, actor domain.User, c domain.
 		return "", false, e
 	}
 	if e = commit.Finish(); e != nil {
+		if errors.Is(e, errPatchRolledBack) {
+			// The previous file is back: record that nothing was applied.
+			change.Status, change.AppliedAtMS, change.Files[0].AfterRevision = "conflicted", nil, nil
+			_ = s.Store.UpdateAIChangeSet(context.WithoutCancel(ctx), change)
+			s.emit(run.ID, "change_set", publicChange(change))
+		}
 		s.audit(ctx, actor, run, kind, target, "ai.file_apply", p, "failed")
 		return "", false, e
 	}
@@ -2064,5 +2140,13 @@ func (s *AIService) RevertChangeSet(ctx context.Context, actor domain.User, id s
 		_ = commit.Rollback()
 		return e
 	}
-	return commit.Finish()
+	if e = commit.Finish(); e != nil {
+		if errors.Is(e, errPatchRolledBack) {
+			// The undo was rolled back on the node: the change is still applied.
+			c.Status, c.RevertedAtMS = "applied", nil
+			_ = s.Store.UpdateAIChangeSet(context.WithoutCancel(ctx), c)
+		}
+		return e
+	}
+	return nil
 }

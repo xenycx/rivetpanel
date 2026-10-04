@@ -9,7 +9,7 @@ export type Radius = (typeof radii)[number]['id'];
 export const radii = [
 	{ id: 'none', name: 'Square', text: 'No rounding anywhere' },
 	{ id: 'subtle', name: 'Subtle', text: 'Barely softened corners' },
-	{ id: 'default', name: 'Default', text: 'The BotForge look' },
+	{ id: 'default', name: 'Default', text: 'The RivetPanel look' },
 	{ id: 'round', name: 'Rounded', text: 'Soft, generous corners' }
 ] as const;
 export type Accent = (typeof accents)[number]['id'];
@@ -29,9 +29,9 @@ export const accents = [
 	{ id: 'clay', name: 'Clay', light: '#8d5142', dark: '#db8b76' }
 ] as const;
 
-const KEY = 'botpanel.theme';
-const ACCENT_KEY = 'botforge.accent';
-const RADIUS_KEY = 'botforge.radius';
+const KEY = 'rivetpanel.theme';
+const ACCENT_KEY = 'rivetpanel.accent';
+const RADIUS_KEY = 'rivetpanel.radius';
 
 function read(): ThemePref {
 	try {
@@ -50,7 +50,7 @@ function readAccent(): Accent {
 		const value = localStorage.getItem(ACCENT_KEY);
 		if (accents.some((accent) => accent.id === value)) return value as Accent;
 	} catch {
-		/* storage unavailable: use the BotForge accent */
+		/* storage unavailable: use the RivetPanel accent */
 	}
 	return 'ember';
 }

@@ -5,7 +5,7 @@
 	import { api, ApiError, fmtBytes, fmtCpu } from '$lib/api/client';
 	import { can, Perm, type Bot, type Capacity, type RuntimeInfo, type Sample } from '$lib/api/types';
 	import { power } from '$lib/api/bots';
-	import { session } from '$lib/session.svelte';
+	import { can as canDo, session } from '$lib/session.svelte';
 	import { describe } from '$lib/status';
 	import StatusBadge from '$lib/components/ui/StatusBadge.svelte';
 	import Icon from '$lib/components/ui/Icon.svelte';
@@ -40,7 +40,7 @@
 	let view = $state<'grid' | 'list'>(
 		(() => {
 			try {
-				return localStorage.getItem('botpanel.fleetView') === 'list' ? 'list' : 'grid';
+				return localStorage.getItem('rivetpanel.fleetView') === 'list' ? 'list' : 'grid';
 			} catch {
 				return 'grid';
 			}
@@ -49,7 +49,7 @@
 	function setView(v: 'grid' | 'list') {
 		view = v;
 		try {
-			localStorage.setItem('botpanel.fleetView', v);
+			localStorage.setItem('rivetpanel.fleetView', v);
 		} catch {
 			/* not remembered */
 		}
@@ -80,7 +80,8 @@
 
 	async function refresh() {
 		try {
-			bots = (await api<{ bots: Bot[] }>('GET', '/bots')).bots;
+			// Game servers have their own page.
+			bots = (await api<{ bots: Bot[] }>('GET', '/bots')).bots.filter((b) => b.kind !== 'game');
 			error = '';
 		} catch (e) {
 			error = e instanceof ApiError ? e.message : 'The bot list could not be loaded. Check your connection.';
@@ -241,7 +242,7 @@
 	}
 </script>
 
-<svelte:head><title>Bots · BotForge</title></svelte:head>
+<svelte:head><title>Bots · RivetPanel</title></svelte:head>
 
 <section class="card card-glow grid gap-6 p-6 sm:p-8 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
 	<div>
@@ -256,7 +257,7 @@
 			{:else}&nbsp;{/if}
 		</p>
 	</div>
-	<div>
+	{#if canDo('bots.create')}<div>
 		<p class="eyebrow">Deploy a new bot</p>
 		<div class="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-2 xl:grid-cols-4">
 			<a href="/bots/new?source=github" class="quick"><Icon name="github" class="text-action" />GitHub</a>
@@ -264,7 +265,7 @@
 			<a href="/bots/new?source=blank" class="quick"><Icon name="upload" class="text-action" />Upload ZIP</a>
 			<a href="/bots/new?source=blank" class="quick"><Icon name="file" class="text-action" />Empty bot</a>
 		</div>
-	</div>
+	</div>{/if}
 </section>
 
 {#if bots && bots.length > 0}
@@ -361,13 +362,13 @@
 	{#if bots === null}
 		{#if !error}<Skeleton rows={4} label="Loading bots" />{/if}
 	{:else if bots.length === 0}
-		<EmptyState title="Create your first bot">
-			<p>Start from a template if this is your first bot: it comes with a working project and tells you which values to add. You can also deploy an existing repository from GitHub or start with an empty workspace.</p>
-			{#snippet actions()}
+		<EmptyState title={canDo('bots.create') ? 'Create your first bot' : 'No bots yet'}>
+			<p>{canDo('bots.create') ? 'Start from a template if this is your first bot: it comes with a working project and tells you which values to add. You can also deploy an existing repository from GitHub or start with an empty workspace.' : 'Your role cannot create bots. Bots shared with you, or in workspaces you belong to, appear here.'}</p>
+			{#snippet actions()}{#if canDo('bots.create')}
 				<a href="/bots/new?source=template" class="btn btn-primary">Start from a template</a>
 				<a href="/bots/new?source=github" class="btn"><Icon name="github" />Deploy from GitHub</a>
 				<a href="/bots/new?source=blank" class="btn">Empty bot</a>
-			{/snippet}
+			{/if}{/snippet}
 		</EmptyState>
 	{:else if scoped.length === 0}
 		<EmptyState title="No bots in {scope?.personal ? 'your personal workspace' : (scope?.name ?? 'this workspace')} yet" compact>

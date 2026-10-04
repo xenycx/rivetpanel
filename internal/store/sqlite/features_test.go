@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"botpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/domain"
 )
 
 func seed(t *testing.T, db *DB) {

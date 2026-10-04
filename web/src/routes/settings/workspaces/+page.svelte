@@ -40,7 +40,7 @@
 	}
 </script>
 
-<svelte:head><title>Workspaces · BotForge</title></svelte:head>
+<svelte:head><title>Workspaces · RivetPanel</title></svelte:head>
 
 <SettingsSection title="Your workspaces" description="A workspace groups bots{session.features.sites ? ' and sites' : ''} for a person or a team. Members see everything in it and act according to their role; your personal workspace is where things go by default.">
 	{#if !workspaces.loaded}

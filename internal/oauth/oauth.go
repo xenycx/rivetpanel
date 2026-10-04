@@ -54,6 +54,9 @@ const maxBody = 1 << 20
 
 var defaultHTTP = &http.Client{Timeout: 10 * time.Second}
 
+// RandString returns n random bytes, base64url encoded (state, nonce).
+func RandString(n int) string { return randString(n) }
+
 // NewPKCE returns a verifier and its S256 challenge.
 func NewPKCE() (verifier, challenge string) {
 	verifier = randString(32)
@@ -286,6 +289,7 @@ type Pending struct {
 	UserID     string // non-empty: linking to this signed-in user
 	Notify     bool
 	RepoAccess bool
+	Nonce      string // OpenID Connect: must come back in the ID token
 	Binder     string // must match the browser's state cookie
 	Expires    time.Time
 }

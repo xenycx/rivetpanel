@@ -5,19 +5,21 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"sort"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 
-	"botpanel/internal/addons"
-	"botpanel/internal/domain"
-	"botpanel/internal/events"
-	"botpanel/internal/filesystem"
-	"botpanel/internal/runtimes"
-	"botpanel/internal/secrets"
-	"botpanel/internal/templates"
+	"github.com/xenycx/rivetpanel/internal/addons"
+	"github.com/xenycx/rivetpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/events"
+	"github.com/xenycx/rivetpanel/internal/filesystem"
+	"github.com/xenycx/rivetpanel/internal/runtimes"
+	"github.com/xenycx/rivetpanel/internal/secrets"
+	"github.com/xenycx/rivetpanel/internal/templates"
 )
 
 // Workspaces is the filesystem surface used for bot lifecycle.
@@ -56,6 +58,127 @@ type BotService struct {
 	AddonData    AddonData                               // nil: add-ons unavailable
 	AddonRuntime AddonRuntime                            // optional: add-on state and logs
 	DiscordAPI   string                                  // Discord REST base (tests); "" = discord.com
+	// Stdin attaches to a running container's input for one-shot commands
+	// (scheduled commands, player actions). Nil disables them.
+	Stdin interface {
+		AttachStdin(ctx context.Context, containerID string) (io.WriteCloser, error)
+	}
+	// StdinFor, when set, picks the input source for a server's node.
+	StdinFor func(nodeID string) interface {
+		AttachStdin(ctx context.Context, containerID string) (io.WriteCloser, error)
+	}
+	// RemoteNode reports whether a node is run by a rivet-agent: its servers'
+	// files live on that node, not under this panel's data directory.
+	RemoteNode func(nodeID string) bool
+	// NodeFiles reads and writes single files of servers on remote nodes
+	// (package manager, AI assistant). Nil refuses those features there.
+	NodeFiles NodeFiles
+	// RemoteAddons observes add-ons of servers on remote nodes.
+	RemoteAddons NodeAddons
+	// RemotePorts asks a remote node's agent whether host ports can be
+	// bound there (a check, not a reservation). Nil skips remote probing.
+	RemotePorts func(ctx context.Context, nodeID, ip string, ports []int) ([]PortState, error)
+	// Notices receives access notifications (sharing, transfers, workspace
+	// membership, accepted invitations); nil sends none.
+	Notices *NotificationService
+}
+
+// actorName is how notifications name the account that acted.
+func actorName(u domain.User) string {
+	if u.DisplayName != "" {
+		return u.DisplayName + " (" + u.Email + ")"
+	}
+	return u.Email
+}
+
+// noticeAccess tells another account about an access change.
+func (s *BotService) noticeAccess(ctx context.Context, actor domain.User, userID, title, body, link string) {
+	if s.Notices == nil || userID == actor.ID {
+		return
+	}
+	s.Notices.Notify(ctx, userID, Notice{Category: domain.NotifyAccess, Title: title, Body: body, Link: link})
+}
+
+func (s *BotService) remote(nodeID string) bool { return s.RemoteNode != nil && s.RemoteNode(nodeID) }
+
+// NodeFiles reaches the workspace of a server that runs on a remote node,
+// through its rivet-agent's file routes (noderoute.Router). Path containment
+// is enforced by the node's filesystem layer; callers authorize the user and
+// bound every size first. A missing file is fs.ErrNotExist, a failed write
+// precondition domain.ErrConflict and a stale patch filesystem.ErrPatchConflict.
+type NodeFiles interface {
+	Online(nodeID string) bool
+	ListDir(ctx context.Context, nodeID, botID, dir string) ([]filesystem.Entry, error)
+	ReadFileRevision(ctx context.Context, nodeID, botID, p string, max int64) ([]byte, string, error)
+	WriteFile(ctx context.Context, nodeID, botID, p string, data []byte, ifMatch string, createOnly bool) (string, error)
+	// WriteFileFrom streams exactly size bytes from src into one file.
+	WriteFileFrom(ctx context.Context, nodeID, botID, p string, src io.Reader, size int64, ifMatch string, createOnly bool) (string, error)
+	BeginPatch(ctx context.Context, nodeID, botID string, files []filesystem.PatchFile, maxFile, maxTotal int64) (string, map[string]string, error)
+	// CreateWorkspace makes a new server's directory on the node (idempotent).
+	CreateWorkspace(ctx context.Context, nodeID, botID string) error
+	CompleteTransaction(ctx context.Context, nodeID, botID, tx string, commit bool) error
+}
+
+// RemoteFiles reports whether b's files live on a remote node and, if so,
+// returns the access to them. It refuses cleanly when the node is offline
+// (or remote file access is not configured), so callers never fall back to
+// the panel's own disk for a remote server.
+func (s *BotService) RemoteFiles(b domain.Bot, what string) (NodeFiles, bool, error) {
+	if !s.remote(b.NodeID) {
+		return nil, false, nil
+	}
+	if s.NodeFiles == nil {
+		return nil, true, domain.Invalid(what + " is not available for servers on remote nodes on this panel")
+	}
+	if !s.NodeFiles.Online(b.NodeID) {
+		return nil, true, domain.Invalid("the server's node is offline; try again when its agent reconnects")
+	}
+	return s.NodeFiles, true, nil
+}
+
+// chooseNode resolves the node a new server is created on: this panel's own
+// node unless an administrator picks another eligible one.
+func (s *BotService) chooseNode(ctx context.Context, actor domain.User, nodeID string) (string, error) {
+	if nodeID == "" {
+		nodeID = s.LocalNode
+	}
+	if nodeID != s.LocalNode && !actor.Can(domain.PermNodesManage) {
+		return "", domain.Invalid("only administrators can choose the node for a new server")
+	}
+	if err := s.placeable(ctx, nodeID); err != nil {
+		return "", err
+	}
+	return nodeID, nil
+}
+
+// placeable checks that new servers may be placed on a node.
+func (s *BotService) placeable(ctx context.Context, nodeID string) error {
+	node, err := s.Store.GetNode(ctx, nodeID)
+	if err != nil || !node.Enabled {
+		return domain.Invalid("node is unavailable")
+	}
+	if node.Draining {
+		return domain.Invalid("that node is draining and accepts no new servers")
+	}
+	if node.Transport != "local" && !s.remote(nodeID) {
+		return domain.Invalid("node is unavailable")
+	}
+	return nil
+}
+
+// createWorkspace makes a new server's directory on the panel; servers on
+// remote nodes get theirs on the node at first use.
+func (s *BotService) createWorkspace(nodeID, id string) error {
+	if s.remote(nodeID) {
+		return nil
+	}
+	return s.Workspaces.Create(id)
+}
+
+func (s *BotService) removeWorkspace(nodeID, id string) {
+	if !s.remote(nodeID) {
+		_ = s.Workspaces.Remove(id)
+	}
 }
 
 // FilesBlocked reports (as a BusyError) whether a deployment or restore is
@@ -152,6 +275,16 @@ func (s *BotService) loadPerm(ctx context.Context, actor domain.User, id string,
 	if b.DesiredState == domain.DesiredDeleted && !allowDeleted {
 		return domain.Bot{}, domain.ErrNotFound
 	}
+	// An API client limited to some bots or workspaces reaches no other bot.
+	if !actor.Client.AllowsBot(b.ID, b.WorkspaceID) {
+		return domain.Bot{}, &domain.ScopeError{What: "bot"}
+	}
+	// The account's role limits every path to a bot, ownership included.
+	if b.OwnerID == actor.ID && perm > 0 {
+		if err := actor.BotBitDenied(perm); err != nil {
+			return domain.Bot{}, err
+		}
+	}
 	if b.OwnerID == actor.ID || actor.IsAdmin() {
 		return b, nil
 	}
@@ -161,6 +294,11 @@ func (s *BotService) loadPerm(ctx context.Context, actor domain.User, id string,
 	}
 	// Workspace owners and admins act as the bot's owner.
 	if domain.WorkspaceRoleRank(role) >= domain.WorkspaceRoleRank(domain.WorkspaceAdmin) {
+		if perm > 0 {
+			if err := actor.BotBitDenied(perm); err != nil {
+				return domain.Bot{}, err
+			}
+		}
 		return b, nil
 	}
 	mask, err := s.Store.GetSubUserPermissions(ctx, id, actor.ID)
@@ -170,7 +308,7 @@ func (s *BotService) loadPerm(ctx context.Context, actor domain.User, id string,
 	if err != nil {
 		return domain.Bot{}, err // ErrNotFound: no grant and no membership
 	}
-	mask |= domain.WorkspaceRolePerms(role)
+	mask = actor.MaskBotPerms(mask | domain.WorkspaceRolePerms(role))
 	if perm == permOwnerOnly || (perm != permAny && !domain.HasPerm(mask, perm)) {
 		return domain.Bot{}, domain.ErrForbidden
 	}
@@ -178,17 +316,19 @@ func (s *BotService) loadPerm(ctx context.Context, actor domain.User, id string,
 }
 
 // Permissions returns the actor's permission mask on a bot they can access.
+// The account's role removes the bits it does not allow (see
+// domain.User.MaskBotPerms), for owners too.
 func (s *BotService) Permissions(ctx context.Context, actor domain.User, b domain.Bot) int {
 	if b.OwnerID == actor.ID || actor.IsAdmin() {
-		return domain.PermAll
+		return actor.MaskBotPerms(domain.PermAll)
 	}
 	mask, _ := s.Store.GetSubUserPermissions(ctx, b.ID, actor.ID)
 	role, _ := s.Store.BotWorkspaceRole(ctx, b.ID, actor.ID)
 	mask |= domain.WorkspaceRolePerms(role)
 	if mask&domain.PermFullAdmin != 0 {
-		return domain.PermAll
+		mask = domain.PermAll
 	}
-	return mask
+	return actor.MaskBotPerms(mask)
 }
 
 func (s *BotService) Create(ctx context.Context, actor domain.User, in CreateBotInput) (domain.Bot, error) {
@@ -212,9 +352,6 @@ func (s *BotService) Create(ctx context.Context, actor domain.User, in CreateBot
 		t, ok := templates.Get(*in.TemplateID)
 		if !ok {
 			return domain.Bot{}, domain.Invalid("unknown template")
-		}
-		if s.Files == nil {
-			return domain.Bot{}, domain.Invalid("templates are not available")
 		}
 		var err error
 		if seed, err = templates.Files(t.ID); err != nil {
@@ -264,13 +401,24 @@ func (s *BotService) Create(ctx context.Context, actor domain.User, in CreateBot
 	if err != nil {
 		return domain.Bot{}, err
 	}
-	nodeID := in.NodeID
-	if nodeID == "" {
-		nodeID = s.LocalNode
+	nodeID, err := s.chooseNode(ctx, actor, in.NodeID)
+	if err != nil {
+		return domain.Bot{}, err
 	}
-	node, err := s.Store.GetNode(ctx, nodeID)
-	if err != nil || !node.Enabled {
-		return domain.Bot{}, domain.Invalid("node is unavailable")
+	// Add-ons must be able to run on the chosen node: checked for each one
+	// before anything is recorded.
+	if len(in.Addons) > 0 {
+		if err := s.addonsAvailable(nodeID); err != nil {
+			return domain.Bot{}, err
+		}
+		if s.remote(nodeID) {
+			for _, a := range in.Addons {
+				k, _ := addons.Get(strings.ToLower(strings.TrimSpace(a.Kind)))
+				if err := addonSupportedOnNode(k); err != nil {
+					return domain.Bot{}, err
+				}
+			}
+		}
 	}
 
 	now := s.now()
@@ -280,41 +428,58 @@ func (s *BotService) Create(ctx context.Context, actor domain.User, in CreateBot
 		DesiredState: domain.DesiredStopped, ObservedState: "stopped", CreatedAtMS: now, UpdatedAtMS: now,
 		SourceType: in.SourceType, TemplateID: in.TemplateID, RestartPolicy: domain.RestartOnFailure, BuildCommand: build,
 	}
+	// A template on a remote node is seeded through the node's agent: refuse
+	// before anything is recorded when that cannot work.
+	var seedTo NodeFiles
+	if len(seed) > 0 {
+		if s.remote(nodeID) {
+			if seedTo, _, err = s.RemoteFiles(b, "templates"); err != nil {
+				return domain.Bot{}, err
+			}
+			if err := checkRemoteSeed(seed); err != nil {
+				return domain.Bot{}, err
+			}
+		} else if s.Files == nil {
+			return domain.Bot{}, domain.Invalid("templates are not available")
+		}
+	}
 	// Workspace first: a leftover directory is harmless and reconcilable, whereas
 	// a row without a workspace would be a broken bot.
-	if err := s.Workspaces.Create(b.ID); err != nil {
+	if err := s.createWorkspace(nodeID, b.ID); err != nil {
 		return domain.Bot{}, fmt.Errorf("create workspace: %w", err)
 	}
 	if err := s.Store.CreateBot(ctx, b); err != nil {
-		_ = s.Workspaces.Remove(b.ID)
+		s.removeWorkspace(nodeID, b.ID)
 		return domain.Bot{}, err
 	}
-	if len(seed) > 0 {
+	if len(seed) > 0 && seedTo == nil {
 		if err := s.seed(b.ID, seed); err != nil {
-			_ = s.Store.MarkBotDeleted(ctx, b.ID, s.now())
-			_ = s.Workspaces.Remove(b.ID)
-			_ = s.Store.DeleteBotRow(ctx, b.ID)
+			s.discardNew(ctx, b)
 			return domain.Bot{}, fmt.Errorf("seed template: %w", err)
 		}
 	}
 	if len(in.Env) > 0 {
 		if err := s.putEnv(ctx, b, in.Env, false); err != nil {
-			_ = s.Store.MarkBotDeleted(ctx, b.ID, s.now())
-			_ = s.Workspaces.Remove(b.ID)
-			_ = s.Store.DeleteBotRow(ctx, b.ID)
+			s.discardNew(ctx, b)
 			return domain.Bot{}, err
 		}
 	}
 	for _, a := range in.Addons {
 		cur, err := s.Store.GetBot(ctx, b.ID)
 		if err == nil {
-			_, _, err = s.addAddon(ctx, cur, a, false) // budget checked above
+			_, _, err = s.addAddon(ctx, cur, a, false, true) // budget checked above
 		}
 		if err != nil {
-			_ = s.Store.MarkBotDeleted(ctx, b.ID, s.now())
-			_ = s.Workspaces.Remove(b.ID)
-			_ = s.Store.DeleteBotRow(ctx, b.ID)
+			s.discardNew(ctx, b)
 			return domain.Bot{}, err
+		}
+	}
+	// The remote template goes last, so the only step after its files are
+	// swapped in on the node is the commit itself.
+	if seedTo != nil {
+		if err := s.seedRemote(ctx, seedTo, b, seed); err != nil {
+			s.discardNew(ctx, b)
+			return domain.Bot{}, fmt.Errorf("seed template on the node: %w", err)
 		}
 	}
 	if len(in.Addons) > 0 || len(in.Env) > 0 {
@@ -328,9 +493,6 @@ func (s *BotService) Create(ctx context.Context, actor domain.User, in CreateBot
 func (s *BotService) validateAddonInputs(in []AddonInput) (int64, error) {
 	if len(in) == 0 {
 		return 0, nil
-	}
-	if err := s.addonsEnabled(); err != nil {
-		return 0, err
 	}
 	if len(in) > maxAddonsPerBot {
 		return 0, domain.Invalid(fmt.Sprintf("a bot can have at most %d add-ons", maxAddonsPerBot))
@@ -375,7 +537,7 @@ func (s *BotService) List(ctx context.Context, actor domain.User) ([]domain.Bot,
 	}
 	out := all[:0]
 	for _, b := range all {
-		if b.DesiredState != domain.DesiredDeleted {
+		if b.DesiredState != domain.DesiredDeleted && actor.Client.AllowsBot(b.ID, b.WorkspaceID) {
 			out = append(out, b)
 		}
 	}
@@ -389,6 +551,9 @@ func (s *BotService) Update(ctx context.Context, actor domain.User, id string, i
 		return domain.Bot{}, err
 	}
 	old := b
+	if b.IsGame() && (in.Runtime != nil || in.Argv != nil || in.Entrypoint != nil || in.BuildCommand != nil) {
+		return domain.Bot{}, domain.Invalid("a game server's startup comes from its server type; change its settings under Startup")
+	}
 	rt, ok := s.Catalog.Get(b.Runtime)
 	if !ok {
 		return domain.Bot{}, fmt.Errorf("runtime %q missing from catalog", b.Runtime)
@@ -580,6 +745,9 @@ func (s *BotService) setIntent(ctx context.Context, actor domain.User, id, desir
 		if _, ok := s.Catalog.Get(b.Runtime); !ok {
 			return domain.Bot{}, domain.Invalid("runtime is no longer available")
 		}
+		if err := s.checkRemotePorts(ctx, b); err != nil {
+			return domain.Bot{}, err
+		}
 	}
 	// A bot that is meant to run but has settled in a terminal state (a clean
 	// exit, a crash with no restart left, or the restart policy said stop) needs
@@ -612,7 +780,7 @@ func (s *BotService) ListEnv(ctx context.Context, actor domain.User, id string) 
 	}
 	out := make([]EnvView, 0, len(rows))
 	for _, r := range rows {
-		if strings.HasPrefix(r.Name, "BOTPANEL_ADDON_") {
+		if strings.HasPrefix(r.Name, "RIVET_ADDON_") {
 			continue // add-on passwords are shown on the Add-ons tab
 		}
 		out = append(out, EnvView{r.Name, r.UpdatedAtMS})
@@ -630,7 +798,7 @@ func (s *BotService) SetEnv(ctx context.Context, actor domain.User, id string, v
 }
 
 // putEnv validates, seals and stores variables. System callers may set the
-// reserved BOTPANEL_* names that users cannot.
+// reserved RIVET_* names that users cannot.
 func (s *BotService) putEnv(ctx context.Context, b domain.Bot, vars map[string]string, system bool) error {
 	if len(vars) == 0 {
 		return domain.Invalid("no variables provided")
@@ -682,13 +850,55 @@ func (s *BotService) DeleteEnv(ctx context.Context, actor domain.User, id, name 
 	if _, err := s.loadPerm(ctx, actor, id, domain.PermManageEnv, false); err != nil {
 		return err
 	}
-	if strings.HasPrefix(name, "BOTPANEL_ADDON_") {
+	if strings.HasPrefix(name, "RIVET_ADDON_") {
 		return domain.Invalid("this password belongs to an add-on; remove the add-on instead")
+	}
+	if strings.HasPrefix(name, "RIVET_AGREEMENT_") {
+		return domain.Invalid("this records an accepted agreement and cannot be removed")
 	}
 	if err := s.Coord.Blocked(id); err != nil {
 		return err
 	}
 	return s.Store.DeleteEnv(ctx, id, name, s.now())
+}
+
+// MaxCommandBytes bounds one console command.
+const MaxCommandBytes = 1000
+
+// SendCommand writes one line to a running server's or bot's console input.
+// It needs the power permission, like typing in the console.
+func (s *BotService) SendCommand(ctx context.Context, actor domain.User, id, line string) error {
+	b, err := s.loadPerm(ctx, actor, id, domain.PermPower, false)
+	if err != nil {
+		return err
+	}
+	return s.sendCommand(ctx, b, line)
+}
+
+func (s *BotService) sendCommand(ctx context.Context, b domain.Bot, line string) error {
+	line = strings.TrimSpace(line)
+	if line == "" || len(line) > MaxCommandBytes || strings.ContainsAny(line, "\n\r\x00") || !utf8.ValidString(line) {
+		return domain.Invalid(fmt.Sprintf("a command is one line of 1-%d bytes", MaxCommandBytes))
+	}
+	var src interface {
+		AttachStdin(ctx context.Context, containerID string) (io.WriteCloser, error)
+	} = s.Stdin
+	if s.StdinFor != nil {
+		src = s.StdinFor(b.NodeID)
+	}
+	if src == nil {
+		return domain.ErrRunnerUnavailable
+	}
+	if b.ContainerID == nil || b.DesiredState != domain.DesiredRunning || b.ObservedState != "running" {
+		return domain.Invalid("it is not running")
+	}
+	w, err := src.AttachStdin(ctx, *b.ContainerID)
+	if err != nil {
+		return fmt.Errorf("attach console: %w", err)
+	}
+	defer w.Close() // detaches only; the process keeps its input
+	_, err = io.WriteString(w, line+"\n")
+	return err
 }
 
 // DecryptEnv returns plaintext variables for container construction. It is
@@ -707,6 +917,87 @@ func (s *BotService) DecryptEnv(ctx context.Context, botID string) (map[string]s
 		out[r.Name] = string(pt)
 	}
 	return out, nil
+}
+
+// Bounds for seeding a template onto a remote node in one transactional
+// patch (the agent's ApplyPatch accepts at most 32 files; its own ceilings
+// are agentproto.MaxPatchFile and MaxPatchTotal, which these stay below).
+const (
+	maxRemoteSeedFiles = 32
+	maxRemoteSeedFile  = 1 << 20
+	maxRemoteSeedTotal = 8 << 20
+)
+
+// checkRemoteSeed refuses a template that cannot be seeded in one patch.
+func checkRemoteSeed(files []templates.File) error {
+	if len(files) > maxRemoteSeedFiles {
+		return domain.Invalid(fmt.Sprintf("this template has more than %d files and cannot be created on a remote node yet", maxRemoteSeedFiles))
+	}
+	var total int64
+	for _, f := range files {
+		if len(f.Data) > maxRemoteSeedFile {
+			return domain.Invalid("a file of this template is too large to create on a remote node")
+		}
+		total += int64(len(f.Data))
+	}
+	if total > maxRemoteSeedTotal {
+		return domain.Invalid("this template is too large to create on a remote node")
+	}
+	return nil
+}
+
+// seedRemote writes a template into a new server's workspace on its node as
+// one create-only transaction: the node makes the directory, stages and
+// swaps every file through its journal (a file that already exists is a
+// conflict), and keeps the change reversible until it is committed here. A
+// lost commit answer is retried once (completion is idempotent on the node);
+// if it still cannot be confirmed the change is rolled back explicitly (an
+// unconfirmed patch also expires to rollback on the node).
+func (s *BotService) seedRemote(ctx context.Context, nf NodeFiles, b domain.Bot, files []templates.File) error {
+	if err := nf.CreateWorkspace(ctx, b.NodeID, b.ID); err != nil {
+		return err
+	}
+	patch := make([]filesystem.PatchFile, len(files))
+	for i, f := range files {
+		data := f.Data
+		if data == nil {
+			data = []byte{} // nil would delete the path
+		}
+		patch[i] = filesystem.PatchFile{Path: f.Path, After: data}
+	}
+	tx, _, err := nf.BeginPatch(ctx, b.NodeID, b.ID, patch, maxRemoteSeedFile, maxRemoteSeedTotal)
+	if err != nil {
+		return err
+	}
+	cctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+	defer cancel()
+	if err = nf.CompleteTransaction(cctx, b.NodeID, b.ID, tx, true); err == nil {
+		return nil
+	}
+	if err = nf.CompleteTransaction(cctx, b.NodeID, b.ID, tx, true); err == nil {
+		return nil
+	}
+	_ = nf.CompleteTransaction(cctx, b.NodeID, b.ID, tx, false)
+	return fmt.Errorf("the node did not confirm the template files: %w", err)
+}
+
+// discardNew removes a server whose creation failed partway, so nothing
+// half-created is left looking usable. A local server's workspace and row
+// go at once. A remote server goes through the normal delete lifecycle: it
+// is marked deleted (hidden everywhere) and its agent purges it, removing
+// its directory on the node and then the row; if the agent cannot do that
+// now, it finishes when it reconnects. Nothing on the panel's disk is
+// touched for a remote server.
+func (s *BotService) discardNew(ctx context.Context, b domain.Bot) {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+	defer cancel()
+	_ = s.Store.MarkBotDeleted(ctx, b.ID, s.now())
+	if s.remote(b.NodeID) && s.Purger != nil {
+		_ = s.Purger.Purge(ctx, b.ID)
+		return
+	}
+	s.removeWorkspace(b.NodeID, b.ID)
+	_ = s.Store.DeleteBotRow(ctx, b.ID)
 }
 
 // seed writes template files into a new bot's workspace.
@@ -745,9 +1036,9 @@ func (s *BotService) RevealEnv(ctx context.Context, actor domain.User, id, name 
 }
 
 // StopOwnedBy records stopped intent for every bot a user owns (offboarding:
-// disabling an account does not by itself stop its bots). Admin only.
+// disabling an account does not by itself stop its bots). Needs users.manage.
 func (s *BotService) StopOwnedBy(ctx context.Context, actor domain.User, ownerID string) (int, error) {
-	if !actor.IsAdmin() {
+	if !actor.Can(domain.PermUsersManage) {
 		return 0, domain.ErrForbidden
 	}
 	if s.Notifier == nil {

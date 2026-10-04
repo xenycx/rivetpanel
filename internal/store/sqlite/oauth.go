@@ -3,7 +3,7 @@ package sqlite
 import (
 	"context"
 
-	"botpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/domain"
 )
 
 const oauthCols = `provider, provider_user_id, user_id, username, email, avatar_url, scopes,
@@ -122,8 +122,8 @@ func (db *DB) CreateUserWithOAuth(ctx context.Context, u domain.User, a domain.O
 		return err
 	}
 	defer tx.Rollback()
-	if _, err := tx.ExecContext(ctx, `INSERT INTO users (`+userCols+`) VALUES (?,?,?,?,?,?,?,?,?)`,
-		u.ID, u.Email, u.DisplayName, u.AvatarJPEG, u.PasswordHash, u.Role, boolInt(u.Disabled), u.CreatedAtMS, u.UpdatedAtMS); err != nil {
+	if _, err := tx.ExecContext(ctx, `INSERT INTO users (`+userCols+`) VALUES (?,?,?,?,?,?,?,?,?,?)`,
+		u.ID, u.Email, u.DisplayName, u.AvatarJPEG, u.PasswordHash, u.Role, boolInt(u.Disabled), u.CreatedAtMS, u.UpdatedAtMS, boolInt(u.EmailVerified)); err != nil {
 		return mapErr(err)
 	}
 	if _, err := tx.ExecContext(ctx, `INSERT INTO oauth_accounts (`+oauthCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
@@ -146,7 +146,8 @@ type SealedRow struct {
 }
 
 // WalkSealed calls fn for every sealed value outside bot environment variables:
-// OAuth tokens, Discord webhooks, GitHub webhook secrets and TOTP secrets.
+// OAuth tokens, Discord webhooks, GitHub webhook secrets, TOTP secrets, panel
+// settings and environment overrides, and OIDC client secrets.
 func (db *DB) WalkSealed(ctx context.Context, fn func(SealedRow) error) error {
 	rows, err := db.QueryContext(ctx, `SELECT 'oauth:' || user_id, provider || ':token', token_key_id, token_ciphertext, token_nonce
 			FROM oauth_accounts WHERE token_ciphertext IS NOT NULL
@@ -156,7 +157,8 @@ func (db *DB) WalkSealed(ctx context.Context, fn func(SealedRow) error) error {
 			FROM github_repos
 		UNION ALL SELECT 'mfa:' || user_id, 'totp', secret_key_id, secret_cipher, secret_nonce FROM user_mfa
 		UNION ALL SELECT 'settings', key, secret_key_id, secret_cipher, secret_nonce FROM panel_settings WHERE secret_cipher IS NOT NULL
-		UNION ALL SELECT 'env', name, secret_key_id, secret_cipher, secret_nonce FROM env_overrides WHERE secret_cipher IS NOT NULL`)
+		UNION ALL SELECT 'env', name, secret_key_id, secret_cipher, secret_nonce FROM env_overrides WHERE secret_cipher IS NOT NULL
+		UNION ALL SELECT 'oidc:' || id, 'client_secret', secret_key_id, secret_ciphertext, secret_nonce FROM oidc_providers WHERE secret_ciphertext IS NOT NULL`)
 	if err != nil {
 		return err
 	}

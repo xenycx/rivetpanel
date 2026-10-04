@@ -7,19 +7,19 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 
-	"botpanel/internal/auth"
-	"botpanel/internal/domain"
-	"botpanel/internal/service"
+	"github.com/xenycx/rivetpanel/internal/auth"
+	"github.com/xenycx/rivetpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/service"
 )
 
-func (s *server) setSessionCookie(c fiber.Ctx, token string, exp time.Time) {
+func (s *panel) setSessionCookie(c fiber.Ctx, token string, exp time.Time) {
 	c.Cookie(&fiber.Cookie{
 		Name: sessionCookie, Value: token, Path: "/", Expires: exp,
 		HTTPOnly: true, Secure: s.secureCookies, SameSite: fiber.CookieSameSiteStrictMode,
 	})
 }
 
-func (s *server) login(c fiber.Ctx) error {
+func (s *panel) login(c fiber.Ctx) error {
 	var in struct {
 		Email    string `json:"email"`
 		Password string `json:"password"`
@@ -48,7 +48,7 @@ func (s *server) login(c fiber.Ctx) error {
 	return c.JSON(fiber.Map{"user": toUser(sess.User), "csrf_token": sess.CSRF})
 }
 
-func (s *server) logout(c fiber.Ctx) error {
+func (s *panel) logout(c fiber.Ctx) error {
 	if err := s.auth.Logout(c.Context(), currentToken(c)); err != nil {
 		return err
 	}
@@ -56,22 +56,40 @@ func (s *server) logout(c fiber.Ctx) error {
 	return c.SendStatus(fiber.StatusNoContent)
 }
 
-func (s *server) me(c fiber.Ctx) error {
+func (s *panel) me(c fiber.Ctx) error {
 	u := currentUser(c)
-	return c.JSON(fiber.Map{"user": toUser(u), "csrf_token": auth.CSRFToken(currentToken(c)), "has_password": u.PasswordHash != "",
+	csrf := ""
+	if u.Client == nil { // API clients send no cookie and need no CSRF token
+		csrf = auth.CSRFToken(currentToken(c))
+	}
+	return c.JSON(fiber.Map{"user": toUser(u), "csrf_token": csrf, "has_password": u.PasswordHash != "",
 		// What this installation offers, so the interface can explain missing
 		// features instead of calling routes that do not exist.
 		"features": fiber.Map{
 			"runner": s.bots.Notifier != nil, "console": s.console != nil, "stats": s.stats != nil, "files": s.files != nil,
 			"deploy": s.deploy != nil && s.oauth.Enabled("github"), "backups": s.backups != nil, "analytics": s.analytics != nil, "sftp": s.sftp != nil,
 			"operations": s.ops != nil, "oauth": s.oauth.AnyEnabled(), "schedules": s.schedules != nil, "mfa": s.mfa != nil, "automation": s.tokens != nil, "health": s.health != nil,
-			"sites": s.sites.Enabled(), "workspaces": true, "ai": s.ai != nil, "mail": s.mail.Enabled(c.Context()),
+			"sites": s.sites.Enabled(), "workspaces": true, "ai": s.ai != nil, "games": s.games != nil, "agents": s.enrollment != nil, "mail": s.mail.Enabled(c.Context()),
 			// Public repositories deploy without GitHub sign-in; add-ons need the Docker runner.
 			"public_repos": s.deploy != nil, "addons": s.bots.AddonData != nil,
-		}, "email_alerts": s.emailAlerts(c), "email_news": s.emailNews(c)})
+			"api_clients": s.clients != nil, "passkeys": s.passkeys != nil, "usage": s.usage != nil,
+		}, "email_alerts": s.emailAlerts(c), "email_news": s.emailNews(c),
+		// Effective role permissions (after the unverified-email policy); the
+		// interface uses them to show what the server will allow.
+		"permissions": nonNil(u.EffectivePermissions()), "email_verification": s.emailVerification(c, u),
+		"api_client": clientInfo(u)})
 }
 
-func (s *server) updateProfile(c fiber.Ctx) error {
+// clientInfo names the API client a request was authenticated by (nil for a
+// browser session).
+func clientInfo(u domain.User) fiber.Map {
+	if u.Client == nil {
+		return nil
+	}
+	return fiber.Map{"id": u.Client.ID, "name": u.Client.Name, "bot_ids": u.Client.BotIDs, "workspace_ids": u.Client.WorkspaceIDs}
+}
+
+func (s *panel) updateProfile(c fiber.Ctx) error {
 	var in struct {
 		DisplayName string  `json:"display_name"`
 		Avatar      *string `json:"avatar_jpeg"`
@@ -94,7 +112,7 @@ func (s *server) updateProfile(c fiber.Ctx) error {
 	return c.JSON(toUser(u))
 }
 
-func (s *server) userAvatar(c fiber.Ctx) error {
+func (s *panel) userAvatar(c fiber.Ctx) error {
 	u, err := s.auth.Store.GetUserByID(c.Context(), strings.Clone(c.Params("id")))
 	if err != nil {
 		return err
@@ -152,7 +170,7 @@ type sessionDTO struct {
 	Current      bool   `json:"current"`
 }
 
-func (s *server) listSessions(c fiber.Ctx) error {
+func (s *panel) listSessions(c fiber.Ctx) error {
 	_, cur, err := s.auth.AuthenticateSession(c.Context(), currentToken(c))
 	if err != nil {
 		return err
@@ -168,14 +186,14 @@ func (s *server) listSessions(c fiber.Ctx) error {
 	return c.JSON(fiber.Map{"sessions": out})
 }
 
-func (s *server) revokeSession(c fiber.Ctx) error {
+func (s *panel) revokeSession(c fiber.Ctx) error {
 	if err := s.auth.RevokeSession(c.Context(), currentUser(c), strings.Clone(c.Params("sid"))); err != nil {
 		return err
 	}
 	return c.SendStatus(fiber.StatusNoContent)
 }
 
-func (s *server) revokeOtherSessions(c fiber.Ctx) error {
+func (s *panel) revokeOtherSessions(c fiber.Ctx) error {
 	n, err := s.auth.RevokeOtherSessions(c.Context(), currentUser(c), currentToken(c))
 	if err != nil {
 		return err
@@ -183,7 +201,7 @@ func (s *server) revokeOtherSessions(c fiber.Ctx) error {
 	return c.JSON(fiber.Map{"revoked": n})
 }
 
-func (s *server) changePassword(c fiber.Ctx) error {
+func (s *panel) changePassword(c fiber.Ctx) error {
 	var in struct {
 		Current string `json:"current_password"`
 		New     string `json:"new_password"`
@@ -198,7 +216,10 @@ func (s *server) changePassword(c fiber.Ctx) error {
 	return c.SendStatus(fiber.StatusNoContent)
 }
 
-func (s *server) createUser(c fiber.Ctx) error {
+// createUser adds an account with the built-in "admin" or "user" role or a
+// custom role id. Only administrators create administrators; delegated
+// account managers can only give roles whose permissions they hold.
+func (s *panel) createUser(c fiber.Ctx) error {
 	var in struct {
 		Email    string `json:"email"`
 		Password string `json:"password"`
@@ -207,17 +228,45 @@ func (s *server) createUser(c fiber.Ctx) error {
 	if err := decode(c, &in); err != nil {
 		return err
 	}
+	actor := currentUser(c)
 	if in.Role == "" {
 		in.Role = domain.RoleUser
 	}
-	u, err := s.auth.CreateUser(c.Context(), in.Email, in.Password, in.Role)
+	base := in.Role
+	if base != domain.RoleAdmin {
+		base = domain.RoleUser
+	}
+	if base == domain.RoleAdmin && !actor.IsAdmin() {
+		return domain.ErrForbidden
+	}
+	if in.Role != base || !actor.IsAdmin() {
+		// Check the role (exists, grantable) before any account is created.
+		r, err := s.auth.Store.GetRole(c.Context(), in.Role)
+		if err != nil {
+			return domain.Invalid("that role does not exist")
+		}
+		for _, p := range r.Permissions {
+			if !actor.Can(p) {
+				return domain.Invalid("you cannot grant " + p + ": you do not hold it yourself")
+			}
+		}
+	}
+	u, err := s.auth.CreateUser(c.Context(), in.Email, in.Password, base)
 	if err != nil {
 		return err
+	}
+	if in.Role != base {
+		r, err := s.auth.AssignRole(c.Context(), actor, u.ID, in.Role)
+		if err != nil {
+			return err
+		}
+		u.RoleID, u.RoleName = r.ID, r.Name
+		s.auditUser(c, "admin.user_role", u.ID, r.Name)
 	}
 	return c.Status(fiber.StatusCreated).JSON(toUser(u))
 }
 
-func (s *server) listUsers(c fiber.Ctx) error {
+func (s *panel) listUsers(c fiber.Ctx) error {
 	us, err := s.auth.ListUsers(c.Context(), currentUser(c))
 	if err != nil {
 		return err
@@ -238,26 +287,52 @@ func (s *server) listUsers(c fiber.Ctx) error {
 	return c.JSON(fiber.Map{"users": out})
 }
 
-// patchUser changes an account's role or enabled state. stop_bots, with
-// disabled=true, also stops every bot the account owns (offboarding).
-func (s *server) patchUser(c fiber.Ctx) error {
+// patchUser changes an account's role ("admin", "user" or a custom role
+// id), enabled state, email address (which then needs verifying again) or
+// verified flag. stop_bots, with disabled=true, also stops every bot the
+// account owns (offboarding).
+func (s *panel) patchUser(c fiber.Ctx) error {
 	var in struct {
-		Disabled *bool   `json:"disabled"`
-		Role     *string `json:"role"`
-		StopBots bool    `json:"stop_bots"`
+		Disabled      *bool   `json:"disabled"`
+		Role          *string `json:"role"`
+		StopBots      bool    `json:"stop_bots"`
+		Email         *string `json:"email"`
+		EmailVerified *bool   `json:"email_verified"`
 	}
 	if err := decode(c, &in); err != nil {
 		return err
 	}
-	if in.Disabled == nil && in.Role == nil {
+	if in.Disabled == nil && in.Role == nil && in.Email == nil && in.EmailVerified == nil {
 		return domain.Invalid("nothing to change")
 	}
 	id := strings.Clone(c.Params("id"))
 	actor := currentUser(c)
 	if in.Role != nil {
-		if err := s.auth.SetRole(c.Context(), actor, id, *in.Role); err != nil {
+		r, err := s.auth.AssignRole(c.Context(), actor, id, strings.Clone(*in.Role))
+		if err != nil {
 			return err
 		}
+		s.auditUser(c, "admin.user_role", id, r.Name)
+	}
+	if in.Email != nil {
+		prev, err := s.auth.SetEmail(c.Context(), actor, id, *in.Email)
+		if err != nil {
+			return err
+		}
+		if !strings.EqualFold(prev.Email, strings.TrimSpace(*in.Email)) {
+			s.auditUser(c, "admin.user_email", id, prev.Email+" -> "+strings.ToLower(strings.TrimSpace(*in.Email)))
+			s.mail.Notify(prev.Email, "An administrator changed this account's email address. Sign-in now uses the new address.")
+		}
+	}
+	if in.EmailVerified != nil {
+		if err := s.auth.SetEmailVerified(c.Context(), actor, id, *in.EmailVerified); err != nil {
+			return err
+		}
+		what := "unverified"
+		if *in.EmailVerified {
+			what = "verified"
+		}
+		s.auditUser(c, "admin.user_email_verified", id, what)
 	}
 	if in.Disabled != nil {
 		if err := s.auth.SetDisabled(c.Context(), actor, id, *in.Disabled); err != nil {
@@ -274,7 +349,7 @@ func (s *server) patchUser(c fiber.Ctx) error {
 
 // recordSignIn keeps successful and failed password/provider sign-ins in the
 // account's activity (failed attempts only for existing accounts).
-func (s *server) recordSignIn(c fiber.Ctx, u domain.User, email string, err error, method string) {
+func (s *panel) recordSignIn(c fiber.Ctx, u domain.User, email string, err error, method string) {
 	if s.audit == nil {
 		return
 	}
@@ -295,7 +370,7 @@ func (s *server) recordSignIn(c fiber.Ctx, u domain.User, email string, err erro
 
 // emailAlerts is whether the signed-in account gets alert emails (true when
 // the switch is not available).
-func (s *server) emailAlerts(c fiber.Ctx) bool {
+func (s *panel) emailAlerts(c fiber.Ctx) bool {
 	if s.mailPrefs == nil {
 		return true
 	}
@@ -304,10 +379,17 @@ func (s *server) emailAlerts(c fiber.Ctx) bool {
 }
 
 // emailNews is whether the signed-in account gets optional news emails.
-func (s *server) emailNews(c fiber.Ctx) bool {
+func (s *panel) emailNews(c fiber.Ctx) bool {
 	if s.mailPrefs == nil {
 		return true
 	}
 	on, err := s.mailPrefs.UserEmailNews(c.Context(), currentUser(c).ID)
 	return err != nil || on
+}
+
+func nonNil(xs []string) []string {
+	if xs == nil {
+		return []string{}
+	}
+	return xs
 }

@@ -6,7 +6,7 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 
-	"botpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/domain"
 )
 
 type errorBody struct {
@@ -64,7 +64,12 @@ func errorHandler(log *slog.Logger) fiber.ErrorHandler {
 		var ve *domain.ValidationError
 		var be *domain.BusyError
 		var ce *domain.CapacityError
+		var pe *domain.PermissionError
 		switch {
+		case errors.As(err, &pe):
+			status, msg = fiber.StatusForbidden, pe.Error()
+		case errors.As(err, new(*domain.ScopeError)):
+			status, msg = fiber.StatusForbidden, err.Error()
 		case errors.As(err, &be):
 			status, msg = fiber.StatusConflict, be.Error()
 		case errors.As(err, &ce):
@@ -85,7 +90,9 @@ func errorHandler(log *slog.Logger) fiber.ErrorHandler {
 			status, msg = fiber.StatusConflict, "conflict; reload and retry"
 		case errors.As(err, &fe):
 			status = fe.Code
-			if status < 500 {
+			// 503 messages are written by handlers for the user (for example
+			// "the server's node is offline"); other 5xx texts stay private.
+			if status < 500 || status == fiber.StatusServiceUnavailable {
 				msg = fe.Message
 			}
 		}
@@ -98,3 +105,7 @@ func errorHandler(log *slog.Logger) fiber.ErrorHandler {
 
 func asErr[T error](err error, target *T) bool { return errors.As(err, target) }
 func isErr(err, target error) bool             { return errors.Is(err, target) }
+
+// ErrorHandler formats errors exactly like the panel API does (rivet-agent
+// uses it so forwarded responses look the same to clients).
+func ErrorHandler(log *slog.Logger) fiber.ErrorHandler { return errorHandler(log) }

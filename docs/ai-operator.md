@@ -1,6 +1,6 @@
 # AI assistant (AI operator)
 
-BotForge’s AI assistant is one private chat for the whole panel. It opens from
+RivetPanel’s AI assistant is one private chat for the whole panel. It opens from
 the **Ask AI** button at the bottom right of every page and from the sparkle
 button in the header (`Ctrl+.`). It uses administrator-configured
 OpenAI-compatible Chat Completions providers (DeepSeek is the first preset) and
@@ -206,7 +206,16 @@ them by path, and it is capped at 60,000 files and 512 MiB. The default
 timeout is ten minutes and the hard ceiling is twenty.
 
 This isolation is enforced by the application plus the existing Docker runtime
-adapter. The wider privileged `botrunner` daemon project is **not implemented**;
-the panel process still talks to Docker. Web research is separate from the
+adapter. For a bot on a remote node, the file tools (list, read, search,
+propose change, Undo) go through its `rivet-agent` with the same protected
+paths, limits and redaction; changes are revision-checked and journaled on the
+node until the panel records them (agent protocol 5, see `agents.md`).
+Isolated diagnostics for a remote bot run on its node (agent protocol 7):
+the panel keeps authorization, approvals, the run limit and secret redaction,
+and the agent validates the command against its own allowlist, copies the same
+safe snapshot and runs the same offline, resource-limited container on the
+node's Docker (at most two at once per node). The panel's disk and Docker are
+never used for a remote bot, and an offline node is refused before anything
+runs. Web research is separate from the
 offline command container. Active runs are marked interrupted after a panel
 restart and can be retried from their retained chat.

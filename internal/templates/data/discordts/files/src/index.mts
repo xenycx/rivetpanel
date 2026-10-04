@@ -4,10 +4,10 @@
 import { createRequire } from 'node:module';
 import { Client, Events, GatewayIntentBits, type ChatInputCommandInteraction, type Guild } from 'discord.js';
 
-// The BotPanel SDK is a CommonJS file next to package.json.
+// The RivetPanel SDK is a CommonJS file next to package.json.
 const require = createRequire(import.meta.url);
-const { BotPanel } = require('../botpanel.js') as {
-  BotPanel: new (client: Client) => { start(): void; command(name: string): void; event(name: string, data?: unknown): void };
+const { RivetPanel } = require('../rivetpanel.js') as {
+  RivetPanel: new (client: Client) => { start(): void; command(name: string): void; event(name: string, data?: unknown): void };
 };
 
 const token: string | undefined = process.env.DISCORD_TOKEN;
@@ -17,7 +17,7 @@ if (!token) {
 }
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
-const panel = new BotPanel(client); // no-op until you generate a key on the Analytics tab
+const panel = new RivetPanel(client); // no-op until you generate a key on the Analytics tab
 
 type Handler = (interaction: ChatInputCommandInteraction) => Promise<void>;
 const commands: Record<string, { description: string; run: Handler }> = {

@@ -4,7 +4,7 @@ BIN := bin
 # it explicitly (for example `make release VERSION=1.2.3-rc.1`).
 VERSION ?= $(shell tr -d '\r\n' < VERSION)
 
-.PHONY: all web build test check integration e2e run-dev clean release version-check
+.PHONY: all web build test check integration e2e run-dev clean release version-check namespace-check
 
 all: build
 
@@ -16,19 +16,28 @@ web:
 
 # Production binary (frontend embedded). Build the frontend first.
 build: version-check web
-	CGO_ENABLED=0 $(GO) build -trimpath -ldflags='-s -w -X main.version=$(VERSION)' -o $(BIN)/botpanel ./cmd/botpanel
+	mkdir -p $(BIN)
+	CGO_ENABLED=0 $(GO) build -trimpath -ldflags='-s -w -X main.version=$(VERSION)' -o $(BIN)/rivetpanel ./cmd/rivetpanel
+	CGO_ENABLED=0 $(GO) build -trimpath -ldflags='-s -w -X main.version=$(VERSION)' -o $(BIN)/rivet-agent ./cmd/rivet-agent
 
 test:
 	$(GO) vet ./...
 	$(GO) test ./...
 
 # Real-Docker tests. Needs a DISPOSABLE daemon:
-#   BOTPANEL_TEST_DOCKER_HOST=unix:///path/docker.sock [BOTPANEL_TEST_IMAGE_PREFIX=mirror.gcr.io/library/] [BOTPANEL_TEST_ROOTLESS=1]
+#   RIVET_TEST_DOCKER_HOST=unix:///path/docker.sock [RIVET_TEST_IMAGE_PREFIX=mirror.gcr.io/library/] [RIVET_TEST_ROOTLESS=1]
 integration:
 	$(GO) test -tags integration -count=1 -timeout 60m -v ./tests/integration
 
-check: version-check test
+check: version-check namespace-check test
 	cd web && npm run check
+
+# Historical release notes retain the former identity; active source,
+# deployment files and documentation must use the RivetPanel namespace.
+namespace-check:
+	@if git grep -nEI '(botforge|botpanel|BOTPANEL)' -- ':!CHANGELOG.md' ':!Makefile' ':!docs/implementation-handoff.md'; then \
+		echo 'legacy product namespace remains outside historical release notes' >&2; exit 1; \
+	fi
 
 # Keep the human-readable source of truth and npm metadata aligned. This is
 # intentionally dependency-free so it also runs in minimal release builders.
@@ -51,9 +60,10 @@ RELEASE_ARCHES ?= amd64 arm64
 release: version-check web
 	rm -rf dist && mkdir -p dist
 	set -e; for arch in $(RELEASE_ARCHES); do \
-		name=botpanel-$(VERSION)-linux-$$arch; \
+		name=rivetpanel-$(VERSION)-linux-$$arch; \
 		mkdir -p dist/$$name; \
-		CGO_ENABLED=0 GOOS=linux GOARCH=$$arch $(GO) build -trimpath -ldflags='-s -w -X main.version=$(VERSION)' -o dist/$$name/botpanel ./cmd/botpanel; \
+		CGO_ENABLED=0 GOOS=linux GOARCH=$$arch $(GO) build -trimpath -ldflags='-s -w -X main.version=$(VERSION)' -o dist/$$name/rivetpanel ./cmd/rivetpanel; \
+		CGO_ENABLED=0 GOOS=linux GOARCH=$$arch $(GO) build -trimpath -ldflags='-s -w -X main.version=$(VERSION)' -o dist/$$name/rivet-agent ./cmd/rivet-agent; \
 		cp -r deploy dist/$$name/deploy; \
 		cp -r docs dist/$$name/docs; \
 		cp README.md CHANGELOG.md VERSION dist/$$name/; \
@@ -65,7 +75,7 @@ release: version-check web
 
 # Run against ./.dev-data; needs no Docker or system directories.
 run-dev:
-	BOTPANEL_ENV=development $(GO) run ./cmd/botpanel
+	RIVET_ENV=development $(GO) run ./cmd/rivetpanel
 
 clean:
 	rm -rf $(BIN) dist web/build web/.svelte-kit

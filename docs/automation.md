@@ -22,38 +22,38 @@ is shown once.
 ## Examples
 
 ```sh
-export BOTPANEL=https://panel.example.com
-export BOTPANEL_TOKEN=bpa_...
+export RIVET=https://panel.example.com
+export RIVET_TOKEN=bpa_...
 
 # List bots and their state
-curl -s -H "Authorization: Bearer $BOTPANEL_TOKEN" $BOTPANEL/api/v1/automation/bots
+curl -s -H "Authorization: Bearer $RIVET_TOKEN" $RIVET/api/v1/automation/bots
 
 # Restart a bot; the same Idempotency-Key within 24 h replays the first answer
-curl -s -X POST -H "Authorization: Bearer $BOTPANEL_TOKEN" \
+curl -s -X POST -H "Authorization: Bearer $RIVET_TOKEN" \
   -H "Idempotency-Key: $CI_PIPELINE_ID-restart" \
-  $BOTPANEL/api/v1/automation/bots/$BOT_ID/restart
+  $RIVET/api/v1/automation/bots/$BOT_ID/restart
 
 # Deploy the linked branch, or one commit
-curl -s -X POST -H "Authorization: Bearer $BOTPANEL_TOKEN" -H "Content-Type: application/json" \
-  -d '{"sha":"'"$GITHUB_SHA"'"}' $BOTPANEL/api/v1/automation/bots/$BOT_ID/deploy
+curl -s -X POST -H "Authorization: Bearer $RIVET_TOKEN" -H "Content-Type: application/json" \
+  -d '{"sha":"'"$GITHUB_SHA"'"}' $RIVET/api/v1/automation/bots/$BOT_ID/deploy
 
 # Follow the deployment
-curl -s -H "Authorization: Bearer $BOTPANEL_TOKEN" \
-  "$BOTPANEL/api/v1/automation/bots/$BOT_ID/operations?kind=deploy,rollback&limit=1"
+curl -s -H "Authorization: Bearer $RIVET_TOKEN" \
+  "$RIVET/api/v1/automation/bots/$BOT_ID/operations?kind=deploy,rollback&limit=1"
 
 # Back up before a risky change
-curl -s -X POST -H "Authorization: Bearer $BOTPANEL_TOKEN" -H "Content-Type: application/json" \
-  -d '{"label":"before release"}' $BOTPANEL/api/v1/automation/bots/$BOT_ID/backups
+curl -s -X POST -H "Authorization: Bearer $RIVET_TOKEN" -H "Content-Type: application/json" \
+  -d '{"label":"before release"}' $RIVET/api/v1/automation/bots/$BOT_ID/backups
 ```
 
 ### GitHub Actions
 
 ```yaml
-- name: Deploy to BotForge
+- name: Deploy to RivetPanel
   env:
-    BOTPANEL_TOKEN: ${{ secrets.BOTPANEL_TOKEN }}
+    RIVET_TOKEN: ${{ secrets.RIVET_TOKEN }}
   run: |
-    curl -sf -X POST -H "Authorization: Bearer $BOTPANEL_TOKEN" \
+    curl -sf -X POST -H "Authorization: Bearer $RIVET_TOKEN" \
       -H "Idempotency-Key: ${{ github.run_id }}-${{ github.run_attempt }}" \
       -H "Content-Type: application/json" -d '{"sha":"${{ github.sha }}"}' \
       https://panel.example.com/api/v1/automation/bots/${{ vars.BOT_ID }}/deploy

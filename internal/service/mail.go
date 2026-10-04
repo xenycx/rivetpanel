@@ -7,8 +7,8 @@ import (
 	"sync"
 	"time"
 
-	"botpanel/internal/domain"
-	"botpanel/internal/mail"
+	"github.com/xenycx/rivetpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/mail"
 )
 
 // Mail volume guards. They protect the Mailgun account and recipients from a
@@ -194,7 +194,7 @@ type TestResult struct {
 // Test checks the Mailgun key and domain and sends one message to the
 // administrator's chosen address.
 func (m *MailService) Test(ctx context.Context, actor domain.User, to string) (TestResult, error) {
-	if !actor.IsAdmin() {
+	if !actor.Can(domain.PermSettingsManage) {
 		return TestResult{}, domain.ErrForbidden
 	}
 	addr, err := mail.ValidateAddress(to)
@@ -266,7 +266,7 @@ func pick(rs []domain.MailRecipient, audience, kind string) (to []string, skippe
 
 // Audience counts who an announcement would reach.
 func (m *MailService) Audience(ctx context.Context, actor domain.User) (map[string]int, error) {
-	if !actor.IsAdmin() {
+	if !actor.Can(domain.PermMailAnnounce) {
 		return nil, domain.ErrForbidden
 	}
 	if m.Recipients == nil {
@@ -293,7 +293,7 @@ func (m *MailService) Audience(ctx context.Context, actor domain.User) (map[stri
 // announcement can run at a time and they are spaced a minute apart (a test
 // is exempt) so a double click cannot send twice.
 func (m *MailService) Broadcast(ctx context.Context, actor domain.User, subject, htmlBody, audience, kind string, test bool) (BroadcastResult, error) {
-	if !actor.IsAdmin() {
+	if !actor.Can(domain.PermMailAnnounce) {
 		return BroadcastResult{}, domain.ErrForbidden
 	}
 	subject = strings.TrimSpace(subject)
@@ -319,7 +319,7 @@ func (m *MailService) Broadcast(ctx context.Context, actor domain.User, subject,
 	if !cfg.Configured() {
 		return BroadcastResult{}, domain.Invalid("email is not set up: add the Mailgun key, domain and sender in Panel settings")
 	}
-	footer := "You receive this because you have an account on this BotForge panel."
+	footer := "You receive this because you have an account on this RivetPanel panel."
 	if kind == KindNews {
 		footer += " You can turn news emails off in Settings → Profile."
 	}

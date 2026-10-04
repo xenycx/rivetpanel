@@ -5,7 +5,7 @@ import (
 	"testing"
 	"testing/fstest"
 
-	rt "botpanel/runtimes"
+	rt "github.com/xenycx/rivetpanel/runtimes"
 )
 
 func TestEmbeddedCatalogLoadsAllSix(t *testing.T) {

@@ -8,11 +8,11 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 
-	"botpanel/internal/domain"
-	"botpanel/internal/service"
+	"github.com/xenycx/rivetpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/service"
 )
 
-func (s *server) listRuntimes(c fiber.Ctx) error {
+func (s *panel) listRuntimes(c fiber.Ctx) error {
 	type rtDTO struct {
 		ID          string   `json:"id"`
 		DisplayName string   `json:"display_name"`
@@ -62,18 +62,20 @@ type addonIn struct {
 	MemoryBytes int64  `json:"memory_bytes"`
 }
 
-func (s *server) createBot(c fiber.Ctx) error {
+func (s *panel) createBot(c fiber.Ctx) error {
 	var in struct {
-		Name        string            `json:"name"`
-		Runtime     string            `json:"runtime"`
-		Argv        []string          `json:"argv"`
-		MemoryBytes int64             `json:"memory_bytes"`
-		NanoCPUs    int64             `json:"nano_cpus"`
-		PidsLimit   int64             `json:"pids_limit"`
-		TemplateID  *string           `json:"template_id"`
-		WorkspaceID string            `json:"workspace_id"`
-		GitHub      *githubIn         `json:"github"`
-		Env         map[string]string `json:"env"`
+		Name        string   `json:"name"`
+		Runtime     string   `json:"runtime"`
+		Argv        []string `json:"argv"`
+		MemoryBytes int64    `json:"memory_bytes"`
+		NanoCPUs    int64    `json:"nano_cpus"`
+		PidsLimit   int64    `json:"pids_limit"`
+		TemplateID  *string  `json:"template_id"`
+		WorkspaceID string   `json:"workspace_id"`
+		// NodeID places the bot on a node (administrators; "" = this panel).
+		NodeID string            `json:"node_id"`
+		GitHub *githubIn         `json:"github"`
+		Env    map[string]string `json:"env"`
 		// BuildCommand replaces the runtime's build step; Addons attaches
 		// databases (kinds from GET /addons).
 		BuildCommand string    `json:"build_command"`
@@ -85,7 +87,7 @@ func (s *server) createBot(c fiber.Ctx) error {
 	ci := service.CreateBotInput{
 		Name: in.Name, Runtime: in.Runtime, Argv: in.Argv, MemoryBytes: in.MemoryBytes,
 		NanoCPUs: in.NanoCPUs, PidsLimit: in.PidsLimit, TemplateID: in.TemplateID, Env: in.Env, WorkspaceID: in.WorkspaceID,
-		BuildCommand: in.BuildCommand,
+		BuildCommand: in.BuildCommand, NodeID: in.NodeID,
 	}
 	for _, a := range in.Addons {
 		ci.Addons = append(ci.Addons, service.AddonInput{Kind: a.Kind, MemoryBytes: a.MemoryBytes})
@@ -113,7 +115,7 @@ func (s *server) createBot(c fiber.Ctx) error {
 }
 
 // viewBot renders a bot with the caller's permissions.
-func (s *server) viewBot(c fiber.Ctx, b domain.Bot) botDTO {
+func (s *panel) viewBot(c fiber.Ctx, b domain.Bot) botDTO {
 	d := toBot(b)
 	u := currentUser(c)
 	d.Permissions = s.bots.Permissions(c.Context(), u, b)
@@ -131,7 +133,7 @@ func (s *server) viewBot(c fiber.Ctx, b domain.Bot) botDTO {
 
 // runnerErr reports whether the local runner can currently act (nil when it
 // can, or when no readiness probe is wired).
-func (s *server) runnerErr(ctx context.Context) error {
+func (s *panel) runnerErr(ctx context.Context) error {
 	if s.runnerReady == nil {
 		return nil
 	}
@@ -141,7 +143,7 @@ func (s *server) runnerErr(ctx context.Context) error {
 // listBots returns the caller's bots. Optional filters for scripts and large
 // fleets: q (name contains), runtime, tag, and limit/offset paging; the
 // response always carries the unpaged total.
-func (s *server) listBots(c fiber.Ctx) error {
+func (s *panel) listBots(c fiber.Ctx) error {
 	bs, err := s.bots.List(c.Context(), currentUser(c))
 	if err != nil {
 		return err
@@ -181,7 +183,7 @@ func (s *server) listBots(c fiber.Ctx) error {
 	return c.JSON(fiber.Map{"bots": out, "total": total})
 }
 
-func (s *server) getBot(c fiber.Ctx) error {
+func (s *panel) getBot(c fiber.Ctx) error {
 	b, err := s.bots.Get(c.Context(), currentUser(c), strings.Clone(c.Params("id")))
 	if err != nil {
 		return err
@@ -196,7 +198,7 @@ func (s *server) getBot(c fiber.Ctx) error {
 	return c.JSON(d)
 }
 
-func (s *server) setTags(c fiber.Ctx) error {
+func (s *panel) setTags(c fiber.Ctx) error {
 	var in struct {
 		Tags []string `json:"tags"`
 	}
@@ -213,7 +215,7 @@ func (s *server) setTags(c fiber.Ctx) error {
 	return c.JSON(fiber.Map{"tags": tags})
 }
 
-func (s *server) setFavorite(c fiber.Ctx) error {
+func (s *panel) setFavorite(c fiber.Ctx) error {
 	var in struct {
 		Favorite bool `json:"favorite"`
 	}
@@ -228,7 +230,7 @@ func (s *server) setFavorite(c fiber.Ctx) error {
 
 // batchBots applies one lifecycle action to several bots and reports each
 // outcome; bots the caller may not control fail individually.
-func (s *server) batchBots(c fiber.Ctx) error {
+func (s *panel) batchBots(c fiber.Ctx) error {
 	var in struct {
 		Action string   `json:"action"`
 		IDs    []string `json:"ids"`
@@ -257,7 +259,7 @@ func (s *server) batchBots(c fiber.Ctx) error {
 	return c.Status(fiber.StatusAccepted).JSON(fiber.Map{"results": out})
 }
 
-func (s *server) patchBot(c fiber.Ctx) error {
+func (s *panel) patchBot(c fiber.Ctx) error {
 	var in struct {
 		Name        *string   `json:"name"`
 		Argv        *[]string `json:"argv"`
@@ -294,7 +296,7 @@ func (s *server) patchBot(c fiber.Ctx) error {
 	return c.JSON(s.viewBot(c, b))
 }
 
-func (s *server) deleteBot(c fiber.Ctx) error {
+func (s *panel) deleteBot(c fiber.Ctx) error {
 	if err := s.bots.Delete(c.Context(), currentUser(c), strings.Clone(c.Params("id"))); err != nil {
 		return err
 	}
@@ -305,7 +307,7 @@ func (s *server) deleteBot(c fiber.Ctx) error {
 // not reflect the length of the real value.
 const maskedValue = "********"
 
-func (s *server) listEnv(c fiber.Ctx) error {
+func (s *panel) listEnv(c fiber.Ctx) error {
 	vs, err := s.bots.ListEnv(c.Context(), currentUser(c), strings.Clone(c.Params("id")))
 	if err != nil {
 		return err
@@ -322,7 +324,7 @@ func (s *server) listEnv(c fiber.Ctx) error {
 	return c.JSON(fiber.Map{"vars": out})
 }
 
-func (s *server) setEnv(c fiber.Ctx) error {
+func (s *panel) setEnv(c fiber.Ctx) error {
 	var in struct {
 		Vars map[string]string `json:"vars"`
 	}
@@ -335,14 +337,14 @@ func (s *server) setEnv(c fiber.Ctx) error {
 	return s.listEnv(c)
 }
 
-func (s *server) deleteEnv(c fiber.Ctx) error {
+func (s *panel) deleteEnv(c fiber.Ctx) error {
 	if err := s.bots.DeleteEnv(c.Context(), currentUser(c), strings.Clone(c.Params("id")), strings.Clone(c.Params("name"))); err != nil {
 		return err
 	}
 	return c.SendStatus(fiber.StatusNoContent)
 }
 
-func (s *server) lifecycle(op func(*service.BotService, fiber.Ctx, string) (domain.Bot, error)) fiber.Handler {
+func (s *panel) lifecycle(op func(*service.BotService, fiber.Ctx, string) (domain.Bot, error)) fiber.Handler {
 	return func(c fiber.Ctx) error {
 		b, err := op(s.bots, c, strings.Clone(c.Params("id")))
 		if err != nil {
@@ -356,7 +358,7 @@ func (s *server) lifecycle(op func(*service.BotService, fiber.Ctx, string) (doma
 	}
 }
 
-func (s *server) setPorts(c fiber.Ctx) error {
+func (s *panel) setPorts(c fiber.Ctx) error {
 	var in struct {
 		Ports []portDTO `json:"ports"`
 	}
@@ -375,7 +377,7 @@ func (s *server) setPorts(c fiber.Ctx) error {
 }
 
 // revealEnv returns one secret's value on explicit request. POST + CSRF, never cached.
-func (s *server) revealEnv(c fiber.Ctx) error {
+func (s *panel) revealEnv(c fiber.Ctx) error {
 	v, err := s.bots.RevealEnv(c.Context(), currentUser(c), strings.Clone(c.Params("id")), strings.Clone(c.Params("name")))
 	if err != nil {
 		return err

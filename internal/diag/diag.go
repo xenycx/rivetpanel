@@ -1,5 +1,5 @@
 // Package diag runs read-only health probes for administrators (the
-// Diagnostics page and "botpanel doctor"). Probes have deadlines, run one at a
+// Diagnostics page and "rivetpanel doctor"). Probes have deadlines, run one at a
 // time, never execute anything user-supplied, and report only an allowlist of
 // facts: no tokens, environment values, configuration files or logs.
 package diag

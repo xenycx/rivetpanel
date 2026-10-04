@@ -7,12 +7,12 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 
-	"botpanel/internal/service"
+	"github.com/xenycx/rivetpanel/internal/service"
 )
 
-// getEnvironment lists every BOTPANEL_* variable with where its value comes
+// getEnvironment lists every RIVET_* variable with where its value comes
 // from. Secret values are never returned.
-func (s *server) getEnvironment(c fiber.Ctx) error {
+func (s *panel) getEnvironment(c fiber.Ctx) error {
 	v, err := s.env.View(c.Context(), currentUser(c))
 	if err != nil {
 		return err
@@ -27,7 +27,7 @@ type environmentBody struct {
 }
 
 // putEnvironment stores overrides; they apply at the next start.
-func (s *server) putEnvironment(c fiber.Ctx) error {
+func (s *panel) putEnvironment(c fiber.Ctx) error {
 	var in environmentBody
 	if err := decode(c, &in); err != nil {
 		return err
@@ -40,7 +40,7 @@ func (s *server) putEnvironment(c fiber.Ctx) error {
 
 // restartPanel exits the process so its supervisor starts it with the stored
 // overrides. Bot containers keep running.
-func (s *server) restartPanel(c fiber.Ctx) error {
+func (s *panel) restartPanel(c fiber.Ctx) error {
 	if err := s.env.RestartPanel(currentUser(c)); err != nil {
 		return err
 	}

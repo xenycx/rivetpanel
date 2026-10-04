@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"botpanel/internal/domain"
-	"botpanel/internal/service"
+	"github.com/xenycx/rivetpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/service"
 )
 
 type envVarJSON struct {
@@ -67,33 +67,33 @@ func readView(t *testing.T, raw []byte) envViewJSON {
 }
 
 func TestEnvironmentEditorOverridesAndPendingRestart(t *testing.T) {
-	e, _, _ := envEnv(t, map[string]string{"BOTPANEL_SFTP_LISTEN": "0.0.0.0:2022", "BOTPANEL_MAX_BUILDS": "2"}, false)
+	e, _, _ := envEnv(t, map[string]string{"RIVET_SFTP_LISTEN": "0.0.0.0:2022", "RIVET_MAX_BUILDS": "2"}, false)
 	admin := e.user("admin@example.com", domain.RoleAdmin)
 	user := e.user("user@example.com", domain.RoleUser)
 	user.mustStatus(403, "GET", "/api/v1/admin/environment", nil)
-	user.mustStatus(403, "PUT", "/api/v1/admin/environment", map[string]any{"set": map[string]string{"BOTPANEL_MAX_BUILDS": "3"}})
+	user.mustStatus(403, "PUT", "/api/v1/admin/environment", map[string]any{"set": map[string]string{"RIVET_MAX_BUILDS": "3"}})
 
 	v := readView(t, admin.mustStatus(200, "GET", "/api/v1/admin/environment", nil))
-	if b := v.get(t, "BOTPANEL_MAX_BUILDS"); b.Source != "environment" || b.Value != "2" || !b.Editable || b.Override || b.Pending {
+	if b := v.get(t, "RIVET_MAX_BUILDS"); b.Source != "environment" || b.Value != "2" || !b.Editable || b.Override || b.Pending {
 		t.Fatalf("environment-provided variable: %+v", b)
 	}
-	if b := v.get(t, "BOTPANEL_BACKUP_KEEP"); b.Source != "default" || b.EnvSet {
+	if b := v.get(t, "RIVET_BACKUP_KEEP"); b.Source != "default" || b.EnvSet {
 		t.Fatalf("default variable: %+v", b)
 	}
-	if b := v.get(t, "BOTPANEL_LISTEN"); b.Editable {
+	if b := v.get(t, "RIVET_LISTEN"); b.Editable {
 		t.Fatalf("a boot variable must not be editable: %+v", b)
 	}
-	if b := v.get(t, "BOTPANEL_PUBLIC_URL"); b.Editable || b.Managed == "" {
+	if b := v.get(t, "RIVET_PUBLIC_URL"); b.Editable || b.Managed == "" {
 		t.Fatalf("a variable owned by Panel settings must point there: %+v", b)
 	}
 
 	// Override one value and switch off another the environment turns on.
 	v = readView(t, admin.mustStatus(200, "PUT", "/api/v1/admin/environment", map[string]any{
-		"set": map[string]string{"BOTPANEL_MAX_BUILDS": "3", "BOTPANEL_SFTP_LISTEN": ""}}))
-	if b := v.get(t, "BOTPANEL_MAX_BUILDS"); b.Source != "panel" || b.Value != "3" || b.EnvValue != "2" || !b.Override || !b.Pending || b.Running != "2" {
+		"set": map[string]string{"RIVET_MAX_BUILDS": "3", "RIVET_SFTP_LISTEN": ""}}))
+	if b := v.get(t, "RIVET_MAX_BUILDS"); b.Source != "panel" || b.Value != "3" || b.EnvValue != "2" || !b.Override || !b.Pending || b.Running != "2" {
 		t.Fatalf("overridden variable: %+v", b)
 	}
-	if b := v.get(t, "BOTPANEL_SFTP_LISTEN"); b.Source != "panel" || b.Value != "" || b.EnvValue != "0.0.0.0:2022" || !b.Pending {
+	if b := v.get(t, "RIVET_SFTP_LISTEN"); b.Source != "panel" || b.Value != "" || b.EnvValue != "0.0.0.0:2022" || !b.Pending {
 		t.Fatalf("an empty override must beat the environment: %+v", b)
 	}
 	if v.Pending != 2 {
@@ -101,8 +101,8 @@ func TestEnvironmentEditorOverridesAndPendingRestart(t *testing.T) {
 	}
 
 	// Resetting returns to the environment value, and nothing is pending.
-	v = readView(t, admin.mustStatus(200, "PUT", "/api/v1/admin/environment", map[string]any{"unset": []string{"BOTPANEL_MAX_BUILDS", "BOTPANEL_SFTP_LISTEN"}}))
-	if b := v.get(t, "BOTPANEL_MAX_BUILDS"); b.Source != "environment" || b.Value != "2" || b.Override || b.Pending || v.Pending != 0 {
+	v = readView(t, admin.mustStatus(200, "PUT", "/api/v1/admin/environment", map[string]any{"unset": []string{"RIVET_MAX_BUILDS", "RIVET_SFTP_LISTEN"}}))
+	if b := v.get(t, "RIVET_MAX_BUILDS"); b.Source != "environment" || b.Value != "2" || b.Override || b.Pending || v.Pending != 0 {
 		t.Fatalf("after reset: %+v pending %d", b, v.Pending)
 	}
 }
@@ -114,15 +114,15 @@ func TestEnvironmentEditorRefusesBadChangesAndStoresNothing(t *testing.T) {
 		t.Helper()
 		admin.mustStatus(want, "PUT", "/api/v1/admin/environment", map[string]any{"set": set})
 	}
-	put(400, map[string]string{"BOTPANEL_LISTEN": "0.0.0.0:80"})                         // boot variable
-	put(400, map[string]string{"BOTPANEL_PUBLIC_URL": "https://x.example.com"})          // owned by Panel settings
-	put(400, map[string]string{"BOTPANEL_NOT_A_THING": "1"})                             // unknown
-	put(400, map[string]string{"BOTPANEL_MAX_BUILDS": "many"})                           // not a number
-	put(400, map[string]string{"BOTPANEL_MAX_BUILDS": "99"})                             // fails validation
-	put(400, map[string]string{"BOTPANEL_PORT_PUBLIC_BIND": "yes"})                      // not 0 or 1
-	put(400, map[string]string{"BOTPANEL_NODE_MEMORY_BYTES": "1048576"})                 // smaller than the largest bot
-	put(400, map[string]string{"BOTPANEL_METRICS_TOKEN": "too-short"})                   // fails validation
-	put(400, map[string]string{"BOTPANEL_MAX_BUILDS": "2", "BOTPANEL_BACKUP_KEEP": "0"}) // one bad value refuses the whole save
+	put(400, map[string]string{"RIVET_LISTEN": "0.0.0.0:80"})                      // boot variable
+	put(400, map[string]string{"RIVET_PUBLIC_URL": "https://x.example.com"})       // owned by Panel settings
+	put(400, map[string]string{"RIVET_NOT_A_THING": "1"})                          // unknown
+	put(400, map[string]string{"RIVET_MAX_BUILDS": "many"})                        // not a number
+	put(400, map[string]string{"RIVET_MAX_BUILDS": "99"})                          // fails validation
+	put(400, map[string]string{"RIVET_PORT_PUBLIC_BIND": "yes"})                   // not 0 or 1
+	put(400, map[string]string{"RIVET_NODE_MEMORY_BYTES": "1048576"})              // smaller than the largest bot
+	put(400, map[string]string{"RIVET_METRICS_TOKEN": "too-short"})                // fails validation
+	put(400, map[string]string{"RIVET_MAX_BUILDS": "2", "RIVET_BACKUP_KEEP": "0"}) // one bad value refuses the whole save
 	admin.mustStatus(400, "PUT", "/api/v1/admin/environment", map[string]any{})
 	var n int
 	e.db.QueryRow(`SELECT count(*) FROM env_overrides`).Scan(&n)
@@ -135,11 +135,11 @@ func TestEnvironmentSecretsAreSealedAndNeverReturned(t *testing.T) {
 	e, _, _ := envEnv(t, nil, false)
 	admin := e.user("admin@example.com", domain.RoleAdmin)
 	const token = "m3trics-token-0123456789-abcdef"
-	raw := admin.mustStatus(200, "PUT", "/api/v1/admin/environment", map[string]any{"set": map[string]string{"BOTPANEL_METRICS_TOKEN": token}})
+	raw := admin.mustStatus(200, "PUT", "/api/v1/admin/environment", map[string]any{"set": map[string]string{"RIVET_METRICS_TOKEN": token}})
 	if strings.Contains(string(raw), token) {
 		t.Fatal("the response contains the secret")
 	}
-	if b := readView(t, raw).get(t, "BOTPANEL_METRICS_TOKEN"); !b.Secret || !b.Set || b.Value != "" || b.Source != "panel" {
+	if b := readView(t, raw).get(t, "RIVET_METRICS_TOKEN"); !b.Secret || !b.Set || b.Value != "" || b.Source != "panel" {
 		t.Fatalf("secret in view: %+v", b)
 	}
 	if strings.Contains(string(admin.mustStatus(200, "GET", "/api/v1/admin/environment", nil)), token) {
@@ -147,13 +147,13 @@ func TestEnvironmentSecretsAreSealedAndNeverReturned(t *testing.T) {
 	}
 	var value *string
 	var cipher []byte
-	e.db.QueryRow(`SELECT value, secret_cipher FROM env_overrides WHERE name = 'BOTPANEL_METRICS_TOKEN'`).Scan(&value, &cipher)
+	e.db.QueryRow(`SELECT value, secret_cipher FROM env_overrides WHERE name = 'RIVET_METRICS_TOKEN'`).Scan(&value, &cipher)
 	if value != nil || len(cipher) == 0 || strings.Contains(string(cipher), token) {
 		t.Fatalf("the secret must be stored sealed: value=%v cipher=%d bytes", value, len(cipher))
 	}
 	// And it is readable by the same keys at the next start.
 	got, unreadable, err := (&service.PanelEnvService{Store: e.db, Keys: e.bots.Keys}).Overrides(t.Context())
-	if err != nil || len(unreadable) != 0 || got["BOTPANEL_METRICS_TOKEN"] != token {
+	if err != nil || len(unreadable) != 0 || got["RIVET_METRICS_TOKEN"] != token {
 		t.Fatalf("overrides at start: %v %v %v", got, unreadable, err)
 	}
 }

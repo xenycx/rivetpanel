@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"testing"
 
-	"botpanel/internal/domain"
-	"botpanel/internal/service"
+	"github.com/xenycx/rivetpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/service"
 )
 
 func automationEnv(t *testing.T) *env {

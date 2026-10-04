@@ -7,14 +7,14 @@ import (
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/mount"
 
-	"botpanel/internal/runner"
+	"github.com/xenycx/rivetpanel/internal/runner"
 )
 
 func spec() runner.ContainerSpec {
 	return runner.ContainerSpec{
-		Name: "botpanel-x-runtime", Role: runner.RoleRuntime, BotID: "x", NodeID: "n", Generation: 7, SpecHash: "abc",
+		Name: "rivetpanel-x-runtime", Role: runner.RoleRuntime, BotID: "x", NodeID: "n", Generation: 7, SpecHash: "abc",
 		Image: "node@sha256:" + strings.Repeat("a", 64), Argv: []string{"node", "index.js", "--flag=$(id)"},
-		Env: []string{"A=b"}, WorkspaceHostPath: "/var/lib/botpanel/bots/x", User: "65532:65532", Network: "bridge",
+		Env: []string{"A=b"}, WorkspaceHostPath: "/var/lib/rivetpanel/bots/x", User: "65532:65532", Network: "bridge",
 		MemoryBytes: 256 << 20, NanoCPUs: 5e8, PidsLimit: 64, TmpfsBytes: 64 << 20, OpenStdin: true,
 	}
 }
@@ -41,7 +41,7 @@ func TestHostConfigEnforcesIsolationPolicy(t *testing.T) {
 		t.Fatalf("only the managed workspace may be mounted: %+v", h)
 	}
 	m := h.Mounts[0]
-	if m.Type != mount.TypeBind || m.Source != "/var/lib/botpanel/bots/x" || m.Target != "/workspace" || m.ReadOnly || m.BindOptions.CreateMountpoint {
+	if m.Type != mount.TypeBind || m.Source != "/var/lib/rivetpanel/bots/x" || m.Target != "/workspace" || m.ReadOnly || m.BindOptions.CreateMountpoint {
 		t.Fatalf("mount: %+v", m)
 	}
 	if h.LogConfig.Type != "json-file" || h.LogConfig.Config["max-size"] == "" || h.LogConfig.Config["max-file"] == "" {

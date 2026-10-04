@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"botpanel/internal/domain"
-	"botpanel/internal/service"
-	"botpanel/internal/store/sqlite"
+	"github.com/xenycx/rivetpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/service"
+	"github.com/xenycx/rivetpanel/internal/store/sqlite"
 )
 
 func TestApplicationHealthAndHeartbeatRule(t *testing.T) {

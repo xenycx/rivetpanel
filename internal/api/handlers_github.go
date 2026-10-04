@@ -6,14 +6,14 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 
-	"botpanel/internal/domain"
-	"botpanel/internal/filesystem"
-	"botpanel/internal/reposcan"
-	"botpanel/internal/service"
-	"botpanel/internal/templates"
+	"github.com/xenycx/rivetpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/filesystem"
+	"github.com/xenycx/rivetpanel/internal/reposcan"
+	"github.com/xenycx/rivetpanel/internal/service"
+	"github.com/xenycx/rivetpanel/internal/templates"
 )
 
-func (s *server) listTemplates(c fiber.Ctx) error {
+func (s *panel) listTemplates(c fiber.Ctx) error {
 	type tplDTO struct {
 		templates.Template
 		// From the runtime recipe, so the creation flow can show real needs.
@@ -50,14 +50,15 @@ type repoDTO struct {
 	LastError      string `json:"last_error"`
 	Deploying      bool   `json:"deploying"`
 	Polling        bool   `json:"polling"`
+	PendingPushMS  int64  `json:"pending_push_at_ms,omitempty"`
 }
 
 func toRepo(v service.RepoView) repoDTO {
 	return repoDTO{v.FullName, v.Branch, v.RootDir, v.Private, v.AutoDeploy, v.HookCreated, v.WebhookURL, v.Secret,
-		v.LastSHA, v.LastDeployedMS, v.LastError, v.Deploying, v.Polling}
+		v.LastSHA, v.LastDeployedMS, v.LastError, v.Deploying, v.Polling, v.PendingPushMS}
 }
 
-func (s *server) githubRepos(c fiber.Ctx) error {
+func (s *panel) githubRepos(c fiber.Ctx) error {
 	rs, err := s.deploy.Repos(c.Context(), currentUser(c))
 	if err != nil {
 		return err
@@ -65,7 +66,7 @@ func (s *server) githubRepos(c fiber.Ctx) error {
 	return c.JSON(fiber.Map{"repos": rs})
 }
 
-func (s *server) githubBranches(c fiber.Ctx) error {
+func (s *panel) githubBranches(c fiber.Ctx) error {
 	bs, err := s.deploy.Branches(c.Context(), currentUser(c), strings.Clone(c.Query("repo")))
 	if err != nil {
 		return err
@@ -75,7 +76,7 @@ func (s *server) githubBranches(c fiber.Ctx) error {
 
 // githubLookup resolves a pasted repository address; public repositories
 // need no GitHub connection.
-func (s *server) githubLookup(c fiber.Ctx) error {
+func (s *panel) githubLookup(c fiber.Ctx) error {
 	r, err := s.deploy.Lookup(c.Context(), currentUser(c), strings.Clone(c.Query("repo")))
 	if err != nil {
 		return err
@@ -84,7 +85,7 @@ func (s *server) githubLookup(c fiber.Ctx) error {
 }
 
 // analyzeGitHub suggests how to host a repository (it creates nothing).
-func (s *server) analyzeGitHub(c fiber.Ctx) error {
+func (s *panel) analyzeGitHub(c fiber.Ctx) error {
 	var in struct {
 		Repo    string `json:"repo"`
 		Branch  string `json:"branch"`
@@ -102,11 +103,11 @@ func (s *server) analyzeGitHub(c fiber.Ctx) error {
 }
 
 // listRecipes returns the verified recipes for well-known open-source bots.
-func (s *server) listRecipes(c fiber.Ctx) error {
+func (s *panel) listRecipes(c fiber.Ctx) error {
 	return c.JSON(fiber.Map{"recipes": reposcan.Recipes()})
 }
 
-func (s *server) getGitHub(c fiber.Ctx) error {
+func (s *panel) getGitHub(c fiber.Ctx) error {
 	v, err := s.deploy.Get(c.Context(), currentUser(c), strings.Clone(c.Params("id")))
 	if errors.Is(err, domain.ErrNotFound) {
 		if _, aerr := s.bots.Authorize(c.Context(), currentUser(c), strings.Clone(c.Params("id")), domain.PermEditFiles); aerr == nil {
@@ -119,7 +120,7 @@ func (s *server) getGitHub(c fiber.Ctx) error {
 	return c.JSON(fiber.Map{"linked": true, "repo": toRepo(v)})
 }
 
-func (s *server) putGitHub(c fiber.Ctx) error {
+func (s *panel) putGitHub(c fiber.Ctx) error {
 	var in githubIn
 	if err := decode(c, &in); err != nil {
 		return err
@@ -133,14 +134,14 @@ func (s *server) putGitHub(c fiber.Ctx) error {
 	return c.JSON(fiber.Map{"linked": true, "repo": toRepo(v)})
 }
 
-func (s *server) deleteGitHub(c fiber.Ctx) error {
+func (s *panel) deleteGitHub(c fiber.Ctx) error {
 	if err := s.deploy.Unlink(c.Context(), currentUser(c), strings.Clone(c.Params("id"))); err != nil {
 		return err
 	}
 	return c.SendStatus(fiber.StatusNoContent)
 }
 
-func (s *server) deployGitHub(c fiber.Ctx) error {
+func (s *panel) deployGitHub(c fiber.Ctx) error {
 	var in struct {
 		SHA string `json:"sha"` // optional: a specific commit (redeploy or roll back)
 	}
@@ -156,7 +157,7 @@ func (s *server) deployGitHub(c fiber.Ctx) error {
 }
 
 // previewGitHub shows what deploying the branch head would change.
-func (s *server) previewGitHub(c fiber.Ctx) error {
+func (s *panel) previewGitHub(c fiber.Ctx) error {
 	cmp, err := s.deploy.Preview(c.Context(), currentUser(c), strings.Clone(c.Params("id")))
 	if err != nil {
 		return err
@@ -166,7 +167,7 @@ func (s *server) previewGitHub(c fiber.Ctx) error {
 
 // githubWebhook receives push events. It answers 401 for anything it cannot
 // authenticate, without saying why.
-func (s *server) githubWebhook(c fiber.Ctx) error {
+func (s *panel) githubWebhook(c fiber.Ctx) error {
 	body := append([]byte(nil), c.Body()...) // request memory is reused after the handler returns
 	res, err := s.deploy.HandleWebhook(c.Context(), strings.Clone(c.Get("X-GitHub-Event")), strings.Clone(c.Get("X-GitHub-Delivery")),
 		strings.Clone(c.Get("X-Hub-Signature-256")), body)
@@ -180,7 +181,7 @@ func (s *server) githubWebhook(c fiber.Ctx) error {
 }
 
 // githubOwners lists the accounts the caller can create repositories under.
-func (s *server) githubOwners(c fiber.Ctx) error {
+func (s *panel) githubOwners(c fiber.Ctx) error {
 	o, err := s.deploy.Owners(c.Context(), currentUser(c))
 	if err != nil {
 		return err
@@ -189,7 +190,7 @@ func (s *server) githubOwners(c fiber.Ctx) error {
 }
 
 // pushPlan previews the files a publish or push would send.
-func (s *server) pushPlan(c fiber.Ctx) error {
+func (s *panel) pushPlan(c fiber.Ctx) error {
 	set, err := s.deploy.PushPlan(c.Context(), currentUser(c), strings.Clone(c.Params("id")))
 	if err != nil {
 		return err
@@ -210,7 +211,7 @@ func (s *server) pushPlan(c fiber.Ctx) error {
 }
 
 // publishGitHub creates a repository from the bot's files and links it.
-func (s *server) publishGitHub(c fiber.Ctx) error {
+func (s *panel) publishGitHub(c fiber.Ctx) error {
 	var in struct {
 		Owner       string `json:"owner"`
 		Name        string `json:"name"`
@@ -230,7 +231,7 @@ func (s *server) publishGitHub(c fiber.Ctx) error {
 }
 
 // pushGitHub commits the bot's current files to its linked repository.
-func (s *server) pushGitHub(c fiber.Ctx) error {
+func (s *panel) pushGitHub(c fiber.Ctx) error {
 	var in struct {
 		Message string `json:"message"`
 	}

@@ -251,7 +251,7 @@
 	</div>
 
 	<div class="card p-4 sm:p-5">
-		<h3 class="flex items-center gap-2 text-title font-semibold"><Icon name="panel" class="text-muted" />BotForge process</h3>
+		<h3 class="flex items-center gap-2 text-title font-semibold"><Icon name="panel" class="text-muted" />RivetPanel process</h3>
 		{#if snap}
 			{@const p = snap.panel}
 			<dl class="mt-3 grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1.5 text-small [&>dd]:text-right [&>dt]:text-muted">
@@ -281,7 +281,7 @@
 			{#if dk?.enabled}<span class="pill ml-auto" data-tone={dk.ready ? 'run' : 'fail'}>{dk.ready ? 'Ready' : 'Unavailable'}</span>{/if}
 		</h3>
 		{#if dk && !dk.enabled}
-			<p class="mt-3 text-small text-muted">The local runner is turned off (<code>BOTPANEL_RUNNER_MODE=none</code>). Bots cannot start on this panel.</p>
+			<p class="mt-3 text-small text-muted">The local runner is turned off (<code>RIVET_RUNNER_MODE=none</code>). Bots cannot start on this panel.</p>
 		{:else if dk}
 			{#if dk.error}<p class="mt-2 text-small text-fail">{dk.error}</p>{/if}
 			<dl class="mt-3 grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1.5 text-small [&>dd]:text-right [&>dt]:text-muted">

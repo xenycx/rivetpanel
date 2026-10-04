@@ -1,18 +1,20 @@
 services:
-  botforge:
-    image: ghcr.io/xenycx/botforge:latest
+  rivetpanel:
+    image: ghcr.io/xenycx/rivetpanel:latest
     restart: unless-stopped
     ports:
       - "127.0.0.1:8080:8080"
       # Uncomment when using the embedded SFTP server.
       # - "2022:2022"
-      # Uncomment for static site hosting (BOTPANEL_SITES_LISTEN=0.0.0.0:8081).
+      # Uncomment for static site hosting (RIVET_SITES_LISTEN=0.0.0.0:8081).
       # - "127.0.0.1:8081:8081"
+      # Uncomment for remote nodes (agents=preview). Raw TLS, not HTTP.
+      # - "8444:8444"
     env_file: .env
     volumes:
-      - botforge-data:/var/lib/botpanel
+      - rivetpanel-data:/var/lib/rivetpanel
       # The in-process runner needs Docker. Treat this container as root-equivalent.
       - /var/run/docker.sock:/var/run/docker.sock
 
 volumes:
-  botforge-data:
+  rivetpanel-data:

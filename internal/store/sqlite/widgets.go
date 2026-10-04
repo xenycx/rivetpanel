@@ -1,8 +1,8 @@
 package sqlite
 
 import (
-	"botpanel/internal/domain"
 	"context"
+	"github.com/xenycx/rivetpanel/internal/domain"
 	"time"
 )
 

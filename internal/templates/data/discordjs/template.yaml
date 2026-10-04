@@ -1,6 +1,6 @@
 id: discordjs
 name: discord.js starter
-description: Slash-command bot with discord.js v14 and BotForge analytics.
+description: Slash-command bot with discord.js v14 and RivetPanel analytics.
 runtime: nodejs
 language: JavaScript
 sdk: js

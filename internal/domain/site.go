@@ -73,7 +73,7 @@ type SiteBaseDomain struct {
 	Primary         bool   // the default for new sites
 	Label           string // display name
 	DNSTarget       string // optional host name or address shown in DNS instructions
-	FromConfig      bool   // listed in BOTPANEL_SITES_BASE_URL or BOTPANEL_SITES_DOMAINS
+	FromConfig      bool   // listed in RIVET_SITES_BASE_URL or RIVET_SITES_DOMAINS
 	Token           string
 	VerifiedAtMS    *int64
 	LastCheckedAtMS *int64

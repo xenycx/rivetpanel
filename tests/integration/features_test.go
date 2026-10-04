@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
-	"botpanel/internal/domain"
-	"botpanel/internal/runner"
-	"botpanel/internal/service"
+	"github.com/xenycx/rivetpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/runner"
+	"github.com/xenycx/rivetpanel/internal/service"
 )
 
 func tunePolicy(t *testing.T, s *stack, id, policy string, maxAttempts int) {

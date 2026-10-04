@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"sort"
 
-	"botpanel/internal/domain"
-	"botpanel/internal/runtimes"
+	"github.com/xenycx/rivetpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/runtimes"
 )
 
 const workspaceMount = "/workspace"
@@ -16,7 +16,7 @@ const workspaceMount = "/workspace"
 // ContainerName is deterministic so a retried create after a lost response
 // collides with (and rediscovers) the earlier container.
 func ContainerName(botID string, role Role) string {
-	return "botpanel-" + botID + "-" + string(role)
+	return "rivetpanel-" + botID + "-" + string(role)
 }
 
 func envList(layers ...map[string]string) []string {
@@ -72,10 +72,17 @@ func (r *Runner) runtimeSpec(bot domain.Bot, rt runtimes.Runtime, image, host st
 		}
 	}
 	provided, own := addonEnv(bot, botEnv)
+	ports, env := portBindings(bot), envList(rt.Env, provided, own)
+	if bot.IsGame() {
+		// The panel's variables (memory, port) take precedence over the server's.
+		if gs, ok := r.cachedGameSpec(bot); ok {
+			ports, env = gamePorts(gs, bot), envList(provided, own, gameEnv(gs, bot))
+		}
+	}
 	s := ContainerSpec{
 		Name: ContainerName(bot.ID, RoleRuntime), Role: RoleRuntime, BotID: bot.ID, NodeID: bot.NodeID, InstallID: r.opts.InstallID,
-		Generation: bot.Generation, Image: image, Argv: bot.Argv, Entrypoint: bot.Entrypoint, Ports: portBindings(bot),
-		Env: envList(rt.Env, provided, own), Networks: extra,
+		Generation: bot.Generation, Image: image, Argv: bot.Argv, Entrypoint: bot.Entrypoint, Ports: ports,
+		Env: env, Networks: extra,
 		WorkspaceHostPath: host, User: r.opts.User, Network: network,
 		MemoryBytes: bot.MemoryBytes, NanoCPUs: bot.NanoCPUs, PidsLimit: bot.PidsLimit,
 		TmpfsBytes: r.opts.TmpfsBytes, OpenStdin: true,

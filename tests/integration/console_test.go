@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"botpanel/internal/console"
-	"botpanel/internal/domain"
-	"botpanel/internal/events"
+	"github.com/xenycx/rivetpanel/internal/console"
+	"github.com/xenycx/rivetpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/events"
 )
 
 type chanConn struct {

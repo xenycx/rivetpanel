@@ -11,10 +11,10 @@ import (
 	"testing"
 	"time"
 
-	"botpanel/internal/domain"
-	"botpanel/internal/hostmon"
-	"botpanel/internal/logbuf"
-	"botpanel/internal/telemetry"
+	"github.com/xenycx/rivetpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/hostmon"
+	"github.com/xenycx/rivetpanel/internal/logbuf"
+	"github.com/xenycx/rivetpanel/internal/telemetry"
 )
 
 func hostEnv(t *testing.T) (*env, *logbuf.Buffer) {

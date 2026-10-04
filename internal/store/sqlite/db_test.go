@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"botpanel/internal/domain"
-	"botpanel/internal/migrations"
+	"github.com/xenycx/rivetpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/migrations"
 )
 
 func open(t *testing.T) *DB {
@@ -65,7 +65,7 @@ func TestMigrateIdempotentAndSchema(t *testing.T) {
 	}
 	var versions int
 	db.QueryRowContext(ctx, `SELECT count(*) FROM schema_migrations`).Scan(&versions)
-	if versions != 37 {
+	if versions != 53 {
 		t.Fatalf("versions = %d", versions)
 	}
 	var tables int
@@ -73,9 +73,36 @@ func TestMigrateIdempotentAndSchema(t *testing.T) {
 		AND name IN ('users','sessions','nodes','bots','bot_env_vars','node_telemetry',
 		'oauth_accounts','api_keys','bot_subusers','github_repos','bot_backups','bot_telemetry_logs','bot_ports',
 		'workspaces','workspace_members','sites','site_releases','site_domains','site_base_domains','operations',
-		'ai_provider_profiles','ai_conversations','ai_messages','ai_runs','ai_tool_calls','ai_change_sets','ai_change_files')`).Scan(&tables)
-	if tables != 27 {
+		'ai_provider_profiles','ai_conversations','ai_messages','ai_runs','ai_tool_calls','ai_change_sets','ai_change_files',
+		'roles','email_verifications','api_clients','oidc_providers','oidc_identities','webauthn_credentials',
+		'notifications','notification_prefs','support_tickets','support_ticket_messages',
+		'kb_categories','kb_articles','status_components','status_incidents','status_incident_components',
+		'status_incident_updates','status_samples','bot_usage','node_usage','usage_marks')`).Scan(&tables)
+	if tables != 47 {
 		t.Fatalf("tables = %d", tables)
+	}
+}
+
+func TestMigrateRefusesUnmarkedDatabase(t *testing.T) {
+	ctx := context.Background()
+	db, err := Open(ctx, filepath.Join(t.TempDir(), "legacy.db"), 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if _, err := db.ExecContext(ctx, `CREATE TABLE users (id TEXT PRIMARY KEY)`); err != nil {
+		t.Fatal(err)
+	}
+	err = db.Migrate(ctx, migrations.FS)
+	if err == nil || !strings.Contains(err.Error(), "unsupported database") {
+		t.Fatalf("migration accepted unmarked database: %v", err)
+	}
+	var tables int
+	if err := db.QueryRowContext(ctx, `SELECT count(*) FROM sqlite_master WHERE type='table' AND name='schema_migrations'`).Scan(&tables); err != nil {
+		t.Fatal(err)
+	}
+	if tables != 0 {
+		t.Fatal("refusal modified the database")
 	}
 }
 
@@ -95,7 +122,7 @@ func TestEnsureLocalNodeIdempotentAndPreservesEdits(t *testing.T) {
 	db.ExecContext(ctx, `UPDATE nodes SET enabled = 0 WHERE id = ?`, domain.LocalNodeID)
 	db.EnsureLocalNode(ctx)
 	node, err := db.GetNode(ctx, domain.LocalNodeID)
-	if err != nil || node.Enabled || node.Transport != "local" || node.Endpoint != nil {
+	if err != nil || node.Enabled || node.Transport != "local" || node.Endpoint != nil || node.LocationID != domain.LocalLocationID {
 		t.Fatalf("node = %+v err=%v", node, err)
 	}
 }
@@ -111,8 +138,8 @@ func TestConstraintsEnforced(t *testing.T) {
 		t.Fatal("expected foreign key violation")
 	}
 	// local node must not have an endpoint
-	_, err = db.ExecContext(ctx, `INSERT INTO nodes (id,name,transport,endpoint,created_at_ms,updated_at_ms)
-		VALUES ('n','n','local','http://x',1,1)`)
+	_, err = db.ExecContext(ctx, `INSERT INTO nodes (id,location_id,name,transport,endpoint,created_at_ms,updated_at_ms)
+		VALUES ('n',?,'n','local','http://x',1,1)`, domain.LocalLocationID)
 	if err == nil {
 		t.Fatal("expected check violation")
 	}

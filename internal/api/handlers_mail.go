@@ -5,18 +5,19 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 
-	"botpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/service"
 )
 
 // resetAvailable is public: the sign-in page uses it to decide whether to
 // offer "Forgot password?".
-func (s *server) resetAvailable(c fiber.Ctx) error {
+func (s *panel) resetAvailable(c fiber.Ctx) error {
 	return c.JSON(fiber.Map{"available": s.resets.Available(c.Context())})
 }
 
 // requestPasswordReset always answers the same way, so it cannot be used to
 // learn which addresses have accounts.
-func (s *server) requestPasswordReset(c fiber.Ctx) error {
+func (s *panel) requestPasswordReset(c fiber.Ctx) error {
 	var in struct {
 		Email string `json:"email"`
 	}
@@ -29,7 +30,7 @@ func (s *server) requestPasswordReset(c fiber.Ctx) error {
 	return c.SendStatus(fiber.StatusNoContent)
 }
 
-func (s *server) confirmPasswordReset(c fiber.Ctx) error {
+func (s *panel) confirmPasswordReset(c fiber.Ctx) error {
 	var in struct {
 		Token    string `json:"token"`
 		Password string `json:"password"`
@@ -50,7 +51,7 @@ func (s *server) confirmPasswordReset(c fiber.Ctx) error {
 }
 
 // testMail checks the Mailgun key and domain and sends one message.
-func (s *server) testMail(c fiber.Ctx) error {
+func (s *panel) testMail(c fiber.Ctx) error {
 	var in struct {
 		To string `json:"to"`
 	}
@@ -67,7 +68,7 @@ func (s *server) testMail(c fiber.Ctx) error {
 	return c.JSON(res)
 }
 
-func (s *server) putEmailAlerts(c fiber.Ctx) error {
+func (s *panel) putEmailAlerts(c fiber.Ctx) error {
 	var in struct {
 		Enabled *bool `json:"enabled"`
 	}
@@ -84,11 +85,11 @@ func (s *server) putEmailAlerts(c fiber.Ctx) error {
 }
 
 // notifySecurity emails the account about a security change, if email is on.
-func (s *server) notifySecurity(u domain.User, what string) {
+func (s *panel) notifySecurity(u domain.User, what string) {
 	s.mail.Notify(u.Email, what)
 }
 
-func (s *server) putEmailNews(c fiber.Ctx) error {
+func (s *panel) putEmailNews(c fiber.Ctx) error {
 	var in struct {
 		Enabled *bool `json:"enabled"`
 	}
@@ -105,7 +106,7 @@ func (s *server) putEmailNews(c fiber.Ctx) error {
 }
 
 // mailAudience says how many accounts each announcement audience reaches.
-func (s *server) mailAudience(c fiber.Ctx) error {
+func (s *panel) mailAudience(c fiber.Ctx) error {
 	counts, err := s.mail.Audience(c.Context(), currentUser(c))
 	if err != nil {
 		return err
@@ -115,22 +116,52 @@ func (s *server) mailAudience(c fiber.Ctx) error {
 
 // sendAnnouncement emails administrator-written HTML to an audience, or only to
 // the sender when test is set. The body is sanitized again inside the service.
-func (s *server) sendAnnouncement(c fiber.Ctx) error {
+func (s *panel) sendAnnouncement(c fiber.Ctx) error {
 	var in struct {
 		Subject  string `json:"subject"`
 		HTML     string `json:"html"`
 		Audience string `json:"audience"`
 		Kind     string `json:"kind"`
 		Test     bool   `json:"test"`
+		// Email (default true) sends it by email; InPanel also posts it to
+		// the audience's notification inbox (works without email set up).
+		Email   *bool `json:"email"`
+		InPanel bool  `json:"in_panel"`
 	}
 	if err := decode(c, &in); err != nil {
 		return err
 	}
-	res, err := s.mail.Broadcast(c.Context(), currentUser(c), in.Subject, in.HTML, in.Audience, in.Kind, in.Test)
-	if err != nil {
-		return err
+	u := currentUser(c)
+	email := in.Email == nil || *in.Email
+	if in.Test {
+		res, err := s.mail.Broadcast(c.Context(), u, in.Subject, in.HTML, in.Audience, in.Kind, true)
+		if err != nil {
+			return err
+		}
+		return c.JSON(res)
 	}
-	return c.JSON(res)
+	if !email && (!in.InPanel || s.notifications == nil) {
+		return domain.Invalid("choose email, the notification inbox or both")
+	}
+	var out struct {
+		service.BroadcastResult
+		InPanel int `json:"in_panel"`
+	}
+	if email {
+		res, err := s.mail.Broadcast(c.Context(), u, in.Subject, in.HTML, in.Audience, in.Kind, false)
+		if err != nil {
+			return err
+		}
+		out.BroadcastResult = res
+	}
+	if in.InPanel && s.notifications != nil {
+		n, err := s.notifications.Announce(c.Context(), u, in.Subject, in.HTML, in.Audience)
+		if err != nil {
+			return err
+		}
+		out.InPanel = n
+	}
+	return c.JSON(out)
 }
 
 // announcementTarget records the subject, whether it was a test, and the

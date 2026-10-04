@@ -1,6 +1,6 @@
 id: discordrb
 name: discordrb starter
-description: Slash-command bot with discordrb (Ruby) and BotForge analytics.
+description: Slash-command bot with discordrb (Ruby) and RivetPanel analytics.
 runtime: ruby
 language: Ruby
 sdk: rb

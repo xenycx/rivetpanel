@@ -48,7 +48,7 @@
 	}
 </script>
 
-<svelte:head><title>Invitation · BotForge</title></svelte:head>
+<svelte:head><title>Invitation · RivetPanel</title></svelte:head>
 
 <section class="hero mx-auto max-w-lg py-8">
 	<p class="eyebrow">Invitation</p>

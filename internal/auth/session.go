@@ -27,7 +27,7 @@ func HashToken(token string) []byte {
 // CSRFToken derives the per-session CSRF token from the session token. The
 // session cookie is HttpOnly, so scripts on other origins cannot compute it.
 func CSRFToken(sessionToken string) string {
-	h := sha256.Sum256([]byte("botpanel-csrf\x00" + sessionToken))
+	h := sha256.Sum256([]byte("rivetpanel-csrf\x00" + sessionToken))
 	return base64.RawURLEncoding.EncodeToString(h[:])
 }
 

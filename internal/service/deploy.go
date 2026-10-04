@@ -17,11 +17,11 @@ import (
 	"sync"
 	"time"
 
-	"botpanel/internal/domain"
-	"botpanel/internal/events"
-	"botpanel/internal/filesystem"
-	"botpanel/internal/github"
-	"botpanel/internal/secrets"
+	"github.com/xenycx/rivetpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/events"
+	"github.com/xenycx/rivetpanel/internal/filesystem"
+	"github.com/xenycx/rivetpanel/internal/github"
+	"github.com/xenycx/rivetpanel/internal/secrets"
 )
 
 // DeployService deploys a bot's source from GitHub into its workspace, on
@@ -47,6 +47,14 @@ type DeployService struct {
 	// repositories of other people, or a webhook GitHub refused) are checked
 	// for new commits. 0 = 5 minutes; negative disables polling.
 	PollInterval time.Duration
+	// Remote deploys to servers on rivet-agent nodes (nil: refused). The
+	// tarball is streamed to the assigned node and never unpacked here.
+	Remote RemoteDeploys
+	// RemotePush reads remote servers' files for GitHub publish/push (nil:
+	// refused for remote servers).
+	RemotePush RemotePushes
+	// PushLimits bound one publish/push (zero: filesystem.DefaultPushLimits).
+	PushLimits filesystem.PushLimits
 
 	baseCtx context.Context
 	sem     chan struct{}
@@ -55,6 +63,18 @@ type DeployService struct {
 	seen    map[string]time.Time // recent webhook delivery ids
 	polled  map[string]string    // bot id -> branch head already queued by polling
 	wg      sync.WaitGroup
+}
+
+// RemoteDeploys is the node-routed, authenticated deployment surface. A
+// deployment is staged on the node (fully validated, workspace untouched),
+// applied only after the panel re-checks that it is still wanted, and kept
+// reversible until the panel has recorded the commit. A transaction that is
+// never completed is rolled back by the node.
+type RemoteDeploys interface {
+	Online(nodeID string) bool
+	BeginDeploy(ctx context.Context, nodeID, botID string, src io.Reader, rootDir string, limits filesystem.BackupLimits) (transaction string, err error)
+	ApplyDeploy(ctx context.Context, nodeID, botID, transaction string) (files int, err error)
+	CompleteTransaction(ctx context.Context, nodeID, botID, transaction string, commit bool) error
 }
 
 // Start sets the context deploy jobs run under (they outlive HTTP requests).
@@ -231,6 +251,9 @@ type RepoView struct {
 	// Polling: auto-deploy works by checking the branch periodically because
 	// no webhook could be installed.
 	Polling bool
+	// PendingPushMS is when a push arrived that waits for the server's
+	// offline node to reconnect (0 = none).
+	PendingPushMS int64
 }
 
 func cleanRoot(s string) (string, error) {
@@ -280,7 +303,11 @@ func (d *DeployService) Get(ctx context.Context, actor domain.User, botID string
 	if err != nil {
 		return RepoView{}, err
 	}
-	return d.view(r), nil
+	v := d.view(r)
+	if p, err := d.store().GetPendingPush(ctx, botID); err == nil && p.Link == linkKey(r) {
+		v.PendingPushMS = p.AtMS
+	}
+	return v, nil
 }
 
 // Configure links (or re-links) a bot to a repository, using the acting user's
@@ -306,7 +333,7 @@ func (d *DeployService) configure(ctx context.Context, actor domain.User, botID 
 	// Without a public address (or a GitHub token) GitHub cannot deliver
 	// webhooks: auto-deploy then polls the branch instead.
 	if in.AutoDeploy && d.publicURL() == "" && d.PollInterval < 0 {
-		return RepoView{}, domain.Invalid("auto-deploy needs BOTPANEL_PUBLIC_URL to be configured so GitHub can reach the panel")
+		return RepoView{}, domain.Invalid("auto-deploy needs RIVET_PUBLIC_URL to be configured so GitHub can reach the panel")
 	}
 	tok, err := d.optToken(ctx, actor.ID)
 	if err != nil {
@@ -396,6 +423,17 @@ func (d *DeployService) configure(ctx context.Context, actor domain.User, botID 
 	return v, nil
 }
 
+// remoteReady refuses work for a node whose agent is not connected.
+func (d *DeployService) remoteReady(nodeID string) error {
+	if d.Remote == nil {
+		return domain.Invalid("deploying from GitHub is not available for servers on remote nodes on this panel")
+	}
+	if !d.Remote.Online(nodeID) {
+		return domain.Invalid("the server's node is offline; deploy again when its agent reconnects")
+	}
+	return nil
+}
+
 func (d *DeployService) secret(r domain.GitHubRepo) (string, error) {
 	pt, err := d.Keys.Open(secretNS(r.BotID), secrets.GitHubSecretName, secrets.Sealed{Ciphertext: r.SecretCipher, Nonce: r.SecretNonce, KeyID: r.SecretKeyID})
 	return string(pt), err
@@ -430,11 +468,17 @@ func (d *DeployService) removeHook(ctx context.Context, botID string) {
 // BeforeBotDelete is wired to BotService.BeforeDelete.
 func (d *DeployService) BeforeBotDelete(ctx context.Context, botID string) { d.removeHook(ctx, botID) }
 
-// CreateFromGitHub creates a bot and links it to a repository; the first
-// deploy runs in the background. If linking fails the bot is deleted again.
+// CreateFromGitHub creates a bot (on the chosen node) and links it to a
+// repository; the first deploy runs in the background. If linking fails the bot is deleted again.
 // With startAfter, the bot is started once the first deployment succeeds.
 func (d *DeployService) CreateFromGitHub(ctx context.Context, actor domain.User, in CreateBotInput, gh ConfigureInput, startAfter bool) (domain.Bot, RepoView, error) {
 	in.SourceType, in.TemplateID = "github", nil
+	if in.NodeID != "" && d.Bots.remote(in.NodeID) {
+		// The first deployment goes straight to the node: it must be reachable.
+		if err := d.remoteReady(in.NodeID); err != nil {
+			return domain.Bot{}, RepoView{}, err
+		}
+	}
 	b, err := d.Bots.Create(ctx, actor, in)
 	if err != nil {
 		return domain.Bot{}, RepoView{}, err
@@ -458,6 +502,74 @@ type DeployRequest struct {
 	// StartAfter starts a stopped bot once this deployment succeeds (the
 	// first deployment of a new bot).
 	StartAfter bool
+	// PushSHA is the commit a push event announced (informational: a push
+	// always deploys the branch head when it runs).
+	PushSHA string
+}
+
+// linkKey identifies a repository link; a pending push only runs for the
+// link it arrived for.
+func linkKey(r domain.GitHubRepo) string {
+	return strings.ToLower(r.FullName) + "@" + r.Branch + ":" + r.RootDir
+}
+
+// deferPush remembers a push for a server whose node is offline instead of
+// recording a failed deployment. It reports whether the push was deferred.
+// The newest push replaces an older one; it runs (deploying the branch head
+// at that time) when the node's agent reconnects.
+func (d *DeployService) deferPush(ctx context.Context, b domain.Bot, repo domain.GitHubRepo, req DeployRequest) bool {
+	if req.Trigger != "push" || req.SHA != "" || !d.Bots.remote(b.NodeID) || d.Remote == nil || d.Remote.Online(b.NodeID) {
+		return false
+	}
+	sha := req.PushSHA
+	if !github.ValidSHA(sha) {
+		sha = ""
+	}
+	if err := d.store().SetPendingPush(ctx, b.ID, sha, linkKey(repo), d.now().UnixMilli()); err != nil {
+		d.warn("remember a push for an offline node", err)
+		return false
+	}
+	if d.Log != nil {
+		d.Log.Info("push deferred until the node reconnects", "bot", b.ID, "node", b.NodeID)
+	}
+	// The node may have reconnected between the check and the write; its
+	// reconnect hook could then have missed this push.
+	if d.Remote.Online(b.NodeID) {
+		go d.RunPendingPushes(context.WithoutCancel(ctx), b.NodeID)
+	}
+	return true
+}
+
+// RunPendingPushes deploys the pushes that arrived while a node was offline,
+// once per server (the branch head, so the newest commit). A push whose
+// repository link changed or was removed meanwhile, or whose server was
+// deleted, is dropped; the usual checks (superseded, link changed, moved)
+// still apply while it runs. Called when a node's agent connects.
+func (d *DeployService) RunPendingPushes(ctx context.Context, nodeID string) int {
+	if d.Remote == nil || !d.Remote.Online(nodeID) {
+		return 0
+	}
+	pending, err := d.store().TakePendingPushes(ctx, nodeID)
+	if err != nil {
+		d.warn("read pending pushes", err)
+		return 0
+	}
+	n := 0
+	for _, p := range pending {
+		repo, err := d.store().GetGitHubRepo(ctx, p.BotID)
+		if err != nil {
+			continue // unlinked meanwhile
+		}
+		if !repo.AutoDeploy || linkKey(repo) != p.Link {
+			label := repo.FullName + "@" + repo.Branch
+			op := d.Ops.Begin(ctx, OpStart{BotID: p.BotID, Kind: domain.OpDeploy, Trigger: "push", SourceLabel: &label})
+			d.Ops.Finish(ctx, op, domain.OpCancelled, "superseded", "a push received while the node was offline was dropped: the repository link or auto-deploy setting changed", nil)
+			continue
+		}
+		d.enqueue(p.BotID, DeployRequest{Trigger: "push", PushSHA: p.SHA})
+		n++
+	}
+	return n
 }
 
 // Deploy starts a deployment of the configured branch (or of req.SHA) in the
@@ -471,13 +583,23 @@ func (d *DeployService) DeployAs(ctx context.Context, actor domain.User, botID, 
 	if _, err := d.Bots.Authorize(ctx, actor, botID, domain.PermEditFiles); err != nil {
 		return err
 	}
+	b, err := d.store().GetBot(ctx, botID)
+	if err != nil {
+		return err
+	}
 	if _, err := d.store().GetGitHubRepo(ctx, botID); err != nil {
 		return err
 	}
 	if sha != "" && !github.ValidSHA(sha) {
 		return domain.Invalid("choose a full commit id")
 	}
-	if err := diskPreflight(d.Files, d.MinFreeDisk); err != nil {
+	if d.Bots.remote(b.NodeID) {
+		// The panel's disk is not involved; the archive limits bound what
+		// the node stages (there is no free-space preflight on the node yet).
+		if err := d.remoteReady(b.NodeID); err != nil {
+			return err
+		}
+	} else if err := diskPreflight(d.Files, d.MinFreeDisk); err != nil {
 		return err
 	}
 	if err := d.Bots.FilesBlocked(botID); err != nil {
@@ -583,6 +705,9 @@ func (d *DeployService) run(base context.Context, botID string, req DeployReques
 	if err != nil || bot.DesiredState == domain.DesiredDeleted {
 		return
 	}
+	if d.deferPush(ctx, bot, repo, req) {
+		return
+	}
 	kind := domain.OpDeploy
 	if req.SHA != "" {
 		kind = domain.OpRollback
@@ -599,7 +724,7 @@ func (d *DeployService) run(base context.Context, botID string, req DeployReques
 	}
 	defer claim.Release()
 
-	sha, n, err := d.deployOnce(cctx, repo, req.SHA, op)
+	sha, n, err := d.deployOnce(cctx, bot.NodeID, repo, req.SHA, op)
 	if err != nil {
 		var sup errSuperseded
 		if errors.As(err, &sup) || (cctx.Err() != nil && ctx.Err() == nil) {
@@ -615,7 +740,7 @@ func (d *DeployService) run(base context.Context, botID string, req DeployReques
 		_ = d.store().RecordDeploy(fctx, botID, nil, &msg, d.now().UnixMilli())
 		d.Ops.Finish(fctx, op, domain.OpFailed, "deploy_failed", msg, nil)
 		if d.Alerts.Wants(fctx, botID, "deploy") {
-			d.Alerts.Send(fctx, bot.OwnerID, "❌ Deploy failed: "+bot.Name, label+": "+msg)
+			d.Alerts.Notify(fctx, bot.OwnerID, domain.NotifyDeploys, "❌ Deploy failed: "+bot.Name, label+": "+msg, BotLink(bot))
 		}
 		return
 	}
@@ -653,8 +778,8 @@ func (d *DeployService) run(base context.Context, botID string, req DeployReques
 	}
 	d.Ops.Finish(fctx, op, domain.OpSucceeded, "", msg, map[string]any{"files": n, "sha": sha, "restarted": restarted, "started": started})
 	if d.Alerts.Wants(fctx, botID, "deploy") {
-		d.Alerts.Send(fctx, bot.OwnerID, "✅ Deployed "+bot.Name,
-			fmt.Sprintf("%s · %s · %d files (%s)", label, sha[:7], n, req.Trigger))
+		d.Alerts.Notify(fctx, bot.OwnerID, domain.NotifyDeploys, "✅ Deployed "+bot.Name,
+			fmt.Sprintf("%s · %s · %d files (%s)", label, sha[:7], n, req.Trigger), BotLink(bot))
 	}
 }
 
@@ -663,8 +788,15 @@ const maxTarball = 1 << 30
 // deployOnce downloads and applies one commit. Before the workspace changes,
 // it re-reads the bot and its repository link: a deleted bot, a removed or
 // changed link, or a cancelled claim stops the deployment without touching
-// any file.
-func (d *DeployService) deployOnce(ctx context.Context, repo domain.GitHubRepo, want string, op string) (string, int, error) {
+// any file. Servers on remote nodes receive the tarball over the node
+// connection; it is never unpacked on the panel host for them.
+func (d *DeployService) deployOnce(ctx context.Context, nodeID string, repo domain.GitHubRepo, want string, op string) (string, int, error) {
+	remote := d.Bots.remote(nodeID)
+	if remote {
+		if err := d.remoteReady(nodeID); err != nil {
+			return "", 0, err
+		}
+	}
 	d.Ops.Stage(ctx, op, "Resolving the commit")
 	tok, err := d.OAuth.GitHubToken(ctx, repo.TokenUserID)
 	if err != nil {
@@ -687,34 +819,23 @@ func (d *DeployService) deployOnce(ctx context.Context, repo domain.GitHubRepo, 
 		return "", 0, ghError(err)
 	}
 	defer body.Close()
+	lim := d.Limits
+	if lim.MaxBytes == 0 {
+		lim = filesystem.DefaultBackupLimits
+	}
+	if remote {
+		return d.deployRemote(ctx, nodeID, repo, sha, io.LimitReader(body, maxTarball), lim, op)
+	}
 	w, err := d.Files.Open(repo.BotID)
 	if err != nil {
 		return "", 0, err
 	}
 	defer w.Close()
-	lim := d.Limits
-	if lim.MaxBytes == 0 {
-		lim = filesystem.DefaultBackupLimits
-	}
 	d.Ops.Stage(ctx, op, "Unpacking and replacing files")
 	n, commit, err := w.DeployTarGzCommit(io.LimitReader(body, maxTarball), repo.RootDir, lim, func() error {
 		// Runs after the archive is fully validated in staging and before
 		// the first workspace entry is replaced.
-		if ctx.Err() != nil {
-			return errSuperseded{"cancelled by a newer action on this bot"}
-		}
-		cur, err := d.store().GetBot(ctx, repo.BotID)
-		if err != nil || cur.DesiredState == domain.DesiredDeleted {
-			return errSuperseded{"the bot was deleted"}
-		}
-		now, err := d.store().GetGitHubRepo(ctx, repo.BotID)
-		if err != nil {
-			return errSuperseded{"the repository was unlinked"}
-		}
-		if !strings.EqualFold(now.FullName, repo.FullName) || now.Branch != repo.Branch || now.RootDir != repo.RootDir {
-			return errSuperseded{"the repository link changed; deploy again to use the new settings"}
-		}
-		return nil
+		return d.stillWanted(ctx, nodeID, repo)
 	})
 	if err != nil {
 		return sha, n, err
@@ -731,6 +852,99 @@ func (d *DeployService) deployOnce(ctx context.Context, repo domain.GitHubRepo, 
 	}
 	if err := commit.Finish(); err != nil {
 		d.warn("clean up previous files", err)
+	}
+	return sha, n, nil
+}
+
+// stillWanted refuses a deployment that newer intent replaced: a cancelled
+// claim, a deleted bot, a removed or changed repository link, or a server
+// that is no longer on the node the deployment targets.
+func (d *DeployService) stillWanted(ctx context.Context, nodeID string, repo domain.GitHubRepo) error {
+	if ctx.Err() != nil {
+		return errSuperseded{"cancelled by a newer action on this bot"}
+	}
+	cur, err := d.store().GetBot(ctx, repo.BotID)
+	if err != nil || cur.DesiredState == domain.DesiredDeleted {
+		return errSuperseded{"the bot was deleted"}
+	}
+	now, err := d.store().GetGitHubRepo(ctx, repo.BotID)
+	if err != nil {
+		return errSuperseded{"the repository was unlinked"}
+	}
+	if !strings.EqualFold(now.FullName, repo.FullName) || now.Branch != repo.Branch || now.RootDir != repo.RootDir {
+		return errSuperseded{"the repository link changed; deploy again to use the new settings"}
+	}
+	if cur.NodeID != nodeID {
+		return errSuperseded{"the server moved to another node"}
+	}
+	return nil
+}
+
+// deployRemote applies one downloaded commit on the server's node. The node
+// stages the whole archive first; the panel then re-checks the bot and its
+// link, lets the node swap, records the commit and only then confirms. Any
+// failure in between rolls the node's workspace back, and a confirmation
+// that never arrives expires to rollback on the node.
+func (d *DeployService) deployRemote(ctx context.Context, nodeID string, repo domain.GitHubRepo, sha string, src io.Reader, lim filesystem.BackupLimits, op string) (string, int, error) {
+	if err := d.stillWanted(ctx, nodeID, repo); err != nil {
+		return sha, 0, err // nothing was sent yet
+	}
+	d.Ops.Stage(ctx, op, "Sending to the node and unpacking")
+	tx, err := d.Remote.BeginDeploy(ctx, nodeID, repo.BotID, src, repo.RootDir, lim)
+	if err != nil {
+		return sha, 0, err
+	}
+	complete := func(ok bool) error {
+		fctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+		defer cancel()
+		for {
+			err := d.Remote.CompleteTransaction(fctx, nodeID, repo.BotID, tx, ok)
+			var ve *domain.ValidationError
+			if err == nil || errors.Is(err, domain.ErrNotFound) || errors.As(err, &ve) {
+				return err // done, or an answer that a retry cannot change
+			}
+			select {
+			case <-fctx.Done():
+				return err
+			case <-time.After(250 * time.Millisecond):
+			}
+		}
+	}
+	// The node has validated and staged everything; nothing changed yet.
+	if err := d.stillWanted(ctx, nodeID, repo); err != nil {
+		if cerr := complete(false); cerr != nil && !errors.Is(cerr, domain.ErrNotFound) {
+			d.warn("abandon a staged remote deployment", cerr)
+		}
+		return sha, 0, err
+	}
+	d.Ops.Stage(ctx, op, "Replacing files")
+	n, err := d.Remote.ApplyDeploy(ctx, nodeID, repo.BotID, tx)
+	if err != nil {
+		// A failed swap is rolled back by the node; a lost answer is rolled
+		// back here (or by the node's expiry when it cannot be reached).
+		if cerr := complete(false); cerr != nil && !errors.Is(cerr, domain.ErrNotFound) {
+			d.warn("roll back a remote deployment after a failed swap", cerr)
+		}
+		return sha, 0, err
+	}
+	fctx, cancel := bg(ctx)
+	defer cancel()
+	if err := d.store().RecordDeploy(fctx, repo.BotID, &sha, nil, d.now().UnixMilli()); err != nil {
+		if rerr := complete(false); rerr != nil {
+			d.warn("roll back remote files after a failed record", rerr)
+		}
+		return sha, 0, err
+	}
+	if err := complete(true); err != nil {
+		// The node keeps the previous files until it hears the commit and
+		// rolls back when it never does. Put the recorded commit back so
+		// the panel does not claim a deployment the node may have undone.
+		d.warn("confirm a remote deployment", err)
+		msg := "the node did not confirm the new files and rolls them back; deploy again"
+		if repo.LastSHA != nil {
+			_ = d.store().RecordDeploy(fctx, repo.BotID, repo.LastSHA, &msg, d.now().UnixMilli())
+		}
+		return sha, 0, domain.Invalid(msg)
 	}
 	return sha, n, nil
 }
@@ -822,7 +1036,7 @@ func (d *DeployService) HandleWebhook(ctx context.Context, event, delivery, sign
 		// A commit the panel pushed from this bot's own files is already
 		// deployed; redeploying it would only restart the bot.
 		if c.Branch == branch && (c.LastSHA == nil || *c.LastSHA != p.After) {
-			d.enqueue(c.BotID, DeployRequest{Trigger: "push"})
+			d.enqueue(c.BotID, DeployRequest{Trigger: "push", PushSHA: p.After})
 			queued = true
 		}
 	}
@@ -894,6 +1108,11 @@ func (d *DeployService) PollOnce(ctx context.Context) int {
 		}
 		if d.isRunning(r.BotID) {
 			continue // a deployment is already fetching the branch head
+		}
+		if b, err := d.store().GetBot(ctx, r.BotID); err != nil {
+			continue
+		} else if d.Bots.remote(b.NodeID) && (d.Remote == nil || !d.Remote.Online(b.NodeID)) {
+			continue // checked again once the node's agent reconnects
 		}
 		tok, err := d.OAuth.GitHubToken(ctx, r.TokenUserID)
 		if err != nil {

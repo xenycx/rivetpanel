@@ -18,10 +18,10 @@ import (
 
 	"github.com/google/uuid"
 
-	"botpanel/internal/domain"
-	"botpanel/internal/events"
-	"botpanel/internal/filesystem"
-	"botpanel/internal/secrets"
+	"github.com/xenycx/rivetpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/events"
+	"github.com/xenycx/rivetpanel/internal/filesystem"
+	"github.com/xenycx/rivetpanel/internal/secrets"
 )
 
 // MaxBackupsPerBot bounds stored backups per bot (all kinds).
@@ -37,6 +37,7 @@ const MaxBackupsPerBot = 50
 type BackupService struct {
 	Bots     *BotService
 	Files    *filesystem.Manager
+	Remote   RemoteArchives // optional: workspace archives for agent nodes
 	Keys     *secrets.Keyring
 	Dir      string // <dir>/<bot_id>/<backup_id>.tar.gz
 	Limits   filesystem.BackupLimits
@@ -52,6 +53,15 @@ type BackupService struct {
 	sem     chan struct{}
 	wg      sync.WaitGroup
 	baseCtx context.Context
+}
+
+// RemoteArchives is the authenticated, node-routed archive surface. A remote
+// restore remains reversible until the panel records the matching database
+// change and explicitly completes the transaction.
+type RemoteArchives interface {
+	Backup(ctx context.Context, nodeID, botID string, extra map[string][]byte, limits filesystem.BackupLimits, dst io.Writer) error
+	BeginRestore(ctx context.Context, nodeID, botID string, src io.Reader, limits filesystem.BackupLimits) (transaction string, err error)
+	CompleteRestore(ctx context.Context, nodeID, botID, transaction string, commit bool) error
 }
 
 func (s *BackupService) now() time.Time {
@@ -401,7 +411,7 @@ func (s *BackupService) snapshotEnv(ctx context.Context, botID string) ([]byte, 
 	}
 	snap := envSnapshot{Version: 1, BotID: botID}
 	for _, r := range rows {
-		if strings.HasPrefix(strings.ToUpper(r.Name), "BOTPANEL_") {
+		if strings.HasPrefix(strings.ToUpper(r.Name), "RIVET_") {
 			continue // system-managed (telemetry key), regenerated on demand
 		}
 		snap.Vars = append(snap.Vars, envSnapVar{r.Name, base64.StdEncoding.EncodeToString(r.Ciphertext),
@@ -439,7 +449,7 @@ func (s *BackupService) execute(ctx context.Context, row domain.Backup, includeE
 		s.Ops.Finish(fctx, op, domain.OpFailed, "backup_failed", msg, nil)
 		if s.Alerts.Wants(fctx, row.BotID, "backup") {
 			if b, err := s.store().GetBot(fctx, row.BotID); err == nil {
-				s.Alerts.Send(fctx, b.OwnerID, "❌ Backup failed: "+b.Name, msg)
+				s.Alerts.Notify(fctx, b.OwnerID, domain.NotifyBackups, "❌ Backup failed: "+b.Name, msg, BotLink(b))
 			}
 		}
 		return
@@ -475,11 +485,6 @@ func (s *BackupService) write(ctx context.Context, row domain.Backup, includeEnv
 		return 0, "", err
 	}
 	fail := func(err error) (int64, string, error) { f.Close(); os.Remove(tmp); return 0, "", err }
-	w, err := s.Files.Open(row.BotID)
-	if err != nil {
-		return fail(err)
-	}
-	defer w.Close()
 	extra := map[string][]byte{}
 	if includeEnv {
 		if extra["env.json"], err = s.snapshotEnv(ctx, row.BotID); err != nil {
@@ -487,8 +492,26 @@ func (s *BackupService) write(ctx context.Context, row domain.Backup, includeEnv
 		}
 	}
 	h := sha256.New()
-	if _, _, err := w.WriteTarGz(io.MultiWriter(f, h), extra, s.Limits); err != nil {
+	b, err := s.store().GetBot(ctx, row.BotID)
+	if err != nil {
 		return fail(err)
+	}
+	if s.Bots.remote(b.NodeID) {
+		if s.Remote == nil {
+			return fail(domain.ErrRunnerUnavailable)
+		}
+		if err := s.Remote.Backup(ctx, b.NodeID, row.BotID, extra, s.Limits, io.MultiWriter(f, h)); err != nil {
+			return fail(err)
+		}
+	} else {
+		w, err := s.Files.Open(row.BotID)
+		if err != nil {
+			return fail(err)
+		}
+		defer w.Close()
+		if _, _, err := w.WriteTarGz(io.MultiWriter(f, h), extra, s.Limits); err != nil {
+			return fail(err)
+		}
 	}
 	if err := f.Sync(); err != nil {
 		return fail(err)
@@ -659,22 +682,54 @@ func (s *BackupService) Restore(ctx context.Context, actor domain.User, botID, i
 		return domain.Bot{}, domain.Invalid("could not take a safety backup of the current state; restore aborted")
 	}
 
+	s.Ops.Stage(ctx, op, "Replacing files")
 	f, err := os.Open(path)
 	if err != nil {
 		return domain.Bot{}, err
 	}
 	defer f.Close()
-	w, err := s.Files.Open(botID)
-	if err != nil {
-		return domain.Bot{}, err
-	}
-	defer w.Close()
-	s.Ops.Stage(ctx, op, "Replacing files")
-	// The previous files are kept until the database records the restore; a
-	// failure here or a crash rolls the files back (Manager.Recover at start).
-	_, commit, err := w.RestoreTarGzCommit(f, s.Limits)
-	if err != nil {
-		return domain.Bot{}, err
+	var finish func(bool) error
+	if s.Bots.remote(b.NodeID) {
+		if s.Remote == nil {
+			return domain.Bot{}, domain.ErrRunnerUnavailable
+		}
+		tx, rerr := s.Remote.BeginRestore(ctx, b.NodeID, botID, f, s.Limits)
+		if rerr != nil {
+			return domain.Bot{}, rerr
+		}
+		finish = func(ok bool) error {
+			fctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+			defer cancel()
+			for {
+				err := s.Remote.CompleteRestore(fctx, b.NodeID, botID, tx, ok)
+				if err == nil {
+					return nil
+				}
+				select {
+				case <-fctx.Done():
+					return err
+				case <-time.After(250 * time.Millisecond):
+				}
+			}
+		}
+	} else {
+		w, werr := s.Files.Open(botID)
+		if werr != nil {
+			return domain.Bot{}, werr
+		}
+		defer w.Close()
+		// The previous files are kept until the database records the restore;
+		// a failure here or a crash rolls them back (Manager.Recover at start).
+		_, commit, rerr := w.RestoreTarGzCommit(f, s.Limits)
+		if rerr != nil {
+			return domain.Bot{}, rerr
+		}
+		finish = func(ok bool) error {
+			if ok {
+				return commit.Finish()
+			}
+			return commit.Rollback()
+		}
 	}
 	dctx, dcancel := bg(ctx) // the database step must not be cut short by a closed request
 	defer dcancel()
@@ -689,12 +744,12 @@ func (s *BackupService) Restore(ctx context.Context, actor domain.User, botID, i
 		}
 	}
 	if err != nil {
-		if rerr := commit.Rollback(); rerr != nil {
+		if rerr := finish(false); rerr != nil {
 			s.Log.Error("restore: files could not be rolled back after a database error", "bot", botID, "err", rerr)
 		}
 		return domain.Bot{}, err
 	}
-	if err := commit.Finish(); err != nil {
+	if err := finish(true); err != nil {
 		s.Log.Warn("restore: clean up the previous files", "bot", botID, "err", err)
 	}
 	return s.store().GetBot(dctx, botID)

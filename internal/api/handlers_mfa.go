@@ -7,15 +7,15 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 
-	"botpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/domain"
 )
 
 // The second-step ticket rides in its own cookie, scoped to the auth routes.
 // Lax, like the OAuth binder: a provider sign-in sets it on the cross-site
 // callback redirect.
-const mfaCookie = "botpanel_mfa"
+const mfaCookie = "rivetpanel_mfa"
 
-func (s *server) setMFACookie(c fiber.Ctx, ticket string) {
+func (s *panel) setMFACookie(c fiber.Ctx, ticket string) {
 	exp := time.Now().Add(5 * time.Minute)
 	if ticket == "" {
 		exp = time.Unix(0, 0)
@@ -28,7 +28,7 @@ func (s *server) setMFACookie(c fiber.Ctx, ticket string) {
 
 // beginMFA replaces a first-step success with a second-step ticket when the
 // account has two-step sign-in. It returns false when no second step is due.
-func (s *server) beginMFA(c fiber.Ctx, u domain.User, method string) (bool, error) {
+func (s *panel) beginMFA(c fiber.Ctx, u domain.User, method string) (bool, error) {
 	if s.mfa == nil {
 		return false, nil
 	}
@@ -45,7 +45,7 @@ func (s *server) beginMFA(c fiber.Ctx, u domain.User, method string) (bool, erro
 }
 
 // completeMFA is POST /auth/mfa {code}: the second step of a sign-in.
-func (s *server) completeMFA(c fiber.Ctx) error {
+func (s *panel) completeMFA(c fiber.Ctx) error {
 	var in struct {
 		Code string `json:"code"`
 	}
@@ -69,7 +69,7 @@ func (s *server) completeMFA(c fiber.Ctx) error {
 	return c.JSON(fiber.Map{"user": toUser(sess.User), "csrf_token": sess.CSRF})
 }
 
-func (s *server) recordMFAFailure(c fiber.Ctx, u domain.User, method string) {
+func (s *panel) recordMFAFailure(c fiber.Ctx, u domain.User, method string) {
 	if s.audit == nil {
 		return
 	}
@@ -78,7 +78,7 @@ func (s *server) recordMFAFailure(c fiber.Ctx, u domain.User, method string) {
 		SubjectUserID: &u.ID, ActorLabel: &u.Email})
 }
 
-func (s *server) mfaStatus(c fiber.Ctx) error {
+func (s *panel) mfaStatus(c fiber.Ctx) error {
 	st, err := s.mfa.Status(c.Context(), currentUser(c))
 	if err != nil {
 		return err
@@ -86,7 +86,7 @@ func (s *server) mfaStatus(c fiber.Ctx) error {
 	return c.JSON(fiber.Map{"enabled": st.Enabled, "enabled_at_ms": st.EnabledAtMS, "recovery_left": st.RecoveryLeft})
 }
 
-func (s *server) mfaSetup(c fiber.Ctx) error {
+func (s *panel) mfaSetup(c fiber.Ctx) error {
 	var in struct {
 		Password string `json:"password"`
 	}
@@ -101,7 +101,7 @@ func (s *server) mfaSetup(c fiber.Ctx) error {
 	return c.JSON(fiber.Map{"key": setup.Key, "uri": setup.URI})
 }
 
-func (s *server) mfaEnable(c fiber.Ctx) error {
+func (s *panel) mfaEnable(c fiber.Ctx) error {
 	var in struct {
 		Code string `json:"code"`
 	}
@@ -117,7 +117,7 @@ func (s *server) mfaEnable(c fiber.Ctx) error {
 	return c.JSON(fiber.Map{"recovery_codes": codes})
 }
 
-func (s *server) mfaDisable(c fiber.Ctx) error {
+func (s *panel) mfaDisable(c fiber.Ctx) error {
 	var in struct {
 		Code string `json:"code"`
 	}
@@ -134,7 +134,7 @@ func (s *server) mfaDisable(c fiber.Ctx) error {
 	return c.SendStatus(fiber.StatusNoContent)
 }
 
-func (s *server) mfaRecoveryCodes(c fiber.Ctx) error {
+func (s *panel) mfaRecoveryCodes(c fiber.Ctx) error {
 	var in struct {
 		Code string `json:"code"`
 	}

@@ -5,8 +5,8 @@ import (
 	"log/slog"
 	"time"
 
-	"botpanel/internal/domain"
-	"botpanel/internal/store/sqlite"
+	"github.com/xenycx/rivetpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/store/sqlite"
 )
 
 // AuditStore is the persistence surface of the activity record.

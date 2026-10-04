@@ -1,0 +1,38 @@
+[Unit]
+Description=RivetPanel remote execution agent
+Documentation=file:///usr/share/doc/rivetpanel/docs/agents.md
+After=network-online.target docker.service
+Wants=network-online.target docker.service
+
+[Service]
+Type=simple
+User=root
+EnvironmentFile=-/etc/rivet-agent/rivet-agent.env
+ExecStart=/usr/local/bin/rivet-agent serve
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+
+# The Docker socket is root-equivalent. The service still drops privileges and
+# kernel access it does not need, but this unit is not a boundary from Docker.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+ReadWritePaths=/var/lib/rivet-agent
+StateDirectory=rivet-agent
+StateDirectoryMode=0750
+CapabilityBoundingSet=CAP_CHOWN CAP_FOWNER CAP_DAC_OVERRIDE
+AmbientCapabilities=CAP_CHOWN CAP_FOWNER CAP_DAC_OVERRIDE
+
+[Install]
+WantedBy=multi-user.target

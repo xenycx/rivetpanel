@@ -5,7 +5,9 @@
 	import { page } from '$app/state';
 	import { api } from '$lib/api/client';
 	import type { Bot } from '$lib/api/types';
-	import { session, loadSession, logout, rememberNext } from '$lib/session.svelte';
+	import { session, loadSession, logout, rememberNext, canAdminister, can } from '$lib/session.svelte';
+	import { adminLinks } from '$lib/adminNav';
+	import { describePermissions } from '$lib/permissions';
 	import { confirmLeave, dirtyEntries } from '$lib/ui/guard.svelte';
 	import DialogHost from '$lib/components/ui/DialogHost.svelte';
 	import ToastRegion from '$lib/components/ui/ToastRegion.svelte';
@@ -18,7 +20,9 @@
 	import { theme, cycleTheme } from '$lib/ui/theme.svelte';
 	import { describe } from '$lib/status';
 	import WorkspaceSwitcher from '$lib/components/WorkspaceSwitcher.svelte';
+	import NotificationBell from '$lib/components/NotificationBell.svelte';
 	import { loadWorkspaces } from '$lib/workspaces.svelte';
+	import { resourceHref } from '$lib/api/games';
 
 	let { children } = $props();
 	let drawer = $state(false);
@@ -26,7 +30,7 @@
 	let setupNeeded = $state(false);
 	function readSidebarPreference() {
 		try {
-			return localStorage.getItem('botforge.sidebarCollapsed') === '1';
+			return localStorage.getItem('rivetpanel.sidebarCollapsed') === '1';
 		} catch {
 			return false;
 		}
@@ -34,7 +38,10 @@
 	let sidebarCollapsed = $state(readSidebarPreference());
 
 	// Pages that work without an account.
-	const PUBLIC = ['/', '/login', '/register', '/reset', '/welcome', '/setup', '/docs'];
+	const PUBLIC = ['/', '/login', '/register', '/reset', '/verify-email', '/welcome', '/setup', '/docs', '/status'];
+	// The help center answers anonymous visitors itself (only while the
+	// public help center is on; otherwise it asks them to sign in).
+	const isPublic = (p: string) => PUBLIC.includes(p) || p === '/help' || p.startsWith('/help/');
 
 	onMount(async () => {
 		await loadSession();
@@ -51,7 +58,7 @@
 		if (!session.loaded || session.user) return;
 		const p = page.url.pathname;
 		if (setupNeeded && p !== '/setup') goto('/setup');
-		else if (!setupNeeded && !PUBLIC.includes(p)) {
+		else if (!setupNeeded && !isPublic(p)) {
 			rememberNext(location.pathname + location.search + location.hash);
 			goto('/login');
 		}
@@ -60,7 +67,7 @@
 	function toggleSidebar() {
 		sidebarCollapsed = !sidebarCollapsed;
 		try {
-			localStorage.setItem('botforge.sidebarCollapsed', sidebarCollapsed ? '1' : '0');
+			localStorage.setItem('rivetpanel.sidebarCollapsed', sidebarCollapsed ? '1' : '0');
 		} catch {
 			/* the preference is optional */
 		}
@@ -104,21 +111,27 @@
 	});
 
 	const path = $derived(page.url.pathname);
-	const isAdmin = $derived(session.user?.role === 'admin');
+	const adminHome = $derived(session.user && canAdminister() ? (adminLinks()[0]?.href ?? '') : '');
+	const withheld = $derived(session.verification.withheld ?? []);
 	type NavItem = { href: string; label: string; icon: IconName; active: boolean };
 	const nav = $derived<NavItem[]>([
-		{ href: '/dashboard', label: 'Overview', icon: 'home', active: path === '/dashboard' || (path.startsWith('/bots') && path !== '/bots/new') },
+		{ href: '/dashboard', label: 'Bots', icon: 'home', active: path === '/dashboard' || (path.startsWith('/bots') && path !== '/bots/new') },
+		...(session.features.games ? [{ href: '/servers', label: 'Game servers', icon: 'gamepad' as IconName, active: path.startsWith('/servers') }] : []),
 		{ href: '/templates', label: 'Templates', icon: 'layers', active: path.startsWith('/templates') || path === '/bots/new' },
 		...(session.features.sites ? [{ href: '/sites', label: 'Sites', icon: 'globe' as IconName, active: path.startsWith('/sites') }] : []),
 		{ href: '/activity', label: 'Activity', icon: 'activity', active: path.startsWith('/activity') },
+		...(can('tickets.create') || can('tickets.view_all') || can('tickets.manage')
+			? [{ href: '/support', label: 'Support', icon: 'lifebuoy' as IconName, active: path.startsWith('/support') }]
+			: []),
 		{ href: '/settings/connected-accounts', label: 'Settings', icon: 'gear', active: path.startsWith('/settings') },
-		...(isAdmin ? [{ href: '/admin/users', label: 'Administration', icon: 'shield' as IconName, active: path.startsWith('/admin') }] : [])
+		...(adminHome ? [{ href: adminHome, label: 'Administration', icon: 'shield' as IconName, active: path.startsWith('/admin') }] : [])
 	]);
 	const resources = $derived([
 		{ href: '/docs', label: 'Documentation', icon: 'book' as IconName, external: false },
+		{ href: '/help', label: 'Help center', icon: 'lifebuoy' as IconName, external: false },
 		{ href: '/api/v1/automation/openapi.yaml', label: 'Automation API', icon: 'code' as IconName, external: true },
-		{ href: '/', label: 'What BotForge does', icon: 'info' as IconName, external: false },
-		...(isAdmin ? [{ href: '/admin/diagnostics', label: 'Status', icon: 'chart' as IconName, external: false }] : [])
+		{ href: '/', label: 'What RivetPanel does', icon: 'info' as IconName, external: false },
+		...(can('system.view') ? [{ href: '/admin/diagnostics', label: 'Status', icon: 'chart' as IconName, external: false }] : [])
 	]);
 	const bare = $derived((PUBLIC.includes(path) && path !== '/docs') || (!session.user && session.loaded));
 	const who = $derived(session.user?.display_name || session.user?.email.split('@')[0] || '');
@@ -135,13 +148,13 @@
 </script>
 
 <svelte:window onbeforeunload={beforeUnload} />
-<svelte:head><title>BotForge</title></svelte:head>
+<svelte:head><title>RivetPanel</title></svelte:head>
 
 {#snippet sidebar(compact = false, collapsible = false)}
 	<div class="flex items-center {compact ? 'flex-col justify-center gap-2' : 'gap-2'} px-1">
-		<a href="/dashboard" class="flex min-w-0 items-center gap-2.5 {compact ? 'justify-center' : 'px-2'} py-1" aria-label="BotForge dashboard" title={compact ? 'BotForge dashboard' : undefined}>
+		<a href="/dashboard" class="flex min-w-0 items-center gap-2.5 {compact ? 'justify-center' : 'px-2'} py-1" aria-label="RivetPanel dashboard" title={compact ? 'RivetPanel dashboard' : undefined}>
 			<img src="/favicon.svg" alt="" width="30" height="30" class="shrink-0 rounded-tile" />
-			{#if !compact}<span class="truncate font-semibold tracking-[0.08em] uppercase">BotForge</span>{/if}
+			{#if !compact}<span class="truncate font-semibold tracking-[0.08em] uppercase">RivetPanel</span>{/if}
 		</a>
 		{#if collapsible}
 			<button class="tb-btn {compact ? '' : 'ml-auto'} shrink-0" onclick={toggleSidebar} aria-label={compact ? 'Expand sidebar' : 'Collapse sidebar'} title={compact ? 'Expand sidebar' : 'Collapse sidebar'}>
@@ -168,7 +181,7 @@
 			{#each favorites as b (b.id)}
 				{@const d = describe(b)}
 				<li>
-					<a href="/bots/{b.id}" class="side-link {compact ? 'justify-center px-0' : ''}" data-active={path === `/bots/${b.id}`} aria-label={compact ? b.name : undefined} title={compact ? b.name : undefined}>
+					<a href={resourceHref(b)} class="side-link {compact ? 'justify-center px-0' : ''}" data-active={path === resourceHref(b)} aria-label={compact ? b.name : undefined} title={compact ? b.name : undefined}>
 						{#if b.logo_url}<img src={b.logo_url} alt="" class="size-6 shrink-0 rounded-pill object-cover" referrerpolicy="no-referrer" />{:else}<span class="side-dot" data-tone={d.tone}></span>{/if}{#if !compact}<span class="truncate">{b.name}</span>{/if}
 					</a>
 				</li>
@@ -203,23 +216,31 @@
 			<header class="topbar sticky top-0 z-30 border-b border-rule-soft backdrop-blur-md">
 				<div class="flex h-16 items-center gap-2 px-4 sm:px-6 lg:px-10">
 					<button class="btn btn-quiet btn-icon lg:hidden" aria-label="Open menu" aria-expanded={drawer} onclick={() => (drawer = true)}><Icon name="menu" size={18} /></button>
-					<a href="/dashboard" class="flex items-center gap-2 lg:hidden" aria-label="BotForge dashboard"><img src="/favicon.svg" alt="" width="26" height="26" class="rounded-tile" /></a>
+					<a href="/dashboard" class="flex items-center gap-2 lg:hidden" aria-label="RivetPanel dashboard"><img src="/favicon.svg" alt="" width="26" height="26" class="rounded-tile" /></a>
 					<p class="hidden truncate text-title text-muted sm:block">Welcome back, <span class="font-semibold text-ink">{who}</span></p>
 					<div class="ml-auto flex items-center gap-1.5">
 						{#if session.features.ai}<button class="tb-btn {chat.open ? 'text-action' : ''}" onclick={() => chat.toggle()} aria-label="Ask AI (Ctrl+.)" aria-pressed={chat.open} title="Ask AI (Ctrl+.)"><Icon name="sparkle" size={17} /></button>{/if}
 						<button class="tb-btn" onclick={() => (palette = true)} aria-label="Go to a bot or page (Ctrl+K)" title="Go to (Ctrl+K)"><Icon name="search" size={17} /></button>
 						<a class="tb-btn hidden sm:grid" href="/activity" aria-label="Activity" title="Activity"><Icon name="history" size={17} /></a>
+						<NotificationBell />
 						<button class="tb-btn" onclick={cycleTheme} aria-label="{themeLabel}. Switch theme" title="{themeLabel} · click to switch">
 							<Icon name={theme.pref === 'system' ? 'monitor' : theme.dark ? 'moon' : 'sun'} size={17} />
 						</button>
-						<a href="/bots/new" class="btn btn-primary ml-1"><Icon name="plus" />New</a>
+						{#if can('bots.create')}<a href="/bots/new" class="btn btn-primary ml-1"><Icon name="plus" />New</a>{/if}
 						<Menu label="Account" items={accountItems}>
 							{#snippet trigger()}{#if session.user?.avatar_url}<img class="avatar object-cover" src={session.user.avatar_url} alt="" />{:else}<span class="avatar" aria-hidden="true">{initials}</span>{/if}<Icon name="chevronDown" size={14} class="text-muted" />{/snippet}
 						</Menu>
 					</div>
 				</div>
 			</header>
-			<main id="main" tabindex="-1" class="mx-auto max-w-[1400px] px-4 pt-6 pb-24 outline-none sm:px-6 lg:px-10 lg:pt-8">{@render children()}</main>
+			<main id="main" tabindex="-1" class="mx-auto max-w-[1400px] px-4 pt-6 pb-24 outline-none sm:px-6 lg:px-10 lg:pt-8">
+				{#if withheld.length && !path.startsWith('/settings/profile')}
+					<p class="mb-5 rounded-tile border border-warn/30 bg-warn/7 px-3.5 py-2.5 text-small" role="status">
+						Verify your email address to unlock {describePermissions(withheld)}. <a class="link" href="/settings/profile#email">Verify now</a>
+					</p>
+				{/if}
+				{@render children()}
+			</main>
 		</div>
 	</div>
 
@@ -237,10 +258,10 @@
 	<OperationShelf />
 	<CommandPalette bind:open={palette} />
 	<AIChat />
-{:else if session.loaded && PUBLIC.includes(path)}
+{:else if session.loaded && isPublic(path)}
 	{@render children()}
 {:else if !session.loaded}
-<div class="grid min-h-dvh place-items-center" role="status"><span class="text-muted">Loading BotForge…</span></div>
+<div class="grid min-h-dvh place-items-center" role="status"><span class="text-muted">Loading RivetPanel…</span></div>
 {/if}
 
 <DialogHost />

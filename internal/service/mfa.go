@@ -7,9 +7,9 @@ import (
 	"sync"
 	"time"
 
-	"botpanel/internal/auth"
-	"botpanel/internal/domain"
-	"botpanel/internal/secrets"
+	"github.com/xenycx/rivetpanel/internal/auth"
+	"github.com/xenycx/rivetpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/secrets"
 )
 
 // MFAStore is the persistence two-step sign-in needs.
@@ -25,7 +25,7 @@ type MFAStore interface {
 }
 
 const (
-	mfaIssuer         = "BotForge"
+	mfaIssuer         = "RivetPanel"
 	mfaTicketTTL      = 5 * time.Minute
 	mfaTicketAttempts = 5
 	mfaMaxTickets     = 1000
@@ -310,4 +310,47 @@ func (m *MFAService) Reset(ctx context.Context, email string) (domain.User, erro
 	}
 	_, err = m.Auth.Store.DeleteOtherSessions(ctx, u.ID, []byte{}) // keep nothing (NULL would match nothing)
 	return u, err
+}
+
+// RecentAuth proves the signed-in person is present: the current password,
+// or (for accounts without one) a sign-in within RecentAuthWindow.
+func (m *MFAService) RecentAuth(ctx context.Context, actor domain.User, currentToken, password string) error {
+	return m.recentAuth(ctx, actor, currentToken, password)
+}
+
+// TicketUser returns the account a pending second step belongs to, without
+// consuming the ticket (a passkey second step needs it to build the request).
+func (m *MFAService) TicketUser(ticket string) (string, bool) {
+	if m == nil || ticket == "" {
+		return "", false
+	}
+	key := string(auth.HashToken(ticket))
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	t := m.tickets[key]
+	if t == nil || m.now().After(t.expires) || t.attempts >= mfaTicketAttempts {
+		return "", false
+	}
+	return t.userID, true
+}
+
+// CompleteVerified finishes a second step that was proven another way (a
+// passkey assertion for userID). It consumes the ticket and issues the session.
+func (m *MFAService) CompleteVerified(ctx context.Context, ticket, userID string) (Session, string, error) {
+	key := string(auth.HashToken(ticket))
+	m.mu.Lock()
+	t := m.tickets[key]
+	if t == nil || m.now().After(t.expires) || t.userID != userID {
+		m.mu.Unlock()
+		return Session{}, "", domain.Invalid("this sign-in expired; start again")
+	}
+	delete(m.tickets, key)
+	device, method := t.device, t.method
+	m.mu.Unlock()
+	u, err := m.Auth.Store.GetUserByID(ctx, userID)
+	if err != nil || u.Disabled {
+		return Session{}, method, domain.ErrUnauthorized
+	}
+	sess, err := m.Auth.IssueSessionFor(ctx, u, device)
+	return sess, method, err
 }

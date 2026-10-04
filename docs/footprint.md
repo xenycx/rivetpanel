@@ -1,8 +1,9 @@
 # Memory footprint
 
-**Target:** under 50 MB aggregate idle RSS for the panel and runner
-processes. In this deployment profile the runner runs **inside** the panel
-process (`cmd/botrunner` does not exist), so the aggregate is one process.
+**Target:** under 50 MB aggregate idle RSS for the panel and local runner. In
+this deployment profile the local runner runs **inside** the panel process, so
+that aggregate is one process. Each remote node adds its own `rivet-agent`
+process on that host and is measured separately.
 
 ## Method
 

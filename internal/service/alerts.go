@@ -14,10 +14,10 @@ import (
 	"sync"
 	"time"
 
-	"botpanel/internal/domain"
-	"botpanel/internal/events"
-	"botpanel/internal/mail"
-	"botpanel/internal/secrets"
+	"github.com/xenycx/rivetpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/events"
+	"github.com/xenycx/rivetpanel/internal/mail"
+	"github.com/xenycx/rivetpanel/internal/secrets"
 )
 
 // AlertService posts deployment and crash notifications to the Discord webhook
@@ -42,6 +42,10 @@ type AlertService struct {
 		GetUserByID(ctx context.Context, id string) (domain.User, error)
 		UserEmailAlerts(ctx context.Context, userID string) (bool, error)
 	}
+	// Notices, when set, keeps an in-panel notification and sends the email
+	// according to the account's per-category preferences (replacing the
+	// direct email above for Send/Notify).
+	Notices *NotificationService
 
 	mu   sync.Mutex
 	last map[string]time.Time // per-bot crash alert throttle
@@ -114,13 +118,35 @@ func (a *AlertService) Wants(ctx context.Context, botID, kind string) bool {
 	return true
 }
 
-// Send posts a message to the user's webhook and emails them, for whichever
-// channels they have. The email is sent in the background.
+// Send is Notify for the bot alerts category without a link.
 func (a *AlertService) Send(ctx context.Context, userID, title, message string) {
+	a.Notify(ctx, userID, domain.NotifyBotAlerts, title, message, "")
+}
+
+// Notify posts a message to the user's webhook and records/emails it for
+// whichever channels they have (the in-panel inbox and email follow the
+// account's preferences for the category). The email is sent in the
+// background.
+func (a *AlertService) Notify(ctx context.Context, userID, category, title, message, link string) {
+	if a == nil {
+		return
+	}
 	if _, err := a.discord(ctx, userID, title, message); err != nil && a.Log != nil {
 		a.Log.Debug("discord alert not sent", "err", err)
 	}
+	if a.Notices != nil {
+		a.Notices.Notify(ctx, userID, Notice{Category: category, Title: title, Body: message, Link: link})
+		return
+	}
 	a.email(ctx, userID, title, message, false)
+}
+
+// BotLink is the interface path of a bot or game server.
+func BotLink(b domain.Bot) string {
+	if b.IsGame() {
+		return "/servers/" + b.ID
+	}
+	return "/bots/" + b.ID
 }
 
 // SendErr is Send that reports whether a message reached the user: it
@@ -174,7 +200,7 @@ func (a *AlertService) discord(ctx context.Context, userID, title, message strin
 		return false, domain.Invalid("no Discord webhook")
 	}
 	body, _ := json.Marshal(map[string]any{
-		"username": "BotForge", "allowed_mentions": map[string]any{"parse": []string{}},
+		"username": "RivetPanel", "allowed_mentions": map[string]any{"parse": []string{}},
 		"embeds": []map[string]any{{"title": clip(title, 200), "description": clip(message, 1500)}},
 	})
 	hc := a.HTTP
@@ -241,7 +267,7 @@ func (a *AlertService) Watch(ctx context.Context, bus *events.Bus) {
 			if err != nil || !a.Wants(ctx, st.BotID, "crash") {
 				continue
 			}
-			a.Send(ctx, bot.OwnerID, "⚠️ "+bot.Name+" needs attention", st.LastError)
+			a.Notify(ctx, bot.OwnerID, domain.NotifyBotAlerts, "⚠️ "+bot.Name+" needs attention", st.LastError, BotLink(bot))
 		}
 	}
 }

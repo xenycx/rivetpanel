@@ -5,10 +5,10 @@ import (
 	"path/filepath"
 	"testing"
 
-	"botpanel/internal/domain"
-	"botpanel/internal/migrations"
-	"botpanel/internal/secrets"
-	"botpanel/internal/store/sqlite"
+	"github.com/xenycx/rivetpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/migrations"
+	"github.com/xenycx/rivetpanel/internal/secrets"
+	"github.com/xenycx/rivetpanel/internal/store/sqlite"
 )
 
 func TestVerifyCoversOAuthAndGitHubSecrets(t *testing.T) {

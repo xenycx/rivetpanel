@@ -10,11 +10,12 @@ import (
 	"sync"
 	"time"
 
-	"botpanel/internal/addons"
-	"botpanel/internal/domain"
-	"botpanel/internal/events"
-	"botpanel/internal/runtimes"
-	"botpanel/internal/store/sqlite"
+	"github.com/xenycx/rivetpanel/internal/addons"
+	"github.com/xenycx/rivetpanel/internal/blueprint"
+	"github.com/xenycx/rivetpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/events"
+	"github.com/xenycx/rivetpanel/internal/runtimes"
+	"github.com/xenycx/rivetpanel/internal/store/sqlite"
 )
 
 // Store is the persistence surface the runner uses.
@@ -159,19 +160,22 @@ type Runner struct {
 	uid        int
 	gid        int
 
-	mu       sync.Mutex
-	queue    chan string
-	pending  map[string]bool
-	locks    map[string]*sync.Mutex
-	cancels  map[string]context.CancelFunc
-	states   map[string]*botState
-	timers   map[string]*time.Timer
-	images   map[string]string // resolved immutable image references
-	ready    error             // nil when Docker is reachable and capable
-	readySet bool
-	caps     Capabilities
-	started  bool
-	runCtx   context.Context
+	mu      sync.Mutex
+	queue   chan string
+	pending map[string]bool
+	locks   map[string]*sync.Mutex
+	cancels map[string]context.CancelFunc
+	states  map[string]*botState
+	timers  map[string]*time.Timer
+	images  map[string]string // resolved immutable image references
+	// blueprints caches parsed blueprint revisions ("id@rev").
+	blueprints map[string]blueprint.Spec
+	prov       *blueprint.Providers
+	ready      error // nil when Docker is reachable and capable
+	readySet   bool
+	caps       Capabilities
+	started    bool
+	runCtx     context.Context
 }
 
 // Deps groups the runner's collaborators.
@@ -184,6 +188,8 @@ type Deps struct {
 	Log        *slog.Logger
 	Bus        *events.Bus   // optional: publishes status changes for live views
 	Builds     BuildRecorder // optional: durable build history and output
+	// Providers download game server software (nil = the public providers).
+	Providers *blueprint.Providers
 }
 
 // New builds a Runner. Call Run to start it.
@@ -204,7 +210,8 @@ func New(d Deps, o Options) (*Runner, error) {
 	}
 	return &Runner{
 		store: d.Store, docker: d.Docker, env: d.Env, ws: d.Workspaces, cat: d.Catalog, log: d.Log, bus: d.Bus, builds: d.Builds, opts: o,
-		uid: uid, gid: gid,
+		prov: d.Providers,
+		uid:  uid, gid: gid,
 		queue: make(chan string, 4096), pending: map[string]bool{}, locks: map[string]*sync.Mutex{},
 		cancels: map[string]context.CancelFunc{}, states: map[string]*botState{}, timers: map[string]*time.Timer{},
 		ready:      errors.New("docker connection not yet established"),
@@ -367,7 +374,15 @@ func (r *Runner) Run(ctx context.Context) error {
 			return nil
 		}
 		r.setReady(fmt.Errorf("docker connection lost: %w", err), caps)
-		r.log.Warn("docker connection lost", "err", err)
+		r.log.Warn("docker connection lost", "err", err, "retry_in", wait)
+		// A remote runner can still reach its local Docker daemon while its
+		// control-plane store is offline. In that case Capabilities succeeds but
+		// watch/resync fails immediately; without a delay this loop hammers the
+		// unavailable panel and emits thousands of log lines per second.
+		if !sleep(ctx, wait) {
+			return nil
+		}
+		wait = min(wait*2, 30*time.Second)
 	}
 	return nil
 }

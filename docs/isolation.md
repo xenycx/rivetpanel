@@ -48,7 +48,7 @@ as unable to enforce limits.
   Define node/user budgets before offering this to untrusted users.
 * **No disk quota.** Workspaces and Docker logs consume host disk (logs are
   rotated; workspaces are not capped beyond upload limits).
-* **Egress is not restricted by BotForge.** Discord needs outbound access, and
+* **Egress is not restricted by RivetPanel.** Discord needs outbound access, and
   the default Docker bridge lets a bot reach host services and other private
   networks (e.g. cloud metadata at 169.254.169.254, the Docker host's own
   ports). You must add a host firewall policy. A starting point, **not verified
@@ -57,19 +57,19 @@ as unable to enforce limits.
   ```sh
   docker network create --driver bridge --subnet 172.30.0.0/16 \
       -o com.docker.network.bridge.name=bpbr0 \
-      -o com.docker.network.bridge.enable_icc=false botpanel
-  # BOTPANEL_CONTAINER_NETWORK=botpanel
-  nft add table inet botpanel_egress
-  nft add chain inet botpanel_egress fwd '{ type filter hook forward priority -1; }'
-  nft add rule  inet botpanel_egress fwd iifname bpbr0 ip daddr '{ 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16 }' drop
-  nft add chain inet botpanel_egress in  '{ type filter hook input priority -1; }'
-  nft add rule  inet botpanel_egress in  iifname bpbr0 drop
+      -o com.docker.network.bridge.enable_icc=false rivetpanel
+  # RIVET_CONTAINER_NETWORK=rivetpanel
+  nft add table inet rivetpanel_egress
+  nft add chain inet rivetpanel_egress fwd '{ type filter hook forward priority -1; }'
+  nft add rule  inet rivetpanel_egress fwd iifname bpbr0 ip daddr '{ 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16 }' drop
+  nft add chain inet rivetpanel_egress in  '{ type filter hook input priority -1; }'
+  nft add rule  inet rivetpanel_egress in  iifname bpbr0 drop
   ```
 * **The panel process is root-equivalent** (Docker socket). Its systemd sandbox
   reduces blast radius but cannot isolate that privilege; only a separate
   runner process could, and none is implemented.
 * Container user ID mapping: under rootless Docker or `userns-remap`, container
-  uid N is not host uid N. Set `BOTPANEL_WORKSPACE_OWNER` to the *host* uid:gid
+  uid N is not host uid N. Set `RIVET_WORKSPACE_OWNER` to the *host* uid:gid
   that maps to the container user. The integration tests ran the container as
   uid 0, which under rootless Docker maps to the unprivileged host user; the
   default non-root 65532 path (which needs CAP_CHOWN) was **not** exercised.
@@ -83,7 +83,7 @@ defaults above (dropped capabilities, read-only root, no-new-privileges, hard
 limits).
 
 * **Published ports** are opt-in per bot and made by the owner or an
-  administrator only, within `BOTPANEL_PORT_RANGE`, on `127.0.0.1` unless the
+  administrator only, within `RIVET_PORT_RANGE`, on `127.0.0.1` unless the
   administrator enables public binding. A published port is reachable by whoever
   can reach that host address; put authentication in front of it. Verified with
   a real container: a bot's HTTP server answered on its published loopback port.
@@ -115,7 +115,7 @@ limits).
   `discord.com` only, on request.
 * **Java builds download Maven** into the workspace inside the build container,
   verified against a SHA-512 pinned in `runtimes/java.yaml`. Dependencies then
-  come from Maven Central. Point `BOTPANEL_RUNTIMES_DIR` at your own recipe to
+  come from Maven Central. Point `RIVET_RUNTIMES_DIR` at your own recipe to
   use a mirror.
 * **SFTP** runs in the panel process (root-equivalent, like everything else
   here) but accesses files only through the contained filesystem layer.

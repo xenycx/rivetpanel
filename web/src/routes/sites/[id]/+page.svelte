@@ -242,7 +242,7 @@
 	const copy = (v: string) => navigator.clipboard?.writeText(v).then(() => toast('Copied'));
 </script>
 
-<svelte:head><title>{d?.site.name ?? 'Site'} · BotForge</title></svelte:head>
+<svelte:head><title>{d?.site.name ?? 'Site'} · RivetPanel</title></svelte:head>
 
 <a href="/sites" class="mb-4 inline-flex items-center gap-1 text-small text-muted hover:text-ink"><Icon name="chevronLeft" size={14} />All sites</a>
 {#if error}<Notice tone="fail" live>{error}</Notice>{/if}

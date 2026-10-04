@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"testing"
 
-	"botpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/domain"
 )
 
 type sessionList struct {

@@ -3,7 +3,7 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { api, ApiError, fmtBytes, MiB } from '$lib/api/client';
-	import type { AddonKind, Analysis, Bot, Connection, GitHubRepo, Limits, Plan, Recipe, RepoLookup, RuntimeInfo, Template, TemplateEnv } from '$lib/api/types';
+	import type { AddonKind, Analysis, Bot, Connection, GitHubRepo, Limits, NodeInfo, Plan, Recipe, RepoLookup, RuntimeInfo, Template, TemplateEnv } from '$lib/api/types';
 	import { joinArgs, splitArgs } from '$lib/args';
 	import { toast } from '$lib/ui/toast.svelte';
 	import { session } from '$lib/session.svelte';
@@ -40,6 +40,8 @@
 	let memoryMiB = $state<number | null>(null);
 	let cpus = $state<number | null>(null);
 	let startNow = $state(true);
+	let nodes = $state<NodeInfo[]>([]);
+	let nodeId = $state('');
 
 	// GitHub: paste any public repository, or pick one of your own.
 	let ghMode = $state<'url' | 'mine'>('url');
@@ -99,6 +101,12 @@
 			gh = null;
 		}
 		if (source === 'github' && repoInput) lookUp();
+		if (session.user?.role === 'admin' && session.features.agents) {
+			api<{ nodes: NodeInfo[] }>('GET', '/nodes').then((r) => {
+				nodes = r.nodes.filter((n) => n.enabled && !n.draining);
+				nodeId = nodes.find((n) => n.transport === 'local')?.id ?? nodes[0]?.id ?? '';
+			}).catch(() => {});
+		}
 	});
 
 	const tpl = $derived(templates?.find((t) => t.id === templateId));
@@ -216,6 +224,8 @@
 	}
 	function chooseSource(s: Source) {
 		source = s;
+		const chosen = nodes.find((n) => n.id === nodeId);
+		if (chosen?.transport === 'agent' && (s === 'template' || s === 'github') && !chosen.agent?.connected) nodeId = nodes.find((n) => n.transport === 'local')?.id ?? '';
 		problems = {};
 		if (s === 'github' && gh?.linked && ghMode === 'mine') loadRepos();
 	}
@@ -252,7 +262,7 @@
 			extra.forEach((x, n) => {
 				if (!x.name && !x.value) return;
 				if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(x.name)) p['extra.' + n] = 'Use letters, digits and underscores; start with a letter.';
-				else if (/^(BOTPANEL_|LD_)|^PATH$/i.test(x.name)) p['extra.' + n] = 'This name is reserved by the panel.';
+				else if (/^(RIVET_|LD_)|^PATH$/i.test(x.name)) p['extra.' + n] = 'This name is reserved by the panel.';
 				else if (seen.has(x.name)) p['extra.' + n] = 'This variable is already listed.';
 				seen.add(x.name);
 			});
@@ -303,6 +313,7 @@
 		}
 		if (source === 'github') body.github = { ...repo, start_after_deploy: startNow && canStart };
 		if (workspaceId) body.workspace_id = workspaceId;
+		if (nodeId) body.node_id = nodeId;
 		try {
 			const b = await api<Bot>('POST', '/bots', body);
 			if (startNow && canStart && source !== 'github') {
@@ -327,7 +338,7 @@
 	const sourceBadge: Record<string, string> = { recipe: 'Verified recipe', detected: 'Detected from files', ai: 'Refined by AI' };
 </script>
 
-<svelte:head><title>New bot · BotForge</title></svelte:head>
+<svelte:head><title>New bot · RivetPanel</title></svelte:head>
 
 <div class="mx-auto max-w-3xl">
 	<a href="/dashboard" class="inline-flex items-center gap-1 text-muted hover:text-ink"><Icon name="chevronLeft" size={14} />Bots</a>
@@ -569,6 +580,15 @@
 					<span class="help">Members of the workspace get access according to their role.</span>
 				</label>
 			{/if}
+			{#if nodes.length > 1}
+				<label class="mt-4 block max-w-md">
+					<span class="label">Node</span>
+					<select class="field" bind:value={nodeId}>
+						{#each nodes as n (n.id)}<option value={n.id} disabled={n.transport === 'agent' && (source === 'template' || source === 'github') && !n.agent?.connected}>{n.name}{n.transport === 'agent' ? n.agent?.connected ? ' · connected' : ' · offline' : ' · local'}</option>{/each}
+					</select>
+					<span class="help">Template and GitHub bots need a connected node: template files are written to that node in one transaction, and GitHub repositories are downloaded by the panel and streamed to it. Empty bots can be created on any eligible node and filled through Files.</span>
+				</label>
+			{/if}
 		{:else if step === 2}
 			{#if tpl && source === 'template'}
 				<div class="mt-4 surface p-4">
@@ -634,6 +654,7 @@
 			<dl class="mt-4 grid grid-cols-[auto_minmax(0,1fr)] gap-x-6 gap-y-2 border-y border-rule-soft py-3">
 				<dt class="text-muted">Name</dt><dd class="font-medium">{name}</dd>
 				{#if targets.length > 1}<dt class="text-muted">Workspace</dt><dd>{targets.find((w) => (w.personal ? '' : w.id) === workspaceId)?.name ?? 'Personal'}</dd>{/if}
+				{#if nodes.length > 1}<dt class="text-muted">Node</dt><dd>{nodes.find((n) => n.id === nodeId)?.name ?? 'Local'}</dd>{/if}
 				<dt class="text-muted">Source</dt><dd>{sourceLabel}{#if source === 'github'}: <code>{repo.full_name}</code> on <code>{repo.branch}</code>{#if repo.root_dir}, folder <code>{repo.root_dir}</code>{/if}{/if}</dd>
 				<dt class="text-muted">Language</dt><dd>{rt?.display_name ?? rtId}</dd>
 				{#if source !== 'template'}

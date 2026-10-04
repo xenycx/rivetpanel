@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"strings"
 
-	"botpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/domain"
 )
 
 const tokenCols = `id, user_id, name, prefix, actions, bot_ids, created_at_ms, last_used_at_ms, expires_at_ms`

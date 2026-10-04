@@ -1,0 +1,52 @@
+slug: steam-rust
+name: Rust
+category: Steam
+description: Rust dedicated server, installed and updated from Steam with an anonymous SteamCMD login (app 258550). Uses a game port and a Steam query port; RCON is left off.
+images:
+  - {label: "SteamCMD Ubuntu", ref: "steamcmd/steamcmd:latest"}
+startup:
+  command: env LD_LIBRARY_PATH=./RustDedicated_Data/Plugins/x86_64:./RustDedicated_Data/Plugins ./RustDedicated -batchmode -nographics +server.ip 0.0.0.0 +server.port {{SERVER_PORT}} +server.queryport {{SERVER_PORT_1}} +server.identity rivet +server.hostname "{{SERVER_NAME}}" +server.description "{{DESCRIPTION}}" +server.maxplayers {{MAX_PLAYERS}} +server.worldsize {{WORLD_SIZE}} +server.seed {{WORLD_SEED}} +server.saveinterval 300
+  stop_signal: SIGINT
+  stop_timeout_seconds: 180
+  done: Server startup complete
+variables:
+  - env: SERVER_NAME
+    name: Server name
+    description: The name shown in the server browser.
+    default: RivetPanel Rust
+    editable: true
+    rules: {pattern: '^[^"\\$`]{1,64}$'}
+  - env: DESCRIPTION
+    name: Description
+    default: A Rust server hosted with RivetPanel.
+    editable: true
+    rules: {pattern: '^[^"\\$`]{0,200}$', max_len: 200}
+  - env: MAX_PLAYERS
+    name: Maximum players
+    default: "50"
+    editable: true
+    rules: {type: int, min: 1, max: 500}
+  - env: WORLD_SIZE
+    name: World size
+    description: Map size in metres (1000-6000). Larger maps need much more memory.
+    default: "3000"
+    editable: true
+    rules: {type: int, min: 1000, max: 6000}
+  - env: WORLD_SEED
+    name: World seed
+    default: "12345"
+    editable: true
+    rules: {type: int, min: 0, max: 2147483647}
+  - env: STEAM_BRANCH
+    name: Steam beta branch
+    description: Leave empty for the public release (for example "staging" for the staging branch). Changing it reinstalls the server.
+    default: ""
+    editable: true
+    reinstall: true
+    rules: {pattern: '^([A-Za-z0-9][A-Za-z0-9._-]{0,63})?$'}
+install:
+  steamcmd: {app_id: 258550, beta: "{{STEAM_BRANCH}}", timeout_minutes: 120, max_size_gb: 40}
+resources: {memory_mb: 12288, min_memory_mb: 8192, cpus: 4, pids: 2048}
+ports: {default: 28015, extra: 1}
+query: steam
+query_allocation: 1

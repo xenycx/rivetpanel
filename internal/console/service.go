@@ -9,8 +9,8 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"botpanel/internal/domain"
-	"botpanel/internal/events"
+	"github.com/xenycx/rivetpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/events"
 )
 
 // Source is the Docker side of the console.
@@ -27,7 +27,7 @@ type Source interface {
 
 // Outgoing is a server-to-client message.
 type Outgoing struct {
-	Type               string `json:"type"` // log | status | dropped | error | pong
+	Type               string `json:"type"` // log | status | dropped | error | node | pong
 	Stream             Stream `json:"stream,omitempty"`
 	TS                 string `json:"ts,omitempty"`
 	Data               string `json:"data,omitempty"`
@@ -58,6 +58,11 @@ type Conn interface {
 // ErrSessionEnded is returned by Run when the server ends a session because
 // the bot was removed or the user's access was revoked.
 var ErrSessionEnded = errors.New("console session ended by server")
+
+// ErrSourceOffline is wrapped by a Source whose node cannot be reached right
+// now (a remote node's agent is disconnected). The stream keeps waiting for
+// the same container instead of treating it as gone.
+var ErrSourceOffline = errors.New("the server's node is offline")
 
 // Params describe one console session.
 type Params struct {
@@ -119,11 +124,36 @@ type Service struct {
 	Src  Source
 	Bus  *events.Bus
 	Opts Options
+	// SourceFor, when set, picks the source for a server's node (remote
+	// nodes stream through their agent); nil uses Src for every server.
+	SourceFor func(nodeID string) Source
 
 	initOnce sync.Once
 	mu       sync.Mutex
 	writers  map[string]uint64 // bot id -> session id holding stdin
 	nextID   uint64
+}
+
+func (s *Service) source(nodeID string) Source {
+	if s.SourceFor != nil {
+		if src := s.SourceFor(nodeID); src != nil {
+			return src
+		}
+	}
+	if s.Src == nil {
+		return noSource{}
+	}
+	return s.Src
+}
+
+// noSource answers when nothing can run the server's containers.
+type noSource struct{}
+
+func (noSource) Logs(context.Context, string, time.Time, int) (io.ReadCloser, error) {
+	return nil, errors.New("no runner for this server's node")
+}
+func (noSource) AttachStdin(context.Context, string) (io.WriteCloser, error) {
+	return nil, errors.New("no runner for this server's node")
 }
 
 func (s *Service) init() {
@@ -309,7 +339,7 @@ func (s *Service) readLoop(ctx context.Context, conn Conn, p Params, sess uint64
 					stdin.Close()
 					stdin = nil
 				}
-				w, err := s.Src.AttachStdin(ctx, *bot.ContainerID)
+				w, err := s.source(bot.NodeID).AttachStdin(ctx, *bot.ContainerID)
 				if err != nil {
 					fail("attach_failed", "could not attach to the bot's input")
 					continue
@@ -411,6 +441,7 @@ func (s *Service) streamLoop(ctx context.Context, p Params, enqueue func(Outgoin
 	last := p.Since
 	tail := p.Tail
 	var finished string // container whose stream already ended
+	offline := false    // a node_offline notice was sent and not yet resolved
 	wait := func() bool {
 		t := time.NewTimer(s.Opts.StatusPoll)
 		defer t.Stop()
@@ -443,13 +474,29 @@ func (s *Service) streamLoop(ctx context.Context, p Params, enqueue func(Outgoin
 		if !last.IsZero() {
 			t = 0
 		}
-		rc, err := s.Src.Logs(ctx, cid, last, t)
+		rc, err := s.source(bot.NodeID).Logs(ctx, cid, last, t)
+		if errors.Is(err, ErrSourceOffline) {
+			// The container may well still run on a disconnected node: say so
+			// once and reattach from the last timestamp when it is back.
+			if !offline {
+				enqueue(Outgoing{Type: "error", Code: "node_offline", Message: "the server's node is offline; output resumes when its agent reconnects"})
+				offline = true
+			}
+			if !wait() {
+				return
+			}
+			continue
+		}
 		if err != nil {
 			finished = cid // container vanished; wait for the runner to publish a new one
 			if !wait() {
 				return
 			}
 			continue
+		}
+		if offline {
+			enqueue(Outgoing{Type: "node", Code: "online"})
+			offline = false
 		}
 		s.pump(ctx, rc, &last, enqueue)
 		rc.Close()
@@ -528,6 +575,13 @@ func NewLimiter(global, perUser, perBot int) *Limiter {
 		perBot = 4
 	}
 	return &Limiter{global: global, perUser: perUser, perBot: perBot, nUser: map[string]int{}, nBot: map[string]int{}}
+}
+
+// Active is the number of console connections holding a slot.
+func (l *Limiter) Active() int {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.nGlobal
 }
 
 // Acquire reserves a slot and returns its release func, or false when a limit is hit.

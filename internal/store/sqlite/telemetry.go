@@ -3,7 +3,7 @@ package sqlite
 import (
 	"context"
 
-	"botpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/domain"
 )
 
 const telemetryCols = `node_id, sampled_at_ms, cpu_percent, logical_cpus, memory_used_bytes, memory_total_bytes,
@@ -103,7 +103,7 @@ func (db *DB) CountRunningBots(ctx context.Context, nodeID string) (int, error) 
 
 // ListNodes returns all nodes.
 func (db *DB) ListNodes(ctx context.Context) ([]domain.Node, error) {
-	rows, err := db.QueryContext(ctx, `SELECT id, name, transport, endpoint, enabled, last_seen_at_ms FROM nodes ORDER BY name LIMIT 1000`)
+	rows, err := db.QueryContext(ctx, `SELECT id, location_id, name, transport, endpoint, enabled, last_seen_at_ms, draining, public_address FROM nodes ORDER BY name LIMIT 1000`)
 	if err != nil {
 		return nil, err
 	}
@@ -112,7 +112,7 @@ func (db *DB) ListNodes(ctx context.Context) ([]domain.Node, error) {
 	for rows.Next() {
 		var n domain.Node
 		var enabled int
-		if err := rows.Scan(&n.ID, &n.Name, &n.Transport, &n.Endpoint, &enabled, &n.LastSeenMS); err != nil {
+		if err := rows.Scan(&n.ID, &n.LocationID, &n.Name, &n.Transport, &n.Endpoint, &enabled, &n.LastSeenMS, &n.Draining, &n.PublicAddress); err != nil {
 			return nil, err
 		}
 		n.Enabled = enabled == 1

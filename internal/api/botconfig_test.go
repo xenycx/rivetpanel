@@ -5,11 +5,11 @@ import (
 	"path/filepath"
 	"strings"
 
-	"botpanel/internal/filesystem"
 	"encoding/json"
+	"github.com/xenycx/rivetpanel/internal/filesystem"
 	"testing"
 
-	"botpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/domain"
 )
 
 func TestStartupNetworkRestartSettings(t *testing.T) {
@@ -185,7 +185,7 @@ func TestCreateWithInitialEnvironment(t *testing.T) {
 	}
 	// Invalid or reserved names reject the whole request; no bot is left behind.
 	u.mustStatus(400, "POST", "/api/v1/bots", map[string]any{"name": "bad", "runtime": "nodejs",
-		"env": map[string]string{"BOTPANEL_URL": "x"}})
+		"env": map[string]string{"RIVET_URL": "x"}})
 	var list struct{ Bots []botDTO }
 	json.Unmarshal(u.mustStatus(200, "GET", "/api/v1/bots", nil), &list)
 	if len(list.Bots) != 1 {

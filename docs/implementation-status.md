@@ -1,8 +1,594 @@
 # Platform overhaul implementation status
 
-Updated 2026-10-01 for BotForge 0.4.0 (see `CHANGELOG.md`). This is the durable checklist for the requested platform
+Updated 2026-10-04 for RivetPanel 0.4.0 (see `CHANGELOG.md`). This is the durable checklist for the requested platform
 overhaul. A checked item is implemented in the current working tree; partial
 items state exactly what remains.
+
+## RivetPanel repurposing (in progress)
+
+- [x] Product namespace changed across the Go module, executable, web package,
+  container image, systemd/Compose deployment, SDKs, environment variables,
+  default data/configuration paths, container labels, DNS records, UI and
+  operator documentation. Historical changelog entries remain unchanged.
+- [x] Preview module catalog with `off`, `preview` and `stable` states,
+  `RIVET_MODULES` overrides and authenticated `GET /api/v1/modules` discovery.
+  Existing application, site and AI capabilities are stable; game servers are
+  a default-on preview; remote node, identity and support modules default to
+  off. Enforcement is application-level configuration and API
+  discovery; routes for future modules do not exist yet. Scope decisions
+  (2026-10-04): Proxmox virtual machines are **dropped** (not planned; the
+  `virtual_machines` catalog entry was removed) and
+  panel extensions are in the **backlog** (not scheduled; the `extensions`
+  entry is likewise inert).
+- [x] Clean-break database identity (`0000_rivetpanel_identity.sql`). Migration
+  refuses a non-empty database without the RivetPanel schema marker before
+  creating its migration ledger or modifying tables. Enforcement is in the
+  SQLite migration layer. Automatic conversion is intentionally absent.
+- [x] Applications stay represented as `bots` in storage and `/api/v1/bots`;
+  game servers use `kind = game` and the `/servers` UI. This is an intentional
+  compatibility decision, not unfinished renaming.
+- [x] Remote-node connection and execution foundation (migrations `0038`,
+  `0039`, `0042`): locations and agent nodes; one-use hashed enrollment;
+  transactional 30-day node certificate issuance and rotation; TLS 1.3 client
+  authentication with database checks for node, serial, expiry, revocation and
+  enabled state; yamux agent/panel APIs; reconnect and resynchronization;
+  remote lifecycle, files, logs, stdin, stats and Minecraft queries; cross-node
+  server access checks; node administration, placement and draining; agent CA
+  backup/restore; CLI enrollment recovery. Real-Docker integration covers
+  enroll → connect → create/files/start/console/stop/delete → revoke.
+  Rotation retires superseded certificates: the first successful mTLS
+  handshake with a certificate revokes every older unrevoked certificate of
+  that node (reason `superseded`, ordered by issue order in SQLite, no schema
+  change), so an old `node.pem` is refused afterwards; a renewal that was
+  issued but never used does not revoke the old one, so an agent that crashed
+  before saving its renewal can still reconnect. Enforced by the hub at the
+  application/TLS/SQLite level. Unit tests: `internal/agenthub`
+  (`hub_auth_test.go`: valid certificate accepted; other-CA, self-signed,
+  expired (certificate and SQLite), revoked, unknown-serial, disabled-node and
+  serial/identity-mismatch certificates refused; cross-node bot read, list,
+  delete, observe, env, install-state, version and build access answer 404;
+  rotation CSRs cannot claim another node; `hub_rotation_test.go`: superseded
+  certificate refused after the renewal connects, unused renewal keeps the old
+  certificate valid, a later renewal retires both) and `internal/agentclient`
+  (`rotation_test.go`: near-expiry renewal, atomic 0600 `node.pem`
+  replacement, new serial recorded, reconnect, old serial refused afterwards;
+  fresh certificates are not renewed).
+  Enforcement boundaries: identity and authorization are application/TLS/SQLite
+  level; file containment is the agent filesystem layer; resource and container
+  hardening are enforced by Docker on the node. Capability reports are stored
+  evidence only, not attestation or kernel/network enforcement. The control
+  plane still holds its Docker socket when the local runner is enabled.
+- [~] Game hosting (Preview 2, migration `0040`): Minecraft Java server types
+  (Paper, Purpur, Vanilla, Fabric, Forge, NeoForge, Folia, Velocity) defined by
+  validated YAML blueprints with immutable revisions; provider version lists;
+  checksum-verified downloads committed atomically; automatic Java selection
+  from Mojang metadata; install scripts in the hardened build container;
+  `server.properties`/`eula.txt` written before each start; graceful stop
+  through the console; Server List Ping status; IP:port allocations with a
+  pool, automatic port selection and host-port probing; administrator
+  blueprint import/export/hide and allocation management. Verified on real
+  Docker 29.7.2 with Paper 26.3 (Java 25) and Forge 1.20.1 (Java 17):
+  install, start, ping, graceful stop (`tests/integration/game_test.go`,
+  opt-in `RIVET_TEST_GAMES=1`). Enforcement: blueprint/variable/allocation
+  rules, EULA, checksums and permissions are application level; resource
+  limits, non-root, capability drop and read-only root are Docker-runtime
+  level. **Not enforced or not implemented**: disk quotas, bandwidth, egress
+  filtering, Bedrock types, mounts, FastDL, proxies/subdomains,
+  firewall rules and lifecycle hooks. Remote placement
+  works and Modrinth installation works remotely (see below); remote
+  allocations are probed by the node's agent (protocol 8, see below).
+- [x] SteamCMD game servers (no migration, no agent protocol change):
+  `install.steamcmd` blueprint step (app id, optional beta-branch template,
+  validate, image, `timeout_minutes` 5-240, `max_size_gb` 1-500), run by the
+  runner in a separate `steamcmd/steamcmd` install container before the
+  install script, always with an anonymous login (no credential fields exist;
+  unknown YAML keys are refused), retried up to 3 times, success detected
+  from SteamCMD's own report, `steamclient.so` copied to `.steam/sdk64|32`,
+  Steam build id recorded as the installed version. New blueprint fields:
+  `startup.stop_signal` (SIGINT/SIGTERM/SIGQUIT/SIGHUP, sent by the runner
+  through Docker before the normal stop), `ports.contiguous` (automatic
+  allocation of consecutive ports, pool runs first), `SERVER_PORT_1..10`
+  system variables (additional allocations in port order), `query: steam` +
+  `query_allocation`, config format `ini` (with section), optional `runtime`.
+  Install scripts now receive the server's declared variables and the
+  panel-provided ones (not hidden agreement records). Built-in types Valheim,
+  Rust and Project Zomboid written from public documentation. Steam A2S_INFO
+  query in `internal/gamequery` (challenge handling, split responses
+  refused), unit-tested against a fake UDP server; local nodes only (the
+  agent relays only the Minecraft ping). Verified: real-Docker
+  `TestSteamCMDInstall` (`RIVET_TEST_STEAM=1`, Steamworks redistributable app
+  1007: anonymous download, install script with variables, consecutive ports,
+  `SERVER_PORT_1`, SIGINT graceful stop); Valheim downloaded and started by
+  hand with the blueprint's command line, SIGINT saved the world, but it did
+  not answer A2S while unlisted. Rust and Project Zomboid were not run.
+  Enforcement: the time limit is enforced by the runner (install container
+  removed); the size limit is a watchdog inside the install container
+  (application level, **not** a disk quota); anonymous-only is enforced by
+  blueprint validation and the generated script; resource limits and
+  hardening of the install container are Docker-runtime level.
+- [x] Pterodactyl egg importer (no migration): `blueprint.ConvertEgg` and
+  `POST /api/v1/admin/blueprints/egg-preview` (`blueprints.manage`, audited
+  as `admin.blueprint_egg_preview`) turn a PTDL_v1/PTDL_v2 egg (≤ 512 KiB,
+  exactly one JSON object) into a blueprint YAML draft plus warnings; nothing
+  is stored, fetched or run. Images, startup (`{{VAR}}`, Pterodactyl
+  placeholders), stop command/`^C`, done marker, variables (Laravel rules
+  mapped where possible), install script (own shell, `/mnt/server` →
+  `/workspace`) and container, `properties`/`ini`/`file` config parsers and
+  the `eula` feature are mapped; everything else (yaml/json/xml parsers,
+  hidden variables, other features, file deny lists, unknown fields,
+  unsupported rules/regexes, package-manager calls) is listed as a warning.
+  The administrator reviews/edits the YAML and saves it through the normal
+  validated import (custom source, immutable revisions). UI: Administration →
+  Server types → Import Pterodactyl egg. Tests: hand-written fixtures in
+  `internal/blueprint/testdata`, `internal/api/games_steam_test.go`.
+  Enforcement: application level (validation, permission); imported install
+  scripts run like any blueprint script in the hardened install container as
+  the unprivileged server user (Docker-runtime level).
+  Browser-checked on a scratch local panel: egg upload → draft with 15
+  warnings → reviewed save → offered under New server; a Valheim server was
+  created from the new SteamCMD blueprint (ports 2456/2457 consecutive,
+  SIGINT stop, SteamCMD shown on Startup). Its 2.2 GB install was not run
+  through the panel.
+- [x] Minecraft extras (migration `0041`): Players page (ops, whitelist, bans,
+  kick/ban through the console), `server.properties` editor that preserves the
+  file and detects concurrent changes, Modrinth plugin/mod browser and
+  installer (loader check, CDN host allowlist, SHA-512 verification, required
+  dependencies listed), one-shot console commands (`POST …/command`, power
+  permission) and task-chain schedules (≤20 steps, ≤1 h of waits, per-step
+  permission re-check, one run at a time). Enforcement: application level.
+- [x] File-manager archives: folder download as zip, compress to zip, and
+  staged extraction of zip/mrpack/tar.gz/tgz/tar already in the workspace with
+  entry, size and compression-ratio limits (application level, descriptor-
+  relative writes inside the workspace).
+- [~] Remote-node completeness: manual, scheduled and pre-restore backups now
+  stream through the authenticated agent connection into panel storage. Remote
+  restore uses the same staged archive validation and keeps the old workspace
+  in the agent's filesystem journal until the application-level database
+  update is confirmed.
+- [x] Remote GitHub deployment (agent protocol 3): manual, webhook and polled
+  deploys for bots on connected agent nodes, and node choice when creating a
+  bot from GitHub. The panel downloads the tarball (1 GiB compressed cap) and
+  streams it over the mTLS node connection; it is never unpacked on the panel
+  host. The agent stages and validates the whole archive (entry, size and
+  path limits) before any workspace change; the panel then re-checks the bot,
+  its repository link and its node (application level) before telling the
+  agent to swap. Previous files stay in the agent's filesystem journal until
+  the panel records the commit; database failure rolls back, an unconfirmed
+  transaction expires to rollback after 5 minutes, and an agent crash is
+  rolled back by journal recovery at agent start. Restores and deployments
+  share one transaction registry (`internal/nodetx`). Node identity is the
+  mTLS certificate checked against SQLite; path containment is the agent's
+  descriptor-relative filesystem layer; agent capability reports are not used
+  for authorization. Admin-only node choice for new bots and game servers is
+  enforced by the application.
+- [x] Remote GitHub publish/push (agent protocol 4): publish to a new
+  repository and push to a linked one for bots on connected agent nodes. The
+  agent selects the files (`POST /node/v1/bots/:id/push-set`) with the same
+  shared code as local publishing: `.gitignore` files, built-in dependency/
+  metadata exclusions and `.env` secret-file exclusion, and the same 5,000
+  files / 200 MiB / 25 MiB-per-file limits, which the agent refuses to raise.
+  The panel reads only the selected files, one at a time with a per-file cap,
+  through the existing contained `files/content` endpoint; nothing is
+  written to the panel's disk. The commit is built through the GitHub API at
+  the panel and recorded as `last_sha`; publish/push run under the per-bot
+  coordinator claim (concurrent deploy/restore refused). Offline nodes are
+  refused before a repository is created or a push queued. Enforcement:
+  identity is mTLS + SQLite, file selection rules and limits are application
+  level on the agent, path containment is the agent's descriptor-relative
+  filesystem layer; capability reports are not consulted.
+- [x] Remote package manager (no wire change): manifests are listed, read
+  and written through the agent's existing contained `files` and
+  `files/content` routes; writes carry `If-Match` on the revision that was
+  read (or `If-None-Match: *` for a new manifest), so a concurrent change
+  answers 409 and nothing is overwritten. Edit-files permission and the
+  deployment/restore lock are enforced by the application; the 1 MiB manifest
+  bound is enforced at the panel on read and write; path containment is the
+  agent's filesystem layer. Offline nodes are refused; the panel's disk is
+  never used for a remote bot.
+- [x] Remote AI file tools (agent protocol 5): list/read/search use the
+  agent's contained file API with the same protected-path refusal, 1 MiB
+  per-file limit and redaction (all application-level at the panel); search
+  reads at most 2,000 files. Proposed changes and Undo are revision-checked
+  patches applied by the agent through `filesystem.ApplyPatch` and the shared
+  `internal/nodetx` registry (`POST /node/v1/bots/:id/patch`, completed via
+  `/transactions/:tx`): reversible until the panel records the change set, an
+  unconfirmed commit is retried once then rolled back (and expires to
+  rollback on the node), an agent crash is rolled back by journal recovery.
+  Offline nodes are refused; the panel's disk is never used. Isolated AI
+  diagnostics still copy the workspace from the panel and are refused for
+  remote bots.
+- [x] Remote template creation (no wire change, protocol stays 5): admin-only
+  node choice and offline refusal before any row is written (application);
+  template size bound (32 files, 1 MiB per file, 8 MiB total) checked at the
+  panel before insert and again by the agent's patch ceilings. The row is
+  inserted, the agent creates the directory through the existing
+  `POST /node/v1/workspaces/:id` route, then all files go as one create-only
+  `filesystem.ApplyPatch` through the shared `internal/nodetx` registry and are
+  committed as the last creation step (lost answer retried once, then
+  rollback). Any failure after the insert marks the bot deleted and hands it
+  to the agent's normal purge (directory and row removed by the agent; an
+  unreachable agent does it on reconnect). Path containment is the agent's
+  filesystem layer; the panel's disk is never used.
+- [x] Remote Modrinth installation (no wire change): edit-files permission,
+  deployment/restore lock and offline refusal are checked before downloading
+  (application). The panel spools the download to a private temporary file
+  and verifies CDN host allowlist, 256 MiB cap, declared size and SHA-512 over
+  the whole file before streaming it to the node with an exact
+  Content-Length through the existing `files/content` route; the agent writes
+  to a temporary file and renames atomically; the panel checks the size the
+  node reports. The node does not recompute the hash (it trusts the panel
+  over the mTLS connection); the agent's upload limit bounds the write.
+- [x] Remote SFTP (no wire change). Enforcement: identity, the per-operation
+  files-permission check (re-validated at most every 5 s, also for open
+  handles), the deployment/restore lock and the per-file size cap are
+  enforced by the panel application (`internal/sftpd`); path containment is
+  enforced by the agent's filesystem layer (`filesystem.Workspace` behind the
+  existing agent file routes); identity of the node is mTLS + SQLite. Any bot
+  whose node is not the panel's own is served only through its agent
+  (`noderoute` `ListDir`, `ReadFileTo`, `WriteFileFrom`, `MakeDir`, `Move`,
+  `RemovePath`), refused while the node is offline, and refused when the
+  agents module is off; `handler.open` refuses remote bots as a second guard,
+  so the panel's disk is never read or written for them (regression tests
+  with a decoy directory: `internal/sftpd/remote_test.go`,
+  `internal/noderoute/sftp_test.go`, `TestRemoteAgentNode`). Transfers are
+  spooled through an unlinked panel temp file; uploads are sent on close in
+  one atomic write (`If-Match` on the revision read for partial writes).
+  SFTP `remove` and `rmdir` use the non-recursive delete
+  (`DELETE …/files?recursive=false`, protocol 7): the emptiness check is the
+  node's own `rmdir` system call (kernel level), so a file another session
+  adds concurrently is never deleted with the directory (regression test
+  `TestRemoteRmdirConcurrentFileSurvives`). Remote listings carry no
+  modification times or modes.
+- [x] Remote add-on states and logs (agent protocol 6:
+  `GET /node/v1/bots/:id/addons`, `GET /node/v1/bots/:id/addons/:kind/logs`).
+  Authorization (view-console permission, add-on attached to the bot) is the
+  panel application; the agent validates the id, the add-on kind and the
+  1–500 line bound and caps the answer at 1 MiB; the panel never asks its own
+  runner about a remote bot. The agent workspace route now answers 400 for an
+  invalid id.
+- [x] Remote-node completion (agent protocol 7, migration `0043`; panel and
+  agents must be upgraded together):
+  * Isolated AI diagnostics for remote servers run on the node
+    (`POST /node/v1/bots/:id/diagnostics`). The panel application keeps
+    authorization (edit-files, re-checked after approval), approvals, the
+    per-run diagnostic budget and secret redaction of the output; offline
+    nodes are refused before anything is sent and the panel never copies its
+    own disk or uses its own Docker for a remote server. The agent validates
+    the argv against its own runtime catalog (same allowlist, interpreter-eval
+    and path rules as the panel), copies a safe snapshot (no symlinks,
+    protected/secret paths, `.git`, binaries or files over 1 MiB; 60,000
+    files / 512 MiB) into its scratch directory and runs the same locked-down
+    container on its Docker (Docker-runtime level: no network, 768 MiB
+    memory, 1 CPU, 256 PIDs, 128 MiB tmpfs, configured non-root user;
+    10-minute timeout; 1 MiB output). At most two run at once per node
+    (application level, 429 beyond). Snapshots and containers are removed
+    after each run; leftover snapshots at agent start and orphan diagnostic
+    containers by the agent's runner sweep.
+  * Node telemetry: `GET /node/v1/telemetry` (CPU, memory, load and the disk
+    of the volume holding the node's server files). The panel stores one
+    `node_telemetry` sample per connected node each telemetry interval and
+    shows the node's disk (not the panel's) in remote servers' live stats.
+    Reported by the node, never used for authorization.
+  * Free-disk preflight (application level, panel side) before staging on a
+    node: restores (archive size), GitHub deploys (size unknown in advance:
+    margin only), AI patches and remote template seeding (total size), and
+    single-file writes of at least 1 MiB (Modrinth files, SFTP and large
+    uploads). Staging is refused with a clear message when the payload plus a
+    256 MiB margin does not fit. It is a check, not a reservation: archives
+    can expand and concurrent writers can still fill the disk (the node's
+    write then fails and the transaction rolls back); a node that reports no
+    disk figures is not refused.
+  * Webhook pushes for a server whose node is offline are remembered
+    (newest push only, `github_repos.pending_push_*`) instead of being
+    recorded as failed deployments, and run once (deploying the branch head)
+    when the node's agent reconnects. A push whose repository link (name,
+    branch, root directory) or auto-deploy setting changed meanwhile is
+    dropped and recorded as cancelled; the usual superseded/link-changed/
+    moved checks apply while it runs. Pending pushes survive a panel restart.
+  * Add-ons chosen at creation are checked for the chosen node before any
+    row is written: remote nodes need the panel's agent add-on access (all
+    built-in kinds — PostgreSQL, Redis, MongoDB, MariaDB — run on agent
+    nodes, which do not need a Docker runner on the panel). Their data lives
+    on the node: removing an add-on deletes it there and re-attaching clears
+    leftovers there (`DELETE /node/v1/bots/:id/addons/:kind/data`), refused
+    while the node is offline; the panel's own add-on data directory is never
+    touched for a remote server.
+- [x] Remote nodes browser-verified (2026-10-04) in the real panel UI with a
+  real `rivet-agent` enrolled through Administration → Nodes on the same
+  host's Docker (agent protocol 7): enrollment and connection state, Nodes
+  page metrics (CPU, memory, disk, running servers from remote telemetry),
+  template bot creation on the node, live stats with NODE DISK, console
+  output and input (bot and Paper server), Files (list, edit, upload incl.
+  a 2 MiB file, compress, extract, zip upload), package manager, backup and
+  restore (with the pre-restore safety copy) and a Paper world backup,
+  public GitHub deployment (create, redeploy, Deploy tab), SFTP with
+  OpenSSH `sftp` (list, put, get, rename, mkdir, refused non-empty rmdir,
+  rm, rmdir), Redis add-on (attach, start, state, log), Paper creation,
+  console command, Modrinth install (Chunky loaded by Paper), node offline
+  behaviour (Files/Packages/console messages, header marker), reconnect
+  (console resumes) and a deferred webhook push deploying once on
+  reconnect (pending push simulated in the database, see below). Fixes
+  from this pass are in the changelog. Not browser-verified: AI file tools
+  and remote `run_diagnostic` (no AI provider configured in the test
+  panel); a real GitHub webhook while offline (needs GitHub sign-in to
+  obtain the webhook secret; the deferred state was injected into
+  `github_repos.pending_push_*` instead); add-on removal/re-attach on the
+  node; game server restore; private repositories and publish/push.
+- [x] Remote allocation port probing (agent protocol 8,
+  `POST /node/v1/ports/probe`; panel and agents must be upgraded together).
+  Fixes the browser-test finding that a remote Paper server's automatic
+  primary allocation was 25565 while that port was already bound on the
+  node. Enforcement boundary: the **agent** bind-tests TCP and UDP on the
+  allocation address on its own host (at most 64 ports per request); the
+  **panel application** skips ports the node reports busy when it creates
+  automatic allocations (and refuses the allocation when the node cannot
+  answer), and refuses to start a stopped/failed remote game server whose
+  allocated port is busy, naming the port. It is a check, not a
+  reservation: a port bound afterwards, or published by Docker through
+  firewall rules only (userland proxy off), is not caught, and Docker on the
+  node remains the final authority. Pool allocations an administrator
+  created are not probed when handed out (same as the local node) but are
+  checked at start. An offline node does not block a start (the intent is
+  recorded). Capability reports play no part. Tests: noderoute harness
+  (`TestRemotePortProbe*`, real bind through hub and agent), api
+  (`TestRemoteGamePortProbe`), agenthub (`TestHubRefusesPreviousProtocol`)
+  and `TestRemoteAgentNode` against real Docker.
+- [ ] Agents do not self-update, migrate workloads or provide automatic
+  capacity scheduling. No privilege-boundary claim is made for Docker
+  access.
+- [x] Identity batch 1: custom roles and email verification (migration
+  `0044`, no agent protocol change).
+  - Roles: `roles` table with the seeded system roles `admin` and `user`
+    (their permissions are computed by the application, so later permissions
+    apply automatically) and admin-defined custom roles (`users.role_id`).
+    25 named permissions (`internal/domain/permissions.go`): 13 resource and
+    12 administration permissions. **Enforced by the panel application**: API
+    route middleware (`requirePerm`) returns 403 on every route a permission
+    covers, including the automation API; services re-check administration
+    permissions; `BotService` masks the per-bot console/power/files/env bits
+    for owners, workspace roles and sharing grants (SFTP uses the same mask).
+    Delegated administrators cannot grant permissions they lack, make or
+    touch administrators, change their own role, act on (role, address,
+    verified flag, enabled state) an account holding administration
+    permissions they lack, or invite with the built-in User role unless they
+    hold every resource permission. Environment editor,
+    modules page and administrator management stay built-in-admin only. Role
+    create/update/delete and assignment are audited. Not enforced at the
+    container, kernel or network layer; roles do not change isolation.
+  - Email verification: `users.email_verified`/`email_verified_at_ms`
+    (existing accounts default to verified), `email_verifications` (SHA-256
+    of a 256-bit token, single use, 24 h expiry, one outstanding link, one per
+    minute in the store plus 5/hour per account and a per-IP confirm limit at
+    the HTTP layer). GitHub/Discord sign-ups and password-reset users are
+    verified. Self-service email change requires the current password (or a
+    recent provider sign-in) and switches the address only when the new
+    address confirms; an account manager's change makes it unverified.
+    Panel setting `unverified_restrict` lists permissions withheld from
+    unverified non-admin accounts (off by default), enforced through the same
+    permission checks (403 "verify your email address").
+  - UI: Administration → Roles, role assignment, address change and
+    verified badges on Users (actions a delegate cannot take are disabled
+    with a reason), the unverified policy in Panel settings, `/verify-email`,
+    profile email section and a banner while permissions are withheld.
+    Browser-verified on a local panel (2026-10-04): role creation, assignment
+    when adding a user and through Change role, a delegated Support role
+    seeing only Users/Roles and getting 403 from Nodes, the unverified banner
+    and profile notice listing withheld permissions, link confirmation
+    (Mailgun not configured; the token was injected into SQLite) and a
+    second use refused, a delegate's actions on a broader Node operators
+    account disabled in the menu and refused (403) by the server, address
+    change and mark-verified on a plain user, and the audit records. Role
+    deletion and Mailgun delivery were covered by tests only.
+  - Not done: account invitations can only carry a built-in role (the
+    `account_invites.role` CHECK constraint); verification links need Mailgun
+    and a panel address; the CLI `create-admin` account starts unverified
+    (administrators are never restricted). OIDC, passkeys and scoped API
+    clients followed in identity batch 2 (below).
+- [x] Identity batch 2: API clients, OpenID Connect sign-in and passkeys
+  (migrations `0045`-`0047`, schema assertion 48, no agent protocol change).
+  New dependencies: `github.com/coreos/go-oidc/v3`, `golang.org/x/oauth2`,
+  `github.com/go-webauthn/webauthn` (with `fxamacker/cbor` 2.9.3 → 2.9.4).
+  - API clients (`api_clients`, `rvc_` tokens, SHA-256 at rest): permissions
+    are a subset of the creator's at creation and are intersected with the
+    creator's current role on every request (`domain.User.Client`, `Can`);
+    a client never counts as an administrator. Bot/workspace scope is
+    enforced by the application in `requireAuth`/`clientGuard` (403) and
+    again in `BotService.loadPerm`, `List`, `workspaceRole`,
+    `creatableWorkspace` and `ListWorkspaces`. Session-only routes
+    (credentials, sessions, sign-in methods, profile, invitations) are
+    refused to clients. Expiry, revocation (owner; account managers under
+    `manageable`), last use, 600 req/min per client, audit of create/revoke,
+    client actions and refusals. Tests: `internal/api/apiclients_test.go`.
+  - OIDC (`oidc_providers`, `oidc_identities`): admin CRUD
+    (`settings.manage`), discovery on save, secret sealed (namespace
+    `oidc:<id>`, included in reseal/key rotation), PKCE S256 + state cookie
+    binder + nonce, go-oidc verification of signature/iss/aud/exp. Linking by
+    email only on `email_verified` and never to accounts with administration
+    permissions; otherwise login-then-link from Settings. Optional sign-up
+    with a default role (not admin; delegated managers limited to roles they
+    hold). TOTP still required after provider sign-in. Tests against an
+    in-process fake issuer: `internal/api/oidc_test.go` (happy path, bad
+    signature, wrong aud/iss, expired, nonce and state mismatch, unverified
+    email, admin email, link, duplicate link, last-method unlink refusal).
+  - Passkeys (`webauthn_credentials`): registration with password re-auth,
+    list/rename/delete (last sign-in method refused), discoverable
+    passwordless sign-in with user verification (no TOTP after it), passkey
+    as the TOTP alternative bound to the MFA ticket's account, clone
+    (counter) detection. RP ID = panel host name; unavailable for IP
+    addresses. Tests with a software authenticator:
+    `internal/api/passkeys_test.go`.
+  - Browser-verified on a scratch local panel (2026-10-04): API client
+    creation dialog and one-time token, curl checks (200 within permissions,
+    403 for an uncarried permission, a session-only route and an admin-only
+    page, 401 after revoking from Administration → API clients), adding an
+    OIDC provider against a local fake issuer, `link_required` for an
+    unverified address of an existing account, SSO sign-up and the linked
+    identity in Connected accounts, audit records. Passkeys: the sign-in
+    button, the Security section and the registration request reach the
+    browser prompt; the browser pane has no authenticator, so the ceremony
+    itself is covered by the Go tests only.
+  - Not done: OIDC group/claim → role mapping, RP-initiated logout, and
+    reading the provider's MFA (`amr`); GitHub/Discord "Disconnect" does not
+    count OIDC identities or passkeys as other sign-in methods (it is only
+    stricter); passkeys are not offered for SFTP; API clients cannot use the
+    console WebSocket from browsers (no header support there) but can from
+    other clients.
+- [x] Support batch 1: in-panel notifications and support tickets
+  (migrations `0048`-`0049`, schema assertion 50, no agent protocol change).
+  Guide: `docs/support.md`.
+  - Notifications (`notifications`, `notification_prefs`): produced by the
+    existing paths (`AlertService.Notify` for crash/heartbeat/deploy/backup,
+    `BotService` sharing/transfer/workspace/invitation hooks, agent hub
+    `OnDisconnect`/`OnConnect` with a 2-minute grace for nodes, announcements,
+    tickets). Enforced by the application: every inbox query is keyed by the
+    signed-in account; inbox and preferences are session-only
+    (`clientSessionOnly`) and refused in the service for API clients. Email
+    only to verified addresses, per-category switch, alert categories also
+    need the profile's Alert emails switch. Retention: 200 per account
+    (trimmed in the insert transaction), 90 days (hourly prune). Live update
+    is polling (30 s, visibility-gated), not a push stream.
+  - Tickets (`support_tickets`, `support_ticket_messages`): permissions
+    `tickets.create` (resource), `tickets.view_all`, `tickets.manage`
+    (administration). Requester-only visibility (no workspace sharing),
+    internal notes and assignment events filtered out of requester views by
+    the store query and DTO, delegated staff limited by `manageable`, unseen
+    tickets answer 404, scoped API clients refused, linked bot checked with
+    `BotService.Get` at creation. Per-account rate limits (10 tickets/h, 60
+    replies/10 min) and caps (10 active, 500 messages, 10,000 characters).
+    Audited as `support.*` (denied attempts kept). No attachments.
+  - Tests: `internal/api/support_test.go` (ticket authorization incl.
+    internal notes, delegated/view-only staff, assignment, audit; API client
+    scope; inbox isolation; preferences; fan-out incl. node grace;
+    retention; email gating against a fake Mailgun).
+  - Browser-verified on a scratch local panel (2026-10-04, no Docker):
+    opening a ticket linked to a bot, staff reply and internal note (note not
+    shown to the requester, staff shown as "Support team"), bell badge and
+    dropdown, mark all read, Settings → Notifications toggle persisted,
+    in-panel-only announcement without Mailgun, staff queue, assignment and
+    status change with events and requester notification, `/notifications`
+    page, audit rows. Email delivery and node notices were covered by tests
+    only.
+  - Not done: attachments, a push (SSE/WebSocket) channel for the bell,
+    Discord fan-out of the new categories (only the existing bot alerts post
+    to Discord). Knowledgebase and status page: support batch 2 below.
+- [x] Support batch 2: knowledgebase (help center) and public status page
+  (migrations `0050`-`0051`, schema assertion 52, tables assertion 44, no
+  agent protocol change, no new dependency). Guide: `docs/support.md`.
+  - Knowledgebase (`kb_categories`, `kb_articles`): permission `kb.manage`
+    (administration; built-in administrators, delegable). Enforced by the
+    application in `service.KBService`: drafts only for `kb.manage`;
+    published `staff` articles only for `kb.manage`, `tickets.view_all`,
+    `tickets.manage`; `users` articles for every signed-in account; `public`
+    articles also for anonymous visitors **only** while the
+    `kb_public` panel setting is on (otherwise anonymous requests answer
+    401). Articles a reader may not see answer 404 and are left out of lists
+    and search. Scoped API clients are refused (`kb` is outside their
+    areas). Markdown safety: the server refuses control characters and any
+    link target that is not `http(s)://` or a same-site path (no
+    `javascript:`, `data:`, `//host`, backslash or quote tricks) outside code;
+    bodies are stored as text and served only inside JSON; the interface
+    renders them with `SafeMarkdown.svelte`, which builds Svelte text nodes
+    (no `{@html}` anywhere in the web app), so raw HTML is displayed
+    literally. Search is a bounded `LIKE` prefilter (200 rows, 8 terms) with
+    scoring in Go, not a full-text index. Related articles on the new-ticket
+    form use the same search (common words dropped). Public reads are
+    rate-limited to 120 requests/minute per client IP. Audited as `kb.*`
+    (denied attempts kept); article bodies are not recorded.
+  - Status page (`status_components`, `status_incidents`,
+    `status_incident_components`, `status_incident_updates`,
+    `status_samples`): permission `status.manage` (administration). The
+    public page `/status` and `GET /api/v1/status` answer 404 unless enabled
+    and are rate-limited to 60 requests/minute per client IP. They expose
+    only the configured title/intro, each selected component's opaque
+    status-page id, administrator-chosen name and description, state, daily
+    bars and uptime, and incident titles, impacts, statuses, windows and
+    update text — never node/bot ids or real names, owners, addresses or
+    error messages (asserted by `TestStatusPagePublicExposure`). Component
+    states are derived by the application from data it already has: panel =
+    operational while it answers; local node = operational; agent node =
+    hub connection (`noderoute.Router.Online`), disabled = major outage, no
+    router = unknown; bot = observed state (+ failing health probe =
+    degraded; bot on a disconnected node = unknown). Open incidents raise
+    the state to their impact; maintenance marked in progress or inside its
+    window shows as maintenance. Delegated managers can only add nodes with
+    `nodes.manage` and bots they can open. Samples every 5 minutes while the
+    page is enabled, counted per component and UTC day, 90 days kept (pruned
+    each run). Panel downtime is not observed by the panel itself: days or
+    hours without samples are "no data", not downtime. Audited as `status.*`.
+  - Tests: `internal/api/kb_test.go` (visibility for anonymous / user /
+    staff / manager, public toggle, drafts, search, suggestions, category
+    deletion, audit; unsafe links and control characters refused, raw HTML
+    only JSON-escaped), `internal/api/statuspage_test.go` (public JSON leaks
+    nothing unselected, delegated sources, incident and maintenance
+    lifecycle, sampling with uptime math and 90-day retention, rate limit).
+  - Browser-verified on a scratch local panel (2026-10-04, no Docker):
+    anonymous `/help` asks to sign in and `/status` says there is no page;
+    category and article created in Administration → Knowledgebase; a
+    `javascript:` link refused on save; an article with `<script>` and
+    `<img onerror>` renders them as text (no script or img element, nothing
+    executed); relative and https links rendered; public help center toggle;
+    status page enabled with the panel and local node under public names; an
+    incident shown as partial outage, then resolved with a timeline; related
+    article suggested while typing a ticket subject; signed out, `/help`,
+    the article and `/status` work anonymously; the public JSON contains no
+    node id or account; the 61st request in a minute answers 429.
+  - Not done (deferred): status subscribers/notifications, incident
+    notifications through `NotificationService`, sites as status components,
+    external (third-party) uptime checks, article attachments/images,
+    revision history, full-text index, per-workspace knowledgebases.
+
+- [x] Usage analytics (migration `0052`, schema assertion 53, tables
+  assertion 47, no agent protocol change, no new dependency). Guide:
+  `docs/features.md` ("Usage analytics").
+  - Data reused: Docker stats (local) and agent stats (connected remote
+    nodes) through the existing `StatsStream` sources, bot rows
+    (`observed_state`, `desired_state`, `restart_count`,
+    `last_started_at_ms`), `operations` + `bot_backups` (deployment and
+    backup outcomes, duration, size), `node_telemetry` (nodes), `users`,
+    `support_tickets`/`support_ticket_messages`. New storage only for what
+    was not kept: per-bot resource history (`bot_usage`), node rollups that
+    outlive raw telemetry (`node_usage`), rollup marks (`usage_marks`).
+  - Collector (`service.UsageService`, started in `cmd/rivetpanel/main.go`):
+    one pass a minute, at most 100 running bots measured per pass (rotating,
+    4 concurrent, 5 s deadline each), workspace size every 30 minutes for
+    local bots only (10 per pass). Raw passes stay in memory; one
+    transaction of 5-minute rows per bucket (the open bucket is written on
+    shutdown). Rollups every 5 minutes recompute the current and previous
+    hour (and their days) with `INSERT … SELECT … ON CONFLICT DO UPDATE`
+    (idempotent); deployment/backup counts are recomputed from operations
+    finished in those hours and stay after the operations are pruned.
+    Retention: 5-minute 3 days, hourly 35 days, daily 400 days (bots and
+    nodes), pruned hourly in batches of 1,000.
+  - API: `GET /api/v1/bots/:id/usage?range=1h|24h|7d|30d|90d[&format=csv]`
+    (enforced by `BotService.Authorize` with the console bit, so sharing
+    grants, role masks and API-client scopes apply);
+    `GET /api/v1/admin/analytics?range=24h|7d|30d|90d[&format=csv]`
+    (`requirePerm(analytics.view)` plus a service re-check). Permission
+    `analytics.view` (administration group, delegable). Enforced by the
+    panel application: non-administrators (including every API client)
+    count only accounts that `manageable` allows and bots those accounts
+    own; nodes need `nodes.manage`, tickets `tickets.view_all` or
+    `tickets.manage`, owner addresses `users.view`; scoped API clients are
+    refused by `clientGuard`.
+  - UI: Analytics tab on bot and server pages (`UsageAnalytics.svelte`),
+    Administration → Analytics (`/admin/analytics`), both on the existing
+    `TimeChart`/`Sparkline` SVG components (theme tokens, light and dark).
+  - Tests: `internal/api/usage_test.go` (exact 5-minute rows from passes
+    incl. crash/start/network deltas and the open bucket, idempotent hourly
+    and daily rollups, deployment/backup counting, range resolutions, CSV,
+    retention per tier incl. node rows and bot deletion, authorization:
+    owner/other account 404, share without console 403, overview 403
+    without permission, delegated scope without administrator data, node and
+    ticket sections by permission, administrator's API client treated as
+    delegated, scoped clients refused).
+  - Limits (not enforced or not measured): bots beyond 100 running are
+    measured in rotation, not every minute; remote workspaces' disk size is
+    not measured; several starts within one minute count once; a panel that
+    is not running records nothing (gaps, not downtime); no per-user/billing
+    or revenue analytics; operations pruned before a rollup counted
+    them (more than 200 finished operations of one bot within five minutes,
+    or older than the 200 kept per bot when analytics first start) are not
+    counted.
 
 ## Completed in 0.4.0, 0.3.0 and since 0.2.0
 
@@ -32,7 +618,7 @@ items state exactly what remains.
 
 - [x] Email through Mailgun (Unreleased): password reset by emailed link,
   invitation emails, bot alerts by email, and security notices; configured in
-  Panel settings (key sealed) or `BOTPANEL_MAILGUN_*`. Enforcement: the sealing,
+  Panel settings (key sealed) or `RIVET_MAILGUN_*`. Enforcement: the sealing,
   the always-identical reset answer, one-use hashed expiring links, the
   sign-out of every session on reset and the sending caps (20 per recipient,
   300 per hour) are application level; delivery and reputation are Mailgun's.
@@ -64,7 +650,7 @@ items state exactly what remains.
   container user, root-container switch, container network and proxy header
   stay environment-file-only; sign-in providers stay on Panel settings. A saved
   set that no longer validates is ignored at start. "Restart panel" exits with
-  code 75 and relies on systemd or a container restart policy, which BotForge
+  code 75 and relies on systemd or a container restart policy, which RivetPanel
   cannot verify.
 - [x] Go to palette indexes pages, administration sections, environment
   variables, docs, bots (with sections), sites, people, AI chats and actions
@@ -94,18 +680,18 @@ items state exactly what remains.
 - [x] Editable site addresses and several sites domains: a slug is unique per
   sites domain; developers change a site's slug and sites domain in its
   settings; administrators add sites domains at runtime (served only after a
-  `_botforge-domain` TXT record is verified; environment-file domains are
+  `_rivetpanel-domain` TXT record is verified; environment-file domains are
   trusted), choose the primary, turn domains off, move every site between
   domains (all or nothing) and remove unused ones. Enforcement: application
   level, in the sites listener's host routing; the panel's host and its
   parents/subdomains, overlapping sites domains, and custom domains under a
   sites domain are refused. Routing and certificates per sites domain are
-  **not** managed by BotForge: the reverse proxy needs a catch-all route and
+  **not** managed by RivetPanel: the reverse proxy needs a catch-all route and
   a certificate for each domain (`docs/sites.md`).
 - [x] Custom domains for sites with DNS TXT ownership verification and
   six-hourly re-checks. Enforcement: the sites listener serves a custom domain
   only after verification (application level). TLS is **not** terminated by
-  BotForge: certificates are issued by the reverse proxy; BotForge only answers
+  RivetPanel: certificates are issued by the reverse proxy; RivetPanel only answers
   its on-demand permission check.
 - [x] Settings redesign (side-by-side sections, sticky navigation, folded
   password form), themed checkboxes/radios, accent-aware dark glows, and a
@@ -115,8 +701,10 @@ items state exactly what remains.
   Risa/SearxNG research, secret redaction, revision-checked journaled changes
   and undo, and direct-argv offline diagnostics. Enforcement: RBAC, approvals,
   limits, protected paths and SSRF checks are application-level; resource,
-  mount, capability and network isolation are Docker-runtime-level. The
-  separate privileged `botrunner` daemon is not implemented (`docs/ai-operator.md`).
+  mount, capability and network isolation are Docker-runtime-level. AI file
+  tools route through `rivet-agent` for remote bots (protocol 5); isolated
+  diagnostics run on the remote server's node with the same sandbox
+  (protocol 7, `docs/ai-operator.md`).
 - [x] AI operator follow-ups: every run limit (rounds, wall time, diagnostics,
   apply attempts, lifecycle actions, changed files/bytes, retained output) is
   enforced per run in both modes; model-initiated file applies, diagnostics,
@@ -148,10 +736,11 @@ items state exactly what remains.
   Docker-runtime-level.
 
 Migrations added since 0.2.0 (the schema-version assertion in
-`internal/store/sqlite/db_test.go` is 37):
+`internal/store/sqlite/db_test.go` checks 43 applied migrations):
 
 | Migration | Purpose |
 | --- | --- |
+| `0000_rivetpanel_identity.sql` | Clean-break product/schema-family marker applied before the existing schema; unmarked non-empty databases are refused before migration |
 | `0024_workspaces.sql` | Workspaces and members; personal workspace backfill; `bots.workspace_id` |
 | `0025_publish_operations.sql` | Rebuilds `operations` to allow the `publish` kind (rows preserved) |
 | `0026_static_sites.sql` | Sites, releases and custom domains |
@@ -162,9 +751,24 @@ Migrations added since 0.2.0 (the schema-version assertion in
 | `0032_host_telemetry.sql` | `node_telemetry` gains `load1`, swap, network and disk throughput columns (existing rows read as zero) |
 | `0033_mail.sql` | `password_resets` (hashed one-use reset links, one per account) and `users.email_alerts` (alert-email switch, default on) |
 | `0034_mail_news.sql` | `users.email_news` (optional news-email switch, default on) |
-| `0035_site_base_domains.sql` | `site_base_domains`; rebuilds `sites` with `domain_id` and a per-domain unique address (`domain_id`, `slug`) instead of a panel-wide unique slug. Runs with foreign keys off (new `-- botpanel:foreign-keys-off` migration marker, checked with `PRAGMA foreign_key_check`) so releases, custom domains and assistant chats are kept; start-up assigns existing sites to the primary domain |
-| `0036_build_command_addons.sql` | `bots.build_command` (custom build script, at most 4 KiB) and `bot_addons` (kind and memory per bot; passwords are sealed `BOTPANEL_ADDON_<KIND>_PASSWORD` rows in `bot_env_vars`) |
+| `0035_site_base_domains.sql` | `site_base_domains`; rebuilds `sites` with `domain_id` and a per-domain unique address (`domain_id`, `slug`) instead of a panel-wide unique slug. Runs with foreign keys off (new `-- rivetpanel:foreign-keys-off` migration marker, checked with `PRAGMA foreign_key_check`) so releases, custom domains and assistant chats are kept; start-up assigns existing sites to the primary domain |
+| `0036_build_command_addons.sql` | `bots.build_command` (custom build script, at most 4 KiB) and `bot_addons` (kind and memory per bot; passwords are sealed `RIVET_ADDON_<KIND>_PASSWORD` rows in `bot_env_vars`) |
 | `0037_logos.sql` | `bots` and `sites` gain `logo`, `logo_type` and `logo_updated_at_ms` for custom logos (PNG/JPEG, at most 256 KiB) |
+| `0038_agent_foundation.sql` | Locations and node placement identity; outbound `agent` transport; last reported agent protocol/certificate/capability state; durable idempotent agent commands with delivery, terminal acknowledgement and deadline state. Persistence only: enrollment, mTLS transport and remote enforcement are not yet implemented |
+| `0039_agent_enrollment.sql` | Single-use hashed enrollment credentials bound one-to-one to pre-created agent nodes; used/revoked/expiry state. The private certificate authority is file-backed under `RIVET_KEY_DIR/agent-ca`, not stored in SQLite |
+| `0040_game_servers.sql` | Additive: `blueprints` and immutable `blueprint_revisions`; `bots.kind` (`bot`/`game`), pinned blueprint revision, image choice and install state; `allocations` (node IP:port pool with server assignment and one primary per server). No table rebuild; existing bots become kind `bot` |
+| `0041_schedule_tasks.sql` | Additive: `schedules.chain` flag and `schedule_tasks` (ordered steps with waits and continue-on-failure); `bots.installed_version`. Chain schedules keep a never-executed placeholder in `schedules.action` because that column's constraint predates chains |
+| `0042_agent_connections.sql` | Additive: issued agent certificate inventory and revocation metadata; node drain/public address; reported agent version and hostname |
+| `0043_pending_pushes.sql` | Additive: `github_repos.pending_push_sha`, `pending_push_link` and `pending_push_at_ms` (a webhook push waiting for its server's offline node to reconnect) |
+| `0044_roles_email_verification.sql` | Additive: `roles` (system `admin`/`user` rows seeded, custom roles with a JSON permission list), `users.role_id`, `users.email_verified` (existing accounts default to 1) and `email_verified_at_ms`, `email_verifications` (hashed single-use links, one per account) |
+| `0045_api_clients.sql` | Additive: `api_clients` (hashed `rvc_` tokens, JSON permission list, optional bot/workspace id lists, optional expiry, last use) |
+| `0046_oidc.sql` | Additive: `oidc_providers` (issuer, client id, sealed secret, scopes, sign-up/link options, default role), `oidc_identities` (provider + subject → account) |
+| `0047_passkeys.sql` | Additive: `webauthn_credentials` (credential id, name, go-webauthn credential record JSON, last use) |
+| `0048_notifications.sql` | Additive: `notifications` (per-account plain-text rows with optional same-origin link and read time), `notification_prefs` (per account and category: in panel, email) |
+| `0049_support_tickets.sql` | Additive: `support_tickets` (number, requester, subject, category, priority, status, optional bot link and name, assignee), `support_ticket_messages` (messages and events; `internal` only for staff) |
+| `0050_knowledgebase.sql` | Additive: `kb_categories` (slug, name, description, position), `kb_articles` (category, slug, title, summary, Markdown body as text, draft/published, public/users/staff visibility, position, author and editor label, times) |
+| `0051_status_page.sql` | Additive: `status_components` (panel/node/bot source, public name and description), `status_incidents` (incident or maintenance, impact, status, window), `status_incident_components`, `status_incident_updates` (timeline), `status_samples` (per component and UTC day counts) |
+| `0052_usage_analytics.sql` | Additive: `bot_usage` (per bot, 5-minute/hourly/daily buckets of sample counts, CPU/memory sums and peaks, network bytes, workspace size, crashes, starts, deployment and backup counts), `node_usage` (hourly/daily rollups of `node_telemetry`), `usage_marks` (rollup watermarks). Retention is applied by the application |
 | `0030_ai_global_chat.sql` | Rebuilds `ai_conversations` so a chat may have no target; `ai_runs.bot_id`/`site_id`, `ai_messages.context_json` (the conversation subtree is stashed and restored, rows preserved) |
 
 Known gaps in this work:
@@ -172,7 +776,7 @@ Known gaps in this work:
 - [ ] The AI operator has no tools for startup-command changes, deployments or
   site publication; those stay manual.
 
-- [ ] Site release files are not included in `botpanel backup`/`restore`.
+- [ ] Site release files are not included in `rivetpanel backup`/`restore`.
 - [ ] Sites domains: the panel does not write reverse-proxy routes or install
   certificates (no Cloudflare Origin CA or ACME integration); a site lives
   under one sites domain and is not aliased under the others.
@@ -228,8 +832,10 @@ Migrations added in this release:
 
 ## Remaining: security and isolation
 
-- [ ] Build a small privileged `botrunner` daemon with a narrow authenticated
-  Unix-socket job protocol, then remove Docker-socket access from the panel.
+- [~] Complete remote feature parity and optionally run the control plane
+  without a local Docker runner; `rivet-agent` and its authenticated outbound
+  channel are implemented, but the panel still holds Docker when local
+  execution is enabled.
 - [ ] Enforce per-bot egress allowlists at DNS and firewall/proxy level.
 - [ ] Enforce workspace disk quotas and per-bot IO throttling.
 - [ ] Enforce bandwidth limits with host traffic shaping such as `tc`/HTB.
@@ -244,7 +850,8 @@ network, filesystem, or container-runtime mechanism.
 
 ## Remaining: operations and reliability
 
-- [ ] Multi-node placement and scheduling, node drain, and migration.
+- [~] Explicit multi-node placement and node drain are implemented; automatic
+  capacity scheduling and workload migration are not.
 - [ ] PostgreSQL backend plus point-in-time recovery, or an equivalent tested
   SQLite WAL archival and restore design.
 - [ ] External bot/panel log shipping to Loki and/or syslog.
@@ -265,7 +872,8 @@ network, filesystem, or container-runtime mechanism.
   Lavalink), named volumes, add-on backups and custom domains for bot HTTP
   ports remain.
 - [ ] Pull-request previews and health-gated blue/green or canary rollout.
-- [ ] A supported panel plugin model for custom pages and jobs.
+- [ ] A supported panel plugin model for custom pages and jobs (extensions:
+  backlog, not scheduled — user decision 2026-10-04).
 - [ ] .NET, Deno/Bun, PHP, and opt-in custom Dockerfile runtimes.
 - [ ] Signed callback action widgets, dashboard filters, and drill-down.
 - [ ] SMTP-backed self-service signup/reset/alert workflows.

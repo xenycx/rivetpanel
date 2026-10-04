@@ -1,6 +1,6 @@
 id: discordpy
 name: discord.py starter
-description: Slash-command bot with discord.py 2 and BotForge analytics.
+description: Slash-command bot with discord.py 2 and RivetPanel analytics.
 runtime: python
 language: Python
 sdk: py

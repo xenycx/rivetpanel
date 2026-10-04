@@ -9,10 +9,10 @@ import (
 	"strings"
 	"time"
 
-	"botpanel/internal/domain"
-	"botpanel/internal/events"
-	"botpanel/internal/runtimes"
-	"botpanel/internal/store/sqlite"
+	"github.com/xenycx/rivetpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/events"
+	"github.com/xenycx/rivetpanel/internal/runtimes"
+	"github.com/xenycx/rivetpanel/internal/store/sqlite"
 )
 
 // immediate requests a near-instant follow-up pass.
@@ -194,6 +194,9 @@ func (r *Runner) doStop(ctx context.Context, bot domain.Bot) time.Duration {
 			continue
 		}
 		if c.Live() {
+			if bot.IsGame() && c.State == "running" {
+				r.gracefulStop(ctx, bot, c)
+			}
 			if err := r.docker.Stop(ctx, c.ID, r.opts.StopTimeout); err != nil && !errors.Is(err, ErrNoContainer) {
 				return r.fail(ctx, bot, "container did not stop", err, st)
 			}
@@ -231,7 +234,10 @@ func (r *Runner) doStop(ctx context.Context, bot domain.Bot) time.Duration {
 
 func (r *Runner) doRun(ctx context.Context, bot domain.Bot) time.Duration {
 	st := r.stateFor(bot.ID)
-	rt, ok := r.cat.Get(bot.Runtime)
+	rt, ok, err := r.runtimeFor(ctx, bot)
+	if err != nil {
+		return r.fail(ctx, bot, "blueprint is unavailable", err, st)
+	}
 	if !ok {
 		if bot.ObservedState != "failed" {
 			r.observe(ctx, bot, sqlite.Observation{State: "failed", SettleGeneration: true, LastError: "runtime is not available in the catalog",
@@ -469,9 +475,14 @@ func (r *Runner) create(ctx context.Context, bot domain.Bot, rt runtimes.Runtime
 		}
 		return r.fail(ctx, bot, msg, err, st)
 	}
-	image, err := r.resolve(ctx, rt.ImageRef())
-	if err != nil {
-		return fail("runtime image is unavailable", err)
+	var image string
+	var err error
+	// A game server that is about to install may still change its image
+	// (automatic Java selection): resolve it after the installation.
+	if !(bot.IsGame() && build) {
+		if image, err = r.resolve(ctx, rt.ImageRef()); err != nil {
+			return fail("runtime image is unavailable", err)
+		}
 	}
 	if err := r.ws.Prepare(bot.ID, r.uid, r.gid); err != nil {
 		return fail("workspace ownership could not be prepared", err)
@@ -493,14 +504,35 @@ func (r *Runner) create(ctx context.Context, bot domain.Bot, rt runtimes.Runtime
 				}
 			}
 		}
-		r.buildStageName(ctx, op, "Preparing the build image")
-		msg, err := r.buildStage(ctx, bot, rt, host, st, op)
+		var msg string
+		var err error
+		if bot.IsGame() {
+			r.buildStageName(ctx, op, "Installing")
+			rt, msg, err = r.installGame(ctx, bot, rt, host, st, op)
+		} else {
+			r.buildStageName(ctx, op, "Preparing the build image")
+			msg, err = r.buildStage(ctx, bot, rt, host, st, op, nil)
+		}
 		if r.buildSlots != nil {
 			<-r.buildSlots
 		}
 		r.buildEnd(ctx, op, msg, err)
 		if err != nil {
+			if bot.IsGame() {
+				if gs, gerr := r.gameStore(); gerr == nil {
+					_ = gs.SetInstallState(context.WithoutCancel(ctx), bot.ID, domain.InstallFailed, nil, r.now().UnixMilli())
+				}
+			}
 			return r.fail(ctx, bot, msg, err, st)
+		}
+		if bot.IsGame() {
+			// The install may have chosen the image automatically.
+			if fresh, err := r.store.GetBot(ctx, bot.ID); err == nil && fresh.Generation == bot.Generation {
+				bot = fresh
+			}
+			if image, err = r.resolve(ctx, rt.ImageRef()); err != nil {
+				return r.fail(ctx, bot, "server image is unavailable", err, st)
+			}
 		}
 	}
 	if r.intentChanged(ctx, bot) {
@@ -519,6 +551,14 @@ func (r *Runner) create(ctx context.Context, bot domain.Bot, rt runtimes.Runtime
 		}
 		if r.intentChanged(ctx, bot) {
 			return immediate
+		}
+	}
+	if bot.IsGame() {
+		if err := r.applyGameConfig(ctx, bot, envMap); err != nil {
+			return r.fail(ctx, bot, "server configuration could not be written", err, st)
+		}
+		if err := r.ws.Prepare(bot.ID, r.uid, r.gid); err != nil {
+			return r.fail(ctx, bot, "workspace ownership could not be prepared", err, st)
 		}
 	}
 	spec := r.runtimeSpec(bot, rt, image, host, envMap)
@@ -549,6 +589,9 @@ func (r *Runner) create(ctx context.Context, bot domain.Bot, rt runtimes.Runtime
 
 // needsBuild reports whether the build stage will run for this generation.
 func (r *Runner) needsBuild(bot domain.Bot, rt runtimes.Runtime, st *botState) bool {
+	if bot.IsGame() {
+		return bot.InstallState != domain.InstallInstalled
+	}
 	if st.built && st.builtGen == bot.Generation {
 		return false
 	}
@@ -630,7 +673,7 @@ func (r *Runner) startContainer(ctx context.Context, bot domain.Bot, id string, 
 // buildStage runs the dependency/compile step in a resource-limited
 // container. Its output is copied to the operation's retained log while it
 // runs; the builder gets no bot secrets.
-func (r *Runner) buildStage(ctx context.Context, bot domain.Bot, rt runtimes.Runtime, host string, st *botState, op string) (string, error) {
+func (r *Runner) buildStage(ctx context.Context, bot domain.Bot, rt runtimes.Runtime, host string, st *botState, op string, shared io.Writer) (string, error) {
 	image, err := r.resolve(ctx, rt.BuilderRef())
 	if err != nil {
 		return "builder image is unavailable", err
@@ -645,7 +688,9 @@ func (r *Runner) buildStage(ctx context.Context, bot domain.Bot, rt runtimes.Run
 		_ = r.removeContainer(cctx, ContainerInfo{ID: id, State: "running"})
 	}()
 	var out io.WriteCloser
-	if r.builds != nil && op != "-" {
+	if shared != nil {
+		out = nopWriteCloser{shared} // the caller owns and closes it
+	} else if r.builds != nil && op != "-" {
 		out = r.builds.BuildOutput(op)
 	}
 	followDone := make(chan struct{})
@@ -678,7 +723,11 @@ func (r *Runner) buildStage(ctx context.Context, bot domain.Bot, rt runtimes.Run
 			out.Close()
 		}
 	}
-	wctx, cancel := context.WithTimeout(ctx, r.opts.BuildTimeout)
+	timeout := r.opts.BuildTimeout
+	if rt.BuildTimeout > 0 {
+		timeout = rt.BuildTimeout
+	}
+	wctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	code, err := r.docker.Wait(wctx, id)
 	if err != nil {

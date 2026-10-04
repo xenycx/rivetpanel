@@ -7,8 +7,12 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 
-	"botpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/domain"
 )
+
+// keyAuditTarget lets a handler replace the recorded target with a better
+// description of what it changed (for example a role's name and permissions).
+const keyAuditTarget ctxKey = 101
 
 // auditRoute names what a changing request did. The target is a name taken
 // from the route or query (a variable name, file path, backup id), never a
@@ -23,6 +27,31 @@ func query(n string) func(fiber.Ctx) string { return func(c fiber.Ctx) string { 
 
 var auditRoutes = map[string]auditRoute{
 	"POST /api/v1/bots":                                       {"bot.create", nil},
+	"POST /api/v1/games":                                      {"game.create", nil},
+	"POST /api/v1/bots/:id/command":                           {"console.command", nil},
+	"POST /api/v1/bots/:id/game/addons":                       {"game.addon_install", nil},
+	"PUT /api/v1/bots/:id/game/variables":                     {"game.variables", nil},
+	"POST /api/v1/bots/:id/game/reinstall":                    {"game.reinstall", nil},
+	"PUT /api/v1/bots/:id/game/image":                         {"game.image", nil},
+	"POST /api/v1/bots/:id/game/upgrade":                      {"game.upgrade", nil},
+	"POST /api/v1/bots/:id/allocations":                       {"game.allocation_add", nil},
+	"DELETE /api/v1/bots/:id/allocations/:aid":                {"game.allocation_remove", param("aid")},
+	"PUT /api/v1/bots/:id/allocations/:aid/primary":           {"game.allocation_primary", param("aid")},
+	"POST /api/v1/admin/blueprints":                           {"admin.blueprint_import", nil},
+	"POST /api/v1/admin/blueprints/egg-preview":               {"admin.blueprint_egg_preview", nil},
+	"PATCH /api/v1/admin/blueprints/:bp":                      {"admin.blueprint_update", param("bp")},
+	"DELETE /api/v1/admin/blueprints/:bp":                     {"admin.blueprint_delete", param("bp")},
+	"POST /api/v1/admin/allocations":                          {"admin.allocations_create", nil},
+	"PATCH /api/v1/admin/allocations/:aid":                    {"admin.allocation_update", param("aid")},
+	"DELETE /api/v1/admin/allocations/:aid":                   {"admin.allocation_delete", param("aid")},
+	"PATCH /api/v1/nodes/:id":                                 {"admin.node_update", param("id")},
+	"DELETE /api/v1/nodes/:id":                                {"admin.node_delete", param("id")},
+	"POST /api/v1/nodes/:id/revoke-certificates":              {"admin.node_certificates_revoke", param("id")},
+	"POST /api/v1/nodes/enrollments":                          {"admin.node_enroll", bodyField("name")},
+	"POST /api/v1/nodes/:id/enrollment":                       {"admin.node_reenroll", param("id")},
+	"POST /api/v1/nodes/locations":                            {"admin.location_create", bodyField("name")},
+	"PATCH /api/v1/nodes/locations/:id":                       {"admin.location_update", param("id")},
+	"DELETE /api/v1/nodes/locations/:id":                      {"admin.location_delete", param("id")},
 	"PATCH /api/v1/bots/:id":                                  {"bot.update", nil},
 	"DELETE /api/v1/bots/:id":                                 {"bot.delete", nil},
 	"POST /api/v1/bots/:id/start":                             {"bot.start", nil},
@@ -38,6 +67,8 @@ var auditRoutes = map[string]auditRoute{
 	"POST /api/v1/bots/:id/files/mkdir":                       {"files.mkdir", nil},
 	"POST /api/v1/bots/:id/files/move":                        {"files.move", nil},
 	"POST /api/v1/bots/:id/files/extract":                     {"files.extract", query("path")},
+	"POST /api/v1/bots/:id/files/compress":                    {"files.compress", nil},
+	"POST /api/v1/bots/:id/files/decompress":                  {"files.decompress", nil},
 	"PUT /api/v1/bots/:id/packages":                           {"packages.edit", nil},
 	"PUT /api/v1/bots/:id/github":                             {"deploy.link", nil},
 	"DELETE /api/v1/bots/:id/github":                          {"deploy.unlink", nil},
@@ -61,21 +92,54 @@ var auditRoutes = map[string]auditRoute{
 	"PUT /api/v1/bots/:id/tags":                               {"bot.tags", nil},
 	"POST /api/v1/bots/batch":                                 {"bot.batch", nil},
 	"POST /api/v1/me/password":                                {"account.password", nil},
+	"POST /api/v1/me/email":                                   {"account.email_change_request", nil},
 	"DELETE /api/v1/me/sessions/:sid":                         {"account.session_revoke", nil},
 	"POST /api/v1/me/sessions/revoke-others":                  {"account.sessions_revoke", nil},
 	"POST /api/v1/me/api-keys":                                {"account.key_create", nil},
 	"DELETE /api/v1/me/api-keys/:id":                          {"account.key_delete", nil},
 	"POST /api/v1/me/tokens":                                  {"account.token_create", nil},
+	"POST /api/v1/me/api-clients":                             {"account.api_client_create", bodyField("name")},
+	"DELETE /api/v1/me/api-clients/:id":                       {"account.api_client_revoke", nil},
+	"DELETE /api/v1/admin/api-clients/:id":                    {"admin.api_client_revoke", param("id")},
+	"DELETE /api/v1/me/identities/:pid":                       {"account.identity_unlink", param("pid")},
+	"POST /api/v1/me/passkeys/register/finish":                {"account.passkey_add", nil},
+	"PATCH /api/v1/me/passkeys/:id":                           {"account.passkey_rename", bodyField("name")},
+	"DELETE /api/v1/me/passkeys/:id":                          {"account.passkey_delete", nil},
+	"POST /api/v1/admin/oidc-providers":                       {"admin.oidc_provider_create", bodyField("name")},
+	"PATCH /api/v1/admin/oidc-providers/:id":                  {"admin.oidc_provider_update", param("id")},
+	"DELETE /api/v1/admin/oidc-providers/:id":                 {"admin.oidc_provider_delete", param("id")},
 	"DELETE /api/v1/me/tokens/:id":                            {"account.token_delete", nil},
 	"DELETE /api/v1/me/connections/:provider":                 {"account.disconnect", param("provider")},
 	"POST /api/v1/me/mfa/enable":                              {"account.mfa_enable", nil},
 	"POST /api/v1/me/mfa/disable":                             {"account.mfa_disable", nil},
-	"POST /api/v1/users":                                      {"admin.user_create", nil},
+	"POST /api/v1/users":                                      {"admin.user_create", bodyField("email")},
+	"POST /api/v1/admin/roles":                                {"admin.role_create", bodyField("name")},
+	"PATCH /api/v1/admin/roles/:rid":                          {"admin.role_update", param("rid")},
+	"DELETE /api/v1/admin/roles/:rid":                         {"admin.role_delete", param("rid")},
 	"PATCH /api/v1/users/:id":                                 {"admin.user_update", param("id")},
 	"PUT /api/v1/admin/settings":                              {"admin.settings", nil},
 	"POST /api/v1/admin/settings/mail/test":                   {"admin.mail_test", nil},
 	"PUT /api/v1/me/email-alerts":                             {"account.email_alerts", nil},
 	"PUT /api/v1/me/email-news":                               {"account.email_news", nil},
+	"PUT /api/v1/me/notification-prefs":                       {"account.notification_prefs", nil},
+	"POST /api/v1/tickets":                                    {"support.ticket_create", nil},
+	"POST /api/v1/tickets/:tid/messages":                      {"support.ticket_reply", param("tid")},
+	"PATCH /api/v1/tickets/:tid":                              {"support.ticket_update", param("tid")},
+	"POST /api/v1/kb/manage/articles":                         {"kb.article_create", nil},
+	"PATCH /api/v1/kb/manage/articles/:aid":                   {"kb.article_update", param("aid")},
+	"DELETE /api/v1/kb/manage/articles/:aid":                  {"kb.article_delete", param("aid")},
+	"POST /api/v1/kb/manage/categories":                       {"kb.category_create", nil},
+	"PATCH /api/v1/kb/manage/categories/:cid":                 {"kb.category_update", param("cid")},
+	"DELETE /api/v1/kb/manage/categories/:cid":                {"kb.category_delete", param("cid")},
+	"PUT /api/v1/kb/manage/settings":                          {"kb.settings", nil},
+	"PUT /api/v1/status/manage/config":                        {"status.config", nil},
+	"POST /api/v1/status/manage/components":                   {"status.component_create", nil},
+	"PATCH /api/v1/status/manage/components/:cid":             {"status.component_update", param("cid")},
+	"DELETE /api/v1/status/manage/components/:cid":            {"status.component_delete", param("cid")},
+	"POST /api/v1/status/manage/incidents":                    {"status.incident_create", nil},
+	"PATCH /api/v1/status/manage/incidents/:iid":              {"status.incident_update", param("iid")},
+	"POST /api/v1/status/manage/incidents/:iid/updates":       {"status.incident_post", param("iid")},
+	"DELETE /api/v1/status/manage/incidents/:iid":             {"status.incident_delete", param("iid")},
 	"POST /api/v1/admin/mail/announcements":                   {"admin.announcement", announcementTarget},
 	"PUT /api/v1/admin/environment":                           {"admin.environment", environmentNames},
 	"POST /api/v1/admin/environment/restart":                  {"admin.restart", nil},
@@ -185,7 +249,7 @@ func envNames(c fiber.Ctx) string {
 // auditMW records every changing request after it ran (success and refusal;
 // server errors are recorded as failed). Reads are not recorded, except the
 // explicit secret reveal, which is a POST.
-func (s *server) auditMW(c fiber.Ctx) error {
+func (s *panel) auditMW(c fiber.Ctx) error {
 	err := c.Next()
 	if s.audit == nil || isSafeMethod(c.Method()) {
 		return err
@@ -213,16 +277,27 @@ func (s *server) auditMW(c fiber.Ctx) error {
 	case status >= 400:
 		outcome = "failed"
 	}
-	if outcome == "denied" && !strings.HasPrefix(r.action, "env.") && !strings.HasPrefix(r.action, "admin.") && r.action != "access.grant" {
+	u := currentUser(c)
+	// Refusals of API client requests are always kept: they show a
+	// credential being used outside what it was given.
+	if outcome == "denied" && u.Client == nil && !strings.HasPrefix(r.action, "env.") && !strings.HasPrefix(r.action, "admin.") && !strings.HasPrefix(r.action, "support.") &&
+		!strings.HasPrefix(r.action, "kb.") && !strings.HasPrefix(r.action, "status.") &&
+		r.action != "access.grant" && !strings.HasPrefix(r.action, "account.api_client") {
 		return err // only security-relevant refusals are worth keeping
 	}
-	u := currentUser(c)
 	ev := domain.AuditEvent{Action: r.action, Outcome: outcome}
 	ev.ActorID, ev.ActorLabel = strPtr(u.ID), strPtr(u.Email)
+	if u.Client != nil {
+		// The record names the credential that acted.
+		ev.ActorLabel = strPtr(u.Email + " via API client " + u.Client.Name)
+	}
 	ip := c.IP()
 	ev.IP = &ip
 	if r.target != nil {
 		ev.Target = strPtr(strings.Clone(r.target(c)))
+	}
+	if t, ok := c.Locals(keyAuditTarget).(string); ok && t != "" {
+		ev.Target = strPtr(t) // a handler named what it changed
 	}
 	botID := strings.Clone(c.Params("id"))
 	switch {
@@ -247,7 +322,7 @@ func (s *server) auditMW(c fiber.Ctx) error {
 		if json.Unmarshal(c.Response().Body(), &inv) == nil && inv.BotID != "" {
 			ev.BotID, ev.BotName = &inv.BotID, &inv.BotName
 		}
-	case r.action == "bot.create" && outcome == "ok":
+	case (r.action == "bot.create" || r.action == "game.create") && outcome == "ok":
 		var created struct {
 			ID   string `json:"id"`
 			Name string `json:"name"`
@@ -340,7 +415,7 @@ func auditQuery(c fiber.Ctx) (before int64, limit int, err error) {
 	return before, limit, nil
 }
 
-func (s *server) botAudit(c fiber.Ctx) error {
+func (s *panel) botAudit(c fiber.Ctx) error {
 	before, limit, err := auditQuery(c)
 	if err != nil {
 		return err
@@ -352,7 +427,7 @@ func (s *server) botAudit(c fiber.Ctx) error {
 	return c.JSON(auditPage(evs, limit))
 }
 
-func (s *server) visibleAudit(c fiber.Ctx) error {
+func (s *panel) visibleAudit(c fiber.Ctx) error {
 	before, limit, err := auditQuery(c)
 	if err != nil {
 		return err

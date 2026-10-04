@@ -2,7 +2,8 @@
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
 	import { api, ApiError } from '$lib/api/client';
-	import { oauthErrors, type Connection, type Provider } from '$lib/api/types';
+	import { oauthErrors, type Connection, type Identity, type Provider } from '$lib/api/types';
+	import { fmtAgo } from '$lib/args';
 	import { confirmDialog } from '$lib/ui/dialogs.svelte';
 	import { toast } from '$lib/ui/toast.svelte';
 	import Icon from '$lib/components/ui/Icon.svelte';
@@ -20,16 +21,53 @@
 	let notice = $state('');
 	let busy = $state<string>('');
 
+	let identities = $state<Identity[]>([]);
+	let available = $state<{ slug: string; name: string }[]>([]);
+
 	async function load() {
-		connections = (await api<{ connections: Connection[] }>('GET', '/me/connections')).connections;
+		const [c, i] = await Promise.all([
+			api<{ connections: Connection[] }>('GET', '/me/connections'),
+			api<{ identities: Identity[]; available: { slug: string; name: string }[] }>('GET', '/me/identities')
+		]);
+		connections = c.connections;
+		identities = i.identities;
+		available = i.available;
 		loaded = true;
+	}
+
+	async function linkSSO(slug: string) {
+		busy = 'oidc:' + slug;
+		error = '';
+		try {
+			const r = await api<{ url: string }>('POST', `/me/identities/${slug}/start`);
+			window.location.assign(r.url); // full navigation to the provider
+		} catch (err) {
+			error = err instanceof ApiError ? err.message : 'Could not start the connection.';
+			busy = '';
+		}
+	}
+
+	async function unlinkSSO(i: Identity) {
+		const ok = await confirmDialog({ title: `Disconnect ${i.name}?`, body: `You can no longer sign in with ${i.name}.`, confirmLabel: 'Disconnect', tone: 'danger' });
+		if (!ok) return;
+		busy = 'oidc:' + i.slug;
+		error = notice = '';
+		try {
+			await api('DELETE', `/me/identities/${i.provider_id}`);
+			await load();
+			toast(`${i.name} disconnected`);
+		} catch (err) {
+			error = err instanceof ApiError ? err.message : 'Could not disconnect.';
+		} finally {
+			busy = '';
+		}
 	}
 
 	onMount(async () => {
 		const code = page.url.searchParams.get('error');
 		if (code) error = oauthErrors[code] ?? 'Could not connect the account.';
 		const linked = page.url.searchParams.get('linked');
-		if (linked) notice = `${meta[linked as Provider]?.name ?? linked} connected.`;
+		if (linked) notice = `${meta[linked as Provider]?.name ?? 'Single sign-on'} connected.`;
 		try {
 			await load();
 		} catch {
@@ -78,9 +116,9 @@
 			: meta[c.provider].blurb;
 </script>
 
-<svelte:head><title>Connected accounts · BotForge</title></svelte:head>
+<svelte:head><title>Connected accounts · RivetPanel</title></svelte:head>
 
-<SettingsSection title="Connected accounts" description="Sign in with GitHub or Discord instead of a password, deploy from and push to your repositories, and receive notifications in Discord. Accounts are only linked from here, never matched by email address.">
+<SettingsSection title="Connected accounts" description="Sign in with GitHub, Discord or your organization's single sign-on instead of a password, deploy from and push to your repositories, and receive notifications in Discord. GitHub and Discord are only linked from here, never matched by email address.">
 {#if notice}<Notice tone="success" class="mb-4" live>{notice}</Notice>{/if}
 {#if error}<Notice tone="fail" class="mb-4" live>{error}</Notice>{/if}
 <ul class="card divide-y divide-rule-soft overflow-hidden">
@@ -112,5 +150,28 @@
 		{#if loaded}<li class="px-4 py-5 text-muted">No sign-in providers are available on this panel.</li>{/if}
 	{/each}
 </ul>
+{#if identities.length || available.length}
+	<h3 class="mt-6 font-semibold">Single sign-on</h3>
+	<p class="text-small text-muted">Your organization's sign-in providers. Connecting one here links it to this account whatever address it reports.</p>
+	<ul class="card mt-2 divide-y divide-rule-soft overflow-hidden">
+		{#each identities as i (i.provider_id)}
+			<li class="flex flex-wrap items-center gap-4 px-4 py-4">
+				<span class="grid size-10 shrink-0 place-items-center rounded-tile bg-ink text-paper" aria-hidden="true"><Icon name="key" size={20} /></span>
+				<div class="min-w-0 flex-1 basis-56">
+					<p class="flex flex-wrap items-center gap-2"><span class="font-semibold">{i.name}</span><span class="pill" data-tone="run">Linked</span></p>
+					<p class="text-small text-muted">{i.email ? `As ${i.email}${i.email_verified ? '' : ' (not verified by the provider)'}` : 'No email address shared'} · {i.last_login_at_ms ? `last used ${fmtAgo(i.last_login_at_ms)}` : 'not used to sign in yet'}</p>
+				</div>
+				<button class="btn btn-danger" disabled={!i.can_unlink || busy !== ''} title={i.can_unlink ? '' : 'This is your only way to sign in. Add a password first.'} onclick={() => unlinkSSO(i)}>Disconnect</button>
+			</li>
+		{/each}
+		{#each available as p (p.slug)}
+			<li class="flex flex-wrap items-center gap-4 px-4 py-4">
+				<span class="grid size-10 shrink-0 place-items-center rounded-tile bg-panel text-muted" aria-hidden="true"><Icon name="key" size={20} /></span>
+				<div class="min-w-0 flex-1 basis-56"><p class="flex flex-wrap items-center gap-2"><span class="font-semibold">{p.name}</span><span class="pill">Not linked</span></p></div>
+				<button class="btn btn-primary" disabled={busy !== ''} onclick={() => linkSSO(p.slug)}>Connect</button>
+			</li>
+		{/each}
+	</ul>
+{/if}
 <p class="mt-3 text-small text-muted">You always keep at least one way to sign in: Disconnect is unavailable for your only method. A password counts; add one under <a class="link" href="/settings/security">Security</a>.</p>
 </SettingsSection>

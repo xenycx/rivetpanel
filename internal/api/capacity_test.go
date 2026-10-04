@@ -5,7 +5,7 @@ import (
 	"sync"
 	"testing"
 
-	"botpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/domain"
 )
 
 func TestCapacityBudgets(t *testing.T) {

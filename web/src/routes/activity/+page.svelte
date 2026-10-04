@@ -92,7 +92,7 @@
 	};
 </script>
 
-<svelte:head><title>Activity · BotForge</title></svelte:head>
+<svelte:head><title>Activity · RivetPanel</title></svelte:head>
 
 <h1 class="text-page">Activity</h1>
 <p class="mt-0.5 max-w-prose text-muted">What happened on the bots you can see: long-running work, and who changed what.</p>

@@ -15,21 +15,24 @@ import (
 	"github.com/pkg/sftp"
 	"golang.org/x/crypto/ssh"
 
-	"botpanel/internal/domain"
-	"botpanel/internal/filesystem"
+	"github.com/xenycx/rivetpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/filesystem"
 )
 
 const (
-	botA = "aaaaaaaa-0000-4000-8000-000000000001"
-	botB = "bbbbbbbb-0000-4000-8000-000000000002"
-	botC = "cccccccc-0000-4000-8000-000000000003" // alice may not edit files here
+	botA  = "aaaaaaaa-0000-4000-8000-000000000001"
+	botB  = "bbbbbbbb-0000-4000-8000-000000000002"
+	botC  = "cccccccc-0000-4000-8000-000000000003" // alice may not edit files here
+	botR  = "dddddddd-0000-4000-8000-000000000004" // runs on a remote node
+	nodeR = "node-remote"
 )
 
 // switches lets tests revoke access while a session is open.
 type switches struct {
 	revoked atomic.Bool // the login (account/key/password) is no longer valid
 	noGrant atomic.Bool // alice lost the files permission on botA
-	blocked atomic.Bool // a deployment/restore holds botA
+	blocked atomic.Bool // a deployment/restore holds botA (and botR)
+	offline atomic.Bool // botR's node is not connected
 }
 
 type fakeAuth struct{ sw *switches }
@@ -51,7 +54,8 @@ type fakeBots struct{ sw *switches }
 
 func (fakeBots) List(_ context.Context, u domain.User) ([]domain.Bot, error) {
 	if u.ID == "alice@x.io" {
-		return []domain.Bot{{ID: botA, Name: "My Bot"}, {ID: botB, Name: "../evil"}, {ID: botC, Name: "readonly"}}, nil
+		return []domain.Bot{{ID: botA, Name: "My Bot"}, {ID: botB, Name: "../evil"}, {ID: botC, Name: "readonly"},
+			{ID: botR, Name: "Remote", NodeID: nodeR}}, nil
 	}
 	return nil, nil
 }
@@ -62,7 +66,7 @@ func (f fakeBots) Permissions(_ context.Context, _ domain.User, b domain.Bot) in
 	return domain.PermEditFiles
 }
 func (f fakeBots) FilesBlocked(botID string) error {
-	if botID == botA && f.sw != nil && f.sw.blocked.Load() {
+	if (botID == botA || botID == botR) && f.sw != nil && f.sw.blocked.Load() {
 		return &domain.BusyError{What: "A restore"}
 	}
 	return nil
@@ -70,6 +74,7 @@ func (f fakeBots) FilesBlocked(botID string) error {
 
 type rig struct {
 	sw      *switches
+	node    *fakeNode
 	t       *testing.T
 	addr    string
 	files   *filesystem.Manager
@@ -93,8 +98,38 @@ func newRig(t *testing.T, maxFile int64) *rig {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// The remote bot's files live on the node. The panel keeps a stale
+	// directory of the same id: it must never be listed, read or written.
+	if err := fm.Create(botR); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "bots", botR, "decoy.txt"), []byte("stale panel copy"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	nm, err := filesystem.NewManager(filepath.Join(dir, "node"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { nm.Close() })
+	if err := nm.Create(botR); err != nil {
+		t.Fatal(err)
+	}
 	sw := &switches{}
-	srv := &Server{Auth: fakeAuth{sw}, Bots: fakeBots{sw}, Files: fm, HostKey: key, MaxFile: maxFile, Log: slog.New(slog.NewTextHandler(io.Discard, nil))}
+	node := &fakeNode{files: nm}
+	srv := &Server{Auth: fakeAuth{sw}, Bots: fakeBots{sw}, Files: fm, HostKey: key, MaxFile: maxFile, SpoolDir: filepath.Join(dir, "spool"),
+		Log: slog.New(slog.NewTextHandler(io.Discard, nil))}
+	if err := os.MkdirAll(srv.SpoolDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	srv.Remote = func(b domain.Bot) (NodeFiles, bool, error) {
+		if b.NodeID == "" {
+			return nil, false, nil
+		}
+		if sw.offline.Load() {
+			return nil, true, domain.Invalid("the server's node is offline; try again when its agent reconnects")
+		}
+		return node, true, nil
+	}
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -103,7 +138,7 @@ func newRig(t *testing.T, maxFile int64) *rig {
 	done := make(chan struct{})
 	go func() { srv.Serve(ctx, ln); close(done) }()
 	t.Cleanup(func() { cancel(); <-done })
-	return &rig{sw: sw, t: t, addr: ln.Addr().String(), files: fm, dir: dir, outside: filepath.Join(dir, "outside.txt")}
+	return &rig{sw: sw, node: node, t: t, addr: ln.Addr().String(), files: fm, dir: dir, outside: filepath.Join(dir, "outside.txt")}
 }
 
 func (r *rig) client(user, pw string) (*sftp.Client, error) {

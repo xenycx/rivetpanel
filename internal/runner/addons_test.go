@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"botpanel/internal/addons"
-	"botpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/addons"
+	"github.com/xenycx/rivetpanel/internal/domain"
 )
 
 func addonRig(t *testing.T) *rig {
@@ -73,7 +73,7 @@ func TestAddonsStartBeforeBotOnPrivateNetwork(t *testing.T) {
 			t.Errorf("bot env missing %s", want)
 		}
 	}
-	if strings.Contains(env, "BOTPANEL_ADDON_") {
+	if strings.Contains(env, "RIVET_ADDON_") {
 		t.Error("internal add-on password variable reached the bot")
 	}
 	b := g.bot()

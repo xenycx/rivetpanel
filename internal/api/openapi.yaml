@@ -1,6 +1,6 @@
 openapi: 3.1.0
 info:
-  title: BotForge automation API
+  title: RivetPanel automation API
   version: "1"
   description: |
     A small HTTP API for scripts and CI: read bot status and history, start,

@@ -13,27 +13,27 @@
 		<link rel="apple-touch-icon" href="/apple-touch-icon.png" sizes="180x180" />
 		<link rel="manifest" href="/manifest.webmanifest" />
 		<meta property="og:type" content="website" />
-		<meta property="og:site_name" content="BotForge" />
-		<meta property="og:title" content="BotForge" />
-		<meta property="og:description" content="Run and manage Discord bots on this server." />
+		<meta property="og:site_name" content="RivetPanel" />
+		<meta property="og:title" content="RivetPanel" />
+		<meta property="og:description" content="Run Discord bots and Minecraft servers on this machine." />
 		<meta property="og:image" content="/og-image.png" />
 		<meta property="og:image:width" content="1200" />
 		<meta property="og:image:height" content="630" />
-		<meta property="og:image:alt" content="BotForge: a fleet of Discord bots with their live state" />
+		<meta property="og:image:alt" content="RivetPanel: a fleet of Discord bots with their live state" />
 		<meta name="twitter:card" content="summary_large_image" />
-		<meta name="twitter:title" content="BotForge" />
-		<meta name="twitter:description" content="Run and manage Discord bots on this server." />
+		<meta name="twitter:title" content="RivetPanel" />
+		<meta name="twitter:description" content="Run Discord bots and Minecraft servers on this machine." />
 		<meta name="twitter:image" content="/og-image.png" />
-		<title>BotForge</title>
+		<title>RivetPanel</title>
 		<script>
 			// Apply the saved theme before first paint (see lib/ui/theme.svelte.ts).
 			try {
-				var t = localStorage.getItem('botpanel.theme');
+				var t = localStorage.getItem('rivetpanel.theme');
 				if (t !== 'light' && t !== 'dark') t = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
 				document.documentElement.setAttribute('data-theme', t);
-				var a = localStorage.getItem('botforge.accent') || 'ember';
+				var a = localStorage.getItem('rivetpanel.accent') || 'ember';
 				document.documentElement.setAttribute('data-accent', a);
-				document.documentElement.setAttribute('data-radius', localStorage.getItem('botforge.radius') || 'default');
+				document.documentElement.setAttribute('data-radius', localStorage.getItem('rivetpanel.radius') || 'default');
 			} catch (e) {}
 		</script>
 		%sveltekit.head%

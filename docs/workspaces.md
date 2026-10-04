@@ -42,7 +42,7 @@ API's "all your bots" tokens and the activity feed follow the same rules.
 * **Transfer ownership** of a bot moves it into the new owner's personal
   workspace, so the previous owner does not keep access through their
   workspace (unless "keep access" is chosen, which adds a direct grant).
-* Quotas (`BOTPANEL_MAX_BOTS_PER_USER`, `BOTPANEL_USER_MEMORY_BYTES`) count the
+* Quotas (`RIVET_MAX_BOTS_PER_USER`, `RIVET_USER_MEMORY_BYTES`) count the
   bot's **owner** (its creator or transfer recipient), not the workspace.
 
 A workspace can be deleted only when it has no bots (including bots still being

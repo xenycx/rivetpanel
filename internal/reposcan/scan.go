@@ -188,7 +188,7 @@ func Scan(r io.Reader, rootDir string, lim Limits) (*Snapshot, error) {
 			for _, re := range envPatterns {
 				for _, m := range re.FindAllStringSubmatch(text, -1) {
 					n := m[1]
-					if ignoredEnv[n] || strings.HasPrefix(n, "NPM_") || strings.HasPrefix(n, "GITHUB_") || strings.HasPrefix(n, "BOTPANEL_") {
+					if ignoredEnv[n] || strings.HasPrefix(n, "NPM_") || strings.HasPrefix(n, "GITHUB_") || strings.HasPrefix(n, "RIVET_") {
 						continue
 					}
 					if _, seen := s.EnvRefs[n]; !seen && len(s.EnvRefs) < 200 {

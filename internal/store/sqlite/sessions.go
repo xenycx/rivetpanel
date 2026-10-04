@@ -3,7 +3,7 @@ package sqlite
 import (
 	"context"
 
-	"botpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/domain"
 )
 
 // MaxSessionsPerUser bounds stored sessions; the oldest are dropped.
@@ -44,16 +44,15 @@ func scanSession(row interface{ Scan(...any) error }) (domain.Session, error) {
 // GetSession returns the user and session for an unexpired session whose user
 // is not disabled; otherwise domain.ErrNotFound.
 func (db *DB) GetSession(ctx context.Context, tokenHash []byte, nowMS int64) (domain.User, domain.Session, error) {
-	row := db.QueryRowContext(ctx, `SELECT u.id, u.email, u.display_name, u.avatar_jpeg, u.password_hash, u.role, u.disabled, u.created_at_ms, u.updated_at_ms, `+sessionCols+`
+	row := db.QueryRowContext(ctx, `SELECT `+userSelect("u")+`, `+sessionCols+`
 		FROM sessions s JOIN users u ON u.id = s.user_id
 		WHERE s.token_hash = ? AND s.expires_at_ms > ? AND u.disabled = 0`, tokenHash, nowMS)
 	var u domain.User
 	var s domain.Session
-	var dis int
 	var id *string
-	err := row.Scan(&u.ID, &u.Email, &u.DisplayName, &u.AvatarJPEG, &u.PasswordHash, &u.Role, &dis, &u.CreatedAtMS, &u.UpdatedAtMS,
-		&id, &s.UserID, &s.CreatedAtMS, &s.ExpiresAtMS, &s.LastSeenAtMS, &s.AuthAtMS, &s.Device)
-	u.Disabled = dis == 1
+	dest, done := userScanDest(&u)
+	err := row.Scan(append(dest, &id, &s.UserID, &s.CreatedAtMS, &s.ExpiresAtMS, &s.LastSeenAtMS, &s.AuthAtMS, &s.Device)...)
+	done()
 	if id != nil {
 		s.ID = *id
 	}

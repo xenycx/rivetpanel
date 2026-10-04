@@ -14,7 +14,7 @@ import (
 	"github.com/fasthttp/websocket"
 	"github.com/gofiber/fiber/v3"
 
-	"botpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/domain"
 )
 
 // wsSource is a fake Docker log/stdin source.
@@ -78,8 +78,31 @@ func serve(t *testing.T, e *env) string {
 		t.Fatal(err)
 	}
 	go e.app.Listener(ln, fiber.ListenConfig{DisableStartupMessage: true})
-	t.Cleanup(func() { e.app.Shutdown() })
+	t.Cleanup(func() {
+		// A console WebSocket is hijacked from the HTTP server, so Shutdown
+		// does not wait for it. Its handler keeps re-reading the session from
+		// the database until it notices the client went away; wait for every
+		// session to end so the database and temporary directory are not
+		// closed and removed underneath it (this made the suite flaky).
+		e.waitConsolesClosed(t)
+		e.app.Shutdown()
+	})
 	return ln.Addr().String()
+}
+
+func (e *env) waitConsolesClosed(t *testing.T) {
+	t.Helper()
+	if e.consoleLimit == nil {
+		return
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for e.consoleLimit.Active() > 0 {
+		if time.Now().After(deadline) {
+			t.Errorf("%d console session(s) still open after the test", e.consoleLimit.Active())
+			return
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
 }
 
 func (e *env) runningBot(c *client, cid string) string {

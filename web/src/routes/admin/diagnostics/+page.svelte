@@ -36,11 +36,11 @@
 	const word = { ok: 'OK', warn: 'Check', fail: 'Problem', info: 'Note' } as const;
 </script>
 
-<svelte:head><title>Diagnostics · BotForge</title></svelte:head>
+<svelte:head><title>Diagnostics · RivetPanel</title></svelte:head>
 <div class="flex flex-wrap items-end justify-between gap-3">
 	<div>
 		<h2 class="text-section">Diagnostics</h2>
-		<p class="mt-1 max-w-3xl text-muted">Read-only checks of this installation. The same report is available on the host with <code>botpanel doctor</code>.</p>
+		<p class="mt-1 max-w-3xl text-muted">Read-only checks of this installation. The same report is available on the host with <code>rivetpanel doctor</code>.</p>
 	</div>
 	<div class="flex gap-2">
 		<a class="btn" href="/api/v1/admin/diagnostics?download=1" download><Icon name="download" />Download report</a>

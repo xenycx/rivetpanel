@@ -14,6 +14,9 @@ import (
 // migration and its version record commit in one transaction. It is
 // idempotent and safe to call on every start.
 func (db *DB) Migrate(ctx context.Context, fsys fs.FS) error {
+	if err := db.verifyProductIdentity(ctx); err != nil {
+		return err
+	}
 	if _, err := db.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS schema_migrations (
 		version       INTEGER PRIMARY KEY NOT NULL,
 		name          TEXT NOT NULL,
@@ -64,7 +67,7 @@ func (db *DB) Migrate(ctx context.Context, fsys fs.FS) error {
 		}
 	}
 
-	// A database written by a newer BotPanel may rely on columns and rules
+	// A database written by a newer RivetPanel may rely on columns and rules
 	// this binary does not know; refuse instead of corrupting it.
 	known := 0
 	if len(migs) > 0 {
@@ -72,7 +75,7 @@ func (db *DB) Migrate(ctx context.Context, fsys fs.FS) error {
 	}
 	for v := range applied {
 		if v > known {
-			return fmt.Errorf("the database schema (version %d) is newer than this BotPanel build supports (version %d); "+
+			return fmt.Errorf("the database schema (version %d) is newer than this RivetPanel build supports (version %d); "+
 				"install the newer release again, or restore a backup taken before the upgrade", v, known)
 		}
 	}
@@ -91,12 +94,41 @@ func (db *DB) Migrate(ctx context.Context, fsys fs.FS) error {
 	return nil
 }
 
+// verifyProductIdentity prevents the clean-break RivetPanel schema from
+// silently modifying a database created by the predecessor product. A brand
+// new database, or one where only the migration ledger was created before an
+// interrupted first migration, is safe to initialize.
+func (db *DB) verifyProductIdentity(ctx context.Context) error {
+	var marker, other int
+	if err := db.QueryRowContext(ctx, `SELECT
+		count(*) FILTER (WHERE name = 'rivetpanel_identity'),
+		count(*) FILTER (WHERE name NOT IN ('schema_migrations', 'rivetpanel_identity') AND name NOT LIKE 'sqlite_%')
+		FROM sqlite_master WHERE type = 'table'`).Scan(&marker, &other); err != nil {
+		return fmt.Errorf("inspect database identity: %w", err)
+	}
+	if marker == 0 {
+		if other == 0 {
+			return nil
+		}
+		return fmt.Errorf("unsupported database: this installation does not have the RivetPanel schema identity; use a new RIVET_DB_PATH (automatic legacy conversion is not supported)")
+	}
+	var product string
+	var family int
+	if err := db.QueryRowContext(ctx, `SELECT product, schema_family FROM rivetpanel_identity WHERE singleton = 1`).Scan(&product, &family); err != nil {
+		return fmt.Errorf("read database identity: %w", err)
+	}
+	if product != "rivetpanel" || family != 1 {
+		return fmt.Errorf("unsupported database identity %q family %d", product, family)
+	}
+	return nil
+}
+
 // noForeignKeys marks a migration that rebuilds a table other tables
 // reference. With foreign keys on, dropping the old table would cascade into
 // every referencing row, so the migration runs on one connection with
 // foreign keys off (SQLite's documented table-rebuild procedure) and must
 // leave no dangling reference behind.
-const noForeignKeys = "-- botpanel:foreign-keys-off"
+const noForeignKeys = "-- rivetpanel:foreign-keys-off"
 
 func (db *DB) apply(ctx context.Context, version int, name, body string) (err error) {
 	conn, err := db.Conn(ctx)

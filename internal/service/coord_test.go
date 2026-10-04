@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"botpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/domain"
 )
 
 func TestCoordinatorClaimsAndPreemption(t *testing.T) {

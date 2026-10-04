@@ -11,7 +11,7 @@ import (
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/mount"
 
-	"botpanel/internal/service"
+	"github.com/xenycx/rivetpanel/internal/service"
 )
 
 const nodeIdle = `
@@ -153,7 +153,7 @@ func TestContainerIsolationSettings(t *testing.T) {
 	if len(ins.Mounts) != 1 || ins.Mounts[0].Destination != "/workspace" || ins.Mounts[0].Type != mount.TypeBind || !ins.Mounts[0].RW {
 		t.Fatalf("mounts: %+v", ins.Mounts)
 	}
-	if ins.Config.User != s.opts.User || ins.Config.Labels[runnerLabel("botpanel.bot_id")] != b.ID {
+	if ins.Config.User != s.opts.User || ins.Config.Labels[runnerLabel("rivetpanel.bot_id")] != b.ID {
 		t.Fatalf("user/labels: %q %v", ins.Config.User, ins.Config.Labels)
 	}
 	// Images are referenced by immutable digest/ID, never by mutable tag.

@@ -138,4 +138,4 @@
 {#if !pinned && live}
 	<p class="mt-1 text-right text-small text-muted"><button class="link" onclick={() => { if (box) box.scrollTop = box.scrollHeight; }}>Jump to the newest line</button></p>
 {/if}
-<p class="mt-3 max-w-3xl text-small text-muted">Secrets, tokens and passwords are replaced with [redacted] before a line is kept. This view starts empty after every restart; the complete history is in the service log of the host (<code>journalctl -u botpanel</code>) or the container (<code>docker logs</code>).</p>
+<p class="mt-3 max-w-3xl text-small text-muted">Secrets, tokens and passwords are replaced with [redacted] before a line is kept. This view starts empty after every restart; the complete history is in the service log of the host (<code>journalctl -u rivetpanel</code>) or the container (<code>docker logs</code>).</p>

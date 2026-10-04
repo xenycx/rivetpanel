@@ -72,7 +72,7 @@
 	const status = (s: Site) => (s.disabled ? { tone: 'fail', label: 'Suspended' } : s.current_release ? { tone: 'run', label: 'Live' } : { tone: undefined, label: 'Empty' });
 </script>
 
-<svelte:head><title>Sites · BotForge</title></svelte:head>
+<svelte:head><title>Sites · RivetPanel</title></svelte:head>
 
 <section class="card card-glow grid gap-6 p-6 sm:p-8 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
 	<div>
@@ -89,7 +89,7 @@
 	<div class="mt-5">
 		<EmptyState title="Site hosting is not enabled on this panel">
 			{#if session.user?.role === 'admin'}
-				<p>Set <code>BOTPANEL_SITES_LISTEN</code> and <code>BOTPANEL_SITES_BASE_URL</code>, point a wildcard DNS record and your reverse proxy at the sites listener, and restart the panel. The documentation explains the setup, including automatic certificates for custom domains.</p>
+				<p>Set <code>RIVET_SITES_LISTEN</code> and <code>RIVET_SITES_BASE_URL</code>, point a wildcard DNS record and your reverse proxy at the sites listener, and restart the panel. The documentation explains the setup, including automatic certificates for custom domains.</p>
 			{:else}
 				<p>An administrator has to turn on static site hosting first.</p>
 			{/if}

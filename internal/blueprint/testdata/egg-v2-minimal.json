@@ -1,0 +1,36 @@
+{
+  "_comment": "Hand-written test fixture for the RivetPanel egg importer.",
+  "meta": {"version": "PTDL_v2", "update_url": null},
+  "exported_at": "2026-01-01T00:00:00+00:00",
+  "name": "Example Java Game",
+  "author": "tests@example.invalid",
+  "description": "A small made-up game server.\r\nSecond line.",
+  "features": ["eula", "java_version"],
+  "docker_images": {"Java 21": "ghcr.io/example/java:21", "Java 17": "ghcr.io/example/java:17", "Bad": "Not An Image!"},
+  "file_denylist": ["secret.txt"],
+  "startup": "java -Xms128M -Xmx{{SERVER_MEMORY}}M -jar {{SERVER_JARFILE}} --port {{server.build.default.port}} --loc {{P_SERVER_LOCATION}}",
+  "config": {
+    "files": "{\"server.properties\":{\"parser\":\"properties\",\"find\":{\"server-ip\":\"{{server.build.default.ip}}\",\"server-port\":\"{{server.build.default.port}}\",\"motd\":\"{{server.build.env.MOTD}}\",\"weird\":\"{{config.docker.interface}}\"}},\"settings.ini\":{\"parser\":\"ini\",\"find\":{\"Network.Port\":\"{{server.build.default.port}}\",\"Name\":\"{{env.MOTD}}\"}},\"start.cfg\":{\"parser\":\"file\",\"find\":{\"port=\":\"port={{server.build.default.port}}\"}},\"config.yml\":{\"parser\":\"yaml\",\"find\":{\"server.port\":\"{{server.build.default.port}}\"}}}",
+    "startup": "{\"done\":[\")! For help, type \",\"Server ready\"],\"userInteraction\":[\"Go to eula.txt\"]}",
+    "logs": "{}",
+    "stop": "stop"
+  },
+  "scripts": {
+    "installation": {
+      "script": "#!/bin/bash\r\napt update\r\ncd /mnt/server\r\necho 'it''s' > /mnt/server/x.txt\r\ncurl -o server.jar https://example.invalid/server.jar\r\n",
+      "container": "ghcr.io/example/installers:debian",
+      "entrypoint": "bash"
+    }
+  },
+  "variables": [
+    {"name": "Server Jar File", "description": "The jar to run.", "env_variable": "SERVER_JARFILE", "default_value": "server.jar", "user_viewable": true, "user_editable": true, "rules": "required|regex:/^([\\w\\d._-]+)(\\.jar)$/", "field_type": "text"},
+    {"name": "Message", "description": "", "env_variable": "MOTD", "default_value": "Hello", "user_viewable": true, "user_editable": true, "rules": "required|string|max:40", "field_type": "text"},
+    {"name": "Players", "description": "", "env_variable": "MAX_PLAYERS", "default_value": "20", "user_viewable": true, "user_editable": true, "rules": "required|integer|between:1,100", "field_type": "text"},
+    {"name": "Mode", "description": "", "env_variable": "MODE", "default_value": "survival", "user_viewable": true, "user_editable": false, "rules": "required|in:survival,creative", "field_type": "text"},
+    {"name": "Debug", "description": "", "env_variable": "DEBUG", "default_value": "0", "user_viewable": false, "user_editable": false, "rules": "boolean", "field_type": "text"},
+    {"name": "Lookahead", "description": "", "env_variable": "LOOK", "default_value": "a", "user_viewable": true, "user_editable": true, "rules": "nullable|regex:/^(?=a)a$/", "field_type": "text"},
+    {"name": "Port clash", "description": "", "env_variable": "SERVER_PORT", "default_value": "1", "user_viewable": true, "user_editable": true, "rules": "", "field_type": "text"},
+    {"name": "Lower", "description": "", "env_variable": "lowercase", "default_value": "", "user_viewable": true, "user_editable": true, "rules": "", "field_type": "text"},
+    {"name": "Token", "description": "", "env_variable": "TOKEN", "default_value": "", "user_viewable": true, "user_editable": true, "rules": "required|string|min:8|uuid", "field_type": "text"}
+  ]
+}

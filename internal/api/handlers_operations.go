@@ -7,7 +7,7 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 
-	"botpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/domain"
 )
 
 type opDTO struct {
@@ -78,7 +78,7 @@ func opsPage(ops []domain.Operation, limit int) fiber.Map {
 	return m
 }
 
-func (s *server) listBotOperations(c fiber.Ctx) error {
+func (s *panel) listBotOperations(c fiber.Ctx) error {
 	kinds, before, limit, err := opQuery(c)
 	if err != nil {
 		return err
@@ -90,7 +90,7 @@ func (s *server) listBotOperations(c fiber.Ctx) error {
 	return c.JSON(opsPage(ops, limit))
 }
 
-func (s *server) listActivity(c fiber.Ctx) error {
+func (s *panel) listActivity(c fiber.Ctx) error {
 	kinds, before, limit, err := opQuery(c)
 	if err != nil {
 		return err
@@ -102,7 +102,7 @@ func (s *server) listActivity(c fiber.Ctx) error {
 	return c.JSON(opsPage(ops, limit))
 }
 
-func (s *server) getOperation(c fiber.Ctx) error {
+func (s *panel) getOperation(c fiber.Ctx) error {
 	op, err := s.ops.Get(c.Context(), currentUser(c), strings.Clone(c.Params("id")), strings.Clone(c.Params("op")))
 	if err != nil {
 		return err
@@ -112,7 +112,7 @@ func (s *server) getOperation(c fiber.Ctx) error {
 
 // operationOutput returns retained output from an absolute offset. Clients
 // poll with next_offset until live is false.
-func (s *server) operationOutput(c fiber.Ctx) error {
+func (s *panel) operationOutput(c fiber.Ctx) error {
 	var offset int64
 	if v := c.Query("offset"); v != "" {
 		n, err := strconv.ParseInt(v, 10, 64)

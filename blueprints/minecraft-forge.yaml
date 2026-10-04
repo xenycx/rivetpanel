@@ -1,0 +1,71 @@
+slug: minecraft-forge
+name: Forge
+category: Minecraft Java
+description: The classic Minecraft mod loader. Put Forge mods in the mods folder. Installation downloads the game libraries and can take a few minutes.
+runtime: java
+images:
+  - {label: "Java 25", ref: "eclipse-temurin:25-jre-alpine", java: 25}
+  - {label: "Java 21", ref: "eclipse-temurin:21-jre-alpine", java: 21}
+  - {label: "Java 17", ref: "eclipse-temurin:17-jre-alpine", java: 17}
+  - {label: "Java 11", ref: "eclipse-temurin:11-jre-alpine", java: 11}
+  - {label: "Java 8", ref: "eclipse-temurin:8-jre-alpine", java: 8}
+  - {label: "Java 25 (glibc)", ref: "eclipse-temurin:25-jre", java: 25}
+  - {label: "Java 21 (glibc)", ref: "eclipse-temurin:21-jre", java: 21}
+java_from: MINECRAFT_VERSION
+startup:
+  command: java -Xms128M -Xmx{{SERVER_MEMORY}}M $(cat rivet-launch.txt) nogui
+  stop: stop
+  stop_timeout_seconds: 120
+  done: ')! For help, type'
+variables:
+  - env: MINECRAFT_VERSION
+    name: Minecraft version
+    description: The version to install. "latest" picks the newest stable release.
+    default: latest
+    editable: true
+    reinstall: true
+    rules: {pattern: '^(latest|[0-9][0-9A-Za-z._-]{0,31})$'}
+    versions: {provider: forge}
+  - env: FORGE_VERSION
+    name: Forge version
+    description: A specific Forge build such as 47.4.0, or "latest" for the recommended build of the chosen Minecraft version.
+    default: latest
+    editable: true
+    reinstall: true
+    rules: {pattern: '^(latest|[0-9][0-9A-Za-z._-]{0,31})$'}
+install:
+  download: {provider: forge, version: "{{MINECRAFT_VERSION}}", build: "{{FORGE_VERSION}}", dest: forge-installer.jar}
+  script: |
+    set -e
+    cd /workspace
+    echo "Running the Forge installer (this downloads the game libraries)..."
+    java -jar forge-installer.jar --installServer
+    rm -f forge-installer.jar forge-installer.jar.log installer.log
+    args=$(ls libraries/net/minecraftforge/forge/*/unix_args.txt 2>/dev/null | head -n 1 || true)
+    if [ -n "$args" ]; then
+      echo "@$args" > rivet-launch.txt
+    else
+      jar=$(ls forge-*.jar 2>/dev/null | grep -v installer | head -n 1 || true)
+      [ -n "$jar" ] || { echo "The Forge installer did not produce a server"; exit 1; }
+      echo "-jar $jar" > rivet-launch.txt
+    fi
+    echo "Installed Forge."
+config_files:
+  - path: server.properties
+    format: properties
+    create: true
+    set:
+      server-port: "{{SERVER_PORT}}"
+      query.port: "{{SERVER_PORT}}"
+      server-ip: ""
+agreements:
+  - id: minecraft-eula
+    text: I accept the Minecraft End User License Agreement.
+    url: https://aka.ms/MinecraftEULA
+    file: eula.txt
+    content: "eula=true\n"
+resources: {memory_mb: 4096, min_memory_mb: 1024, cpus: 2, pids: 1024, heap_percent: 85}
+ports: {default: 25565}
+query: minecraft-java
+features: [minecraft-properties, minecraft-players]
+addons: {source: modrinth, kind: mod, loaders: [forge], dir: mods}

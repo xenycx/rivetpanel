@@ -130,10 +130,10 @@ func ValidateFrom(s string) (string, error) {
 		return "", nil
 	}
 	if strings.ContainsAny(s, "\r\n\x00") || len(s) > 200 {
-		return "", errors.New("the sender must be one line, like BotForge <noreply@example.com>")
+		return "", errors.New("the sender must be one line, like RivetPanel <noreply@example.com>")
 	}
 	if _, err := mail.ParseAddress(s); err != nil {
-		return "", errors.New("the sender must look like BotForge <noreply@example.com>")
+		return "", errors.New("the sender must look like RivetPanel <noreply@example.com>")
 	}
 	return s, nil
 }
@@ -282,7 +282,7 @@ func (c *Client) do(ctx context.Context, cfg Config, method, path, contentType s
 	if contentType != "" {
 		req.Header.Set("Content-Type", contentType)
 	}
-	req.Header.Set("User-Agent", "BotForge")
+	req.Header.Set("User-Agent", "RivetPanel")
 	res, err := c.http().Do(req)
 	if err != nil {
 		// The error text can carry the URL but never the key (it is a header).

@@ -65,7 +65,7 @@ func (r *Registry) get(ctx context.Context, u string, out any) error {
 		return err
 	}
 	req.Header.Set("Accept", "application/json")
-	req.Header.Set("User-Agent", "botpanel (package manager)") // crates.io requires one
+	req.Header.Set("User-Agent", "rivetpanel (package manager)") // crates.io requires one
 	res, err := r.hc().Do(req)
 	if err != nil {
 		return err

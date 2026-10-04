@@ -109,7 +109,7 @@ public class Main {
 		// The java recipe ships a prebuilt jar; compile it with the (approved) JDK image.
 		rt, _ := s.cat.Get("java")
 		args := []string{"run", "--rm", "--network", "none"}
-		if os.Getenv("BOTPANEL_TEST_ROOTLESS") != "1" {
+		if os.Getenv("RIVET_TEST_ROOTLESS") != "1" {
 			// A rootful daemon would create root-owned files the unprivileged test
 			// process cannot chown; run as the test user (rootless maps root to us).
 			args = append(args, "--user", fmt.Sprintf("%d:%d", os.Getuid(), os.Getgid()), "-e", "HOME=/w")
@@ -117,7 +117,7 @@ public class Main {
 		args = append(args, "-v", ws+":/w", "-w", "/w", rt.BuilderImage,
 			"sh", "-c", "javac Main.java && printf 'Main-Class: Main\\n' > m.txt && jar cfm app.jar m.txt Main.class")
 		cmd := exec.Command("docker", args...)
-		cmd.Env = append(os.Environ(), "DOCKER_HOST="+os.Getenv("BOTPANEL_TEST_DOCKER_HOST"))
+		cmd.Env = append(os.Environ(), "DOCKER_HOST="+os.Getenv("RIVET_TEST_DOCKER_HOST"))
 		if out, err := cmd.CombinedOutput(); err != nil {
 			t.Fatalf("java build: %v\n%s", err, out)
 		}
@@ -129,7 +129,7 @@ public class Main {
 // environment arrived, limits are applied by the kernel, the root filesystem is
 // read-only, the workspace is writable, and no Docker socket is present.
 func TestLanguageSmoke(t *testing.T) {
-	only := os.Getenv("BOTPANEL_TEST_ONLY")
+	only := os.Getenv("RIVET_TEST_ONLY")
 	for _, l := range langs {
 		l := l
 		if only != "" && !strings.Contains(only, l.runtime) {

@@ -3,7 +3,7 @@ package sqlite
 import (
 	"context"
 
-	"botpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/domain"
 )
 
 // ListEnv returns a bot's encrypted variables ordered by name.
@@ -119,7 +119,7 @@ func (db *DB) WalkEnv(ctx context.Context, fn func(domain.EnvVar) error) error {
 
 // ReplaceEnvAll makes a bot's user-managed variables exactly vars in one
 // transaction and advances the generation (stopped bots only). Names starting
-// with BOTPANEL_ are system-managed and left untouched.
+// with RIVET_ are system-managed and left untouched.
 func (db *DB) ReplaceEnvAll(ctx context.Context, botID string, vars []domain.EnvVar, nowMS int64) error {
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
@@ -136,7 +136,7 @@ func (db *DB) ReplaceEnvAll(ctx context.Context, botID string, vars []domain.Env
 	if err := db.bumpStopped(ctx, exec, botID, nowMS); err != nil {
 		return err
 	}
-	if _, err := tx.ExecContext(ctx, `DELETE FROM bot_env_vars WHERE bot_id = ? AND name NOT LIKE 'BOTPANEL\_%' ESCAPE '\'`, botID); err != nil {
+	if _, err := tx.ExecContext(ctx, `DELETE FROM bot_env_vars WHERE bot_id = ? AND name NOT LIKE 'RIVET\_%' ESCAPE '\'`, botID); err != nil {
 		return err
 	}
 	for _, v := range vars {

@@ -1,9 +1,9 @@
 # Email (Mailgun)
 
-BotForge can send email through [Mailgun](https://www.mailgun.com/) over its
+RivetPanel can send email through [Mailgun](https://www.mailgun.com/) over its
 HTTP API. It is **off until an administrator configures it**, and nothing in the
 panel depends on it: without it, every flow keeps its non-email path (copy the
-invitation link, `botpanel reset-password EMAIL`, Discord alerts).
+invitation link, `rivetpanel reset-password EMAIL`, Discord alerts).
 
 ## What it sends
 
@@ -12,9 +12,16 @@ invitation link, `botpanel reset-password EMAIL`, Discord alerts).
 | Password reset link | Someone asks on the sign-in page ("Forgot your password?") | n/a: only on request |
 | Account invitation | An administrator ticks "Email the link to this address" when inviting | n/a: only when ticked |
 | Bot alerts | A bot crashes or stops reporting, or a deployment or backup fails (exactly the events that already post to Discord; the per-bot crash, deploy and backup switches apply, and "stopped reporting" follows the bot's heartbeat settings) | Yes: Settings → Profile → Email |
-| Security notices | Password changed (also by reset link), two-step sign-in turned on or off | No: a person must be able to learn their account changed |
+| Security notices | Password changed (also by reset link), two-step sign-in turned on or off, email address change requested or completed (sent to the old address) | No: a person must be able to learn their account changed |
+| Email verification link | A new account registers from an invitation, someone presses "Send verification link" in Settings → Profile, or asks to change their address (sent to the new address) | n/a: only on request; at most one a minute and five an hour per account |
 
 | Announcements | An administrator writes one in Administration → Announcements | Notices: no. News: yes (Settings → Profile → "Email me news and announcements") |
+| Notifications | Support ticket replies and status changes, access changes (sharing, transfers, workspaces, accepted invitations), node offline/online for accounts that manage nodes | Yes: Settings → Notifications, per category |
+
+Bot alerts and notifications are emailed **only to verified addresses** and
+follow Settings → Notifications per category; alerts, deployments, backups and
+node notices also need the profile's Alert emails switch. The same events
+appear in the in-panel notification inbox (`docs/support.md`).
 
 Alert emails go to the bot's **owner**, at the address they sign in with, in
 addition to their Discord webhook if they have one.
@@ -35,6 +42,10 @@ people with accounts: news, policy updates, maintenance notices.
    Sending to everyone stays locked until you have sent a test of the current
    text (editing anything locks it again).
 5. **Send**: a confirmation names the subject, kind and audience.
+
+**Send by** chooses email, the notification inbox (the bell; stored as plain
+text, follows each account's Announcements preference) or both. Without
+Mailgun, only the inbox is available and no test email is needed.
 
 How it behaves: messages go out in batches of up to 100 through Mailgun's
 recipient variables, so **each person sees only their own address**. Every
@@ -66,7 +77,7 @@ responsibility, not something the panel decides.
    to the one domain is the safer choice for production.
 3. In the panel: **Administration → Panel settings → Email (Mailgun)**. Enter the
    key, the domain, the region and a sender such as
-   `BotForge <noreply@mg.example.com>` (an address on the sending domain), then
+   `RivetPanel <noreply@mg.example.com>` (an address on the sending domain), then
    **Save and apply**.
 4. Press **Send test**. It first checks the key, region and domain (read-only)
    and tells you whether the domain's DNS records are verified, then sends one
@@ -76,9 +87,9 @@ responsibility, not something the panel decides.
    email and the panel address are set.
 
 The same values can be fixed in the environment file (they then show as
-read-only in the panel and always win): `BOTPANEL_MAILGUN_API_KEY`,
-`BOTPANEL_MAILGUN_DOMAIN`, `BOTPANEL_MAILGUN_REGION` (`us` or `eu`),
-`BOTPANEL_MAIL_FROM`.
+read-only in the panel and always win): `RIVET_MAILGUN_API_KEY`,
+`RIVET_MAILGUN_DOMAIN`, `RIVET_MAILGUN_REGION` (`us` or `eu`),
+`RIVET_MAIL_FROM`.
 
 ## Security properties
 
@@ -94,6 +105,16 @@ read-only in the panel and always win): `BOTPANEL_MAILGUN_API_KEY`,
   (`/reset#…`), so it is not sent to the server by the browser and does not
   appear in reverse-proxy logs. A password that is too weak is refused *before*
   the link is used up.
+- Email verification links (`/verify-email#…`) are 256-bit random, stored
+  only as a SHA-256 hash, work **once**, expire after **24 hours**, and a new
+  link replaces the old one. Sending is limited to one per account per minute
+  and five per hour; confirming is limited per client address. An email change
+  happens only when the link sent to the new address is used, and the old
+  address is told. Without email, people cannot verify themselves: an account
+  manager marks addresses verified on the Users page. An account manager
+  changing someone's address there makes it unverified and tells the old
+  address. Enforced by the
+  application. See [permissions.md](permissions.md).
 - Resetting a password **signs the account out everywhere**. Two-step sign-in,
   if enabled, still applies at the next sign-in: a reset does not bypass it.
 - Requests are rate limited per client address (10 per 10 minutes for the reset

@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"botpanel/internal/domain"
-	"botpanel/internal/migrations"
-	"botpanel/internal/store/sqlite"
+	"github.com/xenycx/rivetpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/migrations"
+	"github.com/xenycx/rivetpanel/internal/store/sqlite"
 )
 
 func fixture(t *testing.T, stat, meminfo string) ProcReader {

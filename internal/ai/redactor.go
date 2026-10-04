@@ -41,7 +41,7 @@ func ProtectedPath(p string) bool {
 	if strings.HasPrefix(base, ".env") || base == ".npmrc" || base == ".pypirc" || base == ".netrc" || base == "credentials" || base == "secrets.json" {
 		return true
 	}
-	if strings.Contains(p, "/.aws/") || strings.Contains(p, "/.config/gcloud/") || strings.Contains(p, "/.kube/") || strings.Contains(p, ".botforge") || strings.Contains(p, ".botpanel") {
+	if strings.Contains(p, "/.aws/") || strings.Contains(p, "/.config/gcloud/") || strings.Contains(p, "/.kube/") || strings.Contains(p, ".rivetpanel") || strings.Contains(p, ".rivetpanel") {
 		return true
 	}
 	for _, s := range []string{".pem", ".key", ".p12", ".pfx", "id_rsa", "id_ed25519"} {

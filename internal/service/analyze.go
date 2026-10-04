@@ -9,10 +9,10 @@ import (
 	"strings"
 	"time"
 
-	"botpanel/internal/addons"
-	"botpanel/internal/domain"
-	"botpanel/internal/github"
-	"botpanel/internal/reposcan"
+	"github.com/xenycx/rivetpanel/internal/addons"
+	"github.com/xenycx/rivetpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/github"
+	"github.com/xenycx/rivetpanel/internal/reposcan"
 )
 
 // AnalyzeInput selects what to inspect.
@@ -195,9 +195,9 @@ func clipList(l []string, n, each int) []string {
 	return out
 }
 
-const aiPlanSystem = `You are a deployment engineer for BotForge, a panel that hosts chat bots (mostly Discord bots) in Docker containers. Work out how to host the repository described by the user message and answer with ONE JSON object and nothing else.
+const aiPlanSystem = `You are a deployment engineer for RivetPanel, a panel that hosts chat bots (mostly Discord bots) in Docker containers. Work out how to host the repository described by the user message and answer with ONE JSON object and nothing else.
 
-How BotForge runs a bot:
+How RivetPanel runs a bot:
 - The chosen repository folder is the working directory /workspace (HOME=/workspace). The root filesystem is read-only; /workspace and /tmp are writable. No root, no extra packages at run time.
 - Build: the build command runs once per start as "sh -c" in the runtime's builder image, in /workspace, with internet access and WITHOUT the bot's variables. Everything the bot needs must end up in /workspace. Leave it empty to use the runtime's default build.
 - Start: the start command is an exec-form argument list (no shell, no variable expansion, no && or pipes). Its first element MUST be one of the runtime's allowed commands.

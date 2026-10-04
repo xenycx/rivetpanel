@@ -12,8 +12,8 @@ import (
 	"github.com/gofiber/fiber/v3"
 	"github.com/gofiber/fiber/v3/middleware/limiter"
 
-	"botpanel/internal/domain"
-	"botpanel/internal/service"
+	"github.com/xenycx/rivetpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/service"
 )
 
 // Automation API: a small, documented surface (docs/openapi.yaml) for scripts
@@ -30,7 +30,7 @@ func currentAutoToken(c fiber.Ctx) domain.AutomationToken {
 
 var requestIDRe = regexp.MustCompile(`^[A-Za-z0-9._-]{8,64}$`)
 
-func (s *server) automationRoutes(v1 fiber.Router) {
+func (s *panel) automationRoutes(v1 fiber.Router) {
 	g := v1.Group("/automation", s.requestID)
 	g.Get("/openapi.yaml", s.openAPI)
 	a := g.Group("", s.tokenAuth, limiter.New(limiter.Config{
@@ -47,19 +47,19 @@ func (s *server) automationRoutes(v1 fiber.Router) {
 		a.Get("/bots/:id/operations/:op", s.autoScope(service.TokenRead), s.getOperation)
 	}
 	for _, act := range []string{"start", "stop", "restart"} {
-		a.Post("/bots/:id/"+act, s.autoScope(service.TokenPower), s.autoPower(act))
+		a.Post("/bots/:id/"+act, s.autoScope(service.TokenPower), s.requirePerm(domain.PermBotsPower), s.autoPower(act))
 	}
 	if s.deploy != nil {
-		a.Post("/bots/:id/deploy", s.autoScope(service.TokenDeploy), s.autoDeploy)
+		a.Post("/bots/:id/deploy", s.autoScope(service.TokenDeploy), s.requirePerm(domain.PermBotsDeploy), s.autoDeploy)
 	}
 	if s.backups != nil {
-		a.Post("/bots/:id/backups", s.autoScope(service.TokenBackup), s.autoBackup)
+		a.Post("/bots/:id/backups", s.autoScope(service.TokenBackup), s.requirePerm(domain.PermBotsBackups), s.autoBackup)
 	}
 }
 
 // requestID echoes a sane client X-Request-ID or creates one, for correlating
 // CI logs with the panel's.
-func (s *server) requestID(c fiber.Ctx) error {
+func (s *panel) requestID(c fiber.Ctx) error {
 	id := c.Get("X-Request-ID")
 	if !requestIDRe.MatchString(id) {
 		var b [8]byte
@@ -70,16 +70,16 @@ func (s *server) requestID(c fiber.Ctx) error {
 	return c.Next()
 }
 
-func (s *server) tokenAuth(c fiber.Ctx) error {
+func (s *panel) tokenAuth(c fiber.Ctx) error {
 	h := c.Get(fiber.HeaderAuthorization)
 	bearer, ok := strings.CutPrefix(h, "Bearer ")
 	if !ok {
-		c.Set(fiber.HeaderWWWAuthenticate, `Bearer realm="botpanel"`)
+		c.Set(fiber.HeaderWWWAuthenticate, `Bearer realm="rivetpanel"`)
 		return fiber.NewError(fiber.StatusUnauthorized, "send an automation token as: Authorization: Bearer bpa_...")
 	}
 	t, u, err := s.tokens.Authenticate(c.Context(), strings.TrimSpace(bearer))
 	if err != nil {
-		c.Set(fiber.HeaderWWWAuthenticate, `Bearer realm="botpanel", error="invalid_token"`)
+		c.Set(fiber.HeaderWWWAuthenticate, `Bearer realm="rivetpanel", error="invalid_token"`)
 		return fiber.NewError(fiber.StatusUnauthorized, "the token is unknown, expired or revoked")
 	}
 	c.Locals(keyUser, u)
@@ -89,7 +89,7 @@ func (s *server) tokenAuth(c fiber.Ctx) error {
 
 // autoScope checks the token's own scope. A bot outside the token's list is
 // reported as not found, like a bot the owner cannot see.
-func (s *server) autoScope(action string) fiber.Handler {
+func (s *panel) autoScope(action string) fiber.Handler {
 	return func(c fiber.Ctx) error {
 		t := currentAutoToken(c)
 		if t.BotIDs != nil && !contains(t.BotIDs, c.Params("id")) {
@@ -104,7 +104,7 @@ func (s *server) autoScope(action string) fiber.Handler {
 
 // idempotency replays the stored response of a repeated POST that carries the
 // same Idempotency-Key, so a retried CI step does not start work twice.
-func (s *server) idempotency(c fiber.Ctx) error {
+func (s *panel) idempotency(c fiber.Ctx) error {
 	key := c.Get("Idempotency-Key")
 	if c.Method() != fiber.MethodPost || key == "" {
 		return c.Next()
@@ -142,12 +142,12 @@ type autoBotDTO struct {
 	LastError          *string `json:"last_error"`
 }
 
-func (s *server) autoBot(c fiber.Ctx, b domain.Bot) autoBotDTO {
+func (s *panel) autoBot(c fiber.Ctx, b domain.Bot) autoBotDTO {
 	d := s.viewBot(c, b)
 	return autoBotDTO{b.ID, b.Name, b.Runtime, d.Phase, b.DesiredState, b.ObservedState, b.Generation, b.ObservedGeneration, b.LastError}
 }
 
-func (s *server) autoListBots(c fiber.Ctx) error {
+func (s *panel) autoListBots(c fiber.Ctx) error {
 	t := currentAutoToken(c)
 	if !service.Allows(t, service.TokenRead, "") {
 		return fiber.NewError(fiber.StatusForbidden, "this token does not allow read")
@@ -174,7 +174,7 @@ func contains(xs []string, x string) bool {
 	return false
 }
 
-func (s *server) autoGetBot(c fiber.Ctx) error {
+func (s *panel) autoGetBot(c fiber.Ctx) error {
 	b, err := s.bots.Get(c.Context(), currentUser(c), strings.Clone(c.Params("id")))
 	if err != nil {
 		return err
@@ -182,7 +182,7 @@ func (s *server) autoGetBot(c fiber.Ctx) error {
 	return c.JSON(s.autoBot(c, b))
 }
 
-func (s *server) autoPower(action string) fiber.Handler {
+func (s *panel) autoPower(action string) fiber.Handler {
 	return func(c fiber.Ctx) error {
 		id, u := strings.Clone(c.Params("id")), currentUser(c)
 		var b domain.Bot
@@ -202,7 +202,7 @@ func (s *server) autoPower(action string) fiber.Handler {
 	}
 }
 
-func (s *server) autoDeploy(c fiber.Ctx) error {
+func (s *panel) autoDeploy(c fiber.Ctx) error {
 	var in struct {
 		SHA string `json:"sha"`
 	}
@@ -218,7 +218,7 @@ func (s *server) autoDeploy(c fiber.Ctx) error {
 		"message": "Follow progress with GET /automation/bots/{id}/operations?kind=deploy,rollback"})
 }
 
-func (s *server) autoBackup(c fiber.Ctx) error {
+func (s *panel) autoBackup(c fiber.Ctx) error {
 	var in struct {
 		Label string `json:"label"`
 	}
@@ -237,7 +237,7 @@ func (s *server) autoBackup(c fiber.Ctx) error {
 //go:embed openapi.yaml
 var openAPISpec []byte
 
-func (s *server) openAPI(c fiber.Ctx) error {
+func (s *panel) openAPI(c fiber.Ctx) error {
 	c.Set(fiber.HeaderContentType, "application/yaml; charset=utf-8")
 	return c.Send(openAPISpec)
 }
@@ -259,7 +259,7 @@ func toToken(t domain.AutomationToken) tokenDTO {
 	return tokenDTO{t.ID, t.Name, t.Prefix, t.Actions, t.BotIDs, t.CreatedAtMS, t.LastUsedAtMS, t.ExpiresAtMS}
 }
 
-func (s *server) listTokens(c fiber.Ctx) error {
+func (s *panel) listTokens(c fiber.Ctx) error {
 	ts, err := s.tokens.List(c.Context(), currentUser(c))
 	if err != nil {
 		return err
@@ -271,7 +271,7 @@ func (s *server) listTokens(c fiber.Ctx) error {
 	return c.JSON(fiber.Map{"tokens": out, "actions": service.TokenActions})
 }
 
-func (s *server) createToken(c fiber.Ctx) error {
+func (s *panel) createToken(c fiber.Ctx) error {
 	var in struct {
 		Name     string   `json:"name"`
 		Actions  []string `json:"actions"`
@@ -289,7 +289,7 @@ func (s *server) createToken(c fiber.Ctx) error {
 	return c.Status(fiber.StatusCreated).JSON(fiber.Map{"token": plain, "info": toToken(t)})
 }
 
-func (s *server) deleteToken(c fiber.Ctx) error {
+func (s *panel) deleteToken(c fiber.Ctx) error {
 	if err := s.tokens.Delete(c.Context(), currentUser(c), strings.Clone(c.Params("id"))); err != nil {
 		return err
 	}

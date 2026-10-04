@@ -1,7 +1,8 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { api, ApiError } from '$lib/api/client';
-	import { loadSession } from '$lib/session.svelte';
+	import { can, loadSession } from '$lib/session.svelte';
+	import type { PermissionInfo } from '$lib/api/types';
 	import { toast } from '$lib/ui/toast.svelte';
 	import Icon from '$lib/components/ui/Icon.svelte';
 	import Notice from '$lib/components/ui/Notice.svelte';
@@ -24,6 +25,7 @@
 		mailgun_region: string;
 		mail_from: string;
 		mail_enabled: boolean;
+		unverified_restrict: string[];
 	};
 	type MailTest = { message_id: string; domain: string; state: string; sandbox: boolean; dns_verified: boolean };
 	let v = $state<View | null>(null);
@@ -44,6 +46,13 @@
 	let testing = $state(false);
 	let testResult = $state<MailTest | null>(null);
 	let testError = $state('');
+	let catalog = $state<PermissionInfo[]>([]);
+	let restrictOn = $state(false);
+	let restrict = $state<string[]>([]);
+	// Suggested when the policy is first turned on: creating things and
+	// minting credentials, not using what already exists.
+	const suggested = ['bots.create', 'sites.create', 'workspaces.create', 'api_keys.manage', 'ai.use'];
+	const manageSettings = $derived(can('settings.manage'));
 
 	function fill(x: View) {
 		v = x;
@@ -56,16 +65,24 @@
 		mgRegion = x.mailgun_region || 'us';
 		mgFrom = x.mail_from;
 		mgKey = '';
+		restrict = [...(x.unverified_restrict ?? [])];
+		restrictOn = restrict.length > 0;
 	}
+	function toggleRestrict(p: string, on: boolean) {
+		restrict = on ? [...restrict.filter((x) => x !== p), p] : restrict.filter((x) => x !== p);
+	}
+
 	onMount(async () => {
 		try {
-			warning = sessionStorage.getItem('botpanel.setupWarning') ?? '';
-			sessionStorage.removeItem('botpanel.setupWarning');
+			warning = sessionStorage.getItem('rivetpanel.setupWarning') ?? '';
+			sessionStorage.removeItem('rivetpanel.setupWarning');
 		} catch {
 			/* ignore */
 		}
+		if (!can('settings.manage')) return;
 		try {
 			fill(await api<View>('GET', '/admin/settings'));
+			catalog = (await api<{ permissions: PermissionInfo[] }>('GET', '/admin/permissions')).permissions;
 		} catch (e) {
 			error = e instanceof ApiError ? e.message : 'Settings could not be loaded.';
 		}
@@ -87,6 +104,7 @@
 		if (!v.locked.mailgun_domain) body.mailgun_domain = mgDomain;
 		if (!v.locked.mailgun_region) body.mailgun_region = mgRegion;
 		if (!v.locked.mail_from) body.mail_from = mgFrom;
+		body.unverified_restrict = restrictOn ? catalog.map((p) => p.name).filter((p) => restrict.includes(p)) : [];
 		try {
 			fill(await api<View>('PUT', '/admin/settings', body));
 			await loadSession(); // feature flags follow the new providers and email
@@ -131,8 +149,9 @@
 	}
 </script>
 
-<svelte:head><title>Panel settings · BotForge</title></svelte:head>
+<svelte:head><title>Panel settings · RivetPanel</title></svelte:head>
 
+{#if manageSettings}
 <h2 class="text-section">Panel settings</h2>
 <p class="mt-1 max-w-3xl text-muted">Applied immediately, without a restart. Values set in the environment file are shown read-only and always win.</p>
 {#if warning}<Notice tone="warn" class="mt-3" title="Setup finished, but some settings were not saved">{warning}</Notice>{/if}
@@ -148,7 +167,7 @@
 			<label class="mt-auto block pt-4">
 				<span class="sr-only">Panel address</span>
 				<input class="field font-mono" bind:value={publicUrl} disabled={v.locked.public_url} placeholder="https://panel.example.com" />
-				{#if v.locked.public_url}<span class="help">Set in the environment file (BOTPANEL_PUBLIC_URL).</span>{/if}
+				{#if v.locked.public_url}<span class="help">Set in the environment file (RIVET_PUBLIC_URL).</span>{/if}
 			</label>
 		</section>
 
@@ -182,6 +201,30 @@
 		{/each}
 
 
+		<section class="card p-5 sm:p-6 xl:col-span-2" id="unverified">
+			<div class="flex flex-wrap items-center gap-2">
+				<Icon name="shield" size={20} class="text-muted" />
+				<h3 class="text-title font-semibold">Unverified email addresses</h3>
+				<span class="pill" data-tone={restrictOn ? 'warn' : 'idle'}>{restrictOn ? 'Restricted' : 'Not restricted'}</span>
+			</div>
+			<p class="mt-1 text-small text-muted">New accounts confirm their address through an emailed link. Accounts that existed before verification, accounts created through GitHub or Discord, and administrators count as verified. The server refuses what is withheld until the address is confirmed.</p>
+			<label class="mt-4 flex items-start gap-2.5">
+				<input type="checkbox" class="mt-0.5" bind:checked={restrictOn} onchange={() => { if (restrictOn && restrict.length === 0) restrict = [...suggested]; }} />
+				<span>Restrict accounts until their email address is verified<span class="help">{v.mail_enabled ? 'They can send themselves a link from their profile.' : 'Email is off, so people cannot verify themselves: an account manager has to mark addresses verified on the Users page.'}</span></span>
+			</label>
+			{#if restrictOn}
+				<p class="label mt-4">Withhold these permissions</p>
+				<div class="mt-1 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+					{#each catalog as p (p.name)}
+						<label class="flex items-start gap-2.5 text-small">
+							<input type="checkbox" class="mt-0.5" checked={restrict.includes(p.name)} onchange={(e) => toggleRestrict(p.name, e.currentTarget.checked)} />
+							<span>{p.label}{#if p.group === 'administration'}<span class="text-muted"> (administration)</span>{/if}</span>
+						</label>
+					{/each}
+				</div>
+			{/if}
+		</section>
+
 		<section class="card p-5 sm:p-6 xl:col-span-2">
 			<div class="flex flex-wrap items-center gap-2">
 				<Icon name="send" size={20} class="text-muted" />
@@ -195,12 +238,12 @@
 				<label class="block">
 					<span class="label">API key</span>
 					<input class="field font-mono" type="password" autocomplete="off" spellcheck="false" bind:value={mgKey} disabled={v.locked.mailgun_api_key} placeholder={v.mailgun_key_set ? '•••••••• saved; type to replace' : 'Mailgun private or domain sending key'} />
-					<span class="help">{v.locked.mailgun_api_key ? 'Set in the environment file (BOTPANEL_MAILGUN_API_KEY).' : 'Stored encrypted and never shown again.'}</span>
+					<span class="help">{v.locked.mailgun_api_key ? 'Set in the environment file (RIVET_MAILGUN_API_KEY).' : 'Stored encrypted and never shown again.'}</span>
 				</label>
 				<label class="block">
 					<span class="label">Sending domain</span>
 					<input class="field font-mono" bind:value={mgDomain} disabled={v.locked.mailgun_domain} placeholder="mg.example.com" />
-					<span class="help">{v.locked.mailgun_domain ? 'Set in the environment file (BOTPANEL_MAILGUN_DOMAIN).' : 'A domain you verified in Mailgun. A sandbox domain only delivers to addresses you authorized there.'}</span>
+					<span class="help">{v.locked.mailgun_domain ? 'Set in the environment file (RIVET_MAILGUN_DOMAIN).' : 'A domain you verified in Mailgun. A sandbox domain only delivers to addresses you authorized there.'}</span>
 				</label>
 				<label class="block">
 					<span class="label">Region</span>
@@ -208,12 +251,12 @@
 						<option value="us">US (api.mailgun.net)</option>
 						<option value="eu">EU (api.eu.mailgun.net)</option>
 					</select>
-					<span class="help">{v.locked.mailgun_region ? 'Set in the environment file (BOTPANEL_MAILGUN_REGION).' : 'The region your Mailgun domain was created in.'}</span>
+					<span class="help">{v.locked.mailgun_region ? 'Set in the environment file (RIVET_MAILGUN_REGION).' : 'The region your Mailgun domain was created in.'}</span>
 				</label>
 				<label class="block">
 					<span class="label">Sender</span>
-					<input class="field" bind:value={mgFrom} disabled={v.locked.mail_from} placeholder="BotForge <noreply@mg.example.com>" />
-					<span class="help">{v.locked.mail_from ? 'Set in the environment file (BOTPANEL_MAIL_FROM).' : 'Must be an address on the sending domain.'}</span>
+					<input class="field" bind:value={mgFrom} disabled={v.locked.mail_from} placeholder="RivetPanel <noreply@mg.example.com>" />
+					<span class="help">{v.locked.mail_from ? 'Set in the environment file (RIVET_MAIL_FROM).' : 'Must be an address on the sending domain.'}</span>
 				</label>
 			</div>
 			<div class="mt-5 border-t border-rule-soft pt-4">
@@ -235,7 +278,10 @@
 
 		<div class="sticky bottom-4 flex justify-end xl:col-span-2"><button class="btn btn-primary shadow-overlay" disabled={saving}>{saving ? 'Saving…' : 'Save and apply'}</button></div>
 	</form>
-	<div class="mt-10 border-t border-rule-soft pt-8">
+{/if}
+{/if}
+{#if can('ai.manage') && (!manageSettings || v)}
+	<div class={manageSettings ? 'mt-10 border-t border-rule-soft pt-8' : ''}>
 		<p class="eyebrow">AI operator</p>
 		<h2 class="mt-1 text-section">AI assistant</h2>
 		<p class="mt-1 max-w-3xl text-muted">The assistant behind Ask AI. It needs one provider; web research is an optional extra. Nothing here affects hosting.</p>

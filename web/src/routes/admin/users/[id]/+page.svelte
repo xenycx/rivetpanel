@@ -23,7 +23,7 @@
 	const memory = $derived(v?.bots.filter((b) => b.desired_state === 'running').reduce((n, b) => n + b.memory_bytes, 0) ?? 0);
 </script>
 
-<svelte:head><title>{v?.user.email ?? 'Account'} · Administration · BotForge</title></svelte:head>
+<svelte:head><title>{v?.user.email ?? 'Account'} · Administration · RivetPanel</title></svelte:head>
 
 <a href="/admin/users" class="mb-4 inline-flex items-center gap-1 text-small text-muted hover:text-ink"><Icon name="chevronLeft" size={14} />All users</a>
 {#if error}<Notice tone="fail" live>{error}</Notice>{/if}
@@ -34,7 +34,7 @@
 		{#if v.user.avatar_url}<img src={v.user.avatar_url} alt="" class="size-12 rounded-pill object-cover" />{:else}<span class="grid size-12 place-items-center rounded-pill bg-paper-2 font-semibold text-muted" aria-hidden="true">{(v.user.display_name || v.user.email).slice(0, 2).toUpperCase()}</span>{/if}
 		<div class="min-w-0 flex-1">
 			<h2 class="truncate text-section">{v.user.display_name || v.user.email}</h2>
-			<p class="text-small text-muted">{v.user.display_name ? `${v.user.email} · ` : ''}{v.user.role === 'admin' ? 'Administrator' : 'User'} · joined {fmtWhen(v.user.created_at_ms)} · {v.has_password ? 'password' : 'provider sign-in only'}</p>
+			<p class="text-small text-muted">{v.user.display_name ? `${v.user.email} · ` : ''}{v.user.role === 'admin' ? 'Administrator' : v.user.role_name || 'User'} · email {v.user.email_verified ? 'verified' : 'not verified'} · joined {fmtWhen(v.user.created_at_ms)} · {v.has_password ? 'password' : 'provider sign-in only'}</p>
 		</div>
 		{#if v.user.disabled}<span class="pill" data-tone="fail">Disabled</span>{:else}<span class="pill" data-tone="run">Active</span>{/if}
 	</header>

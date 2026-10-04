@@ -9,8 +9,8 @@ import (
 
 	"github.com/google/uuid"
 
-	"botpanel/internal/auth"
-	"botpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/auth"
+	"github.com/xenycx/rivetpanel/internal/domain"
 )
 
 const (

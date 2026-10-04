@@ -11,9 +11,9 @@ import (
 	"strings"
 	"testing"
 
-	"botpanel/internal/domain"
-	"botpanel/internal/filesystem"
-	"botpanel/internal/pkgmgr"
+	"github.com/xenycx/rivetpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/filesystem"
+	"github.com/xenycx/rivetpanel/internal/pkgmgr"
 )
 
 func TestPackageManagerAPI(t *testing.T) {

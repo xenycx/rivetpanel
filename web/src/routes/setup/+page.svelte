@@ -86,7 +86,7 @@
 			aiKey = '';
 			setCsrf(r.csrf_token);
 			await loadSession();
-			if (r.settings_error) sessionStorage.setItem('botpanel.setupWarning', r.settings_error);
+			if (r.settings_error) sessionStorage.setItem('rivetpanel.setupWarning', r.settings_error);
 			await goto(r.settings_error ? '/admin/settings' : '/');
 		} catch (err) {
 			error = msg(err);
@@ -97,13 +97,13 @@
 	}
 </script>
 
-<svelte:head><title>Set up BotForge</title></svelte:head>
+<svelte:head><title>Set up RivetPanel</title></svelte:head>
 
 <main class="min-h-dvh px-4 py-8 sm:py-14">
 	<div class="mx-auto max-w-5xl">
 		<div class="flex items-center gap-2.5">
 			<img src="/favicon.svg" alt="" width="34" height="34" class="rounded-tile" />
-			<span class="font-semibold tracking-[0.08em] uppercase">BotForge</span>
+			<span class="font-semibold tracking-[0.08em] uppercase">RivetPanel</span>
 			<span class="pill ml-2">First-run setup</span>
 		</div>
 
@@ -136,7 +136,7 @@
 							<label class="block max-w-md">
 								<span class="label">Setup code</span>
 								<input class="field text-center font-mono text-title tracking-[0.2em] uppercase" autocomplete="off" spellcheck="false" placeholder="XXXX-XXXX-XXXX-XXXX" required bind:value={code} />
-								<span class="help">It proves you run this server. Find it in the panel's log (<code>docker logs botpanel</code> or <code>journalctl -u botpanel</code>){#if codeFile}, or in <code>{codeFile}</code>{/if}.</span>
+								<span class="help">It proves you run this server. Find it in the panel's log (<code>docker logs rivetpanel</code> or <code>journalctl -u rivetpanel</code>){#if codeFile}, or in <code>{codeFile}</code>{/if}.</span>
 							</label>
 						{:else if step === 1}
 							<div>

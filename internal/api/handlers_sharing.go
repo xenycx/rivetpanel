@@ -13,7 +13,7 @@ type subUserDTO struct {
 	CreatedAtMS int64  `json:"created_at_ms"`
 }
 
-func (s *server) listSubUsers(c fiber.Ctx) error {
+func (s *panel) listSubUsers(c fiber.Ctx) error {
 	us, err := s.bots.ListSubUsers(c.Context(), currentUser(c), strings.Clone(c.Params("id")))
 	if err != nil {
 		return err
@@ -25,7 +25,7 @@ func (s *server) listSubUsers(c fiber.Ctx) error {
 	return c.JSON(fiber.Map{"users": out})
 }
 
-func (s *server) shareBot(c fiber.Ctx) error {
+func (s *panel) shareBot(c fiber.Ctx) error {
 	var in struct {
 		Email       string `json:"email"`
 		Permissions int    `json:"permissions"`
@@ -40,14 +40,14 @@ func (s *server) shareBot(c fiber.Ctx) error {
 	return c.JSON(subUserDTO{u.UserID, u.Email, u.Permissions, u.CreatedAtMS})
 }
 
-func (s *server) unshareBot(c fiber.Ctx) error {
+func (s *panel) unshareBot(c fiber.Ctx) error {
 	if err := s.bots.UnshareBot(c.Context(), currentUser(c), strings.Clone(c.Params("id")), strings.Clone(c.Params("uid"))); err != nil {
 		return err
 	}
 	return c.SendStatus(fiber.StatusNoContent)
 }
 
-func (s *server) transferBot(c fiber.Ctx) error {
+func (s *panel) transferBot(c fiber.Ctx) error {
 	var in struct {
 		Email      string `json:"email"`
 		KeepAccess bool   `json:"keep_access"`

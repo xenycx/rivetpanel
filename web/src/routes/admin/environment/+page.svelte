@@ -76,7 +76,7 @@
 	}
 
 	const matches = (v: EnvVar) => {
-		const f = find.trim().toLowerCase().replace(/^botpanel_/, '');
+		const f = find.trim().toLowerCase().replace(/^rivet_/, '');
 		if (f && !`${v.name} ${v.description} ${v.group} ${v.value}`.toLowerCase().includes(f)) return false;
 		if (show === 'changed') return v.override || changed(v);
 		if (show === 'pending') return v.pending;
@@ -119,7 +119,7 @@
 
 	async function restart() {
 		const ok = await confirmDialog({
-			title: 'Restart BotForge now?',
+			title: 'Restart RivetPanel now?',
 			body: 'The panel exits and your service manager (systemd, or Docker’s restart policy) starts it again with the saved values. The page is unavailable for a few seconds. Bots keep running.\nIf nothing starts it again, the panel stays down until you start it yourself.',
 			confirmLabel: 'Restart panel',
 			tone: 'danger'
@@ -146,7 +146,7 @@
 		}
 		await load();
 		restarting = false;
-		if (view && view.started_at_ms !== before) toast('BotForge restarted with the saved values', 'success');
+		if (view && view.started_at_ms !== before) toast('RivetPanel restarted with the saved values', 'success');
 		else error = 'The panel did not come back within 90 seconds. Check the service on the host.';
 	}
 
@@ -159,10 +159,10 @@
 	}
 </script>
 
-<svelte:head><title>Environment · BotForge</title></svelte:head>
+<svelte:head><title>Environment · RivetPanel</title></svelte:head>
 
 <h2 class="text-section">Environment</h2>
-<p class="mt-1 max-w-3xl text-muted">Every <code>BOTPANEL_</code> variable the panel reads, with where its value comes from. Changes made here are stored in the panel and take priority over the environment file; they apply after a restart. The environment file itself is never edited.</p>
+<p class="mt-1 max-w-3xl text-muted">Every <code>RIVET_</code> variable the panel reads, with where its value comes from. Changes made here are stored in the panel and take priority over the environment file; they apply after a restart. The environment file itself is never edited.</p>
 
 {#if error}<Notice tone="fail" class="mt-4" live>{error}</Notice>{/if}
 {#if view?.rejected}
@@ -175,11 +175,11 @@
 {/if}
 
 {#if restarting}
-	<Notice tone="info" class="mt-4" live title="Restarting…">Waiting for BotForge to come back. This page reloads its values when it does.</Notice>
+	<Notice tone="info" class="mt-4" live title="Restarting…">Waiting for RivetPanel to come back. This page reloads its values when it does.</Notice>
 {:else if view && view.pending > 0}
 	<Notice tone="warn" class="mt-4" title="{view.pending} saved change{view.pending === 1 ? '' : 's'} not in effect yet">
 		The panel is still running with the values it started with.
-		{#if !view.can_restart}Restart the service on the host to apply them: <code>sudo systemctl restart botpanel</code> or <code>docker compose restart</code>.{/if}
+		{#if !view.can_restart}Restart the service on the host to apply them: <code>sudo systemctl restart rivetpanel</code> or <code>docker compose restart</code>.{/if}
 		{#snippet action()}{#if view?.can_restart}<button class="btn btn-sm btn-primary" onclick={restart}><Icon name="restart" size={13} />Restart panel</button>{/if}{/snippet}
 	</Notice>
 {/if}

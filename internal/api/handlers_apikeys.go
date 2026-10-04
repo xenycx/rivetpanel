@@ -16,14 +16,14 @@ type apiKeyDTO struct {
 	ExpiresAtMS  *int64 `json:"expires_at_ms"`
 }
 
-func (s *server) sftpInfo(c fiber.Ctx) error {
+func (s *panel) sftpInfo(c fiber.Ctx) error {
 	if s.sftp == nil {
 		return c.JSON(fiber.Map{"enabled": false})
 	}
 	return c.JSON(fiber.Map{"enabled": true, "port": s.sftp.Port, "fingerprint": s.sftp.Fingerprint})
 }
 
-func (s *server) listAPIKeys(c fiber.Ctx) error {
+func (s *panel) listAPIKeys(c fiber.Ctx) error {
 	ks, err := s.auth.ListAPIKeys(c.Context(), currentUser(c).ID)
 	if err != nil {
 		return err
@@ -36,7 +36,7 @@ func (s *server) listAPIKeys(c fiber.Ctx) error {
 }
 
 // createAPIKey returns the plaintext key exactly once.
-func (s *server) createAPIKey(c fiber.Ctx) error {
+func (s *panel) createAPIKey(c fiber.Ctx) error {
 	var in struct {
 		Name          string `json:"name"`
 		ExpiresInDays int    `json:"expires_in_days"`
@@ -52,7 +52,7 @@ func (s *server) createAPIKey(c fiber.Ctx) error {
 	return c.Status(fiber.StatusCreated).JSON(fiber.Map{"key": plain, "info": apiKeyDTO{k.ID, k.Name, k.Prefix, k.CreatedAtMS, k.LastUsedAtMS, k.ExpiresAtMS}})
 }
 
-func (s *server) deleteAPIKey(c fiber.Ctx) error {
+func (s *panel) deleteAPIKey(c fiber.Ctx) error {
 	if err := s.auth.DeleteAPIKey(c.Context(), currentUser(c).ID, strings.Clone(c.Params("id"))); err != nil {
 		return err
 	}

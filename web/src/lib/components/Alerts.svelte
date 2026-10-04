@@ -74,7 +74,7 @@
 	}
 
 	const stateText = {
-		unknown: ['No heartbeat yet', 'The bot has not reported. Add the BotForge SDK to see whether it is connected to Discord, not just whether its process runs.'],
+		unknown: ['No heartbeat yet', 'The bot has not reported. Add the RivetPanel SDK to see whether it is connected to Discord, not just whether its process runs.'],
 		ok: ['Reporting', 'The bot is pushing heartbeats and says it is ready.'],
 		stale: ['Not reporting', 'The container runs, but the bot stopped pushing. It may be stuck or disconnected from Discord.'],
 		not_ready: ['Not ready', 'The bot reports that it is not connected to Discord.']
@@ -126,7 +126,7 @@
 	</p>
 
 	<div class="mt-6">
-		<SettingsSection title="Heartbeat from the SDK" description="Every push from the BotForge SDK counts as a heartbeat. It can also say whether the Discord connection is ready. Bots that never reported stay unknown and never alert.">
+		<SettingsSection title="Heartbeat from the SDK" description="Every push from the RivetPanel SDK counts as a heartbeat. It can also say whether the Discord connection is ready. Bots that never reported stay unknown and never alert.">
 			<div class="grid gap-3">
 				<p class="max-w-prose">{stateText[health.state][1]}</p>
 				<ol class="grid gap-2 text-small">

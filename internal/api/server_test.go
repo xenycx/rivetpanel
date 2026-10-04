@@ -64,7 +64,7 @@ func TestMetricsDisabledAndBearerProtected(t *testing.T) {
 	}
 	defer resp.Body.Close()
 	body, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode != 200 || !strings.Contains(string(body), "botpanel_database_up 1") || !strings.HasPrefix(resp.Header.Get("Content-Type"), "text/plain") {
+	if resp.StatusCode != 200 || !strings.Contains(string(body), "rivetpanel_database_up 1") || !strings.HasPrefix(resp.Header.Get("Content-Type"), "text/plain") {
 		t.Fatalf("metrics: %d %s", resp.StatusCode, body)
 	}
 }

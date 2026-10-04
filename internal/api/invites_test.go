@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"botpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/domain"
 )
 
 func TestInvitationLinks(t *testing.T) {

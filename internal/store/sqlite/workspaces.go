@@ -7,7 +7,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"botpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/domain"
 )
 
 // createPersonalWorkspace gives a new account its personal workspace, in the

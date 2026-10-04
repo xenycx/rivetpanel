@@ -25,6 +25,12 @@ const reasonText: Record<string, string> = {
 	cleanup_failed: 'Removing it did not finish. The panel keeps retrying.'
 };
 
+/** The reason sentence, naming a game server "the server" instead of "the bot". */
+function reasonFor(b: Bot, reason: string): string | undefined {
+	const t = reasonText[reason];
+	return t && b.kind === 'game' ? t.replace(/^The bot\b/, 'The server') : t;
+}
+
 function exitPart(b: Bot): string {
 	return b.last_exit_code !== null && b.last_exit_code !== 0 ? ` Exit code ${b.last_exit_code}.` : '';
 }
@@ -51,6 +57,8 @@ export function describe(b: Bot, now = Date.now()): Described {
 			return { label: 'Starting', tone: 'warn', busy: true, detail: 'Start requested. Waiting for the runner to pick it up.' };
 		case 'building':
 			return { label: 'Building', tone: 'warn', busy: true, detail: 'Preparing the image and installing dependencies in a separate build container.' };
+		case 'installing':
+			return { label: 'Installing', tone: 'warn', busy: true, detail: 'Downloading and installing the server software. The first start of a new version takes a little longer.', next: 'build-output' };
 		case 'starting':
 			return { label: 'Starting', tone: 'warn', busy: true, detail: 'The container is starting.' };
 		case 'restarting':
@@ -60,7 +68,7 @@ export function describe(b: Bot, now = Date.now()): Described {
 		case 'retrying': {
 			const s = retryIn(b, now);
 			const when = s === null ? 'Retrying shortly.' : s === 0 ? 'Retrying now.' : `Next attempt in ${fmtCountdown(s)}.`;
-			const what = reasonText[reason] ?? 'The last attempt failed.';
+			const what = reasonFor(b, reason) ?? 'The last attempt failed.';
 			const count = reason === 'crash_backoff' && b.restart_count > 0 ? ` Crash ${b.restart_count} in a row.` : '';
 			return {
 				label: 'Waiting to retry',
@@ -75,7 +83,7 @@ export function describe(b: Bot, now = Date.now()): Described {
 				label: 'Failed',
 				tone: 'fail',
 				busy: false,
-				detail: `${reasonText[reason] ?? 'The last run failed.'}${exitPart(b)} Fix the cause, then start it again.`,
+				detail: `${reasonFor(b, reason) ?? 'The last run failed.'}${exitPart(b)} Fix the cause, then start it again.`,
 				next: 'retry'
 			};
 		case 'exited':

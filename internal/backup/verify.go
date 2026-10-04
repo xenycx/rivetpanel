@@ -4,9 +4,9 @@ import (
 	"context"
 	"sort"
 
-	"botpanel/internal/domain"
-	"botpanel/internal/secrets"
-	"botpanel/internal/store/sqlite"
+	"github.com/xenycx/rivetpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/secrets"
+	"github.com/xenycx/rivetpanel/internal/store/sqlite"
 )
 
 // EnvReport summarizes whether stored environment values can be decrypted.

@@ -5,7 +5,7 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 
-	"botpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/domain"
 )
 
 type inviteDTO struct {
@@ -22,7 +22,7 @@ func toInvite(v domain.Invite) inviteDTO {
 	return inviteDTO{v.ID, v.BotID, v.BotName, v.Permissions, v.CreatorName, v.CreatedAtMS, v.ExpiresAtMS}
 }
 
-func (s *server) listInvites(c fiber.Ctx) error {
+func (s *panel) listInvites(c fiber.Ctx) error {
 	vs, err := s.bots.ListInvites(c.Context(), currentUser(c), strings.Clone(c.Params("id")))
 	if err != nil {
 		return err
@@ -34,7 +34,7 @@ func (s *server) listInvites(c fiber.Ctx) error {
 	return c.JSON(fiber.Map{"invites": out})
 }
 
-func (s *server) createInvite(c fiber.Ctx) error {
+func (s *panel) createInvite(c fiber.Ctx) error {
 	var in struct {
 		Permissions int `json:"permissions"`
 		Days        int `json:"expires_in_days"`
@@ -50,7 +50,7 @@ func (s *server) createInvite(c fiber.Ctx) error {
 	return c.Status(fiber.StatusCreated).JSON(fiber.Map{"token": tok, "path": "/invite#" + tok, "info": toInvite(v)})
 }
 
-func (s *server) deleteInvite(c fiber.Ctx) error {
+func (s *panel) deleteInvite(c fiber.Ctx) error {
 	if err := s.bots.RevokeInvite(c.Context(), currentUser(c), strings.Clone(c.Params("id")), strings.Clone(c.Params("iid"))); err != nil {
 		return err
 	}
@@ -59,7 +59,7 @@ func (s *server) deleteInvite(c fiber.Ctx) error {
 
 // The token travels in POST bodies (the link keeps it in the URL fragment,
 // which browsers never send to the server or put in Referer headers).
-func (s *server) previewInvite(c fiber.Ctx) error {
+func (s *panel) previewInvite(c fiber.Ctx) error {
 	var in struct {
 		Token string `json:"token"`
 	}
@@ -73,7 +73,7 @@ func (s *server) previewInvite(c fiber.Ctx) error {
 	return c.JSON(toInvite(v))
 }
 
-func (s *server) acceptInvite(c fiber.Ctx) error {
+func (s *panel) acceptInvite(c fiber.Ctx) error {
 	var in struct {
 		Token string `json:"token"`
 	}

@@ -12,17 +12,17 @@ import (
 	"strings"
 	"time"
 
-	"botpanel/internal/addons"
-	"botpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/addons"
+	"github.com/xenycx/rivetpanel/internal/domain"
 )
 
 // AddonNetwork is the private, internal network that joins a bot to its
 // add-ons. Add-ons are attached only to it, so they have no outbound access
 // and no other bot can reach them.
-func AddonNetwork(botID string) string { return "botpanel-" + botID + "-net" }
+func AddonNetwork(botID string) string { return "rivetpanel-" + botID + "-net" }
 
 // AddonContainerName is deterministic like every other managed container.
-func AddonContainerName(botID, kind string) string { return "botpanel-" + botID + "-addon-" + kind }
+func AddonContainerName(botID, kind string) string { return "rivetpanel-" + botID + "-addon-" + kind }
 
 const (
 	addonTmpfsBytes = 64 << 20
@@ -261,7 +261,7 @@ func addonEnv(bot domain.Bot, env map[string]string) (provided, own map[string]s
 	provided = addons.BotEnv(kinds, pw)
 	own = make(map[string]string, len(env))
 	for k, v := range env {
-		if !strings.HasPrefix(k, "BOTPANEL_ADDON_") {
+		if !strings.HasPrefix(k, "RIVET_ADDON_") {
 			own[k] = v
 		}
 	}

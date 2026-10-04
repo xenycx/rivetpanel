@@ -16,7 +16,7 @@
 	const off = 'border-rule-soft bg-panel hover:border-rule';
 </script>
 
-<svelte:head><title>Appearance · BotForge</title></svelte:head>
+<svelte:head><title>Appearance · RivetPanel</title></svelte:head>
 
 <p class="mb-2 max-w-prose text-muted">These choices apply to this browser only and take effect immediately.</p>
 

@@ -55,11 +55,11 @@
 			/* the preference is optional */
 		}
 	}
-	let treeHidden = $state(pref('botforge.filesTreeHidden'));
+	let treeHidden = $state(pref('rivetpanel.filesTreeHidden'));
 	let focusMode = $state(false);
 	function toggleTree() {
 		treeHidden = !treeHidden;
-		setPref('botforge.filesTreeHidden', treeHidden);
+		setPref('rivetpanel.filesTreeHidden', treeHidden);
 	}
 	function onWindowKey(e: KeyboardEvent) {
 		if (e.key === 'Escape' && focusMode && !(e.target as HTMLElement | null)?.closest?.('.cm-editor, [role=menu], dialog')) focusMode = false;
@@ -69,6 +69,27 @@
 	let uploads = $state<Upload[]>([]);
 
 	const base = (id: string) => basePath || `/bots/${id}/files`;
+	const isArchive = (name: string) => /\.(zip|tar\.gz|tgz|tar|mrpack)$/i.test(name);
+	async function compress(p: string) {
+		try {
+			const r = await api<{ path: string }>('POST', `/bots/${botId}/files/compress`, { paths: [p] });
+			toast(`Created ${r.path}`, 'success');
+			await list(cwd);
+		} catch (e) {
+			toast(e instanceof ApiError ? e.message : 'The archive could not be created.', 'fail');
+		}
+	}
+	async function extractHere(p: string) {
+		const ok = await confirmDialog({ title: `Extract ${p.split('/').pop()}?`, body: 'The files are unpacked into this folder. Files with the same names are replaced. Links and unsafe paths in the archive are refused.', confirmLabel: 'Extract' });
+		if (!ok) return;
+		try {
+			const r = await api<{ extracted: number }>('POST', `/bots/${botId}/files/decompress`, { path: p });
+			toast(`Extracted ${r.extracted} files`, 'success');
+			await list(cwd);
+		} catch (e) {
+			toast(e instanceof ApiError ? e.message : 'The archive could not be extracted.', 'fail');
+		}
+	}
 	const q = (p: string) => encodeURIComponent(p);
 	const join = (dir: string, name: string) => (dir ? `${dir}/${name}` : name);
 	const err = (e: unknown, fallback: string) => (e instanceof ApiError ? e.message : fallback);
@@ -395,6 +416,9 @@
 								fixed
 								items={[
 									...(en.type === 'file' ? [{ label: 'Download', onselect: () => window.open(`/api/v1${base(botId)}/content?path=${q(p)}&download=1`, '_self') }] : []),
+									...(!basePath && en.type === 'dir' ? [{ label: 'Download as zip', onselect: () => window.open(`/api/v1/bots/${botId}/files/zip?path=${q(p)}`, '_self') }] : []),
+									...(!basePath && en.type !== 'symlink' ? [{ label: 'Compress to zip', onselect: () => compress(p) }] : []),
+									...(!basePath && en.type === 'file' && isArchive(en.name) ? [{ label: 'Extract here', onselect: () => extractHere(p) }] : []),
 									{ label: 'Rename', onselect: () => rename(en) },
 									'separator',
 									{ label: 'Delete', danger: true, onselect: () => remove(en) }
@@ -403,7 +427,7 @@
 						</li>
 					{:else}
 						<li class="px-2 py-5 text-muted">
-							{#if filter}No names match “{filter}”.{:else}This folder is empty. Upload your code, create a file, or deploy a repository under Deployments.{/if}
+							{#if filter}No names match “{filter}”.{:else if listError && entries === null}Nothing to show until the folder can be listed.{:else}This folder is empty. Upload your code, create a file, or deploy a repository under Deployments.{/if}
 						</li>
 					{/each}
 				{/if}

@@ -89,7 +89,7 @@ func LoadDir(dir, active string, create bool) (*Keyring, error) {
 	files, _ := filepath.Glob(filepath.Join(dir, "*.key"))
 	if len(files) == 0 {
 		if !create {
-			return nil, fmt.Errorf("no encryption keys in %s (create one with: botpanel keygen)", dir)
+			return nil, fmt.Errorf("no encryption keys in %s (create one with: rivetpanel keygen)", dir)
 		}
 		if err := GenerateKeyFile(dir, active); err != nil {
 			return nil, err

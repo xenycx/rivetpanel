@@ -12,8 +12,8 @@ import (
 	fws "github.com/gofiber/contrib/v3/websocket"
 	"github.com/gofiber/fiber/v3"
 
-	"botpanel/internal/console"
-	"botpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/console"
+	"github.com/xenycx/rivetpanel/internal/domain"
 )
 
 const (
@@ -39,7 +39,7 @@ type consoleParams struct {
 // consoleGuard runs before the WebSocket upgrade so failures are ordinary HTTP
 // responses: 426 (not an upgrade), 403 (foreign origin), 404 (no such bot or not
 // yours), 429 (too many connections), 400 (bad parameters).
-func (s *server) consoleGuard(c fiber.Ctx) error {
+func (s *panel) consoleGuard(c fiber.Ctx) error {
 	if !fws.IsWebSocketUpgrade(c) {
 		return fiber.ErrUpgradeRequired
 	}
@@ -105,7 +105,7 @@ func (w *wsTransport) Receive(ctx context.Context) (console.Incoming, error) {
 	return in, err
 }
 
-func (s *server) consoleWS(c *fws.Conn) {
+func (s *panel) consoleWS(c *fws.Conn) {
 	release, _ := c.Locals(consoleReleaseK).(func())
 	if release != nil {
 		defer release()

@@ -72,6 +72,6 @@ func Announcement(subject, bodyHTML, footer string) Body {
 	if footer != "" {
 		h.WriteString(`<p style="text-align:center;font-size:12px;color:#6a7384;line-height:1.5;margin:16px 0 0">` + html.EscapeString(footer) + `</p>`)
 	}
-	h.WriteString(`<p style="text-align:center;font-size:12px;color:#9aa1af">BotForge</p></div></body></html>`)
+	h.WriteString(`<p style="text-align:center;font-size:12px;color:#9aa1af">RivetPanel</p></div></body></html>`)
 	return Body{Subject: subject, Text: text, HTML: h.String()}
 }

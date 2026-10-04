@@ -11,9 +11,9 @@ import (
 
 	"github.com/google/uuid"
 
-	"botpanel/internal/auth"
-	"botpanel/internal/domain"
-	"botpanel/internal/mail"
+	"github.com/xenycx/rivetpanel/internal/auth"
+	"github.com/xenycx/rivetpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/mail"
 )
 
 const (
@@ -125,6 +125,13 @@ func (p *PasswordResetService) Confirm(ctx context.Context, token, next string) 
 	}
 	if err := p.Auth.Store.SetPassword(ctx, u.ID, hash, nil, p.now().UnixMilli()); err != nil {
 		return domain.User{}, err
+	}
+	// The link reached the account's address, which proves it is theirs.
+	if !u.EmailVerified {
+		if err := p.Auth.Store.SetEmailVerified(ctx, u.ID, true, p.now().UnixMilli()); err != nil {
+			return domain.User{}, err
+		}
+		u.EmailVerified = true
 	}
 	p.Mail.Notify(u.Email, "The password for this account was changed using a reset link, and every session was signed out.")
 	return u, nil

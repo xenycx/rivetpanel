@@ -2,7 +2,9 @@
 // Cyberduck) can manage bot files. Users sign in with their panel email and
 // either their password or an API key. Each user sees one directory per bot
 // they may edit; every operation runs through the same descriptor-relative
-// filesystem containment as the web file manager and is re-authorized.
+// filesystem containment as the web file manager and is re-authorized. Bots
+// on remote nodes are served through their rivet-agent (NodeFiles), never
+// from the panel's own disk.
 package sftpd
 
 import (
@@ -22,13 +24,14 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/pkg/sftp"
 	"golang.org/x/crypto/ssh"
 
-	"botpanel/internal/domain"
-	"botpanel/internal/filesystem"
+	"github.com/xenycx/rivetpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/filesystem"
 )
 
 // Authenticator verifies SFTP credentials (password or API key). The returned
@@ -48,9 +51,16 @@ type Bots interface {
 
 // Server is the SFTP daemon.
 type Server struct {
-	Auth     Authenticator
-	Bots     Bots
-	Files    *filesystem.Manager
+	Auth  Authenticator
+	Bots  Bots
+	Files *filesystem.Manager
+	// Remote reports whether a bot's files live on a remote node and, if so,
+	// returns the access to them (an offline node is an error). Nil fails
+	// closed: every bot is refused.
+	Remote func(b domain.Bot) (NodeFiles, bool, error)
+	// SpoolDir holds remote transfers while they cross the panel ("" = the
+	// system temporary directory). Spool files are unlinked when created.
+	SpoolDir string
 	HostKey  ssh.Signer
 	MaxFile  int64 // largest file a client may write, in bytes
 	MaxConns int   // concurrent connections (default 32)
@@ -81,7 +91,7 @@ func LoadOrCreateHostKey(file string) (ssh.Signer, error) {
 	if err != nil {
 		return nil, err
 	}
-	blk, err := ssh.MarshalPrivateKey(priv, "botpanel-sftp")
+	blk, err := ssh.MarshalPrivateKey(priv, "rivetpanel-sftp")
 	if err != nil {
 		return nil, err
 	}
@@ -150,7 +160,7 @@ func (s *Server) handleConn(ctx context.Context, nc net.Conn) {
 	var check func(context.Context) (domain.User, error)
 	cfg := &ssh.ServerConfig{
 		MaxAuthTries:  3,
-		ServerVersion: "SSH-2.0-BotPanel",
+		ServerVersion: "SSH-2.0-RivetPanel",
 		PasswordCallback: func(md ssh.ConnMetadata, pw []byte) (*ssh.Permissions, error) {
 			if s.fails.blocked(ip) {
 				return nil, errors.New("too many failed attempts")
@@ -456,11 +466,23 @@ func (h *handler) allowed(ctx context.Context, botID string) error {
 	return nil
 }
 
+// allowedNow is allowed with its own operation timeout.
+func (h *handler) allowedNow(botID string) error {
+	ctx, cancel := h.opCtx()
+	defer cancel()
+	return h.allowed(ctx, botID)
+}
+
 // open re-checks that the login is valid and the bot is still editable
-// (revocation takes effect within authCacheTTL) and opens its workspace.
+// (revocation takes effect within authCacheTTL) and opens its local
+// workspace. It refuses a bot on a remote node: its directory on this
+// panel's disk, if any, is stale and must never be served.
 func (h *handler) open(ctx context.Context, t target) (*filesystem.Workspace, error) {
 	if err := h.allowed(ctx, t.bot.ID); err != nil {
 		return nil, err
+	}
+	if _, remote, _ := h.remoteOf(t); remote {
+		return nil, sftp.ErrSSHFxPermissionDenied
 	}
 	w, err := h.s.Files.Open(t.bot.ID)
 	if err != nil {
@@ -475,7 +497,7 @@ func mapErr(err error) error {
 		return nil
 	case errors.Is(err, sftp.ErrSSHFxNoSuchFile), errors.Is(err, sftp.ErrSSHFxPermissionDenied), errors.Is(err, sftp.ErrSSHFxOpUnsupported):
 		return err
-	case errors.Is(err, fs.ErrNotExist):
+	case errors.Is(err, fs.ErrNotExist), errors.Is(err, domain.ErrNotFound):
 		return sftp.ErrSSHFxNoSuchFile
 	case errors.Is(err, filesystem.ErrInvalidPath), strings.Contains(err.Error(), "path escapes"):
 		return sftp.ErrSSHFxPermissionDenied
@@ -500,6 +522,12 @@ func (h *handler) Fileread(r *sftp.Request) (io.ReaderAt, error) {
 	if t.root || t.botRoot() {
 		return nil, sftp.ErrSSHFxFailure
 	}
+	if nf, remote, err := h.remote(ctx, t); remote {
+		if err != nil {
+			return nil, err
+		}
+		return h.remoteRead(t, nf)
+	}
 	w, err := h.open(ctx, t)
 	if err != nil {
 		return nil, mapErr(err)
@@ -514,11 +542,15 @@ func (h *handler) Fileread(r *sftp.Request) (io.ReaderAt, error) {
 
 // guardedFile re-checks access on every read or write of an already-open
 // handle, so revoking a grant, key or account also stops transfers in flight.
+// For a remote bot f is a private spool file and commit sends a written file
+// to the node when the client closes it.
 type guardedFile struct {
-	f   *os.File
-	h   *handler
-	bot string
-	max int64 // writes: per-file cap
+	f      *os.File
+	h      *handler
+	bot    string
+	max    int64 // writes: per-file cap
+	commit func(*os.File) error
+	failed atomic.Bool // a refused write: the spooled file is never committed
 }
 
 func (g *guardedFile) check() error {
@@ -535,6 +567,14 @@ func (g *guardedFile) ReadAt(p []byte, off int64) (int, error) {
 }
 
 func (g *guardedFile) WriteAt(p []byte, off int64) (int, error) {
+	n, err := g.writeAt(p, off)
+	if err != nil {
+		g.failed.Store(true)
+	}
+	return n, err
+}
+
+func (g *guardedFile) writeAt(p []byte, off int64) (int, error) {
 	if err := g.check(); err != nil {
 		return 0, err
 	}
@@ -547,7 +587,22 @@ func (g *guardedFile) WriteAt(p []byte, off int64) (int, error) {
 	return g.f.WriteAt(p, off)
 }
 
-func (g *guardedFile) Close() error { return g.f.Close() }
+func (g *guardedFile) Close() error {
+	if g.commit != nil {
+		var err error
+		if g.failed.Load() {
+			err = errors.New("the upload failed; nothing was saved on the server")
+		} else {
+			err = g.commit(g.f)
+		}
+		g.commit = nil
+		if cerr := g.f.Close(); err == nil {
+			err = cerr
+		}
+		return err
+	}
+	return g.f.Close()
+}
 
 // Filewrite implements sftp.FileWriter.
 func (h *handler) Filewrite(r *sftp.Request) (io.WriterAt, error) {
@@ -562,6 +617,12 @@ func (h *handler) Filewrite(r *sftp.Request) (io.WriterAt, error) {
 	}
 	if err := h.s.Bots.FilesBlocked(t.bot.ID); err != nil {
 		return nil, sftp.ErrSSHFxFailure // a deployment or restore is replacing the files
+	}
+	if nf, remote, err := h.remote(ctx, t); remote {
+		if err != nil {
+			return nil, err
+		}
+		return h.remoteWrite(ctx, t, nf, r.Pflags())
 	}
 	w, err := h.open(ctx, t)
 	if err != nil {
@@ -614,6 +675,12 @@ func (h *handler) Filecmd(r *sftp.Request) error {
 	}
 	if err := h.s.Bots.FilesBlocked(t.bot.ID); err != nil {
 		return sftp.ErrSSHFxFailure
+	}
+	if nf, remote, err := h.remote(ctx, t); remote {
+		if err != nil {
+			return err
+		}
+		return h.remoteCmd(ctx, r, t, nf)
 	}
 	w, err := h.open(ctx, t)
 	if err != nil {
@@ -693,6 +760,12 @@ func (h *handler) Filelist(r *sftp.Request) (sftp.ListerAt, error) {
 			}
 			return out, nil
 		}
+		if nf, remote, err := h.remote(ctx, t); remote {
+			if err != nil {
+				return nil, err
+			}
+			return h.remoteList(ctx, r, t, nf)
+		}
 		w, err := h.open(ctx, t)
 		if err != nil {
 			return nil, mapErr(err)
@@ -709,6 +782,12 @@ func (h *handler) Filelist(r *sftp.Request) (sftp.ListerAt, error) {
 		}
 		if t.botRoot() {
 			return listerAt{virtDir{t.dir}}, nil
+		}
+		if nf, remote, err := h.remote(ctx, t); remote {
+			if err != nil {
+				return nil, err
+			}
+			return h.remoteList(ctx, r, t, nf)
 		}
 		w, err := h.open(ctx, t)
 		if err != nil {

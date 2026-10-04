@@ -1,10 +1,11 @@
-// Package backup creates and restores consistent BotPanel backups.
+// Package backup creates and restores consistent RivetPanel backups.
 //
 // A backup directory holds three independent restore inputs:
 //
-//	botpanel.db    SQLite snapshot made with VACUUM INTO (WAL-consistent; never a raw file copy)
+//	rivetpanel.db    SQLite snapshot made with VACUUM INTO (WAL-consistent; never a raw file copy)
 //	bots.tar.gz    every bot workspace
 //	keys/          encryption keys (only with IncludeKeys; store them separately from the rest)
+//	keys/agent-ca/ the agent certificate authority, when one exists (only with IncludeKeys)
 //	manifest.json  checksums and metadata
 //
 // Without the keys, stored environment values cannot be decrypted.
@@ -30,26 +31,30 @@ import (
 
 	"github.com/google/uuid"
 
-	"botpanel/internal/store/sqlite"
+	"github.com/xenycx/rivetpanel/internal/store/sqlite"
 )
 
 const (
 	manifestName = "manifest.json"
-	dbName       = "botpanel.db"
+	dbName       = "rivetpanel.db"
 	botsName     = "bots.tar.gz"
 	keysDirName  = "keys"
+	agentCADir   = "agent-ca"
 	// maxRestoreBytes bounds the total size extracted from bots.tar.gz.
 	maxRestoreBytes = 256 << 30
 )
 
 // Manifest describes a backup.
 type Manifest struct {
-	Version      int               `json:"version"`
-	CreatedAtMS  int64             `json:"created_at_ms"`
-	Bots         int               `json:"bots"`
-	IncludesKeys bool              `json:"includes_keys"`
-	KeyIDs       []string          `json:"key_ids"`
-	SHA256       map[string]string `json:"sha256"`
+	Version      int      `json:"version"`
+	CreatedAtMS  int64    `json:"created_at_ms"`
+	Bots         int      `json:"bots"`
+	IncludesKeys bool     `json:"includes_keys"`
+	KeyIDs       []string `json:"key_ids"`
+	// IncludesAgentCA is set when keys/agent-ca/ holds the agent CA key and
+	// certificate; their checksums are in SHA256.
+	IncludesAgentCA bool              `json:"includes_agent_ca,omitempty"`
+	SHA256          map[string]string `json:"sha256"`
 }
 
 // Source names what to back up.
@@ -119,6 +124,18 @@ func Create(ctx context.Context, src Source, dest string, includeKeys bool, now 
 			}
 		}
 		m.IncludesKeys = true
+		ok, err := copyAgentCA(filepath.Join(src.KeyDir, agentCADir), filepath.Join(kd, agentCADir), false)
+		if err != nil {
+			return m, fmt.Errorf("copy agent CA: %w", err)
+		}
+		if ok {
+			m.IncludesAgentCA = true
+			for _, name := range agentCAFiles() {
+				if m.SHA256[name], err = sumFile(filepath.Join(dest, name)); err != nil {
+					return m, err
+				}
+			}
+		}
 	}
 
 	for _, name := range []string{dbName, botsName} {
@@ -128,6 +145,57 @@ func Create(ctx context.Context, src Source, dest string, includeKeys bool, now 
 	}
 	b, _ := json.MarshalIndent(m, "", "  ")
 	return m, os.WriteFile(filepath.Join(dest, manifestName), b, 0o600)
+}
+
+var agentCAModes = map[string]os.FileMode{"ca.key": 0o600, "ca.crt": 0o644}
+
+// agentCAFiles are the manifest names of the agent CA files.
+func agentCAFiles() []string {
+	return []string{keysDirName + "/" + agentCADir + "/ca.key", keysDirName + "/" + agentCADir + "/ca.crt"}
+}
+
+// copyAgentCA copies a complete agent CA from src to dst. It reports false
+// when src holds no CA, and refuses a partial one. Files are written to
+// temporaries and renamed so an interrupted copy never leaves a partial CA.
+func copyAgentCA(src, dst string, force bool) (bool, error) {
+	present := 0
+	for name := range agentCAModes {
+		if _, err := os.Stat(filepath.Join(src, name)); err == nil {
+			present++
+		} else if !errors.Is(err, fs.ErrNotExist) {
+			return false, err
+		}
+	}
+	switch present {
+	case 0:
+		return false, nil
+	case 1:
+		return false, errors.New("agent CA is incomplete: ca.key and ca.crt must both exist")
+	}
+	if !force {
+		for name := range agentCAModes {
+			if _, err := os.Stat(filepath.Join(dst, name)); err == nil {
+				return false, fmt.Errorf("%s already exists (use --force)", filepath.Join(dst, name))
+			}
+		}
+	}
+	if err := os.MkdirAll(dst, 0o700); err != nil {
+		return false, err
+	}
+	for _, name := range []string{"ca.key", "ca.crt"} {
+		if err := copyFile(filepath.Join(src, name), filepath.Join(dst, name+".tmp"), agentCAModes[name]); err != nil {
+			return false, err
+		}
+		if err := os.Chmod(filepath.Join(dst, name+".tmp"), agentCAModes[name]); err != nil {
+			return false, err
+		}
+	}
+	for _, name := range []string{"ca.key", "ca.crt"} {
+		if err := os.Rename(filepath.Join(dst, name+".tmp"), filepath.Join(dst, name)); err != nil {
+			return false, err
+		}
+	}
+	return true, nil
 }
 
 func listKeyIDs(dir string) ([]string, error) {
@@ -273,6 +341,21 @@ func Verify(dir string) (Manifest, error) {
 			return m, fmt.Errorf("%s does not match its checksum; the backup is corrupt or was modified", name)
 		}
 	}
+	if m.IncludesAgentCA {
+		for _, name := range agentCAFiles() {
+			want, ok := m.SHA256[name]
+			if !ok {
+				return m, fmt.Errorf("manifest lacks a checksum for %s", name)
+			}
+			got, err := sumFile(filepath.Join(dir, filepath.FromSlash(name)))
+			if err != nil {
+				return m, err
+			}
+			if got != want {
+				return m, fmt.Errorf("%s does not match its checksum; the backup is corrupt or was modified", name)
+			}
+		}
+	}
 	return m, nil
 }
 
@@ -304,6 +387,13 @@ func Restore(ctx context.Context, dir string, o RestoreOptions) (Manifest, error
 			return m, fmt.Errorf("%s is not empty; refusing to restore over it (use --force)", o.DataRoot)
 		}
 	}
+	if o.RestoreKeys && m.IncludesAgentCA && !o.Force {
+		for name := range agentCAModes {
+			if p := filepath.Join(o.KeyDir, agentCADir, name); fileExists(p) {
+				return m, fmt.Errorf("%s already exists; refusing to overwrite the agent CA (use --force)", p)
+			}
+		}
+	}
 	// Bot files first: a failure leaves the database untouched.
 	if err := extractBots(ctx, filepath.Join(dir, botsName), o.DataRoot, o.Force); err != nil {
 		return m, fmt.Errorf("restore bot files: %w", err)
@@ -328,6 +418,11 @@ func Restore(ctx context.Context, dir string, o RestoreOptions) (Manifest, error
 				return m, err
 			}
 		}
+		if m.IncludesAgentCA {
+			if _, err := copyAgentCA(filepath.Join(dir, keysDirName, agentCADir), filepath.Join(o.KeyDir, agentCADir), o.Force); err != nil {
+				return m, fmt.Errorf("restore agent CA: %w", err)
+			}
+		}
 	}
 	// Database last, atomically.
 	for _, p := range []string{o.DBPath + "-wal", o.DBPath + "-shm"} {
@@ -341,6 +436,11 @@ func Restore(ctx context.Context, dir string, o RestoreOptions) (Manifest, error
 		return m, err
 	}
 	return m, os.Rename(tmp, o.DBPath)
+}
+
+func fileExists(p string) bool {
+	_, err := os.Stat(p)
+	return err == nil
 }
 
 func copyFile(src, dst string, mode os.FileMode) error {

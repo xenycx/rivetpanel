@@ -8,8 +8,8 @@ import (
 	"testing"
 	"testing/fstest"
 
-	"botpanel/internal/domain"
-	"botpanel/internal/migrations"
+	"github.com/xenycx/rivetpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/migrations"
 )
 
 // 0030 rebuilds ai_conversations, which cascades into everything below it. An

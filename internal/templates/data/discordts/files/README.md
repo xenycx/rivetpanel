@@ -12,4 +12,4 @@ and namespaces need a compiler and are rejected (`erasableSyntaxOnly` in
 - Add commands in the `commands` table; they are registered when the bot
   starts.
 - Analytics: generate a key in the panel's **Analytics** section; the bundled
-  `botpanel.js` then reports guilds, latency, commands and a heartbeat.
+  `rivetpanel.js` then reports guilds, latency, commands and a heartbeat.

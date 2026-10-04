@@ -2,44 +2,129 @@ package sqlite
 
 import (
 	"context"
+	"database/sql"
 
-	"botpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/domain"
 )
 
 const schedCols = `s.id, s.bot_id, s.owner_id, COALESCE(u.email, ''), s.action, s.spec, s.timezone, s.enabled, s.next_run_at_ms,
-	s.last_run_at_ms, s.last_status, s.last_message, s.created_at_ms, s.updated_at_ms`
+	s.last_run_at_ms, s.last_status, s.last_message, s.created_at_ms, s.updated_at_ms, s.chain`
+
+// chainPlaceholder is stored in schedules.action for task chains; it is never
+// executed (the action column predates chains and keeps its constraint).
+const chainPlaceholder = "restart"
 
 func scanSchedule(row interface{ Scan(...any) error }) (domain.Schedule, error) {
 	var s domain.Schedule
-	var en int
+	var en, chain int
 	err := row.Scan(&s.ID, &s.BotID, &s.OwnerID, &s.OwnerEmail, &s.Action, &s.Spec, &s.Timezone, &en, &s.NextRunMS,
-		&s.LastRunMS, &s.LastStatus, &s.LastMessage, &s.CreatedAtMS, &s.UpdatedAtMS)
+		&s.LastRunMS, &s.LastStatus, &s.LastMessage, &s.CreatedAtMS, &s.UpdatedAtMS, &chain)
 	s.Enabled = en == 1
+	if chain == 1 {
+		s.Action = domain.ScheduleChain
+	}
 	return s, mapErr(err)
 }
 
+func storedAction(s domain.Schedule) (string, int) {
+	if s.Action == domain.ScheduleChain {
+		return chainPlaceholder, 1
+	}
+	return s.Action, 0
+}
+
+func writeTasks(ctx context.Context, tx *sql.Tx, s domain.Schedule) error {
+	if _, err := tx.ExecContext(ctx, `DELETE FROM schedule_tasks WHERE schedule_id = ?`, s.ID); err != nil {
+		return err
+	}
+	if s.Action != domain.ScheduleChain {
+		return nil
+	}
+	for i, t := range s.Tasks {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO schedule_tasks (schedule_id, seq, action, payload, delay_seconds, continue_on_failure)
+			VALUES (?, ?, ?, ?, ?, ?)`, s.ID, i, t.Action, t.Payload, t.DelaySeconds, boolInt(t.ContinueOnFailure)); err != nil {
+			return mapErr(err)
+		}
+	}
+	return nil
+}
+
+// loadTasks fills the tasks of chain schedules.
+func (db *DB) loadTasks(ctx context.Context, list []domain.Schedule) error {
+	for i := range list {
+		if list[i].Action != domain.ScheduleChain {
+			continue
+		}
+		rows, err := db.QueryContext(ctx, `SELECT action, payload, delay_seconds, continue_on_failure FROM schedule_tasks
+			WHERE schedule_id = ? ORDER BY seq`, list[i].ID)
+		if err != nil {
+			return err
+		}
+		for rows.Next() {
+			var t domain.ScheduleTask
+			var cont int
+			if err := rows.Scan(&t.Action, &t.Payload, &t.DelaySeconds, &cont); err != nil {
+				rows.Close()
+				return err
+			}
+			t.ContinueOnFailure = cont == 1
+			list[i].Tasks = append(list[i].Tasks, t)
+		}
+		if err := rows.Close(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (db *DB) InsertSchedule(ctx context.Context, s domain.Schedule) error {
-	_, err := db.ExecContext(ctx, `INSERT INTO schedules (id, bot_id, owner_id, action, spec, timezone, enabled, next_run_at_ms,
-		created_at_ms, updated_at_ms) VALUES (?,?,?,?,?,?,?,?,?,?)`, s.ID, s.BotID, s.OwnerID, s.Action, s.Spec, s.Timezone,
-		boolInt(s.Enabled), s.NextRunMS, s.CreatedAtMS, s.UpdatedAtMS)
-	return mapErr(err)
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	action, chain := storedAction(s)
+	if _, err := tx.ExecContext(ctx, `INSERT INTO schedules (id, bot_id, owner_id, action, spec, timezone, enabled, next_run_at_ms,
+		created_at_ms, updated_at_ms, chain) VALUES (?,?,?,?,?,?,?,?,?,?,?)`, s.ID, s.BotID, s.OwnerID, action, s.Spec, s.Timezone,
+		boolInt(s.Enabled), s.NextRunMS, s.CreatedAtMS, s.UpdatedAtMS, chain); err != nil {
+		return mapErr(err)
+	}
+	if err := writeTasks(ctx, tx, s); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (db *DB) UpdateSchedule(ctx context.Context, s domain.Schedule) error {
-	res, err := db.ExecContext(ctx, `UPDATE schedules SET action = ?, spec = ?, timezone = ?, enabled = ?, next_run_at_ms = ?,
-		updated_at_ms = ? WHERE id = ? AND bot_id = ?`, s.Action, s.Spec, s.Timezone, boolInt(s.Enabled), s.NextRunMS, s.UpdatedAtMS, s.ID, s.BotID)
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	action, chain := storedAction(s)
+	res, err := tx.ExecContext(ctx, `UPDATE schedules SET action = ?, spec = ?, timezone = ?, enabled = ?, next_run_at_ms = ?,
+		updated_at_ms = ?, chain = ? WHERE id = ? AND bot_id = ?`, action, s.Spec, s.Timezone, boolInt(s.Enabled), s.NextRunMS, s.UpdatedAtMS, chain, s.ID, s.BotID)
 	if err != nil {
 		return err
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
 		return domain.ErrNotFound
 	}
-	return nil
+	if err := writeTasks(ctx, tx, s); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (db *DB) GetSchedule(ctx context.Context, botID, id string) (domain.Schedule, error) {
-	return scanSchedule(db.QueryRowContext(ctx, `SELECT `+schedCols+` FROM schedules s LEFT JOIN users u ON u.id = s.owner_id
+	s, err := scanSchedule(db.QueryRowContext(ctx, `SELECT `+schedCols+` FROM schedules s LEFT JOIN users u ON u.id = s.owner_id
 		WHERE s.id = ? AND s.bot_id = ?`, id, botID))
+	if err != nil {
+		return s, err
+	}
+	list := []domain.Schedule{s}
+	err = db.loadTasks(ctx, list)
+	return list[0], err
 }
 
 func (db *DB) ListSchedules(ctx context.Context, botID string) ([]domain.Schedule, error) {
@@ -67,7 +152,11 @@ func (db *DB) querySchedules(ctx context.Context, q string, args ...any) ([]doma
 		}
 		out = append(out, s)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	rows.Close()
+	return out, db.loadTasks(ctx, out)
 }
 
 // RecordScheduleRun stores the outcome of a run and the next due time; a nil
@@ -93,7 +182,9 @@ func (db *DB) DeleteSchedule(ctx context.Context, botID, id string) error {
 // BotsWithBackupSchedule lists bots that have their own enabled backup
 // schedule, so the panel-wide backup interval skips them (no double backups).
 func (db *DB) BotsWithBackupSchedule(ctx context.Context) (map[string]bool, error) {
-	rows, err := db.QueryContext(ctx, `SELECT DISTINCT bot_id FROM schedules WHERE action = 'backup' AND enabled = 1`)
+	rows, err := db.QueryContext(ctx, `SELECT DISTINCT s.bot_id FROM schedules s WHERE s.enabled = 1 AND
+		((s.chain = 0 AND s.action = 'backup') OR (s.chain = 1 AND EXISTS
+			(SELECT 1 FROM schedule_tasks t WHERE t.schedule_id = s.id AND t.action = 'backup')))`)
 	if err != nil {
 		return nil, err
 	}

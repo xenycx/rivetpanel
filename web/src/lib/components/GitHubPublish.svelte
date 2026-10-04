@@ -86,7 +86,7 @@
 <Dialog bind:open title={link ? `Push to ${link.full_name}` : 'Publish to GitHub'} size="lg">
 	<form id="gh-publish" class="grid gap-4" onsubmit={submit}>
 		{#if link}
-			<label class="block"><span class="label">Commit message</span><input class="field" maxlength="2000" bind:value={message} placeholder="Update from BotForge" /></label>
+			<label class="block"><span class="label">Commit message</span><input class="field" maxlength="2000" bind:value={message} placeholder="Update from RivetPanel" /></label>
 			<p class="text-small text-muted">Files inside {link.root_dir ? `/${link.root_dir}` : 'the repository'} are replaced by the bot's files; nothing is force-pushed. If someone pushed meanwhile, the push stops and you can deploy their changes first.</p>
 		{:else}
 			<div class="grid gap-4 sm:grid-cols-[minmax(0,12rem)_minmax(0,1fr)]">
@@ -95,7 +95,7 @@
 				</label>
 				<label class="block"><span class="label">Repository name</span><input class="field font-mono" required maxlength="100" bind:value={form.name} /></label>
 			</div>
-			<label class="block"><span class="label">Description <span class="font-normal text-muted">(optional)</span></span><input class="field" maxlength="350" bind:value={form.description} placeholder="{bot.name} (published from BotForge)" /></label>
+			<label class="block"><span class="label">Description <span class="font-normal text-muted">(optional)</span></span><input class="field" maxlength="350" bind:value={form.description} placeholder="{bot.name} (published from RivetPanel)" /></label>
 			<div class="grid gap-2 sm:grid-cols-2">
 				<label class="flex items-start gap-2.5 rounded-tile border border-rule-soft p-3"><input type="checkbox" class="mt-0.5" bind:checked={form.private} /><span>Private repository<span class="help mt-0">Recommended: bot code often names servers and channels.</span></span></label>
 				<label class="flex items-start gap-2.5 rounded-tile border border-rule-soft p-3"><input type="checkbox" class="mt-0.5" bind:checked={form.auto_deploy} /><span>Deploy on every push<span class="help mt-0">Adds a webhook so pushes to GitHub redeploy this bot.</span></span></label>

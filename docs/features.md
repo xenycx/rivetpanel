@@ -23,7 +23,8 @@ These are per-browser preferences.
   their sections), sites, people, AI chats and actions. Several words narrow
   the search; Tab switches scope; `>` lists actions only.
 - **New bot** (`/bots/new`): template, GitHub repository or empty bot; required
-  values such as the token up front; review of memory, CPU and build memory.
+  values such as the token up front; review of memory, CPU and build memory;
+  administrators can place an empty bot on an enabled, non-draining node.
 - **Bot page**: an identity card with shortcuts to the public page studio and
   resource settings, one row of tabs (Manage, Overview, Files, Deploy, Startup,
   Packages, Env, Network, Page, Health, Backups, Schedules, Access, Settings),
@@ -48,8 +49,57 @@ These are per-browser preferences.
 - **Administration**: users (with each account's workspaces, bots and recent
   deployments), workspaces, sites and domains (suspend/restore), host
   resources, bots' resource use, capacity and panel logs, panel settings
-  (sign-in, registration, the AI assistant), the environment editor, and
-  diagnostics.
+  (sign-in, registration, the AI assistant), nodes and locations (enrollment,
+  connection, drain, certificates), the environment editor, and diagnostics.
+
+## Game servers (preview)
+
+Game servers → New server creates Minecraft Java servers (Paper, Purpur,
+Vanilla, Fabric, Forge, NeoForge, Folia, Velocity) and Steam dedicated servers
+(Valheim, Rust, Project Zomboid). Steam games are downloaded and updated with
+an anonymous SteamCMD login in a separate install container on the first
+start or on Reinstall; a "Steam beta branch" setting picks a branch. Steam
+servers get the ports they need (for example Valheim's consecutive game and
+query ports), stop with the game's own signal or console command so the world
+is saved, and show players, name, map and version through the Steam query
+while running on the panel's own node. Administrators can also convert a
+Pterodactyl egg into a server type under Administration → Server types →
+Import Pterodactyl egg: the draft and a list of everything that could not be
+mapped are shown for review before anything is saved. Details, limits and the
+games' terms are in `docs/game-servers.md`.
+
+## Remote nodes (preview)
+
+`rivet-agent` runs assigned workloads on a separate Docker host and connects
+outward to the panel over mutually authenticated TLS. Lifecycle, console,
+Files, live container statistics and Minecraft status are routed through the
+node connection. Placement is an explicit administrator choice; draining
+refuses new servers but does not migrate existing ones. Backups stream from
+the assigned node into the panel's backup storage, and restore remains
+journaled on that node until the panel confirms the database update. GitHub
+deployments (manual, webhook and polled) stream the downloaded tarball to the
+assigned node, which stages and validates it before swapping and keeps the
+previous files until the panel records the commit; an administrator can pick a
+connected node when creating a bot from GitHub. GitHub publish and push read
+the selected files from the node. The package manager and the AI assistant's
+file tools edit the node's files directly, with revision checks so a
+concurrent change is never overwritten (agent protocol 5). An administrator
+can create a template bot on a connected node: the template files are written
+there in one transaction that is committed only after the bot is recorded,
+and a failed creation is removed again through the agent. Modrinth plugins and
+mods for a remote game server are verified completely at the panel (CDN
+allowlist, 256 MiB limit, SHA-512) in a temporary file and only then streamed
+to the node. SFTP works for remote servers through the agent (the panel's disk
+is never used for them), and the Add-ons tab shows remote add-on states and
+logs (agent protocol 6). The AI assistant's isolated diagnostics run on the
+server's node with the same sandbox; add-ons chosen at creation are checked
+for the node and their data is managed there; agents report CPU, memory and
+disk for node charts and the live stats strip; the panel refuses to stage a
+restore, deployment, change or large file on a node without enough free disk;
+and a GitHub push that arrives while a node is offline is deployed when it
+reconnects (agent protocol 7). Remote allocation probing is still local-only.
+Installation,
+certificate enforcement and the full boundary are in [agents.md](agents.md).
 
 ## Sharing and permissions (RBAC)
 
@@ -84,6 +134,19 @@ administrator cannot be removed or disabled.
 developer, viewer) on top of these per-bot grants; see
 [workspaces.md](workspaces.md). Static websites are covered in
 [sites.md](sites.md).
+
+**Account roles** sit above all of this. Every account holds the built-in
+Administrator or User role or a custom role made under Administration →
+Roles from named permissions (`bots.create`, `bots.files`, `nodes.manage`,
+`users.manage` and so on). The server refuses (`403`) anything the role does
+not include, for owners too, and the console/power/files/environment
+permissions also mask per-bot grants and workspace roles, so a full-access
+share cannot give back what the role removes. Custom roles can delegate parts
+of the administration area without making someone an administrator; a
+delegate can never grant more than it holds or act on an account with
+administration permissions it lacks, and only administrators make
+administrators or open the environment editor and modules page. Role changes
+are audited. See [permissions.md](permissions.md).
 
 ## Lifecycle, power controls and resource gauges
 
@@ -120,15 +183,15 @@ recorded with their output (256 KiB kept per build) and shown live.
 
 Values are masked in every list. **Reveal** fetches one value on request and
 hides it again after 30 seconds. **Import .env** previews names before saving.
-Names starting `BOTPANEL_` and `LD_`, and `PATH`, are reserved;
-`BOTPANEL_TELEMETRY_KEY` and `BOTPANEL_URL` are set by the panel.
+Names starting `RIVET_` and `LD_`, and `PATH`, are reserved;
+`RIVET_TELEMETRY_KEY` and `RIVET_URL` are set by the panel.
 
 ## Network and ports
 
 Outbound access can be turned off (Docker's `none` network). Ports are **not
 published by default**. The owner can publish host ports inside
-`BOTPANEL_PORT_RANGE` (default 20000-29999), unique across bots, bound to
-`127.0.0.1` unless `BOTPANEL_PORT_PUBLIC_BIND=1`.
+`RIVET_PORT_RANGE` (default 20000-29999), unique across bots, bound to
+`127.0.0.1` unless `RIVET_PORT_PUBLIC_BIND=1`.
 
 **Bandwidth limits are recorded but not enforced.** Docker has no built-in
 bandwidth cap; enforcing one needs traffic shaping (`tc`) on the host.
@@ -162,13 +225,13 @@ Seven starters are embedded in the binary and copied into a new bot:
 
 | Template | Runtime | Notes |
 | --- | --- | --- |
-| discord.js | Node.js 24 | CommonJS, BotForge SDK included |
+| discord.js | Node.js 24 | CommonJS, RivetPanel SDK included |
 | discord.js TypeScript | Node.js 24 | `src/index.mts` run directly by Node's built-in type stripping (no build step); `npm run check` type-checks locally |
-| discord.py | Python | BotForge SDK included |
+| discord.py | Python | RivetPanel SDK included |
 | Poise (Serenity) | Rust | builds in a 3 GiB build container |
 | JDA | Java | Maven fetched and verified (pinned SHA-512) in the build container |
 | DiscordGo | Go | |
-| discordrb | Ruby 4 | `bundle install` into `vendor/bundle`; BotForge SDK included |
+| discordrb | Ruby 4 | `bundle install` into `vendor/bundle`; RivetPanel SDK included |
 
 Each reads `DISCORD_TOKEN`, exits with a clear message when it is missing, and
 registers `/ping`. Template metadata lists required variables, setup steps,
@@ -196,6 +259,18 @@ journal outside the workspace records the plan before the first rename. If the
 panel dies mid-way, the next start rolls the workspace back to the previous
 files; the deployed commit is recorded before the previous files are dropped.
 A Stop, Delete or Unlink that arrives during a deployment wins.
+
+For a bot on a remote node the panel downloads the tarball (at most 1 GiB) and
+streams it to the node over the authenticated agent connection; nothing is
+unpacked on the panel host. The node stages the whole archive, the panel
+checks once more that the bot and its repository link are unchanged, and the
+node then swaps the files and keeps the previous ones until the panel has
+recorded the commit (a failure, a lost confirmation or an agent crash rolls
+back). Manual deploys to an offline node are refused; polling resumes when
+the agent reconnects, and a webhook push received while the node is offline
+waits (the Deploy tab says so) and deploys the newest commit once the agent
+reconnects, unless the repository link changed meanwhile. Nothing is staged
+when the node lacks free disk space. See [agents.md](agents.md).
 
 Auto-deploy uses a push webhook authenticated by HMAC-SHA256; unauthenticated
 deliveries always get the same `401`. A webhook needs your GitHub connection
@@ -250,7 +325,7 @@ A bot can run up to four companion databases next to it: **PostgreSQL 17**,
   CPU and PID limits, a read-only root filesystem, all capabilities dropped,
   `no-new-privileges` and the panel's unprivileged container user.
 * Add-ons join a private, **internal** Docker network per bot
-  (`botpanel-<bot>-net`): they have **no internet access**, only that bot (and
+  (`rivetpanel-<bot>-net`): they have **no internet access**, only that bot (and
   its other add-ons) can reach them, by host name (`postgres`, `redis`,
   `mongodb`, `mariadb`). The bot keeps its normal network and joins the private
   one; a bot with networking disabled uses only the private network.
@@ -261,7 +336,7 @@ A bot can run up to four companion databases next to it: **PostgreSQL 17**,
   `YAGPDB_PQPASSWORD=${POSTGRES_PASSWORD}`; unknown references and lone `$`
   signs are left as written.
 * Passwords are generated (144 bits) and stored sealed like other variables
-  (as hidden `BOTPANEL_ADDON_<KIND>_PASSWORD` rows, so key rotation and
+  (as hidden `RIVET_ADDON_<KIND>_PASSWORD` rows, so key rotation and
   verification cover them); they never appear in container labels. Redis has
   no password: the private network is its access control.
 * Add-ons start before the bot and the bot is created only after their health
@@ -275,7 +350,7 @@ A bot can run up to four companion databases next to it: **PostgreSQL 17**,
 * Add-on memory counts toward per-user and node memory budgets.
 
 Limits: one add-on of each kind per bot; add-on data is **not** included in
-bot backups or `botpanel backup` (dump it from the bot, for example with
+bot backups or `rivetpanel backup` (dump it from the bot, for example with
 `pg_dump`); no version choice or extensions; no Lavalink yet.
 
 ## Logos
@@ -321,10 +396,14 @@ panel or over SFTP) to the linked branch.
   skipped and listed). Each push is recorded as a *Push to GitHub* operation
   in the deployment history; the pushed commit is recorded as deployed, and
   its own webhook delivery does not redeploy the bot.
+* For a bot on a remote node, the node selects the files with the same rules
+  and limits and the panel reads only those files, one at a time, over the
+  authenticated agent connection; nothing is copied to the panel's disk.
+  Publishing and pushing are refused while the node is offline.
 
 ## Backups
 
-Manual and scheduled snapshots under `BOTPANEL_BACKUP_DIR` (mode 0600, SHA-256
+Manual and scheduled snapshots under `RIVET_BACKUP_DIR` (mode 0600, SHA-256
 recorded), with labels, integrity verification, a health summary and an
 optional "stop the bot while copying" mode. Contents: the workspace without
 rebuildable folders plus, optionally, the environment as **sealed** rows,
@@ -339,9 +418,11 @@ previous files are kept until the database records the restore, so a database
 error or a crash returns the complete previous state.
 
 Limits: 50 backups per bot (5 slots reserved for scheduled and safety copies),
-2 GiB per workspace (`BOTPANEL_BACKUP_MAX_BYTES`). Backups, restores and
-deployments refuse to start with less than `BOTPANEL_MIN_FREE_DISK_BYTES`
-(default 1 GiB) free. They are **not** included in `botpanel backup`.
+2 GiB per workspace (`RIVET_BACKUP_MAX_BYTES`). Backups, restores and
+deployments refuse to start with less than `RIVET_MIN_FREE_DISK_BYTES`
+(default 1 GiB) free. They are **not** included in `rivetpanel backup`.
+For a remote server the archive is created on its assigned node and streamed
+into the same panel backup directory; restores require that node to be online.
 
 ## Scheduled actions
 
@@ -379,14 +460,30 @@ running bot stops reporting for 1 minute to 1 hour (and once when it recovers).
 A test message can be sent. Crash alerts are throttled to one per bot per 10
 minutes.
 
+## Notifications and support
+
+A bell in the top bar collects in-panel notifications (alerts, deployments,
+backups, sharing, node state for node managers, announcements, support
+replies) with per-category in-panel/email preferences under Settings →
+Notifications. **Support** opens tickets with threaded replies, statuses,
+staff assignment and internal notes (`tickets.*` permissions). The
+**help center** (`/help`) shows Markdown articles written under
+Administration → Knowledgebase (`kb.manage`): draft or published, visible
+to everyone, signed-in accounts or support staff, searchable, suggested
+while a ticket subject is typed, and readable without an account only when
+the public help center is on. The **status page** (`/status`,
+`status.manage`) publishes chosen components under public names with
+automatic states, incidents, maintenance windows and 90-day uptime bars.
+Details, limits and authorization rules: `docs/support.md`.
+
 ## Host monitoring and panel logs
 
 **Administration → Host** has four tabs.
 
 - **Resources**: CPU, memory (cache, swap), load average, disk, network and disk
   throughput now and over 1 hour to 30 days (averages plus dashed peaks; the
-  range is capped by `BOTPANEL_TELEMETRY_RETENTION`, 7 days by default), a
-  disk-fill forecast from the trend, host facts, the BotForge process (memory,
+  range is capped by `RIVET_TELEMETRY_RETENTION`, 7 days by default), a
+  disk-fill forecast from the trend, host facts, the RivetPanel process (memory,
   goroutines, open files, requests, errors, database size), the Docker runner
   and storage per location (directory sizes are counted in the background
   about every five minutes). A "needs attention" list flags a nearly full disk,
@@ -400,21 +497,74 @@ minutes.
 - **Panel logs**: the newest 2,000 lines the panel logged since it started,
   with level filter, search, live follow, copy and download. Secrets, tokens and
   passwords are redacted before a line is kept. The view starts empty after a
-  restart; the complete log stays in journald (`journalctl -u botpanel`) or
+  restart; the complete log stays in journald (`journalctl -u rivetpanel`) or
   `docker logs`.
+
+## Usage analytics
+
+Every bot and game server has an **Analytics** tab (anyone with console
+access to it, the same as the live gauges): CPU and memory (averages with
+dashed peaks against the limits), network traffic per bucket, uptime, crashes
+and starts, workspace size, deployments (succeeded, failed, average duration;
+bots only) and backups (succeeded, failed, bytes written). Ranges: 1 hour and
+24 hours (5-minute buckets, the current five minutes included as they are
+collected), 7 and 30 days (hourly) and 90 days (daily). **Export CSV**
+downloads the rows shown (`GET /api/v1/bots/:id/usage?range=…&format=csv`).
+
+**Administration → Analytics** (permission `analytics.view`) sums the same
+data across the panel for 24 hours to 90 days: accounts (total and new), bots
+and game servers (total and running), CPU and memory in use, network,
+uptime, crashes and starts, deployments, backups, and the top 10 consumers by
+CPU, memory and network. With `nodes.manage` it adds each node's average and
+peak CPU, memory, disk, network and a CPU trend, grouped by location; with
+`tickets.view_all` or `tickets.manage` it adds tickets opened, closed and
+waiting and the median time to the first staff reply. Owners' addresses are
+shown with `users.view`. A delegated viewer (not a built-in administrator)
+sees only the accounts it could manage under the delegated-administration
+rule and their bots; API clients never count as administrators, and clients
+limited to bots or workspaces cannot open the overview. CSV:
+`GET /api/v1/admin/analytics?range=…&format=csv`.
+
+How it is collected (no new agent protocol, nothing pushed by bots):
+
+- Once a minute the panel reads every bot's state and, for running bots,
+  one Docker stats reading (locally) or an agent stats reading (connected
+  remote nodes), at most 100 bots per pass in rotation with 4 at a time.
+  Bots on a disconnected node are counted for uptime but not measured.
+- Uptime is the share of samples in which a bot that was meant to run was
+  running. Crashes are increases of the restart policy's consecutive-crash
+  counter; starts are changes of the last start time (several in one minute
+  count once).
+- Network is the difference of the container's counters between samples.
+- Workspace size is measured every 30 minutes for bots on this panel's own
+  node only (up to 10 per pass).
+- Deployments and backups are counted from the operations history (and the
+  backup's size) into hourly rows every five minutes, so the counts stay
+  after old operations are pruned. On first start the last 35 days of
+  operations still recorded are counted.
+- Nodes come from the existing node telemetry samples, rolled up into
+  hourly and daily rows so node trends outlive
+  `RIVET_TELEMETRY_RETENTION`.
+
+Storage and retention (SQLite tables `bot_usage`, `node_usage`, migration
+`0052`): one transaction of 5-minute rows per five minutes; hourly and daily
+rows are recomputed for the current and previous hour/day only. 5-minute
+rows are kept 3 days, hourly rows 35 days, daily rows 400 days; pruning runs
+hourly in batches of 1,000. Deleting a bot deletes its rows. Time the panel
+itself was not running records nothing (a gap, not downtime).
 
 ## Environment variables from the panel
 
-**Administration → Environment** lists every `BOTPANEL_` variable with its
+**Administration → Environment** lists every `RIVET_` variable with its
 description, default and source (default, environment file or set here) and
 lets an administrator change most of them. Values are stored in the panel's
 database (the metrics token encrypted) and layered over the process environment
-when BotForge starts, so a change applies after a restart; the page shows what
+when RivetPanel starts, so a change applies after a restart; the page shows what
 is waiting. The environment file is never edited. Precedence: value set here,
 then environment, then the built-in default; a value set here may be empty to
 switch off something the environment enables.
 
-Not editable here: variables read before the database opens (`BOTPANEL_ENV`,
+Not editable here: variables read before the database opens (`RIVET_ENV`,
 `_LISTEN`, `_DB_PATH`, `_DB_MAX_CONNS`, `_DATA_ROOT`, `_KEY_DIR`,
 `_ACTIVE_KEY_ID`, `_RUNTIMES_DIR`), ones that decide what the panel may do to
 the host (`_DOCKER_HOST`, `_CONTAINER_USER`, `_WORKSPACE_OWNER`,
@@ -424,7 +574,7 @@ as a whole configuration first; if a saved set ever stops validating, the panel
 starts without it and says so on the page. **Restart panel** exits with code 75
 and needs systemd (`Restart=on-failure`) or a container restart policy; without
 a detected supervisor the button is hidden. Bot containers keep running through
-a restart. From the host: `botpanel env` lists the saved values and `botpanel
+a restart. From the host: `rivetpanel env` lists the saved values and `rivetpanel
 env reset [NAME…]` drops them.
 
 ## Capacity and admission
@@ -434,11 +584,11 @@ page (0 = unlimited):
 
 | Setting | Effect |
 | --- | --- |
-| `BOTPANEL_NODE_MEMORY_BYTES` | sum of memory limits of bots wanted running; a start that would exceed it is refused (409) with the numbers |
-| `BOTPANEL_USER_MEMORY_BYTES` | sum of a user's bot memory limits |
-| `BOTPANEL_MAX_BOTS_PER_USER` | bots per user |
-| `BOTPANEL_MAX_BUILDS` | concurrent build containers (default 1); waiting builds say so |
-| `BOTPANEL_MIN_FREE_DISK_BYTES` | free space backups, restores and deployments need (default 1 GiB) |
+| `RIVET_NODE_MEMORY_BYTES` | sum of memory limits of bots wanted running; a start that would exceed it is refused (409) with the numbers |
+| `RIVET_USER_MEMORY_BYTES` | sum of a user's bot memory limits |
+| `RIVET_MAX_BOTS_PER_USER` | bots per user |
+| `RIVET_MAX_BUILDS` | concurrent build containers (default 1); waiting builds say so |
+| `RIVET_MIN_FREE_DISK_BYTES` | free space backups, restores and deployments need (default 1 GiB) |
 
 The node check and the start are one database transaction, so simultaneous
 starts cannot overcommit. Per-user budgets do not apply to administrators.
@@ -447,9 +597,10 @@ hard memory limits, and there are no disk quotas.
 
 ## Accounts and sign-in
 
-Passwords (Argon2id), GitHub and Discord sign-in (`oauth.md`), password change
+Passwords (Argon2id), GitHub and Discord sign-in (`oauth.md`), OpenID Connect
+single sign-on and passkeys (`auth.md`), password change
 that signs out other sessions, a sessions list with sign-out, and at most 20
-sessions per user. `botpanel reset-password EMAIL` is the host recovery path.
+sessions per user. `rivetpanel reset-password EMAIL` is the host recovery path.
 With Mailgun configured (`email.md`) people can also reset a forgotten password
 from the sign-in page by emailed one-use link, administrators can email
 invitations, bot owners can receive alerts by email (switch in Profile), and
@@ -457,22 +608,53 @@ every password or two-step change sends a security notice. Administrators can
 email HTML news and policy updates to accounts (Administration →
 Announcements; `email.md`).
 
+**Email verification**: new accounts confirm their address with a one-use
+link (24 hours, only the SHA-256 is stored, resends rate limited) from
+Settings → Profile; GitHub/Discord sign-ups and accounts from before
+verification existed count as verified. Changing your own address needs your
+password and takes effect only when the new address is confirmed. Panel
+settings can withhold chosen permissions from unverified accounts (off by
+default); account managers can mark addresses verified by hand. See
+[permissions.md](permissions.md).
+
+**Single sign-on (OpenID Connect)**: administrators add providers under
+Administration → Single sign-on (discovery checked on save, secret sealed,
+PKCE + state + nonce, ID token signature/issuer/audience/expiry verified).
+Identities link automatically only by a provider-verified address and never to
+accounts with administration permissions; otherwise people link from
+Settings → Connected accounts. Optional sign-up with a default role (never
+Administrator). See [auth.md](auth.md).
+
+**Passkeys** (WebAuthn): added under Security (password required); sign in
+without a password, or use one instead of the TOTP code. Needs the panel
+address to be a host name.
+
+**API clients**: `rvc_` bearer tokens for the whole API with a chosen subset of
+the creator's permissions (re-checked every request, never administrator),
+optionally limited to bots/workspaces (403 elsewhere), expiring or not,
+revocable by the owner or under Administration → API clients, audited. See
+[auth.md](auth.md).
+
 **Two-step sign-in** (TOTP): set up in Security with any authenticator app
 (key shown for manual entry, plus an `otpauth://` link for phones), confirmed
 with a first code, with 10 one-use recovery codes (only hashes stored). It
 applies after both password and provider sign-in. Codes cannot be replayed;
 a sign-in ticket allows 5 attempts in 5 minutes. With two-step sign-in on, SFTP
-no longer accepts the account password (use SFTP keys). `botpanel reset-mfa
+no longer accepts the account password (use SFTP keys). `rivetpanel reset-mfa
 EMAIL` removes it from the host.
 
 ## SFTP
 
-Off unless `BOTPANEL_SFTP_LISTEN` is set. Sign in with your panel email plus
+Off unless `RIVET_SFTP_LISTEN` is set. Sign in with your panel email plus
 your password or an **SFTP key** (Settings → SFTP & API keys). One folder per
 bot you may edit. Same containment as the web file manager. Access is re-checked
 about every 5 seconds, including open file handles. No shell/exec/forwarding;
 3 auth tries per connection, 10 failures per minute per address, 32 connections,
-a per-file size cap. The host key is kept next to the database. **SFTP does not
+a per-file size cap. The host key is kept next to the database. Folders of
+servers on a remote node are served through that node's agent: transfers pass
+through a private temporary file on the panel, an upload reaches the node in
+one atomic write when the file is closed, listings show no modification
+times, and an offline node answers with an error. **SFTP does not
 work through Cloudflare's proxy or a Cloudflare Tunnel.**
 
 ## Automation API
@@ -488,7 +670,7 @@ token. SFTP keys never work here and tokens never work for SFTP. See
 ## Bot analytics
 
 Generate a telemetry key in **Public page → Private insights** (stop the bot first; the key becomes
-`BOTPANEL_TELEMETRY_KEY`). Bots push to `POST /api/v1/bot-telemetry` (or the
+`RIVET_TELEMETRY_KEY`). Bots push to `POST /api/v1/bot-telemetry` (or the
 WebSocket at `/api/v1/bot-telemetry/ws`) with `Authorization: Bearer <key>`:
 
 ```json
@@ -522,7 +704,7 @@ processes from using one database.
 
 ## Operations
 
-`botpanel version | doctor | verify | reseal | backup | backup-verify | restore
+`rivetpanel version | doctor | verify | reseal | backup | backup-verify | restore
 | create-admin | reset-password | reset-mfa | keygen`. `reseal` (panel stopped)
 re-encrypts every sealed value with the active key and can be re-run to
 continue; keep old key files while per-bot backups made before the reseal exist.

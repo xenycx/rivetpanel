@@ -6,8 +6,8 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 
-	"botpanel/internal/domain"
-	"botpanel/internal/mail"
+	"github.com/xenycx/rivetpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/mail"
 )
 
 type accountInviteDTO struct {
@@ -22,7 +22,7 @@ func accountInviteOut(v domain.AccountInvite) accountInviteDTO {
 	return accountInviteDTO{v.ID, v.Email, v.Role, v.CreatedAtMS, v.ExpiresAtMS}
 }
 
-func (s *server) registrationStatus(c fiber.Ctx) error {
+func (s *panel) registrationStatus(c fiber.Ctx) error {
 	enabled := false
 	if s.settings != nil {
 		if e, err := s.settings.Effective(c.Context()); err == nil {
@@ -40,7 +40,7 @@ func (s *server) registrationStatus(c fiber.Ctx) error {
 	return c.JSON(fiber.Map{"enabled": enabled, "providers": providers})
 }
 
-func (s *server) previewAccountInvite(c fiber.Ctx) error {
+func (s *panel) previewAccountInvite(c fiber.Ctx) error {
 	var in struct {
 		Token string `json:"token"`
 	}
@@ -54,7 +54,7 @@ func (s *server) previewAccountInvite(c fiber.Ctx) error {
 	return c.JSON(accountInviteOut(v))
 }
 
-func (s *server) registerAccount(c fiber.Ctx) error {
+func (s *panel) registerAccount(c fiber.Ctx) error {
 	if s.settings == nil {
 		return domain.Invalid("registration is disabled")
 	}
@@ -78,10 +78,15 @@ func (s *server) registerAccount(c fiber.Ctx) error {
 		return err
 	}
 	s.setSessionCookie(c, sess.Token, time.UnixMilli(sess.ExpiresAtMS))
+	// New accounts start unverified; send the first link right away when the
+	// panel can (a failure is not an error: the account can ask again).
+	if s.verify != nil && s.verify.Available(c.Context()) {
+		_ = s.verify.Send(c.Context(), u)
+	}
 	return c.Status(fiber.StatusCreated).JSON(fiber.Map{"user": toUser(u), "csrf_token": sess.CSRF})
 }
 
-func (s *server) createAccountInvite(c fiber.Ctx) error {
+func (s *panel) createAccountInvite(c fiber.Ctx) error {
 	var in struct {
 		Email, Role   string
 		ExpiresInDays int  `json:"expires_in_days"`
@@ -104,7 +109,7 @@ func (s *server) createAccountInvite(c fiber.Ctx) error {
 	return c.Status(fiber.StatusCreated).JSON(fiber.Map{"invite": accountInviteOut(v), "token": tok, "path": "/register#" + tok, "emailed": emailed, "email_error": emailErr})
 }
 
-func (s *server) listAccountInvites(c fiber.Ctx) error {
+func (s *panel) listAccountInvites(c fiber.Ctx) error {
 	vs, err := s.auth.ListAccountInvites(c.Context(), currentUser(c))
 	if err != nil {
 		return err
@@ -116,7 +121,7 @@ func (s *server) listAccountInvites(c fiber.Ctx) error {
 	return c.JSON(fiber.Map{"invites": out})
 }
 
-func (s *server) deleteAccountInvite(c fiber.Ctx) error {
+func (s *panel) deleteAccountInvite(c fiber.Ctx) error {
 	if err := s.auth.DeleteAccountInvite(c.Context(), currentUser(c), strings.Clone(c.Params("id"))); err != nil {
 		return err
 	}
@@ -125,7 +130,7 @@ func (s *server) deleteAccountInvite(c fiber.Ctx) error {
 
 // emailInvite mails the invitation link to the invited address and returns
 // whether it was started, or a sentence explaining why not.
-func (s *server) emailInvite(c fiber.Ctx, v domain.AccountInvite, tok string, days int) (bool, string) {
+func (s *panel) emailInvite(c fiber.Ctx, v domain.AccountInvite, tok string, days int) (bool, string) {
 	if v.Email == "" {
 		return false, "this invitation has no email address to send to"
 	}

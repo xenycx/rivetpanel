@@ -15,8 +15,8 @@ import (
 
 	"github.com/google/uuid"
 
-	"botpanel/internal/auth"
-	"botpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/auth"
+	"github.com/xenycx/rivetpanel/internal/domain"
 )
 
 const MaxAvatarBytes = 64 << 10
@@ -50,7 +50,7 @@ func (s *AuthService) now() time.Time {
 
 // dummy returns a valid hash used to equalize timing for unknown accounts.
 func (s *AuthService) dummy(ctx context.Context) string {
-	s.dummyOnce.Do(func() { s.dummyHash, _ = s.Hasher.Hash(context.Background(), "botpanel-dummy-password") })
+	s.dummyOnce.Do(func() { s.dummyHash, _ = s.Hasher.Hash(context.Background(), "rivetpanel-dummy-password") })
 	return s.dummyHash
 }
 
@@ -112,7 +112,7 @@ func accountInviteHash(token string) ([]byte, error) {
 }
 
 func (s *AuthService) CreateAccountInvite(ctx context.Context, actor domain.User, email, role string, days int) (domain.AccountInvite, string, error) {
-	if !actor.IsAdmin() {
+	if !actor.Can(domain.PermUsersManage) || (role == domain.RoleAdmin && !actor.IsAdmin()) {
 		return domain.AccountInvite{}, "", domain.ErrForbidden
 	}
 	if email != "" {
@@ -124,6 +124,12 @@ func (s *AuthService) CreateAccountInvite(ctx context.Context, actor domain.User
 	}
 	if role != domain.RoleAdmin && role != domain.RoleUser {
 		return domain.AccountInvite{}, "", domain.Invalid("role must be admin or user")
+	}
+	// The built-in user role grants every resource permission; a delegated
+	// account manager may only hand it out when it holds them all (as for
+	// AssignRole).
+	if err := grantable(actor, domain.DefaultUserPermissions()); role == domain.RoleUser && err != nil {
+		return domain.AccountInvite{}, "", err
 	}
 	if days < 1 || days > 14 {
 		return domain.AccountInvite{}, "", domain.Invalid("invitation expiry must be between 1 and 14 days")
@@ -142,7 +148,7 @@ func (s *AuthService) CreateAccountInvite(ctx context.Context, actor domain.User
 }
 
 func (s *AuthService) ListAccountInvites(ctx context.Context, actor domain.User) ([]domain.AccountInvite, error) {
-	if !actor.IsAdmin() {
+	if !actor.Can(domain.PermUsersManage) {
 		return nil, domain.ErrForbidden
 	}
 	return s.Store.ListAccountInvites(ctx, s.now().UnixMilli())
@@ -191,7 +197,7 @@ func (s *AuthService) RegisterWithInvite(ctx context.Context, token, email, pass
 }
 
 func (s *AuthService) DeleteAccountInvite(ctx context.Context, actor domain.User, id string) error {
-	if !actor.IsAdmin() {
+	if !actor.Can(domain.PermUsersManage) {
 		return domain.ErrForbidden
 	}
 	return s.Store.DeleteAccountInvite(ctx, id)
@@ -369,39 +375,46 @@ func (s *AuthService) Logout(ctx context.Context, token string) error {
 }
 
 func (s *AuthService) ListUsers(ctx context.Context, actor domain.User) ([]domain.User, error) {
-	if !actor.IsAdmin() {
+	if !actor.Can(domain.PermUsersView) {
 		return nil, domain.ErrForbidden
 	}
 	return s.Store.ListUsers(ctx)
 }
 
-// SetDisabled enables or disables an account (admin only); disabling revokes
-// its sessions. Admins cannot disable themselves.
+// SetDisabled enables or disables an account (users.manage); disabling
+// revokes its sessions. Nobody can disable themselves; delegated account
+// managers cannot act on administrators or accounts holding administration
+// permissions they lack (see manageable).
 func (s *AuthService) SetDisabled(ctx context.Context, actor domain.User, id string, disabled bool) error {
-	if !actor.IsAdmin() {
+	if !actor.Can(domain.PermUsersManage) {
 		return domain.ErrForbidden
 	}
 	if disabled && actor.ID == id {
 		return domain.Invalid("you cannot disable your own account")
 	}
+	if !actor.IsAdmin() {
+		target, err := s.Store.GetUserByID(ctx, id)
+		if err != nil {
+			return err
+		}
+		if err := manageable(actor, target); err != nil {
+			return err
+		}
+	}
 	return s.Store.SetUserDisabled(ctx, id, disabled, s.now().UnixMilli())
 }
 
-// SetRole makes a user an administrator or a regular user (admin only). The
-// store refuses to remove the last active administrator.
+// SetRole assigns the built-in "admin" or "user" role or a custom role id
+// (see AssignRole). The store refuses to remove the last active
+// administrator.
 func (s *AuthService) SetRole(ctx context.Context, actor domain.User, id, role string) error {
-	if !actor.IsAdmin() {
-		return domain.ErrForbidden
-	}
-	if role != domain.RoleAdmin && role != domain.RoleUser {
-		return domain.Invalid("role must be admin or user")
-	}
-	return s.Store.SetUserRole(ctx, id, role, s.now().UnixMilli())
+	_, err := s.AssignRole(ctx, actor, id, role)
+	return err
 }
 
 // BotCounts returns owned-bot counts per user (admin only).
 func (s *AuthService) BotCounts(ctx context.Context, actor domain.User) (map[string]int, error) {
-	if !actor.IsAdmin() {
+	if !actor.Can(domain.PermUsersView) {
 		return nil, domain.ErrForbidden
 	}
 	return s.Store.BotCountsByOwner(ctx)

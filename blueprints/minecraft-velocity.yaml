@@ -1,0 +1,34 @@
+slug: minecraft-velocity
+name: Velocity
+category: Minecraft Proxy
+description: Modern, high-performance proxy that links several Minecraft Java servers into one network.
+runtime: java
+images:
+  - {label: "Java 21", ref: "eclipse-temurin:21-jre-alpine", java: 21}
+  - {label: "Java 25", ref: "eclipse-temurin:25-jre-alpine", java: 25}
+startup:
+  command: java -Xms128M -Xmx{{SERVER_MEMORY}}M -XX:+UseG1GC -jar {{SERVER_JARFILE}}
+  stop: end
+  stop_timeout_seconds: 30
+  done: 'Done ('
+variables:
+  - env: VELOCITY_VERSION
+    name: Velocity version
+    description: The Velocity release to install, or "latest" for the newest stable one.
+    default: latest
+    editable: true
+    reinstall: true
+    rules: {pattern: '^(latest|[0-9][0-9A-Za-z._-]{0,31})$'}
+    versions: {provider: papermc, project: velocity}
+  - env: SERVER_JARFILE
+    name: Server jar
+    description: File name of the server jar in the server's files.
+    default: server.jar
+    editable: true
+    rules: {pattern: '^[A-Za-z0-9._-]{1,64}\.jar$'}
+install:
+  download: {provider: papermc, project: velocity, version: "{{VELOCITY_VERSION}}", dest: "{{SERVER_JARFILE}}"}
+resources: {memory_mb: 1024, min_memory_mb: 256, cpus: 1, pids: 512, heap_percent: 80}
+ports: {default: 25577, container: 25577}
+query: minecraft-java
+addons: {source: modrinth, kind: plugin, loaders: [velocity], dir: plugins}

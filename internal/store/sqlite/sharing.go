@@ -3,7 +3,7 @@ package sqlite
 import (
 	"context"
 
-	"botpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/domain"
 )
 
 // SetSubUser grants or updates a user's permissions on a bot. The owner cannot
@@ -76,7 +76,7 @@ func (db *DB) InsertAPIKey(ctx context.Context, k domain.APIKey) error {
 
 // GetUserByAPIKey resolves an unexpired key to an enabled user and records use.
 func (db *DB) GetUserByAPIKey(ctx context.Context, hash []byte, scope string, nowMS int64) (domain.User, error) {
-	u, err := scanUser(db.QueryRowContext(ctx, `SELECT u.id, u.email, u.display_name, u.avatar_jpeg, u.password_hash, u.role, u.disabled, u.created_at_ms, u.updated_at_ms
+	u, err := scanUser(db.QueryRowContext(ctx, `SELECT `+userSelect("u")+`
 		FROM api_keys k JOIN users u ON u.id = k.user_id
 		WHERE k.token_hash = ? AND k.scope = ? AND u.disabled = 0
 		  AND (k.expires_at_ms IS NULL OR k.expires_at_ms > ?)`, hash, scope, nowMS))

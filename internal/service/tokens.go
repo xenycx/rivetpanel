@@ -11,8 +11,8 @@ import (
 
 	"github.com/google/uuid"
 
-	"botpanel/internal/auth"
-	"botpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/auth"
+	"github.com/xenycx/rivetpanel/internal/domain"
 )
 
 // TokenStore is the persistence automation tokens need.

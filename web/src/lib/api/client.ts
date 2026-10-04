@@ -105,10 +105,18 @@ export function uploadProgress(path: string, file: Blob, onProgress: (fraction: 
 		xhr.setRequestHeader('content-type', contentType);
 		xhr.upload.onprogress = (e) => e.lengthComputable && onProgress(e.loaded / e.total);
 		xhr.onload = async () => {
-			const res = new Response(xhr.response, { status: xhr.status });
-			if (xhr.status === 401) onUnauthorized();
-			if (xhr.status >= 200 && xhr.status < 300) resolve(res);
-			else reject(await toError(res));
+			try {
+				// A 204 (the file content route) must be built without a body:
+				// `new Response('', { status: 204 })` throws, which used to leave
+				// the upload pending forever and stall every following file.
+				const empty = xhr.status === 204 || xhr.status === 205 || xhr.status === 304;
+				const res = new Response(empty ? null : xhr.response, { status: xhr.status });
+				if (xhr.status === 401) onUnauthorized();
+				if (xhr.status >= 200 && xhr.status < 300) resolve(res);
+				else reject(await toError(res));
+			} catch {
+				reject(new ApiError(xhr.status, 'invalid_response', 'The server answered the upload in an unexpected way.'));
+			}
 		};
 		xhr.onerror = () => reject(new ApiError(0, 'network', 'The connection failed during the upload.'));
 		xhr.onabort = () => reject(new ApiError(0, 'aborted', 'Upload cancelled.'));

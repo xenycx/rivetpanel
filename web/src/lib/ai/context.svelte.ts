@@ -36,7 +36,7 @@ const pageNames: [RegExp, string][] = [
 ];
 
 export function pageLabel(pathname: string): string {
-	return pageNames.find(([re]) => re.test(pathname))?.[1] ?? 'BotForge';
+	return pageNames.find(([re]) => re.test(pathname))?.[1] ?? 'RivetPanel';
 }
 
 /** The context to attach to a message sent from this URL. */

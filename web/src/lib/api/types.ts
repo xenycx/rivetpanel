@@ -1,4 +1,23 @@
-export type User = { id: string; email: string; display_name: string; avatar_url: string; role: 'admin' | 'user'; disabled: boolean; created_at_ms: number };
+export type User = {
+	id: string;
+	email: string;
+	display_name: string;
+	avatar_url: string;
+	role: 'admin' | 'user';
+	disabled: boolean;
+	created_at_ms: number;
+	/** Custom role id; '' means the built-in role in `role`. */
+	role_id: string;
+	role_name: string;
+	email_verified: boolean;
+};
+
+export type Role = { id: string; name: string; description: string; permissions: string[]; system: boolean; users: number; created_at_ms: number; updated_at_ms: number };
+export type PermissionInfo = { name: string; group: 'resources' | 'administration'; label: string; description: string };
+export type EmailVerification = { verified: boolean; withheld: string[]; available: boolean; pending_email: string; sent_at_ms: number };
+
+export type ModuleState = 'off' | 'preview' | 'stable';
+export type Module = { key: string; label: string; description: string; state: ModuleState };
 
 export type Bot = {
 	id: string;
@@ -50,7 +69,17 @@ export type Bot = {
 	last_started_at_ms: number | null;
 	tags: string[];
 	favorite: boolean;
+	/** "bot" (an application such as a Discord bot) or "game" (a game server). */
+	kind: 'bot' | 'game';
+	blueprint_id?: string;
+	blueprint_revision?: number;
+	/** Chosen image label; "" = automatic (decided when installing). */
+	image_choice?: string;
+	install_state?: 'pending' | 'installing' | 'installed' | 'failed';
+	allocations?: Allocation[];
 };
+
+export type Allocation = { id: string; node_id: string; ip: string; port: number; alias: string; notes: string; bot_id: string | null; primary: boolean };
 
 /** Server-derived lifecycle word (internal/api phaseOf). */
 export type Phase =
@@ -60,6 +89,7 @@ export type Phase =
 	| 'runner_offline'
 	| 'queued'
 	| 'building'
+	| 'installing'
 	| 'starting'
 	| 'running'
 	| 'restarting'
@@ -118,7 +148,31 @@ export type Sample = {
 	disk_read_bps: number;
 	disk_write_bps: number;
 };
-export type NodeInfo = { id: string; name: string; transport: string; enabled: boolean; latest?: Sample };
+export type AgentInfo = {
+	connected: boolean;
+	protocol_version: number;
+	agent_version: string;
+	hostname: string;
+	capabilities: Record<string, unknown>;
+	certificate_serial: string | null;
+	certificate_expires_at_ms: number | null;
+	connected_at_ms: number | null;
+	disconnected_at_ms: number | null;
+};
+export type NodeInfo = {
+	id: string;
+	location_id: string;
+	name: string;
+	transport: 'local' | 'agent' | 'https';
+	enabled: boolean;
+	draining: boolean;
+	public_address: string;
+	server_count: number;
+	last_seen_at_ms: number | null;
+	agent?: AgentInfo;
+	latest?: Sample;
+};
+export type LocationInfo = { id: string; name: string; description: string; node_count: number; created_at_ms: number; updated_at_ms: number };
 
 export type Provider = 'github' | 'discord';
 export type Connection = {
@@ -140,9 +194,32 @@ export const oauthErrors: Record<string, string> = {
 	signup_disabled: 'No account is linked to that identity. Ask an administrator for an account, then connect it in Settings.',
 	email_in_use: 'An account with that email already exists. Sign in with your password, then connect the provider in Settings.',
 	email_unverified: 'The provider did not share a verified email address.',
-	already_linked: 'That account is already connected to a different BotForge user.',
+	already_linked: 'That account is already connected to a different RivetPanel user.',
 	account_disabled: 'This account is disabled.',
-	server_error: 'Something went wrong on the server. Please try again.'
+	server_error: 'Something went wrong on the server. Please try again.',
+	token_invalid: 'The sign-in provider sent an identity token this panel could not verify. Please try again; if it keeps failing, tell an administrator.',
+	link_required: 'An account with that email address already exists. Sign in to it another way, then connect the provider under Settings → Connected accounts.',
+	email_missing: 'The sign-in provider did not share an email address, which a new account needs.'
+};
+
+/** A linked OpenID Connect identity (Settings → Connected accounts). */
+export type Identity = { provider_id: string; slug: string; name: string; email: string; email_verified: boolean; created_at_ms: number; last_login_at_ms: number | null; can_unlink: boolean };
+/** An OpenID Connect provider as administrators configure it. */
+export type OidcProvider = {
+	id: string;
+	slug: string;
+	name: string;
+	issuer: string;
+	client_id: string;
+	secret_set: boolean;
+	scopes: string;
+	enabled: boolean;
+	allow_signup: boolean;
+	link_by_email: boolean;
+	default_role_id: string;
+	redirect_uri: string;
+	created_at_ms: number;
+	updated_at_ms: number;
 };
 
 export type TemplateEnv = { name: string; label: string; description: string; secret: boolean; required: boolean; default?: string };
@@ -178,6 +255,8 @@ export type RepoLink = {
 	deploying: boolean;
 	/** Auto-deploy checks the branch periodically (no webhook). */
 	polling?: boolean;
+	/** A push that waits for the server's offline node to reconnect. */
+	pending_push_at_ms?: number;
 };
 export type Backup = {
 	id: string;
@@ -235,6 +314,8 @@ export type Gauge = {
 	disk_used_bytes: number;
 	disk_total_bytes: number;
 	disk_free_bytes: number;
+	/** 'node': a remote server; only its node's volume is known. */
+	disk_scope?: 'workspace' | 'node';
 };
 export type ApiKey = { id: string; name: string; prefix: string; created_at_ms: number; last_used_at_ms: number | null; expires_at_ms: number | null };
 
@@ -263,7 +344,9 @@ export type Operation = {
 export type OpPage = { operations: Operation[]; next_before?: number };
 export type OutputChunk = { text: string; next_offset: number; total: number; truncated: boolean; live: boolean };
 
-export type ScheduleAction = 'backup' | 'start' | 'stop' | 'restart' | 'deploy';
+export type ScheduleAction = 'backup' | 'start' | 'stop' | 'restart' | 'deploy' | 'chain';
+export type TaskAction = 'command' | 'start' | 'stop' | 'restart' | 'kill' | 'backup';
+export type ScheduleTask = { action: TaskAction; payload: string; delay_seconds: number; continue_on_failure: boolean };
 export type Schedule = {
 	id: string;
 	action: ScheduleAction;
@@ -278,6 +361,7 @@ export type Schedule = {
 	upcoming: number[];
 	can_edit: boolean;
 	created_at_ms: number;
+	tasks: ScheduleTask[];
 };
 
 export type Capacity = {
@@ -477,3 +561,18 @@ export type Analysis = {
 	truncated: boolean;
 };
 export type Recipe = { repo: string; branch: string; name: string; description: string; language: string; plan: Plan };
+
+/** A scoped application credential for the whole API (bearer "rvc_" token). */
+export type ApiClient = {
+	id: string;
+	name: string;
+	prefix: string;
+	permissions: string[];
+	bot_ids: string[] | null;
+	workspace_ids: string[] | null;
+	created_at_ms: number;
+	last_used_at_ms: number | null;
+	expires_at_ms: number | null;
+	owner_id: string;
+	owner_email: string;
+};

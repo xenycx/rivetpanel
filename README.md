@@ -1,13 +1,37 @@
-# BotForge
+# RivetPanel
 
-Current version: **0.2.0**. See [CHANGELOG.md](CHANGELOG.md) for release notes
+Current version: **0.4.0**. See [CHANGELOG.md](CHANGELOG.md) for release notes
 and [the implementation status](docs/implementation-status.md) for the staged
 platform-overhaul checklist.
 
-A lightweight hosting panel for Discord bots written in Node.js, Python, Rust,
-Go, Java or Ruby. Go + Fiber backend, SQLite, SvelteKit UI embedded in one
-static binary, Docker for isolation.
+A lightweight self-hosted control plane for Discord bots and other isolated
+applications, **Minecraft servers**, and static sites, with remote nodes and
+other modules being added as opt-in previews. The existing application runtimes cover Node.js, Python, Rust,
+Go, Java and Ruby. The control plane uses Go, Fiber, SQLite and an embedded
+SvelteKit interface; Docker provides the current execution boundary.
 
+RivetPanel is a clean-break namespace. It does not read or automatically
+convert databases created by the predecessor product. Start with a new
+`RIVET_DB_PATH`; an unmarked database is refused before it is changed.
+
+* **Minecraft servers** (preview): Paper, Purpur, Vanilla, Fabric, Forge,
+  NeoForge, Folia and Velocity from versioned server-type blueprints, with
+  version lists, checksum-verified downloads, automatic Java selection,
+  graceful console stops, player counts, port allocations, a Players page,
+  a `server.properties` editor, a Modrinth plugin/mod installer, task-chain
+  schedules with console commands, and an administrator-managed blueprint
+  catalog (`docs/game-servers.md`)
+* **Steam game servers** (preview): Valheim, Rust and Project Zomboid
+  installed with an anonymous SteamCMD login, Steam A2S player status, and a
+  Pterodactyl egg importer that turns eggs into reviewable blueprint drafts
+* **Remote nodes** (preview): enroll `rivet-agent` hosts with one-use tokens,
+  route lifecycle, console, stats, files, SFTP, packages, AI file tools and
+  diagnostics, add-ons, backups, GitHub deployments (pushes during an outage
+  run on reconnect), GitHub publish/push and Minecraft queries over outbound
+  mTLS, with node telemetry and a free-disk check before staging; choose a
+  node during creation, and drain, disable, revoke or delete nodes from
+  Administration; panel and agents must be upgraded together (agent protocol
+  7, `docs/agents.md`)
 * Bot lifecycle (start / stop / restart / delete) driven by persisted desired
   state and a reconciler, safe across crashes and lost Docker responses
 * Resource-capped, hardened containers (memory, CPU, PIDs, read-only root,
@@ -19,7 +43,10 @@ static binary, Docker for isolation.
 * Node telemetry with bounded retention; SQLite-aware backup and restore
 * Users with ownership checks, Argon2id, CSRF-protected cookie sessions
 * Sign-in with GitHub and Discord (linkable, self-hostable OAuth; `docs/oauth.md`)
+* Single sign-on through any OpenID Connect provider, passkeys (passwordless or as the second step), and scoped API clients for the whole API (`docs/auth.md`)
 * Optional email through Mailgun: password reset, invitations, bot alerts and security notices (`docs/email.md`) and an admin Announcements tab for HTML news and policy updates; off by default and free at idle
+* In-panel notifications (bell, per-category in-panel/email preferences) and support tickets with staff assignment and internal notes (`docs/support.md`)
+* Knowledgebase / help center at `/help` (Markdown articles, categories, public / signed-in / staff visibility, optional public access, related articles on new tickets) and a public status page at `/status` (selected components under public names, incidents, maintenance, 90-day uptime bars) (`docs/support.md`)
 * Quickstart templates (discord.js, discord.py, Poise, JDA, DiscordGo) and
   GitHub deployments from **any public repository** (no GitHub connection
   needed) with auto-deploy on push or by polling
@@ -37,6 +64,10 @@ static binary, Docker for isolation.
 * Team **workspaces** with owner/admin/developer/viewer roles on top of per-bot
   sharing, and administrator views of every workspace, account and deployment
   (`docs/workspaces.md`)
+* **Custom account roles** built from named permissions, enforced by the
+  server on every route, with delegated administration and audited changes;
+  **email verification** with one-use links and an optional restriction for
+  unverified accounts (`docs/permissions.md`)
 * **Static site hosting** on a separate listener: ZIP or GitHub publishing,
   instant rollback, editable site addresses, several sites domains (added at
   runtime with DNS verification), custom domains with DNS verification,
@@ -52,25 +83,26 @@ static binary, Docker for isolation.
   Discord notifications (`docs/features.md`)
 
 Architecture, deployment, API, and feature guides are collected in [`docs/`](docs/README.md).
-Phase 1 is a **single-host** platform: no multi-host scheduling, HA, billing,
-interactive shell, or standalone runner daemon (`cmd/botrunner`).
+Remote placement is explicit and administrator-controlled; there is no
+automatic capacity scheduler, live migration, HA, billing or interactive
+shell. Several file-backed features remain local-only; see `docs/agents.md`.
 
 ## Build and run
 
 ```sh
-make build      # npm ci + static UI build -> internal/webui/dist -> bin/botpanel
-make run-dev    # BOTPANEL_ENV=development: data under ./.dev-data, dev key auto-created
+make build      # web UI plus bin/rivetpanel and bin/rivet-agent
+make run-dev    # RIVET_ENV=development: data under ./.dev-data, dev key auto-created
 make check      # go vet, go test, svelte-check
 make integration  # real-Docker tests, needs a DISPOSABLE daemon (see the Makefile)
 ```
 
-Requires Go >= 1.27 and Node >= 22 to build (module path is the placeholder
-`botpanel`). Production install: `docs/deployment.md`. First run:
+Requires Go >= 1.27 and Node >= 22 to build (module path
+`github.com/xenycx/rivetpanel`). Production install: `docs/deployment.md`. First run:
 
 ```sh
-botpanel keygen                          # encryption key (kept outside the database)
-botpanel create-admin you@example.com    # hidden password prompt
-botpanel                                 # serve on BOTPANEL_LISTEN (default 127.0.0.1:8080)
+rivetpanel keygen                          # encryption key (kept outside the database)
+rivetpanel create-admin you@example.com    # hidden password prompt
+rivetpanel                                 # serve on RIVET_LISTEN (default 127.0.0.1:8080)
 ```
 
 Other commands: `backup`, `backup-verify`, `restore`, `verify` (`docs/backup.md`).
@@ -78,7 +110,7 @@ Other commands: `backup`, `backup-verify`, `restore`, `verify` (`docs/backup.md`
 ### Run the published container
 
 ```sh
-docker pull ghcr.io/xenycx/botforge:latest
+docker pull ghcr.io/xenycx/rivetpanel:latest
 docker compose up -d
 ```
 
@@ -87,18 +119,22 @@ See [the container guide](docs/container.md) before mounting the Docker socket.
 ## Documentation
 
 Start at the [documentation index](docs/README.md). The project home is
-[github.com/xenycx/botforge](https://github.com/xenycx/botforge).
+[github.com/xenycx/rivetpanel](https://github.com/xenycx/rivetpanel).
 
 * `docs/architecture.md`: state model, reconciliation, console semantics
 * `docs/isolation.md`: what containers get, the evidence, and **what is not provided**
 * `docs/backup.md`, `docs/deployment.md`, `docs/footprint.md`
 * `docs/features.md`: every panel feature, its limits and what it does not do
 * `docs/workspaces.md`: team workspaces, roles and administrator oversight
+* `docs/permissions.md`: account roles, the permission catalog, delegated administration and email verification
 * `docs/sites.md`: static site hosting, custom domains, DNS and reverse proxy setup
+* `docs/agents.md`: remote-node installation, enrollment, placement, certificate lifecycle and limits
 * [CHANGELOG.md](CHANGELOG.md): versioned release history
 * [docs/implementation-status.md](docs/implementation-status.md): completed and remaining platform-overhaul work
 * `docs/oauth.md`: GitHub/Discord sign-in setup, Cloudflare, troubleshooting
+* `docs/auth.md`: OpenID Connect single sign-on, passkeys and API clients
 * `docs/email.md`: Mailgun setup, what is emailed, security properties and limits
+* `docs/support.md`: notifications, preferences, support tickets, the knowledgebase, the status page and their authorization rules
 
 ## Validation (2026-09-30, Linux 7.2.5 x86_64, Go 1.27.1, Node 26.8.1)
 
@@ -124,7 +160,15 @@ not enforced (Docker has no native cap).
 
 ## Known limitations
 
-* **Egress, admission control and disk quotas are not enforced by BotForge**;
+* Game servers are Minecraft Java plus three SteamCMD games (anonymous
+  downloads only; no Bedrock, mounts, FastDL or subdomains). The Pterodactyl
+  egg importer does not map yaml/json/xml config edits. Steam status queries
+  work only for servers on the panel's own node. They can run on remote
+  nodes; their backups and Modrinth installs (verified at the panel, then
+  streamed to the node) work through the agent, and the node's agent checks
+  that a port is free before it is allocated or the server starts (a check,
+  not a reservation; agent protocol 8).
+* **Egress, admission control and disk quotas are not enforced by RivetPanel**;
   see `docs/isolation.md` before hosting untrusted users. The firewall example
   there was not run in the test environment.
 * The panel holds the Docker socket (root-equivalent). Its systemd sandbox
@@ -149,7 +193,7 @@ not enforced (Docker has no native cap).
   diffs with undo.
 * Administrator tools: a Host page with live and historical CPU, memory, load,
   disk and network charts, per-bot resource use, storage, Docker and process
-  details and the panel's own log; an Environment page that edits `BOTPANEL_`
+  details and the panel's own log; an Environment page that edits `RIVET_`
   variables from the browser (applied at the next restart); and a Ctrl+K "Go to"
   palette that finds pages, settings, variables, bots, sites, people, chats and
   actions. It cannot change startup commands, deploy, publish sites or

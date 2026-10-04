@@ -16,11 +16,11 @@ import (
 	"testing"
 	"time"
 
-	"botpanel/internal/addons"
-	"botpanel/internal/domain"
-	"botpanel/internal/filesystem"
-	"botpanel/internal/github"
-	"botpanel/internal/service"
+	"github.com/xenycx/rivetpanel/internal/addons"
+	"github.com/xenycx/rivetpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/filesystem"
+	"github.com/xenycx/rivetpanel/internal/github"
+	"github.com/xenycx/rivetpanel/internal/service"
 )
 
 func TestAddonsAPI(t *testing.T) {
@@ -57,7 +57,7 @@ func TestAddonsAPI(t *testing.T) {
 	var envs struct{ Env []struct{ Name string } }
 	json.Unmarshal(c.mustStatus(200, "GET", base+"/env", nil), &envs)
 	for _, v := range envs.Env {
-		if strings.HasPrefix(v.Name, "BOTPANEL_ADDON_") {
+		if strings.HasPrefix(v.Name, "RIVET_ADDON_") {
 			t.Fatalf("password listed: %+v", envs)
 		}
 	}

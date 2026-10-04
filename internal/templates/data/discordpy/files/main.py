@@ -5,7 +5,7 @@ import sys
 import discord
 from discord import app_commands
 
-from botpanel import BotPanel
+from rivetpanel import RivetPanel
 
 token = os.environ.get("DISCORD_TOKEN")
 if not token:
@@ -16,7 +16,7 @@ class Bot(discord.Client):
     def __init__(self) -> None:
         super().__init__(intents=discord.Intents.default())
         self.tree = app_commands.CommandTree(self)
-        self.panel = BotPanel(self)  # no-op until you generate a key on the Analytics tab
+        self.panel = RivetPanel(self)  # no-op until you generate a key on the Analytics tab
 
     async def setup_hook(self) -> None:
         await self.tree.sync()

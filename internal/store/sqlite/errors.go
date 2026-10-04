@@ -5,7 +5,7 @@ import (
 	"errors"
 	"strings"
 
-	"botpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/domain"
 )
 
 func mapErr(err error) error {

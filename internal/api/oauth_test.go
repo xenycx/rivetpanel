@@ -11,10 +11,10 @@ import (
 	"strings"
 	"testing"
 
-	"botpanel/internal/domain"
-	"botpanel/internal/oauth"
-	"botpanel/internal/secrets"
-	"botpanel/internal/service"
+	"github.com/xenycx/rivetpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/oauth"
+	"github.com/xenycx/rivetpanel/internal/secrets"
+	"github.com/xenycx/rivetpanel/internal/service"
 )
 
 // fakeGitHub serves the three GitHub endpoints the provider calls.
@@ -136,7 +136,7 @@ func TestOAuthDisabledWhenNotConfigured(t *testing.T) {
 		t.Fatalf("status %d", resp.StatusCode)
 	}
 	_, body := c.req("GET", "/api/v1/auth/providers", nil)
-	if strings.TrimSpace(string(body)) != `{"providers":[]}` {
+	if strings.TrimSpace(string(body)) != `{"oidc":[],"passkeys":false,"providers":[]}` {
 		t.Fatalf("providers: %s", body)
 	}
 }
@@ -170,9 +170,15 @@ func TestOAuthSignupLoginAndTokenSealing(t *testing.T) {
 		t.Fatal("PKCE verifier not sent to the token endpoint")
 	}
 	c := &client{e: e, cookie: tok}
-	var me struct{ User struct{ Email, Role string } }
+	var me struct {
+		User struct {
+			Email, Role   string
+			EmailVerified bool `json:"email_verified"`
+		}
+	}
 	json.Unmarshal(c.mustStatus(200, "GET", "/api/v1/auth/me", nil), &me)
-	if me.User.Email != "octo@example.com" || me.User.Role != "user" {
+	// The provider-verified address counts as verified.
+	if me.User.Email != "octo@example.com" || me.User.Role != "user" || !me.User.EmailVerified {
 		t.Fatalf("me: %+v", me)
 	}
 

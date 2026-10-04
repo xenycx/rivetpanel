@@ -14,7 +14,7 @@ import (
 
 	"go.yaml.in/yaml/v3"
 
-	"botpanel/sdk"
+	"github.com/xenycx/rivetpanel/sdk"
 )
 
 //go:embed all:data
@@ -131,7 +131,7 @@ func Files(id string) ([]File, error) {
 	}
 	switch t.SDK {
 	case "js", "py", "rb":
-		name := map[string]string{"js": "botpanel.js", "py": "botpanel.py", "rb": "botpanel.rb"}[t.SDK]
+		name := map[string]string{"js": "rivetpanel.js", "py": "rivetpanel.py", "rb": "rivetpanel.rb"}[t.SDK]
 		b, err := sdk.FS.ReadFile(name)
 		if err != nil {
 			return nil, err

@@ -1,28 +1,27 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
-	import { session } from '$lib/session.svelte';
+	import { page } from '$app/state';
+	import { canAdminister, session } from '$lib/session.svelte';
+	import { adminLinks } from '$lib/adminNav';
 	import SubNav from '$lib/components/ui/SubNav.svelte';
 	let { children } = $props();
-	const links = [
-		{ href: '/admin/users', label: 'Users', icon: 'users' as const, match: '/admin/users/' },
-		{ href: '/admin/workspaces', label: 'Workspaces', icon: 'building' as const, match: '/admin/workspaces/' },
-		{ href: '/admin/sites', label: 'Sites and domains', icon: 'globe' as const },
-		{ href: '/admin/host', label: 'Host', icon: 'chart' as const },
-		{ href: '/admin/settings', label: 'Panel settings', icon: 'gear' as const },
-		{ href: '/admin/mail', label: 'Announcements', icon: 'send' as const },
-		{ href: '/admin/environment', label: 'Environment', icon: 'sliders' as const },
-		{ href: '/admin/diagnostics', label: 'Diagnostics', icon: 'shield' as const }
-	];
+	// Sections follow the account's role permissions; the server refuses the
+	// rest whatever the interface shows.
+	const links = $derived(session.user ? adminLinks() : []);
 	$effect(() => {
-		if (session.user && session.user.role !== 'admin') goto('/dashboard');
+		if (!session.user) return;
+		if (!canAdminister()) goto('/dashboard');
+		else if (links.length && !links.some((l) => page.url.pathname === l.href || (l.match && page.url.pathname.startsWith(l.match)))) goto(links[0].href);
 	});
 </script>
 
-{#if session.user?.role === 'admin'}
+{#if session.user && canAdminister()}
 	<header class="border-b border-rule-soft pb-5">
 		<p class="eyebrow">Administration</p>
 		<h1 class="mt-1 text-page">This installation<span class="text-action">.</span></h1>
-		<p class="mt-0.5 text-muted">Accounts, workspaces, hosted sites, the host and its health.</p>
+		<p class="mt-0.5 text-muted">
+			{#if session.user.role === 'admin'}Accounts, roles, workspaces, hosted sites, game servers, the host and its health.{:else}The parts of the administration your role ({session.user.role_name || 'custom'}) allows.{/if}
+		</p>
 	</header>
 	<div class="mt-6 flex flex-col gap-6 md:flex-row md:gap-10">
 		<SubNav {links} label="Administration sections" />

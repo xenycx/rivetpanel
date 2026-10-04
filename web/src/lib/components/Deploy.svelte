@@ -46,7 +46,7 @@
 	}
 
 	onMount(() => {
-		if (!session.features.deploy) return;
+		if (!available) return;
 		init();
 		const t = setInterval(() => {
 			now = Date.now();
@@ -155,11 +155,15 @@
 	const statusColor = { A: 'text-run', M: 'text-warn', D: 'text-fail' };
 	const fileMark = (s: string) => (s === 'added' ? 'A' : s === 'removed' ? 'D' : 'M');
 	const wanted = page.url.searchParams.get('op');
+	// Public repositories deploy without GitHub sign-in (features.public_repos);
+	// sign-in (features.deploy) adds private repositories, webhooks and publishing.
+	const available = $derived(session.features.deploy || session.features.public_repos);
+	const signIn = $derived(session.features.deploy);
 </script>
 
-{#if !session.features.deploy}
-	<EmptyState title="GitHub deployments are not set up">
-		<p>Deploying from GitHub needs GitHub sign-in to be configured on this panel (BOTPANEL_GITHUB_CLIENT_ID and _SECRET; see docs/oauth.md). Until then, upload code under Files or over SFTP.</p>
+{#if !available}
+	<EmptyState title="GitHub deployments are not available">
+		<p>This panel has no GitHub deployment service. Upload code under Files or over SFTP.</p>
 	</EmptyState>
 {:else if !loaded}
 	<Skeleton rows={3} label="Loading deployments" />
@@ -173,6 +177,9 @@
 				<div class="min-w-0 flex-1">
 					<p class="flex items-center gap-2 text-title font-semibold"><Icon name="github" /><span class="break-all">{link.full_name}</span></p>
 					<p class="text-muted">Branch <code>{link.branch}</code>{link.root_dir ? `, folder /${link.root_dir}` : ''}. {link.auto_deploy ? (link.hook_created ? 'Deploys on every push.' : link.polling ? 'Checks for new commits every few minutes.' : 'Waiting for the webhook to be added.') : 'Deploys when you ask.'}</p>
+					{#if link.pending_push_at_ms && !link.deploying}
+						<p class="mt-1 text-small text-warn">A push arrived {fmtAgo(link.pending_push_at_ms, now)} while this server's node was offline. The newest commit deploys when the node reconnects.</p>
+					{/if}
 					<p class="mt-2">
 						{#if link.deploying}
 							<span class="font-medium text-warn">Deploying now</span>{#if latest?.status === 'running'}: {latest.stage}{/if}
@@ -251,9 +258,11 @@
 		</section>
 	{/if}
 
-	<div class="mt-6">
-		<GitHubPublish {bot} {link} {conn} {admin} onqueued={() => load().catch(() => {})} />
-	</div>
+	{#if signIn}
+		<div class="mt-6">
+			<GitHubPublish {bot} {link} {conn} {admin} onqueued={() => load().catch(() => {})} />
+		</div>
+	{/if}
 	{#if !link && history.some((o) => o.kind === 'publish')}
 		<ul class="mt-4 list-card">
 			{#each history.filter((o) => o.kind === 'publish').slice(0, 3) as op (op.id)}<OperationRow {op} {now} />{/each}
@@ -271,7 +280,9 @@
 				<p class="mt-1 max-w-prose text-muted">Link a repository to download a branch into this bot's workspace. Nothing from the repository runs on the host; the bot builds it in its own container.</p>
 			{/if}
 			{#if settingsOpen}
-				{#if !conn?.linked}
+				{#if !signIn}
+					<Notice class="mt-3">Any public repository works; the branch is checked every few minutes. Private repositories, instant webhook deployments and publishing need GitHub sign-in to be configured on this panel (see docs/oauth.md).</Notice>
+				{:else if !conn?.linked}
 					<Notice class="mt-3">Any public repository works. To use private ones and have pushes deploy instantly through a webhook, <a href="/settings/connected-accounts">connect GitHub</a>; otherwise the branch is checked every few minutes.</Notice>
 				{:else if !conn.repo_access}
 					<Notice class="mt-3">Only public repositories are available until you grant repository access in <a href="/settings/connected-accounts">Connected accounts</a>. That also lets the panel add the webhook for you.</Notice>

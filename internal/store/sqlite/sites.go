@@ -5,7 +5,7 @@ import (
 	"database/sql"
 	"errors"
 
-	"botpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/domain"
 )
 
 const siteCols = `s.id, s.workspace_id, s.owner_id, s.name, s.slug, s.spa, s.clean_urls, s.current_release, s.disabled,
@@ -372,7 +372,7 @@ func (db *DB) EnsureBaseDomains(ctx context.Context, seeds []domain.SiteBaseDoma
 	}
 	defer tx.Rollback()
 	if len(seeds) > 0 {
-		// A configured primary follows BOTPANEL_SITES_BASE_URL: when its host
+		// A configured primary follows RIVET_SITES_BASE_URL: when its host
 		// changes, the domain (and every site under it) moves along, as it did
 		// before base domains could be managed.
 		seeded := map[string]bool{}

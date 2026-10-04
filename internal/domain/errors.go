@@ -44,3 +44,40 @@ func (e *CapacityError) Error() string {
 }
 
 func mib(n int64) string { return fmt.Sprintf("%d MiB", n>>20) }
+
+// PermissionError is a 403 caused by a missing role permission; it matches
+// ErrForbidden and its message names the permission.
+type PermissionError struct {
+	Perm       string
+	Unverified bool // withheld until the email address is verified
+	Client     bool // the API client does not carry it
+}
+
+func (e *PermissionError) Error() string {
+	if e.Client {
+		return "this API client does not carry the " + e.Perm + " permission"
+	}
+	if e.Unverified {
+		return "verify your email address to use this (" + e.Perm + ")"
+	}
+	return "your role does not include the " + e.Perm + " permission"
+}
+
+func (e *PermissionError) Is(target error) bool { return target == ErrForbidden }
+
+// Denied explains why u lacks p.
+func Denied(u User, p string) error {
+	if u.Client != nil && !contains(u.Client.Permissions, p) {
+		return &PermissionError{Perm: p, Client: true}
+	}
+	return &PermissionError{Perm: p, Unverified: !u.IsAdmin() && contains(u.Withheld, p) && contains(u.RolePermissions(), p)}
+}
+
+func contains(xs []string, x string) bool {
+	for _, v := range xs {
+		if v == x {
+			return true
+		}
+	}
+	return false
+}

@@ -6,7 +6,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"botpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/domain"
 )
 
 // MaxOwnedWorkspaces bounds the team workspaces one account may own.
@@ -28,12 +28,19 @@ func (s *BotService) workspaceRole(ctx context.Context, actor domain.User, id st
 	if _, err := s.Store.GetWorkspace(ctx, id); err != nil {
 		return "", err
 	}
+	if !actor.Client.AllowsWorkspace(id) {
+		return "", &domain.ScopeError{What: "workspace"}
+	}
 	if actor.IsAdmin() {
 		return domain.WorkspaceOwner, nil
 	}
 	role, err := s.Store.WorkspaceRole(ctx, id, actor.ID)
 	if err != nil {
 		return "", err
+	}
+	// A delegated workspaces.view permission reads any workspace as a viewer.
+	if role == "" && actor.Can(domain.PermWorkspacesView) {
+		role = domain.WorkspaceViewer
 	}
 	if role == "" {
 		return "", domain.ErrNotFound
@@ -62,10 +69,14 @@ func (s *BotService) creatableWorkspace(ctx context.Context, actor domain.User, 
 		if err != nil {
 			return "", err
 		}
+		if !actor.Client.AllowsWorkspace(w.ID) {
+			return "", &domain.ScopeError{What: "workspace"}
+		}
 		return w.ID, nil
 	}
 	if _, err := s.requireWorkspaceRole(ctx, actor, id, domain.WorkspaceDeveloper); err != nil {
-		if errors.Is(err, domain.ErrForbidden) {
+		var se *domain.ScopeError
+		if errors.Is(err, domain.ErrForbidden) && !errors.As(err, &se) {
 			return "", domain.Invalid("viewers cannot create anything in that workspace")
 		}
 		return "", err
@@ -75,12 +86,22 @@ func (s *BotService) creatableWorkspace(ctx context.Context, actor domain.User, 
 
 // ListWorkspaces returns the workspaces the actor is a member of.
 func (s *BotService) ListWorkspaces(ctx context.Context, actor domain.User) ([]domain.WorkspaceSummary, error) {
-	return s.Store.ListWorkspacesForUser(ctx, actor.ID)
+	all, err := s.Store.ListWorkspacesForUser(ctx, actor.ID)
+	if err != nil || !actor.Client.Scoped() {
+		return all, err
+	}
+	out := all[:0]
+	for _, w := range all {
+		if actor.Client.AllowsWorkspace(w.ID) {
+			out = append(out, w)
+		}
+	}
+	return out, nil
 }
 
 // ListAllWorkspaces returns every workspace (administrators only).
 func (s *BotService) ListAllWorkspaces(ctx context.Context, actor domain.User) ([]domain.WorkspaceSummary, error) {
-	if !actor.IsAdmin() {
+	if !actor.Can(domain.PermWorkspacesView) {
 		return nil, domain.ErrForbidden
 	}
 	return s.Store.ListAllWorkspaces(ctx, actor.ID)
@@ -166,7 +187,13 @@ func (s *BotService) AddWorkspaceMember(ctx context.Context, actor domain.User, 
 	if err != nil {
 		return domain.WorkspaceMember{}, err
 	}
-	return s.setMember(ctx, actor, id, target, role)
+	m, err := s.setMember(ctx, actor, id, target, role)
+	if err == nil {
+		if w, err := s.Store.GetWorkspace(ctx, id); err == nil {
+			s.noticeAccess(ctx, actor, target.ID, actorName(actor)+" added you to the workspace "+w.Name, "Your role: "+role+".", "/settings/workspaces/"+id)
+		}
+	}
+	return m, err
 }
 
 // SetWorkspaceMemberRole changes a member's role.

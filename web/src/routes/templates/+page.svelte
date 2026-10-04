@@ -21,7 +21,7 @@
 	const accent: Record<string, string> = { JavaScript: '#f0c14b', TypeScript: '#4a8fe7', Python: '#4b8bbe', Rust: '#e2753a', Java: '#e76f51', Go: '#29beb0', Ruby: '#d6453d' };
 </script>
 
-<svelte:head><title>Templates · BotForge</title></svelte:head>
+<svelte:head><title>Templates · RivetPanel</title></svelte:head>
 
 <section class="card card-glow p-6 sm:p-8">
 	<p class="eyebrow">Templates</p>

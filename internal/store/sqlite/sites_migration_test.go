@@ -8,8 +8,8 @@ import (
 	"testing"
 	"testing/fstest"
 
-	"botpanel/internal/domain"
-	"botpanel/internal/migrations"
+	"github.com/xenycx/rivetpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/migrations"
 )
 
 // 0035 rebuilds sites, which releases, custom domains and assistant chats
@@ -122,7 +122,7 @@ func TestSiteBaseDomainsMigrationKeepsSites(t *testing.T) {
 		t.Fatalf("deleted a domain sites use: %v", err)
 	}
 
-	// When BOTPANEL_SITES_BASE_URL's host changes, the configured primary
+	// When RIVET_SITES_BASE_URL's host changes, the configured primary
 	// follows it and its sites move along; an extra no longer listed stays.
 	if err := db.EnsureBaseDomains(ctx, []domain.SiteBaseDomain{{ID: "d9", Domain: "sites.example.org", Token: "0123456789abcdef"}}, 7); err != nil {
 		t.Fatal(err)

@@ -9,9 +9,9 @@ import (
 
 	"github.com/google/uuid"
 
-	"botpanel/internal/domain"
-	"botpanel/internal/oplog"
-	"botpanel/internal/store/sqlite"
+	"github.com/xenycx/rivetpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/oplog"
+	"github.com/xenycx/rivetpanel/internal/store/sqlite"
 )
 
 // OpStore is the persistence surface of operations.
@@ -208,7 +208,7 @@ func (o *Operations) ForWorkspace(ctx context.Context, actor domain.User, worksp
 // ForOwner returns recent operations on the bots an account owns
 // (administrators only).
 func (o *Operations) ForOwner(ctx context.Context, actor domain.User, ownerID string, limit int) ([]domain.Operation, error) {
-	if !actor.IsAdmin() {
+	if !actor.Can(domain.PermUsersView) {
 		return nil, domain.ErrForbidden
 	}
 	return o.Store.ListOperations(ctx, sqlite.OperationFilter{OwnerID: ownerID, Limit: limit})

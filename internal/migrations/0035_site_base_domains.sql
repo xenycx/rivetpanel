@@ -1,12 +1,12 @@
--- botpanel:foreign-keys-off
+-- rivetpanel:foreign-keys-off
 -- Sites can be served under more than one base domain: a site's address is
 -- <slug>.<its base domain>, and a slug is unique per base domain instead of
 -- across the panel. Base domains come from the configuration
--- (BOTPANEL_SITES_BASE_URL, BOTPANEL_SITES_DOMAINS) or are added by an
+-- (RIVET_SITES_BASE_URL, RIVET_SITES_DOMAINS) or are added by an
 -- administrator, and serve only after DNS ownership is verified.
 --
 -- The configured domains are inserted at start-up, which also assigns every
--- existing site to the primary domain (the host of BOTPANEL_SITES_BASE_URL):
+-- existing site to the primary domain (the host of RIVET_SITES_BASE_URL):
 -- SQL cannot read the environment.
 CREATE TABLE site_base_domains (
     id                  TEXT PRIMARY KEY NOT NULL,
@@ -19,7 +19,7 @@ CREATE TABLE site_base_domains (
     dns_target          TEXT NOT NULL DEFAULT '' CHECK (length(dns_target) <= 253),
     -- Listed in the environment file: trusted without a TXT record.
     from_config         INTEGER NOT NULL DEFAULT 0 CHECK (from_config IN (0, 1)),
-    -- Expected value of the _botforge-domain TXT record.
+    -- Expected value of the _rivetpanel-domain TXT record.
     token               TEXT NOT NULL CHECK (length(token) BETWEEN 16 AND 64),
     verified_at_ms      INTEGER,
     last_checked_at_ms  INTEGER,

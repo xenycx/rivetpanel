@@ -15,10 +15,10 @@ import (
 	"syscall"
 	"time"
 
-	"botpanel/internal/domain"
-	"botpanel/internal/logbuf"
-	"botpanel/internal/runner"
-	"botpanel/internal/telemetry"
+	"github.com/xenycx/rivetpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/logbuf"
+	"github.com/xenycx/rivetpanel/internal/runner"
+	"github.com/xenycx/rivetpanel/internal/telemetry"
 )
 
 // BotStore lists bots.
@@ -118,7 +118,7 @@ type MemoryFacts struct {
 	NodeBudget int64 `json:"node_budget"`
 }
 
-// PanelFacts is the BotForge process itself.
+// PanelFacts is the RivetPanel process itself.
 type PanelFacts struct {
 	Version    string    `json:"version"`
 	GoVersion  string    `json:"go_version"`

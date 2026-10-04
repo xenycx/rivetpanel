@@ -8,8 +8,8 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"botpanel/internal/domain"
-	"botpanel/internal/runtimes"
+	"github.com/xenycx/rivetpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/runtimes"
 )
 
 const (
@@ -120,7 +120,7 @@ func validateEnvName(name string, system bool) error {
 		return domain.Invalid(fmt.Sprintf("invalid environment variable name %q", name))
 	}
 	up := strings.ToUpper(name)
-	if name == "PATH" || strings.HasPrefix(up, "LD_") || (!system && strings.HasPrefix(up, "BOTPANEL_")) {
+	if name == "PATH" || strings.HasPrefix(up, "LD_") || (!system && strings.HasPrefix(up, "RIVET_")) {
 		return domain.Invalid(fmt.Sprintf("environment variable %q is reserved", name))
 	}
 	return nil

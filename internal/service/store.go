@@ -5,7 +5,8 @@ package service
 import (
 	"context"
 
-	"botpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/store/sqlite"
 )
 
 // Store is the persistence surface the services need.
@@ -16,6 +17,17 @@ type Store interface {
 	ListUsers(ctx context.Context) ([]domain.User, error)
 	SetUserDisabled(ctx context.Context, id string, disabled bool, nowMS int64) error
 	SetUserRole(ctx context.Context, id, role string, nowMS int64) error
+	SetUserCustomRole(ctx context.Context, id, roleID string, nowMS int64) error
+	ListRoles(ctx context.Context) ([]domain.Role, error)
+	GetRole(ctx context.Context, id string) (domain.Role, error)
+	CreateRole(ctx context.Context, r domain.Role) error
+	UpdateRole(ctx context.Context, r domain.Role) error
+	DeleteRole(ctx context.Context, id string) error
+	CreateEmailVerification(ctx context.Context, id, userID, email string, hash []byte, nowMS, expiresMS, cooldownMS int64) error
+	PendingEmailVerification(ctx context.Context, userID string, nowMS int64) (string, int64, error)
+	ConsumeEmailVerification(ctx context.Context, hash []byte, nowMS int64) (userID, oldEmail, newEmail string, err error)
+	SetUserEmail(ctx context.Context, id, email string, nowMS int64) error
+	SetEmailVerified(ctx context.Context, id string, verified bool, nowMS int64) error
 	UpdateProfile(ctx context.Context, id, name string, avatar []byte, replaceAvatar bool, nowMS int64) error
 	BotCountsByOwner(ctx context.Context) (map[string]int, error)
 
@@ -59,6 +71,9 @@ type Store interface {
 	ListAutoDeployRepos(ctx context.Context, fullName string) ([]domain.GitHubRepo, error)
 	ListPollingRepos(ctx context.Context, limit int) ([]domain.GitHubRepo, error)
 	RecordDeploy(ctx context.Context, botID string, sha *string, errMsg *string, nowMS int64) error
+	SetPendingPush(ctx context.Context, botID, sha, link string, nowMS int64) error
+	TakePendingPushes(ctx context.Context, nodeID string) ([]sqlite.PendingPush, error)
+	GetPendingPush(ctx context.Context, botID string) (sqlite.PendingPush, error)
 	SetBotPorts(ctx context.Context, botID string, gen int64, ports []domain.BotPort, nowMS int64) error
 	SetBotTelemetryKey(ctx context.Context, botID string, hash []byte, nowMS int64) error
 

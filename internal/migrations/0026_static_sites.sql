@@ -9,7 +9,7 @@ CREATE TABLE sites (
     owner_id            TEXT NOT NULL
                         REFERENCES users(id),
     name                TEXT NOT NULL CHECK (length(name) BETWEEN 1 AND 64),
-    -- <slug>.<BOTPANEL_SITES_DOMAIN> is the default hostname.
+    -- <slug>.<RIVET_SITES_DOMAIN> is the default hostname.
     slug                TEXT NOT NULL UNIQUE
                         CHECK (length(slug) BETWEEN 3 AND 40 AND slug NOT GLOB '*[^a-z0-9-]*'),
     spa                 INTEGER NOT NULL DEFAULT 0 CHECK (spa IN (0, 1)),
@@ -46,7 +46,7 @@ CREATE TABLE site_domains (
     domain              TEXT PRIMARY KEY NOT NULL CHECK (length(domain) BETWEEN 4 AND 253),
     site_id             TEXT NOT NULL
                         REFERENCES sites(id) ON DELETE CASCADE,
-    -- Expected value of the _botforge-verify TXT record.
+    -- Expected value of the _rivetpanel-verify TXT record.
     token               TEXT NOT NULL CHECK (length(token) BETWEEN 16 AND 64),
     verified_at_ms      INTEGER,
     last_checked_at_ms  INTEGER,

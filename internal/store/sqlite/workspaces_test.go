@@ -9,8 +9,8 @@ import (
 	"testing"
 	"testing/fstest"
 
-	"botpanel/internal/domain"
-	"botpanel/internal/migrations"
+	"github.com/xenycx/rivetpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/migrations"
 )
 
 // upTo returns the migrations up to and including version max.
@@ -47,7 +47,12 @@ func TestWorkspaceMigrationBackfills(t *testing.T) {
 	if err := db.Migrate(ctx, upTo(t, 23)); err != nil {
 		t.Fatal(err)
 	}
-	if err := db.EnsureLocalNode(ctx); err != nil {
+	// This fixture is deliberately held at schema 23, before locations exist.
+	// Seed the node using that historical schema rather than the current store
+	// helper, which correctly targets the current schema only.
+	if _, err := db.ExecContext(ctx, `INSERT INTO nodes
+		(id, name, transport, endpoint, enabled, created_at_ms, updated_at_ms)
+		VALUES (?, ?, 'local', NULL, 1, 1, 1)`, domain.LocalNodeID, domain.LocalNodeName); err != nil {
 		t.Fatal(err)
 	}
 	for _, q := range []string{

@@ -4,6 +4,7 @@
 	const links = [
 		{ href: '/settings/profile', label: 'Profile', icon: 'users' as const },
 		{ href: '/settings/appearance', label: 'Appearance', icon: 'sliders' as const },
+		{ href: '/settings/notifications', label: 'Notifications', icon: 'bell' as const },
 		{ href: '/settings/workspaces', label: 'Workspaces', icon: 'building' as const, match: '/settings/workspaces/' },
 		{ href: '/settings/connected-accounts', label: 'Connected accounts', icon: 'link' as const },
 		{ href: '/settings/security', label: 'Security', icon: 'shield' as const },

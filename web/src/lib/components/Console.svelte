@@ -14,10 +14,12 @@
 	let { bot }: { bot: Bot } = $props();
 	// Input needs the power permission (the server re-checks it on every line).
 	const canInput = $derived(can(bot, Perm.power));
+	const noun = $derived(bot.kind === 'game' ? 'server' : 'bot');
 
 	let host: HTMLDivElement | undefined = $state();
 	let link = $state<'connecting' | 'live' | 'reconnecting' | 'ended'>('connecting');
 	let notice = $state('');
+	let offlineNotice = false; // notice is the "node offline" message
 	let line = $state('');
 	let paused = $state(false);
 	let dropped = $state(0);
@@ -97,6 +99,12 @@
 						break;
 					case 'error':
 						notice = m.message ?? 'The console reported an error.';
+						offlineNotice = m.code === 'node_offline';
+						break;
+					case 'node':
+						// The node's agent is back: output resumes in this session.
+						if (m.code === 'online' && offlineNotice) notice = '';
+						offlineNotice = false;
 						break;
 				}
 			};
@@ -116,6 +124,10 @@
 
 		sendInput = (text) => {
 			if (ws?.readyState !== WebSocket.OPEN) return false;
+			// An earlier refusal (for example "not running" during a restart)
+			// must not stay on screen after a later line is sent; a new
+			// refusal arrives as its own error message.
+			if (link === 'live') notice = '';
 			ws.send(JSON.stringify({ type: 'stdin', data: text }));
 			return true;
 		};
@@ -208,7 +220,7 @@
 
 {#if !session.features.console}
 	<EmptyState title="Live output needs the Docker runner">
-		<p>This panel runs without Docker (BOTPANEL_RUNNER_MODE=none), so bots cannot run here and there is no output to show.</p>
+		<p>This panel runs without Docker (RIVET_RUNNER_MODE=none), so bots cannot run here and there is no output to show.</p>
 	</EmptyState>
 {:else}
 	<!-- A terminal window: title bar with the stream's state and tools, the
@@ -228,22 +240,22 @@
 				<button class="btn btn-quiet btn-icon btn-sm !text-term-ink/70 hover:!bg-white/10 hover:!text-term-ink" aria-pressed={paused} onclick={togglePause} title={paused ? 'Resume output' : 'Hold new output so you can read'} aria-label={paused ? 'Resume output' : 'Pause output'}><Icon name={paused ? 'play' : 'pause'} size={13} /></button>
 				<button class="btn btn-quiet btn-icon btn-sm !text-term-ink/70 hover:!bg-white/10 hover:!text-term-ink" onclick={copy} title="Copy output" aria-label="Copy output"><Icon name={copied ? 'check' : 'copy'} size={13} /></button>
 				<button class="btn btn-quiet btn-icon btn-sm !text-term-ink/70 hover:!bg-white/10 hover:!text-term-ink" onclick={() => downloadAll()} title="Download output" aria-label="Download output"><Icon name="download" size={13} /></button>
-				<button class="btn btn-quiet btn-icon btn-sm !text-term-ink/70 hover:!bg-white/10 hover:!text-term-ink" onclick={() => clearView()} title="Clear this view (the bot is not affected)" aria-label="Clear view"><Icon name="trash" size={13} /></button>
+				<button class="btn btn-quiet btn-icon btn-sm !text-term-ink/70 hover:!bg-white/10 hover:!text-term-ink" onclick={() => clearView()} title="Clear this view (the {noun} is not affected)" aria-label="Clear view"><Icon name="trash" size={13} /></button>
 			</div>
 		</div>
 		<div bind:this={host} class="h-[max(20rem,calc(100dvh-30rem))] overflow-hidden p-2" aria-label="Bot output" role="log"></div>
 		{#if canInput}
 			<form class="flex items-center gap-2 border-t border-white/8 bg-black/20 px-3.5 py-1.5" onsubmit={send}>
-				<label class="sr-only" for="stdin">Send a line to the bot</label>
+				<label class="sr-only" for="stdin">{bot.kind === 'game' ? 'Send a console command' : 'Send a line to the bot'}</label>
 				<span class="font-mono text-term-ink/50 select-none" aria-hidden="true">›</span>
-				<input id="stdin" class="min-h-9 min-w-0 flex-1 bg-transparent font-mono text-[.8125rem] text-term-ink outline-none placeholder:text-term-ink/40" placeholder="Send a line to the bot’s standard input" autocomplete="off" spellcheck="false" bind:value={line} disabled={link !== 'live'} />
+				<input id="stdin" class="min-h-9 min-w-0 flex-1 bg-transparent font-mono text-[.8125rem] text-term-ink outline-none placeholder:text-term-ink/40" placeholder={bot.kind === 'game' ? 'Type a command, for example: say Hello' : 'Send a line to the bot’s standard input'} autocomplete="off" spellcheck="false" bind:value={line} disabled={link !== 'live'} />
 				<button class="btn btn-quiet btn-icon btn-sm !text-term-ink/70 hover:!bg-white/10 hover:!text-term-ink" disabled={link !== 'live' || line === ''} aria-label="Send" title="Send"><Icon name="send" size={14} /></button>
 			</form>
 		{/if}
 	</div>
 	{#if notice}<p class="mt-2 text-small text-warn" role="status">{notice}</p>{/if}
 	<p class="mt-2 text-small text-muted">
-		{#if canInput}Input goes to the bot process, not to a shell. One console at a time can send input.{:else}You can watch the output. Sending input needs the start and stop permission.{/if}
-		Closing this page does not stop the bot.
+		{#if canInput}{bot.kind === 'game' ? 'Commands go to the server console, not to a shell (no leading slash needed).' : 'Input goes to the bot process, not to a shell.'} One console at a time can send input.{:else}You can watch the output. Sending input needs the start and stop permission.{/if}
+		Closing this page does not stop the {noun}.
 	</p>
 {/if}

@@ -10,6 +10,7 @@
 	import Skeleton from '$lib/components/ui/Skeleton.svelte';
 	import SettingsSection from '$lib/components/ui/SettingsSection.svelte';
 	import TwoStep from '$lib/components/TwoStep.svelte';
+	import Passkeys from '$lib/components/Passkeys.svelte';
 
 	type Sess = { id: string; device: string; created_at_ms: number; last_seen_at_ms: number; expires_at_ms: number; current: boolean };
 	let sessions = $state<Sess[] | null>(null);
@@ -82,7 +83,7 @@
 	const deviceIcon = (d: string) => (/curl|python|go-http|bot|automation/i.test(d) ? 'terminal' : 'monitor');
 </script>
 
-<svelte:head><title>Security · BotForge</title></svelte:head>
+<svelte:head><title>Security · RivetPanel</title></svelte:head>
 
 <SettingsSection
 	title="Password"
@@ -119,6 +120,8 @@
 		{/if}
 	</div>
 </SettingsSection>
+
+{#if session.features.passkeys}<Passkeys />{/if}
 
 {#if session.features.mfa}<TwoStep />{/if}
 

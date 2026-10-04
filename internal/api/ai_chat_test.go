@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"botpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/domain"
 )
 
 type fakeLogs struct{ text string }
@@ -70,7 +70,7 @@ func TestAIChatFollowsThePageTheUserIsOn(t *testing.T) {
 	run := sendChat(t, admin, chat, "approval", "why is this broken?", map[string]any{"kind": "bot", "id": bot, "label": "spoofed name", "path": "/bots/" + bot + "?tab=files", "section": "files", "detail": "Viewing src/index.js"})
 	waitRun(t, admin, run, "completed")
 	prompt := systemPrompt(fp, 0)
-	for _, want := range []string{`scoped to bot "aibot"`, "files section", "Viewing src/index.js", "BotForge Assistant"} {
+	for _, want := range []string{`scoped to bot "aibot"`, "files section", "Viewing src/index.js", "RivetPanel Assistant"} {
 		if !strings.Contains(prompt, want) {
 			t.Fatalf("system prompt lacks %q:\n%s", want, prompt)
 		}

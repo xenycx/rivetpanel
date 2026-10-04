@@ -10,14 +10,19 @@
 ## Install
 
 ```sh
-make build                 # npm ci, static UI build, embedded into bin/botpanel
+make build                 # UI plus bin/rivetpanel and bin/rivet-agent
 sudo deploy/install.sh     # binary, directories, systemd units; creates no secrets
 ```
 
-Then follow the printed steps: create an encryption key (`botpanel keygen`),
-create the first admin (`botpanel create-admin EMAIL`, hidden password prompt
-or `BOTPANEL_ADMIN_PASSWORD`), start `botpanel` and `botpanel-backup.timer`.
+Then follow the printed steps: create an encryption key (`rivetpanel keygen`),
+create the first admin (`rivetpanel create-admin EMAIL`, hidden password prompt
+or `RIVET_ADMIN_PASSWORD`), start `rivetpanel` and `rivetpanel-backup.timer`.
 There is deliberately no unauthenticated first-run setup endpoint.
+
+To add a remote execution host, enable `agents=preview`, expose the raw TLS
+agent listener, copy the release to the node and run
+`sudo deploy/install-agent.sh`. Enrollment and firewall details are in
+[`agents.md`](agents.md).
 
 ## Reverse proxy and TLS
 
@@ -33,7 +38,7 @@ panel.example.com {
 }
 ```
 
-Behind a proxy on the same host, set `BOTPANEL_PROXY_HEADER` (`X-Forwarded-For`
+Behind a proxy on the same host, set `RIVET_PROXY_HEADER` (`X-Forwarded-For`
 for Caddy/nginx, `CF-Connecting-IP` for Cloudflare) so rate limits apply per
 client instead of per proxy. The header is trusted only from loopback peers, so
 the proxy must run on the same machine; without it all clients share the
@@ -42,38 +47,38 @@ proxy's address. Cloudflare Tunnel and `panel.xenyc.ge` specifics are in
 
 ## Configuration
 
-See `deploy/systemd/botpanel.env.example`. Notable: `BOTPANEL_CONTAINER_USER`
-(non-root uid:gid), `BOTPANEL_WORKSPACE_OWNER` (host uid:gid; differs under
-rootless/userns), `BOTPANEL_CONTAINER_NETWORK`, `BOTPANEL_MAX_BOT_MEMORY_BYTES`,
-`BOTPANEL_RUNTIMES_DIR` (override the six recipes, e.g. to pin digests or use a
-registry mirror), `BOTPANEL_KEY_DIR`/`BOTPANEL_ACTIVE_KEY_ID`.
+See `deploy/systemd/rivetpanel.env.example`. Notable: `RIVET_CONTAINER_USER`
+(non-root uid:gid), `RIVET_WORKSPACE_OWNER` (host uid:gid; differs under
+rootless/userns), `RIVET_CONTAINER_NETWORK`, `RIVET_MAX_BOT_MEMORY_BYTES`,
+`RIVET_RUNTIMES_DIR` (override the six recipes, e.g. to pin digests or use a
+registry mirror), `RIVET_KEY_DIR`/`RIVET_ACTIVE_KEY_ID`.
 
 ## Optional services and extra directories
 
 * **OAuth sign-in and GitHub deployments:** `oauth.md`. Needs
-  `BOTPANEL_PUBLIC_URL`; GitHub auto-deploy webhooks need GitHub to be able to
+  `RIVET_PUBLIC_URL`; GitHub auto-deploy webhooks need GitHub to be able to
   reach `<PUBLIC_URL>/api/v1/webhooks/github`.
-* **Static sites:** off by default; set `BOTPANEL_SITES_LISTEN` (for example
-  `127.0.0.1:8081`) and `BOTPANEL_SITES_BASE_URL` (for example
+* **Static sites:** off by default; set `RIVET_SITES_LISTEN` (for example
+  `127.0.0.1:8081`) and `RIVET_SITES_BASE_URL` (for example
   `https://sites.example.com`), add a wildcard DNS record and route every
   non-panel host name to that listener in the reverse proxy. Caddy's on-demand
   TLS can ask the listener which host names may get certificates. More sites
-  domains come from `BOTPANEL_SITES_DOMAINS` or Administration → Sites and
+  domains come from `RIVET_SITES_DOMAINS` or Administration → Sites and
   domains; each needs its own wildcard DNS record and certificate. Full setup:
-  `sites.md`. Releases live in `BOTPANEL_SITES_DIR`
-  (`/var/lib/botpanel/sites`, inside the service's `ReadWritePaths`); include
+  `sites.md`. Releases live in `RIVET_SITES_DIR`
+  (`/var/lib/rivetpanel/sites`, inside the service's `ReadWritePaths`); include
   it in host backups.
-* **SFTP:** off by default; `BOTPANEL_SFTP_LISTEN=0.0.0.0:2022`. Open the port in
+* **SFTP:** off by default; `RIVET_SFTP_LISTEN=0.0.0.0:2022`. Open the port in
   your firewall. It is plain TCP: it does not work through an HTTP proxy or
-  Cloudflare Tunnel. The host key is created at `/var/lib/botpanel/sftp_host_ed25519`.
+  Cloudflare Tunnel. The host key is created at `/var/lib/rivetpanel/sftp_host_ed25519`.
 * **Published bot ports:** off unless a bot opts in, within
-  `BOTPANEL_PORT_RANGE` (default 20000-29999) on 127.0.0.1. Firewall the range
-  from the internet unless you set `BOTPANEL_PORT_PUBLIC_BIND=1`.
-* **Backups:** per-bot snapshots in `BOTPANEL_BACKUP_DIR`
-  (`/var/lib/botpanel/backups`, covered by the service's `ReadWritePaths`).
-  They are not part of `botpanel backup`; back that directory up too. Sealed
+  `RIVET_PORT_RANGE` (default 20000-29999) on 127.0.0.1. Firewall the range
+  from the internet unless you set `RIVET_PORT_PUBLIC_BIND=1`.
+* **Backups:** per-bot snapshots in `RIVET_BACKUP_DIR`
+  (`/var/lib/rivetpanel/backups`, covered by the service's `ReadWritePaths`).
+  They are not part of `rivetpanel backup`; back that directory up too. Sealed
   values in them (and OAuth tokens in the database) need the same key files.
-  `botpanel verify` checks environment variables, OAuth tokens, Discord webhooks
+  `rivetpanel verify` checks environment variables, OAuth tokens, Discord webhooks
   and GitHub webhook secrets against the keys.
 
 ## Operations
@@ -91,11 +96,11 @@ registry mirror), `BOTPANEL_KEY_DIR`/`BOTPANEL_ACTIVE_KEY_ID`.
 
 Most variables can also be changed from **Administration → Environment**; those
 values are stored in the database and win over the environment file after the
-next restart (`botpanel env reset` removes them from the host). The systemd unit
+next restart (`rivetpanel env reset` removes them from the host). The systemd unit
 restarts the panel after the page's **Restart panel** button because the button
 exits with code 75 and the unit has `Restart=on-failure`.
 
-Set `BOTPANEL_METRICS_TOKEN` to a random secret of at least 24 characters to
+Set `RIVET_METRICS_TOKEN` to a random secret of at least 24 characters to
 enable `GET /metrics`. Scrapers must send `Authorization: Bearer <token>`.
 Leaving the variable empty keeps the endpoint disabled. Metrics cover process
 uptime and requests, database availability, aggregate bot lifecycle counts,

@@ -8,10 +8,10 @@ import (
 	"fmt"
 	"time"
 
-	"botpanel/internal/auth"
+	"github.com/xenycx/rivetpanel/internal/auth"
 
-	"botpanel/internal/domain"
-	"botpanel/internal/events"
+	"github.com/xenycx/rivetpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/events"
 )
 
 func normalizePerms(p int) (int, error) {
@@ -60,6 +60,9 @@ func (s *BotService) ShareBot(ctx context.Context, actor domain.User, botID, ema
 	if err := s.Store.SetSubUser(ctx, su); err != nil {
 		return domain.SubUser{}, err
 	}
+	if b, err := s.Store.GetBot(ctx, botID); err == nil {
+		s.noticeAccess(ctx, actor, target.ID, actorName(actor)+" shared "+b.Name+" with you", "", BotLink(b))
+	}
 	return su, nil
 }
 
@@ -76,7 +79,7 @@ func (s *BotService) UnshareBot(ctx context.Context, actor domain.User, botID, u
 }
 
 // RotateTelemetryKey issues a new bot-to-panel telemetry key, invalidating the
-// old one, and stores it as the bot's BOTPANEL_TELEMETRY_KEY environment
+// old one, and stores it as the bot's RIVET_TELEMETRY_KEY environment
 // variable (sealed like other variables) so the bot can read it. The bot must
 // be stopped, like every configuration change. The plaintext is returned once.
 func (s *BotService) RotateTelemetryKey(ctx context.Context, actor domain.User, id, publicURL string) (string, error) {
@@ -89,9 +92,9 @@ func (s *BotService) RotateTelemetryKey(ctx context.Context, actor domain.User, 
 		return "", err
 	}
 	key := telemetryKeyPrefix + base64.RawURLEncoding.EncodeToString(raw)
-	vars := map[string]string{"BOTPANEL_TELEMETRY_KEY": key}
+	vars := map[string]string{"RIVET_TELEMETRY_KEY": key}
 	if publicURL != "" {
-		vars["BOTPANEL_URL"] = publicURL
+		vars["RIVET_URL"] = publicURL
 	}
 	if err := s.putEnv(ctx, b, vars, true); err != nil {
 		return "", err
@@ -225,5 +228,9 @@ func (s *BotService) TransferBot(ctx context.Context, actor domain.User, botID, 
 	if s.BeforeDelete != nil { // removes the GitHub webhook with the old token
 		s.BeforeDelete(ctx, b.ID)
 	}
-	return s.Store.TransferBot(ctx, b.ID, target.ID, keepAccess, s.now())
+	removed, err := s.Store.TransferBot(ctx, b.ID, target.ID, keepAccess, s.now())
+	if err == nil {
+		s.noticeAccess(ctx, actor, target.ID, actorName(actor)+" transferred "+b.Name+" to you", "You are now its owner.", BotLink(b))
+	}
+	return removed, err
 }

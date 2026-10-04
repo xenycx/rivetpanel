@@ -1,6 +1,6 @@
 id: discordts
 name: discord.js TypeScript starter
-description: Slash-command bot in TypeScript, run directly by Node.js (no compile step), with BotForge analytics.
+description: Slash-command bot in TypeScript, run directly by Node.js (no compile step), with RivetPanel analytics.
 runtime: nodejs
 language: TypeScript
 sdk: js

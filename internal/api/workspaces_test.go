@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"botpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/domain"
 )
 
 type wsList struct {

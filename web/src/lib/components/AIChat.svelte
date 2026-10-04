@@ -276,7 +276,7 @@
 					<span class="grid size-8 shrink-0 place-items-center rounded-control bg-action/12 text-action"><Icon name="sparkle" size={16} /></span>
 					<div class="min-w-0 flex-1">
 						<h2 class="truncate leading-tight font-semibold">{chat.selected && chat.messages.length ? chat.selected.title : 'Ask AI'}</h2>
-						<p class="truncate text-[.72rem] text-muted">{chat.provider ? `${chat.provider.name} · ${chat.selected?.model ?? chat.provider.default_model}` : 'BotForge assistant'}</p>
+						<p class="truncate text-[.72rem] text-muted">{chat.provider ? `${chat.provider.name} · ${chat.selected?.model ?? chat.provider.default_model}` : 'RivetPanel assistant'}</p>
 					</div>
 					<button class="btn btn-quiet btn-icon btn-sm" onclick={() => (screen = 'history')} aria-label="Previous chats" title="Previous chats"><Icon name="history" size={16} /></button>
 					<button class="btn btn-quiet btn-icon btn-sm" onclick={() => (screen = 'settings')} aria-label="Model and mode" title="Model and mode"><Icon name="sliders" size={16} /></button>
@@ -342,7 +342,7 @@
 							<span class="grid size-11 place-items-center rounded-tile bg-action/12 text-action"><Icon name="sparkle" size={22} /></span>
 							<h3 class="mt-3 text-section font-semibold">How can I help?</h3>
 							<p class="mt-1 text-small text-muted">
-								{#if view.kind !== 'page' && attach}I can see you are on <strong class="text-ink">{view.label}</strong>{view.section ? ` (${view.section.replace(/[-_]/g, ' ')})` : ''}. Ask about it, or ask me to find and fix a problem.{:else}Ask about BotForge, or open a bot and I can look at its logs, files and settings.{/if}
+								{#if view.kind !== 'page' && attach}I can see you are on <strong class="text-ink">{view.label}</strong>{view.section ? ` (${view.section.replace(/[-_]/g, ' ')})` : ''}. Ask about it, or ask me to find and fix a problem.{:else}Ask about RivetPanel, or open a bot and I can look at its logs, files and settings.{/if}
 							</p>
 							<div class="mt-4 grid gap-1.5">
 								{#each suggestions as s}
@@ -395,7 +395,7 @@
 					</div>
 					<div class="flex items-end gap-2">
 						<label class="sr-only" for="ai-chat-input">Message the assistant</label>
-						<textarea id="ai-chat-input" bind:this={box} class="field max-h-40 min-h-[2.5rem] flex-1 resize-none py-2 [field-sizing:content]" rows="1" bind:value={chat.prompt} onkeydown={onKeydown} placeholder={noProvider ? 'The assistant is not set up' : hasTarget ? `Ask about ${view.label}…` : 'Ask anything about BotForge…'} disabled={noProvider}></textarea>
+						<textarea id="ai-chat-input" bind:this={box} class="field max-h-40 min-h-[2.5rem] flex-1 resize-none py-2 [field-sizing:content]" rows="1" bind:value={chat.prompt} onkeydown={onKeydown} placeholder={noProvider ? 'The assistant is not set up' : hasTarget ? `Ask about ${view.label}…` : 'Ask anything about RivetPanel…'} disabled={noProvider}></textarea>
 						{#if chat.active}
 							<button type="button" class="btn btn-icon" onclick={() => chat.cancel()} aria-label="Stop" title="Stop"><Icon name="stop" size={12} /></button>
 						{:else}

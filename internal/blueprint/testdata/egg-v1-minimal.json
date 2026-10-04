@@ -1,0 +1,11 @@
+{
+  "meta": {"version": "PTDL_v1"},
+  "name": "Old Style Game",
+  "author": "tests@example.invalid",
+  "description": null,
+  "image": "quay.io/example/game:latest",
+  "startup": "./game -port {{SERVER_PORT}}",
+  "config": {"files": "{}", "startup": "{\"done\": \"Ready\", \"userInteraction\": []}", "logs": "{}", "stop": "^C"},
+  "scripts": {"installation": {"script": "cd /mnt/server && echo ok", "container": "alpine:3.20", "entrypoint": "ash"}},
+  "variables": []
+}

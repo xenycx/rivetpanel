@@ -14,7 +14,7 @@ import (
 	"syscall"
 	"time"
 
-	"botpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/domain"
 )
 
 // Store persists samples.

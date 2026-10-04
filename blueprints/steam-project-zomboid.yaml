@@ -1,0 +1,64 @@
+slug: steam-project-zomboid
+name: Project Zomboid
+category: Steam
+description: Project Zomboid dedicated server, installed and updated from Steam with an anonymous SteamCMD login (app 380870). Uses two UDP ports; settings live in Zomboid/Server/servertest.ini.
+images:
+  - {label: "SteamCMD Ubuntu", ref: "steamcmd/steamcmd:latest"}
+startup:
+  command: ./start-server.sh -cachedir=/workspace/Zomboid -servername servertest -port {{SERVER_PORT}} -udpport {{SERVER_PORT_1}} -adminusername admin -adminpassword "${ADMIN_PASSWORD:-$SERVER_ID}"
+  stop: quit
+  stop_timeout_seconds: 120
+  done: SERVER STARTED
+variables:
+  - env: ADMIN_PASSWORD
+    name: Admin password
+    description: Password of the in-game "admin" account, used when the server creates it on its first start. If empty, the server's ID is used; change it in game afterwards.
+    default: ""
+    editable: true
+    rules: {pattern: '^([^"\\$`]{6,64})?$'}
+  - env: PUBLIC_NAME
+    name: Public name
+    description: The name shown in the server browser.
+    default: RivetPanel Zomboid
+    editable: true
+    rules: {pattern: '^[^"\\$`]{1,64}$'}
+  - env: MAX_PLAYERS
+    name: Maximum players
+    default: "16"
+    editable: true
+    rules: {type: int, min: 1, max: 100}
+  - env: PUBLIC
+    name: List publicly
+    default: "true"
+    editable: true
+    rules: {type: bool}
+  - env: JAVA_HEAP_MB
+    name: Java heap (MiB)
+    description: Maximum Java heap. Keep it below the server's memory limit.
+    default: "3072"
+    editable: true
+    rules: {type: int, min: 1024, max: 65536}
+  - env: STEAM_BRANCH
+    name: Steam beta branch
+    description: Leave empty for the stable release (for example "unstable" for the public test build). Changing it reinstalls the server.
+    default: ""
+    editable: true
+    reinstall: true
+    rules: {pattern: '^([A-Za-z0-9][A-Za-z0-9._-]{0,63})?$'}
+install:
+  steamcmd: {app_id: 380870, beta: "{{STEAM_BRANCH}}", timeout_minutes: 60, max_size_gb: 15}
+config_files:
+  - path: Zomboid/Server/servertest.ini
+    format: ini
+    set:
+      PublicName: "{{PUBLIC_NAME}}"
+      MaxPlayers: "{{MAX_PLAYERS}}"
+      Public: "{{PUBLIC}}"
+      DefaultPort: "{{SERVER_PORT}}"
+      UDPPort: "{{SERVER_PORT_1}}"
+  - path: ProjectZomboid64.json
+    format: lines
+    replace:
+      - {match: '^\s*"-Xmx[0-9]+[mMgG]",?\s*$', with: '    "-Xmx{{JAVA_HEAP_MB}}m",'}
+resources: {memory_mb: 4096, min_memory_mb: 3072, cpus: 2, pids: 2048}
+ports: {default: 16261, extra: 1, contiguous: true}

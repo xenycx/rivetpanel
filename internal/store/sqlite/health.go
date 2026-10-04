@@ -5,7 +5,7 @@ import (
 	"database/sql"
 	"errors"
 
-	"botpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/domain"
 )
 
 // RecordHeartbeat stores the time of a bot's latest SDK push.

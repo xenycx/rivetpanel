@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
-	import { login, session, takeNext, verifyMFA } from '$lib/session.svelte';
+	import { loadSession, login, session, takeNext, verifyMFA } from '$lib/session.svelte';
+	import { passkeySecondStep, passkeySignIn, passkeysSupported } from '$lib/passkeys';
 	import { page } from '$app/state';
 	import { onMount } from 'svelte';
 	import { api, ApiError } from '$lib/api/client';
@@ -12,6 +13,8 @@
 	let error = $state('');
 	let busy = $state(false);
 	let providers = $state<string[]>([]);
+	let sso = $state<{ slug: string; name: string }[]>([]);
+	let passkeys = $state(false);
 	let reachable = $state(true);
 	let canReset = $state(false);
 	let errorEl: HTMLParagraphElement | undefined = $state();
@@ -33,7 +36,10 @@
 			/* older server: no reset link */
 		}
 		try {
-			providers = (await api<{ providers: { id: string }[] }>('GET', '/auth/providers')).providers.map((p) => p.id);
+			const r = await api<{ providers: { id: string }[]; oidc?: { slug: string; name: string }[]; passkeys?: boolean }>('GET', '/auth/providers');
+			providers = r.providers.map((p) => p.id);
+			sso = r.oidc ?? [];
+			passkeys = !!r.passkeys && passkeysSupported();
 		} catch (e) {
 			if (!(e instanceof ApiError) || e.status >= 500 || e.status === 0) reachable = false;
 		}
@@ -63,6 +69,26 @@
 					: err instanceof ApiError && err.status === 401
 						? 'The email or password is not correct.'
 						: 'The panel is not reachable. Check your connection and try again.';
+			await Promise.resolve();
+			errorEl?.focus();
+		} finally {
+			busy = false;
+		}
+	}
+
+	// Passkeys: the browser asks for the device's PIN or biometric. A
+	// cancelled prompt is not an error worth showing.
+	async function withPasskey(second: boolean) {
+		busy = true;
+		error = '';
+		try {
+			if (second) await passkeySecondStep();
+			else await passkeySignIn();
+			await loadSession(); // the session effect navigates
+		} catch (err) {
+			if (err instanceof DOMException && err.name === 'NotAllowedError') return;
+			error = err instanceof ApiError && err.status < 500 ? err.message.charAt(0).toUpperCase() + err.message.slice(1) + '.' : 'The passkey could not be used.';
+			if (err instanceof ApiError && /expired/.test(err.message)) step = 'password';
 			await Promise.resolve();
 			errorEl?.focus();
 		} finally {
@@ -100,14 +126,14 @@
 	}
 </script>
 
-<svelte:head><title>Sign in · BotForge</title></svelte:head>
+<svelte:head><title>Sign in · RivetPanel</title></svelte:head>
 
 <main class="grid min-h-dvh place-items-center px-4 py-10">
 	<div class="w-full max-w-sm">
-		<p class="flex items-center gap-2 text-title font-semibold tracking-tight"><img src="/favicon.svg" alt="" width="28" height="28" class="rounded-tile" />BotForge</p>
+		<p class="flex items-center gap-2 text-title font-semibold tracking-tight"><img src="/favicon.svg" alt="" width="28" height="28" class="rounded-tile" />RivetPanel</p>
 		<p class="eyebrow mt-8">{step === 'mfa' ? 'Step 2 of 2' : 'Welcome back'}</p>
 		<h1 class="mt-1 text-page">{step === 'mfa' ? 'Two-step verification' : 'Sign in'}<span class="text-action">.</span></h1>
-		<p class="mt-1 text-muted">{step === 'mfa' ? (useRecovery ? 'Enter one of your recovery codes. Each works once.' : 'Enter the 6-digit code from your authenticator app.') : 'Run and manage Discord bots on this server.'}</p>
+		<p class="mt-1 text-muted">{step === 'mfa' ? (useRecovery ? 'Enter one of your recovery codes. Each works once.' : 'Enter the 6-digit code from your authenticator app.') : 'Run Discord bots and Minecraft servers on this machine.'}</p>
 
 		{#if !reachable}<p class="mt-4 border-l-[3px] border-warn bg-panel px-3 py-2">The panel does not respond right now. It may be restarting; try again in a minute.</p>{/if}
 		{#if error}<p bind:this={errorEl} tabindex="-1" class="mt-4 border-l-[3px] border-fail bg-panel px-3 py-2 text-fail outline-none" role="alert">{error}</p>{/if}
@@ -124,14 +150,19 @@
 				</label>
 				<button class="btn btn-primary w-full" disabled={busy}>{busy ? 'Checking…' : 'Verify and sign in'}</button>
 			</form>
+			{#if passkeys}<button class="btn mt-2 w-full" disabled={busy} onclick={() => withPasskey(true)}><Icon name="key" />Use a passkey instead</button>{/if}
 			<div class="mt-4 flex flex-wrap justify-between gap-2 text-small">
 				<button class="link" onclick={() => { useRecovery = !useRecovery; code = ''; codeEl?.focus(); }}>{useRecovery ? 'Use the authenticator app' : 'Use a recovery code'}</button>
 				<button class="link" onclick={() => { step = 'password'; error = ''; }}>Start over</button>
 			</div>
 		{:else}
-		{#if providers.length}
+		{#if providers.length || sso.length || passkeys}
 			<div class="mt-6 grid gap-2">
+				{#if passkeys}<button class="btn w-full" disabled={busy} onclick={() => withPasskey(false)}><Icon name="key" />Sign in with a passkey</button>{/if}
 				<!-- Full navigation: the provider redirect must not go through fetch. -->
+				{#each sso as p (p.slug)}
+					<a class="btn w-full" href={`/api/v1/auth/oidc/${p.slug}/login`} data-sveltekit-reload><Icon name="key" />Continue with {p.name}</a>
+				{/each}
 				{#each providers as p (p)}
 					<a class="btn w-full" href={`/api/v1/auth/${p}/login`} data-sveltekit-reload><Icon name={p as 'github'} />Continue with {labels[p] ?? p}</a>
 				{/each}
@@ -139,7 +170,7 @@
 			<div class="my-5 flex items-center gap-3 text-small text-muted"><hr class="flex-1 border-rule" />or with a password<hr class="flex-1 border-rule" /></div>
 		{/if}
 
-		<form class="{providers.length ? '' : 'mt-6'} space-y-4" onsubmit={submit}>
+		<form class="{providers.length || sso.length || passkeys ? '' : 'mt-6'} space-y-4" onsubmit={submit}>
 			<label class="block">
 				<span class="label">Email</span>
 				<input class="field" type="email" autocomplete="username" required bind:value={email} />
@@ -152,6 +183,6 @@
 			<button class="btn btn-primary w-full" disabled={busy}>{busy ? 'Signing in…' : 'Sign in'}</button>
 		</form>
 		{/if}
-		<p class="mt-6 text-small text-muted">No account? Ask the administrator of this panel to add you. <a class="link" href="/">What is BotForge?</a></p>
+		<p class="mt-6 text-small text-muted">No account? Ask the administrator of this panel to add you. <a class="link" href="/">What is RivetPanel?</a></p>
 	</div>
 </main>

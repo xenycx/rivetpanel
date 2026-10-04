@@ -8,15 +8,15 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 
-	"botpanel/internal/domain"
-	"botpanel/internal/service"
+	"github.com/xenycx/rivetpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/service"
 )
 
-const oauthCookie = "botpanel_oauth"
+const oauthCookie = "rivetpanel_oauth"
 
 // The state cookie must survive the cross-site redirect back from the provider,
 // so it is SameSite=Lax (Strict would be withheld) and scoped to the auth routes.
-func (s *server) setOAuthCookie(c fiber.Ctx, binder string) {
+func (s *panel) setOAuthCookie(c fiber.Ctx, binder string) {
 	exp := time.Now().Add(10 * time.Minute)
 	if binder == "" {
 		exp = time.Unix(0, 0)
@@ -27,7 +27,7 @@ func (s *server) setOAuthCookie(c fiber.Ctx, binder string) {
 	})
 }
 
-func (s *server) oauthEnabled(c fiber.Ctx) (string, error) {
+func (s *panel) oauthEnabled(c fiber.Ctx) (string, error) {
 	p := strings.Clone(c.Params("provider")) // request memory is reused; the flow outlives it
 	if s.oauth == nil || !s.oauth.Enabled(p) {
 		return "", fiber.ErrNotFound
@@ -36,7 +36,7 @@ func (s *server) oauthEnabled(c fiber.Ctx) (string, error) {
 }
 
 // oauthProviders lists the providers configured on this panel (public).
-func (s *server) oauthProviders(c fiber.Ctx) error {
+func (s *panel) oauthProviders(c fiber.Ctx) error {
 	out := []fiber.Map{}
 	if s.oauth != nil {
 		for _, p := range []string{domain.ProviderGitHub, domain.ProviderDiscord} {
@@ -45,11 +45,15 @@ func (s *server) oauthProviders(c fiber.Ctx) error {
 			}
 		}
 	}
-	return c.JSON(fiber.Map{"providers": out})
+	oidc := []fiber.Map{}
+	for _, p := range s.oidc.PublicProviders(c.Context()) {
+		oidc = append(oidc, fiber.Map{"slug": p.Slug, "name": p.Name})
+	}
+	return c.JSON(fiber.Map{"providers": out, "oidc": oidc, "passkeys": s.passkeys != nil && s.passkeys.Available()})
 }
 
 // oauthLogin starts a sign-in flow.
-func (s *server) oauthLogin(c fiber.Ctx) error {
+func (s *panel) oauthLogin(c fiber.Ctx) error {
 	p, err := s.oauthEnabled(c)
 	if err != nil {
 		return err
@@ -63,7 +67,7 @@ func (s *server) oauthLogin(c fiber.Ctx) error {
 }
 
 // oauthCallback finishes either flow and always answers with a redirect to the UI.
-func (s *server) oauthCallback(c fiber.Ctx) error {
+func (s *panel) oauthCallback(c fiber.Ctx) error {
 	p, err := s.oauthEnabled(c)
 	if err != nil {
 		return err
@@ -108,7 +112,7 @@ func (s *server) oauthCallback(c fiber.Ctx) error {
 	return c.Redirect().Status(fiber.StatusFound).To("/login?complete=1")
 }
 
-func (s *server) oauthDone(c fiber.Ctx, dest, code string) error {
+func (s *panel) oauthDone(c fiber.Ctx, dest, code string) error {
 	return c.Redirect().Status(fiber.StatusFound).To(dest + "?error=" + url.QueryEscape(code))
 }
 
@@ -123,7 +127,7 @@ type connectionDTO struct {
 	CanDisconnect bool   `json:"can_disconnect"`
 }
 
-func (s *server) listConnections(c fiber.Ctx) error {
+func (s *panel) listConnections(c fiber.Ctx) error {
 	if s.oauth == nil {
 		return c.JSON(fiber.Map{"connections": []connectionDTO{}})
 	}
@@ -141,7 +145,7 @@ func (s *server) listConnections(c fiber.Ctx) error {
 // startConnection begins a link flow for the signed-in user and returns the
 // provider URL; the browser navigates to it. POST + CSRF keeps a third-party
 // page from initiating a link.
-func (s *server) startConnection(c fiber.Ctx) error {
+func (s *panel) startConnection(c fiber.Ctx) error {
 	p, err := s.oauthEnabled(c)
 	if err != nil {
 		return err
@@ -163,7 +167,7 @@ func (s *server) startConnection(c fiber.Ctx) error {
 	return c.JSON(fiber.Map{"url": redirect})
 }
 
-func (s *server) deleteConnection(c fiber.Ctx) error {
+func (s *panel) deleteConnection(c fiber.Ctx) error {
 	if s.oauth == nil {
 		return fiber.ErrNotFound
 	}

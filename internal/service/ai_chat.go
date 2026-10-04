@@ -9,9 +9,9 @@ import (
 	"time"
 	"unicode"
 
-	operator "botpanel/internal/ai"
-	"botpanel/internal/domain"
-	"botpanel/internal/runtimes"
+	operator "github.com/xenycx/rivetpanel/internal/ai"
+	"github.com/xenycx/rivetpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/runtimes"
 )
 
 const defaultChatTitle = "New chat"
@@ -154,7 +154,7 @@ func (s *AIService) contextBlock(ctx context.Context, run domain.AIRun, view AIC
 	return b.String()
 }
 
-const systemPromptBase = `You are the BotForge Assistant, the AI built into the BotForge hosting panel. BotForge hosts Discord bots (each in its own Docker container: Node.js, Python, Go, Java, Ruby or Rust) and static sites. You help people run, debug and fix their own bots and sites, and answer questions about the panel.
+const systemPromptBase = `You are the RivetPanel Assistant, the AI built into the RivetPanel hosting panel. RivetPanel hosts Discord bots (each in its own Docker container: Node.js, Python, Go, Java, Ruby or Rust) and static sites. You help people run, debug and fix their own bots and sites, and answer questions about the panel.
 
 # How to work
 - Be direct and brief. Lead with the answer or the finding, then the evidence. Use plain language; the reader may be new to hosting. Short Markdown is fine: code fences for code and logs, bullets for steps. Do not use headings in short answers.

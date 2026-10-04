@@ -40,7 +40,7 @@ func TestVarsMatchWhatLoadReads(t *testing.T) {
 			t.Errorf("%s is listed twice", v.Name)
 		}
 		seen[v.Name] = true
-		if !strings.HasPrefix(v.Name, "BOTPANEL_") || v.Description == "" || !groups[v.Group] {
+		if !strings.HasPrefix(v.Name, "RIVET_") || v.Description == "" || !groups[v.Group] {
 			t.Errorf("%s: needs the prefix, a description and a known group", v.Name)
 		}
 		if v.Kind == KindEnum && len(v.Options) == 0 {
@@ -51,28 +51,28 @@ func TestVarsMatchWhatLoadReads(t *testing.T) {
 
 func TestOverlayPrecedence(t *testing.T) {
 	base := func(name string) (string, bool) {
-		if name == "BOTPANEL_SFTP_LISTEN" {
+		if name == "RIVET_SFTP_LISTEN" {
 			return "0.0.0.0:2022", true
 		}
 		return "", false
 	}
 	ov := map[string]string{
-		"BOTPANEL_SFTP_LISTEN": "",        // explicit empty beats the environment
-		"BOTPANEL_LISTEN":      ":9",      // boot variable: never overridden
-		"BOTPANEL_MAX_BUILDS":  " 3 ",     // trimmed
-		"BOTPANEL_UNKNOWN":     "ignored", // not described
+		"RIVET_SFTP_LISTEN": "",        // explicit empty beats the environment
+		"RIVET_LISTEN":      ":9",      // boot variable: never overridden
+		"RIVET_MAX_BUILDS":  " 3 ",     // trimmed
+		"RIVET_UNKNOWN":     "ignored", // not described
 	}
 	look := Overlay(base, ov)
-	if v, ok := look("BOTPANEL_SFTP_LISTEN"); !ok || v != "" {
+	if v, ok := look("RIVET_SFTP_LISTEN"); !ok || v != "" {
 		t.Fatalf("explicit empty override = %q, %v", v, ok)
 	}
-	if _, ok := look("BOTPANEL_LISTEN"); ok {
+	if _, ok := look("RIVET_LISTEN"); ok {
 		t.Fatal("a boot variable must not be overridable")
 	}
-	if v, _ := look("BOTPANEL_MAX_BUILDS"); v != "3" {
+	if v, _ := look("RIVET_MAX_BUILDS"); v != "3" {
 		t.Fatalf("override = %q", v)
 	}
-	if _, ok := look("BOTPANEL_UNKNOWN"); ok {
+	if _, ok := look("RIVET_UNKNOWN"); ok {
 		t.Fatal("an undescribed variable must not be overridable")
 	}
 	cfg, err := LoadLookup(look)
@@ -89,16 +89,16 @@ func TestCheckValue(t *testing.T) {
 		name, value string
 		ok          bool
 	}{
-		{"BOTPANEL_MAX_BUILDS", "2", true},
-		{"BOTPANEL_MAX_BUILDS", "two", false},
-		{"BOTPANEL_BUILD_TIMEOUT", "15m", true},
-		{"BOTPANEL_BUILD_TIMEOUT", "15", false},
-		{"BOTPANEL_PORT_PUBLIC_BIND", "true", false},
-		{"BOTPANEL_PORT_PUBLIC_BIND", "1", true},
-		{"BOTPANEL_RUNNER_MODE", "remote", false},
-		{"BOTPANEL_RUNNER_MODE", "none", true},
-		{"BOTPANEL_SITES_LISTEN", "", true},
-		{"BOTPANEL_SITES_LISTEN", "a\nb", false},
+		{"RIVET_MAX_BUILDS", "2", true},
+		{"RIVET_MAX_BUILDS", "two", false},
+		{"RIVET_BUILD_TIMEOUT", "15m", true},
+		{"RIVET_BUILD_TIMEOUT", "15", false},
+		{"RIVET_PORT_PUBLIC_BIND", "true", false},
+		{"RIVET_PORT_PUBLIC_BIND", "1", true},
+		{"RIVET_RUNNER_MODE", "remote", false},
+		{"RIVET_RUNNER_MODE", "none", true},
+		{"RIVET_SITES_LISTEN", "", true},
+		{"RIVET_SITES_LISTEN", "a\nb", false},
 	}
 	for _, c := range cases {
 		spec, _ := Spec(c.name)

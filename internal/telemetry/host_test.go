@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"botpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/domain"
 )
 
 func hostFixture(t *testing.T) ProcReader {

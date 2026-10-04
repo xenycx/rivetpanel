@@ -1,0 +1,54 @@
+slug: minecraft-vanilla
+name: Vanilla
+category: Minecraft Java
+description: The official Minecraft Java server from Mojang, without plugins or mods.
+runtime: java
+images:
+  - {label: "Java 25", ref: "eclipse-temurin:25-jre-alpine", java: 25}
+  - {label: "Java 21", ref: "eclipse-temurin:21-jre-alpine", java: 21}
+  - {label: "Java 17", ref: "eclipse-temurin:17-jre-alpine", java: 17}
+  - {label: "Java 11", ref: "eclipse-temurin:11-jre-alpine", java: 11}
+  - {label: "Java 8", ref: "eclipse-temurin:8-jre-alpine", java: 8}
+  - {label: "Java 25 (glibc)", ref: "eclipse-temurin:25-jre", java: 25}
+  - {label: "Java 21 (glibc)", ref: "eclipse-temurin:21-jre", java: 21}
+java_from: MINECRAFT_VERSION
+startup:
+  command: java -Xms128M -Xmx{{SERVER_MEMORY}}M -jar {{SERVER_JARFILE}} nogui
+  stop: stop
+  stop_timeout_seconds: 90
+  done: ')! For help, type'
+variables:
+  - env: MINECRAFT_VERSION
+    name: Minecraft version
+    description: The version to install. "latest" picks the newest stable release.
+    default: latest
+    editable: true
+    reinstall: true
+    rules: {pattern: '^(latest|[0-9][0-9A-Za-z._-]{0,31})$'}
+    versions: {provider: minecraft-vanilla}
+  - env: SERVER_JARFILE
+    name: Server jar
+    description: File name of the server jar in the server's files.
+    default: server.jar
+    editable: true
+    rules: {pattern: '^[A-Za-z0-9._-]{1,64}\.jar$'}
+install:
+  download: {provider: minecraft-vanilla, version: "{{MINECRAFT_VERSION}}", dest: "{{SERVER_JARFILE}}"}
+config_files:
+  - path: server.properties
+    format: properties
+    create: true
+    set:
+      server-port: "{{SERVER_PORT}}"
+      query.port: "{{SERVER_PORT}}"
+      server-ip: ""
+agreements:
+  - id: minecraft-eula
+    text: I accept the Minecraft End User License Agreement.
+    url: https://aka.ms/MinecraftEULA
+    file: eula.txt
+    content: "eula=true\n"
+resources: {memory_mb: 2048, min_memory_mb: 512, cpus: 2, pids: 1024, heap_percent: 85}
+ports: {default: 25565}
+query: minecraft-java
+features: [minecraft-properties, minecraft-players]

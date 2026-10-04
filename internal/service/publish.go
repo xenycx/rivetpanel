@@ -9,9 +9,9 @@ import (
 	"sync"
 	"time"
 
-	"botpanel/internal/domain"
-	"botpanel/internal/filesystem"
-	"botpanel/internal/github"
+	"github.com/xenycx/rivetpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/filesystem"
+	"github.com/xenycx/rivetpanel/internal/github"
 )
 
 // Pushing a bot's files to GitHub. The files are read from the workspace
@@ -19,22 +19,99 @@ import (
 // the token of whoever linked the repository): pushing is write access to
 // their GitHub account. Nothing from the workspace is executed.
 
-// PushPlan previews what a push would send.
-func (d *DeployService) PushPlan(ctx context.Context, actor domain.User, botID string) (filesystem.PushSet, error) {
-	if _, err := d.Bots.Authorize(ctx, actor, botID, domain.PermEditFiles); err != nil {
-		return filesystem.PushSet{}, err
+// RemotePushes reads a remote server's files for a push through its node's
+// authenticated connection: the node selects the files with the shared
+// filter and secret-file rules, then each selected file is read on its own.
+// Nothing is written to the panel's disk.
+type RemotePushes interface {
+	Online(nodeID string) bool
+	PushSet(ctx context.Context, nodeID, botID string, lim filesystem.PushLimits) (filesystem.PushSet, error)
+	ReadFile(ctx context.Context, nodeID, botID, path string, max int64) ([]byte, error)
+}
+
+// pushSource is where a push reads a server's files: the panel's own
+// workspace, or the node that runs the server.
+type pushSource interface {
+	set(ctx context.Context) (filesystem.PushSet, error)
+	read(ctx context.Context, p string) ([]byte, error)
+	close()
+}
+
+type localPush struct {
+	w   *filesystem.Workspace
+	lim filesystem.PushLimits
+}
+
+func (l localPush) set(context.Context) (filesystem.PushSet, error) { return l.w.PushSet(l.lim) }
+func (l localPush) read(_ context.Context, p string) ([]byte, error) {
+	return l.w.Read(p, l.lim.MaxFile)
+}
+func (l localPush) close() { l.w.Close() }
+
+type remotePush struct {
+	r           RemotePushes
+	node, botID string
+	lim         filesystem.PushLimits
+}
+
+func (r remotePush) set(ctx context.Context) (filesystem.PushSet, error) {
+	return r.r.PushSet(ctx, r.node, r.botID, r.lim)
+}
+func (r remotePush) read(ctx context.Context, p string) ([]byte, error) {
+	return r.r.ReadFile(ctx, r.node, r.botID, p, r.lim.MaxFile)
+}
+func (remotePush) close() {}
+
+func (d *DeployService) pushLimits() filesystem.PushLimits {
+	if d.PushLimits.MaxFiles > 0 && d.PushLimits.MaxBytes > 0 && d.PushLimits.MaxFile > 0 {
+		return d.PushLimits
 	}
-	w, err := d.Files.Open(botID)
+	return filesystem.DefaultPushLimits
+}
+
+// openPush opens the files of b for a push. A server on a remote node is
+// read from that node only, and refused while its agent is offline.
+func (d *DeployService) openPush(b domain.Bot) (pushSource, error) {
+	lim := d.pushLimits()
+	if d.Bots.remote(b.NodeID) {
+		if d.RemotePush == nil {
+			return nil, domain.Invalid("publishing to GitHub is not available for servers on remote nodes on this panel")
+		}
+		if !d.RemotePush.Online(b.NodeID) {
+			return nil, domain.Invalid("the server's node is offline; try again when its agent reconnects")
+		}
+		return remotePush{r: d.RemotePush, node: b.NodeID, botID: b.ID, lim: lim}, nil
+	}
+	w, err := d.Files.Open(b.ID)
 	if err != nil {
-		return filesystem.PushSet{}, err
+		return nil, err
 	}
-	defer w.Close()
-	set, err := w.PushSet(filesystem.DefaultPushLimits)
+	return localPush{w: w, lim: lim}, nil
+}
+
+// pushSet selects the files to push, turning limit violations into
+// messages users can act on.
+func pushSet(ctx context.Context, src pushSource) (filesystem.PushSet, error) {
+	set, err := src.set(ctx)
 	var ae *filesystem.ErrArchive
 	if errors.As(err, &ae) {
 		return filesystem.PushSet{}, domain.Invalid(ae.Msg)
 	}
 	return set, err
+}
+
+// PushPlan previews what a push would send.
+func (d *DeployService) PushPlan(ctx context.Context, actor domain.User, botID string) (filesystem.PushSet, error) {
+	b, err := d.Bots.Authorize(ctx, actor, botID, domain.PermEditFiles)
+	if err != nil {
+		return filesystem.PushSet{}, err
+	}
+	src, err := d.openPush(b)
+	if err != nil {
+		return filesystem.PushSet{}, err
+	}
+	defer src.close()
+	return pushSet(ctx, src)
 }
 
 // Owners lists where the actor may create repositories.
@@ -80,7 +157,7 @@ func (d *DeployService) Publish(ctx context.Context, actor domain.User, botID st
 		return github.Repo{}, domain.Invalid("repository names use letters, digits, '.', '-' and '_' (up to 100)")
 	}
 	if in.AutoDeploy && d.publicURL() == "" {
-		return github.Repo{}, domain.Invalid("auto-deploy needs BOTPANEL_PUBLIC_URL to be configured so GitHub can reach the panel")
+		return github.Repo{}, domain.Invalid("auto-deploy needs RIVET_PUBLIC_URL to be configured so GitHub can reach the panel")
 	}
 	tok, err := d.OAuth.GitHubPushToken(ctx, actor.ID)
 	if err != nil {
@@ -106,7 +183,7 @@ func (d *DeployService) Publish(ctx context.Context, actor domain.User, botID st
 	}
 	desc := strings.TrimSpace(in.Description)
 	if desc == "" {
-		desc = b.Name + " (published from BotForge)"
+		desc = b.Name + " (published from RivetPanel)"
 	}
 	repo, err := d.GH.CreateRepo(ctx, tok, org, name, desc, in.Private)
 	if errors.Is(err, github.ErrConflict) {
@@ -116,7 +193,7 @@ func (d *DeployService) Publish(ctx context.Context, actor domain.User, botID st
 		return github.Repo{}, ghError(err)
 	}
 	d.startPush(botID, pushJob{actor: actor, full: repo.FullName, branch: repo.DefaultBranch, token: tok,
-		message: "Initial commit from BotForge", publish: &PublishInput{AutoDeploy: in.AutoDeploy}})
+		message: "Initial commit from RivetPanel", publish: &PublishInput{AutoDeploy: in.AutoDeploy}})
 	return repo, nil
 }
 
@@ -127,7 +204,8 @@ func (d *DeployService) Push(ctx context.Context, actor domain.User, botID, mess
 	if err := d.ready(); err != nil {
 		return err
 	}
-	if _, err := d.Bots.Authorize(ctx, actor, botID, domain.PermEditFiles); err != nil {
+	b, err := d.Bots.Authorize(ctx, actor, botID, domain.PermEditFiles)
+	if err != nil {
 		return err
 	}
 	link, err := d.store().GetGitHubRepo(ctx, botID)
@@ -143,7 +221,7 @@ func (d *DeployService) Push(ctx context.Context, actor domain.User, botID, mess
 	}
 	message = strings.TrimSpace(message)
 	if message == "" {
-		message = "Update from BotForge"
+		message = "Update from RivetPanel"
 	}
 	if len(message) > 2000 {
 		return domain.Invalid("the commit message is too long")
@@ -151,6 +229,13 @@ func (d *DeployService) Push(ctx context.Context, actor domain.User, botID, mess
 	if what, busy := d.Bots.Coord.Active(botID); busy {
 		return domain.Invalid(what + " is in progress; push when it has finished")
 	}
+	// Refuse now (not in the background) when the files cannot be read, for
+	// example because the server's node is offline.
+	src, err := d.openPush(b)
+	if err != nil {
+		return err
+	}
+	src.close()
 	d.startPush(botID, pushJob{actor: actor, full: link.FullName, branch: link.Branch, root: link.RootDir, token: tok, message: message})
 	return nil
 }
@@ -275,12 +360,16 @@ func (d *DeployService) pushOnce(ctx context.Context, botID string, j pushJob, o
 	}
 
 	d.Ops.Stage(ctx, op, "Collecting files")
-	w, err := d.Files.Open(botID)
+	b, err := d.store().GetBot(ctx, botID)
 	if err != nil {
 		return pushResult{}, err
 	}
-	defer w.Close()
-	set, err := w.PushSet(filesystem.DefaultPushLimits)
+	src, err := d.openPush(b)
+	if err != nil {
+		return pushResult{}, err
+	}
+	defer src.close()
+	set, err := pushSet(ctx, src)
 	if err != nil {
 		return pushResult{}, err
 	}
@@ -324,7 +413,7 @@ func (d *DeployService) pushOnce(ctx context.Context, botID string, j pushJob, o
 				if f.Link != "" {
 					content, mode = []byte(f.Link), "120000"
 				} else {
-					content, it.err = w.Read(f.Path, filesystem.DefaultPushLimits.MaxFile)
+					content, it.err = src.read(ctx, f.Path)
 					if f.Exec {
 						mode = "100755"
 					}

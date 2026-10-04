@@ -9,9 +9,9 @@ import (
 	"sync"
 	"time"
 
-	"botpanel/internal/config"
-	"botpanel/internal/domain"
-	"botpanel/internal/secrets"
+	"github.com/xenycx/rivetpanel/internal/config"
+	"github.com/xenycx/rivetpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/secrets"
 )
 
 // PanelEnvStore is the persistence the environment editor needs.
@@ -20,7 +20,7 @@ type PanelEnvStore interface {
 	PutEnvOverrides(ctx context.Context, set []domain.Setting, remove []string, by string, nowMS int64) error
 }
 
-// PanelEnvService lets an administrator change the panel's BOTPANEL_* variables from
+// PanelEnvService lets an administrator change the panel's RIVET_* variables from
 // the browser. The values are stored in the database and layered over the
 // process environment the next time the panel starts; the environment file
 // itself is never written (the systemd unit mounts it read-only, and a
@@ -206,7 +206,7 @@ func (s *PanelEnvService) Update(ctx context.Context, actor domain.User, ch Pane
 		spec, ok := config.Spec(name)
 		switch {
 		case !ok:
-			return spec, domain.Invalid(name + " is not a BotForge setting")
+			return spec, domain.Invalid(name + " is not a RivetPanel setting")
 		case spec.Managed != "":
 			return spec, domain.Invalid(name + " is changed under Panel settings")
 		case spec.Boot:

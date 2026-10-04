@@ -1,0 +1,49 @@
+slug: steam-valheim
+name: Valheim
+category: Steam
+description: Valheim dedicated server, installed and updated from Steam with an anonymous SteamCMD login (app 896660). Players join on the game port; Steam queries use the next port.
+images:
+  - {label: "SteamCMD Ubuntu", ref: "steamcmd/steamcmd:latest"}
+startup:
+  command: env LD_LIBRARY_PATH=./linux64 SteamAppId=892970 ./valheim_server.x86_64 -nographics -batchmode -name "{{SERVER_NAME}}" -port {{SERVER_PORT}} -world "{{WORLD_NAME}}" -password "{{SERVER_PASSWORD}}" -public {{PUBLIC}} -savedir ./saves
+  stop_signal: SIGINT
+  stop_timeout_seconds: 120
+  done: Game server connected
+variables:
+  - env: SERVER_NAME
+    name: Server name
+    description: The name shown in the server browser. It must not contain the password.
+    default: RivetPanel Valheim
+    editable: true
+    rules: {pattern: '^[^"\\$`]{1,64}$'}
+  - env: WORLD_NAME
+    name: World name
+    description: The world to load or create, stored under saves/worlds_local.
+    default: Dedicated
+    editable: true
+    rules: {pattern: '^[A-Za-z0-9_-]{1,32}$'}
+  - env: SERVER_PASSWORD
+    name: Server password
+    description: At least 5 characters. Valheim refuses to start a server without one.
+    default: ""
+    editable: true
+    rules: {pattern: '^([^"\\$`]{5,64})?$'}
+  - env: PUBLIC
+    name: List publicly
+    description: 1 lists the server in the community browser, 0 keeps it unlisted (join by address).
+    default: "1"
+    editable: true
+    rules: {type: enum, options: ["0", "1"]}
+  - env: STEAM_BRANCH
+    name: Steam beta branch
+    description: Leave empty for the public release. Changing it reinstalls the server.
+    default: ""
+    editable: true
+    reinstall: true
+    rules: {pattern: '^([A-Za-z0-9][A-Za-z0-9._-]{0,63})?$'}
+install:
+  steamcmd: {app_id: 896660, beta: "{{STEAM_BRANCH}}", timeout_minutes: 60, max_size_gb: 10}
+resources: {memory_mb: 4096, min_memory_mb: 2048, cpus: 2, pids: 1024}
+ports: {default: 2456, extra: 1, contiguous: true}
+query: steam
+query_allocation: 1

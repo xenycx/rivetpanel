@@ -7,7 +7,7 @@ import (
 	"sort"
 	"strings"
 
-	"botpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/domain"
 )
 
 var tagRe = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{0,23}$`)

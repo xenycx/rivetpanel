@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { resourceHref } from '$lib/api/games';
 	import { fmtBytes } from '$lib/api/client';
 	import type { Bot } from '$lib/api/types';
 	import { fmtAgo } from '$lib/args';
@@ -25,7 +26,7 @@
 					{@const d = describe(b)}
 					<tr class="[&>td]:px-4 [&>td]:py-2.5 hover:bg-paper/40">
 						<td class="max-w-64">
-							<a href="/bots/{b.id}" class="flex min-w-0 items-center gap-2 font-medium hover:underline">
+							<a href={resourceHref(b)} class="flex min-w-0 items-center gap-2 font-medium hover:underline">
 								{#if b.logo_url}<img src={b.logo_url} alt="" class="size-6 shrink-0 rounded-pill object-cover" referrerpolicy="no-referrer" />{/if}
 								<span class="truncate">{b.name}</span>
 							</a>

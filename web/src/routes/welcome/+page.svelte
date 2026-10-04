@@ -4,7 +4,7 @@
 	import Icon, { type IconName } from '$lib/components/ui/Icon.svelte';
 	import { toast } from '$lib/ui/toast.svelte';
 
-	const repo = 'https://github.com/xenycx/botforge';
+	const repo = 'https://github.com/xenycx/rivetpanel';
 	const features: { icon: IconName; title: string; text: string }[] = [
 		{ icon: 'shield', title: 'Hardened isolation', text: 'Every bot runs in its own container: memory, CPU and process limits, no capabilities, read-only root, non-root user.' },
 		{ icon: 'terminal', title: 'Live console', text: 'Stream output, send input, pause, copy and download, with permissions checked on every line.' },
@@ -28,11 +28,11 @@
 		{ name: 'DiscordGo', lang: 'Go', color: '#29beb0' },
 		{ name: 'discordrb', lang: 'Ruby', color: '#d6453d' }
 	];
-	const install = `docker run -d --name botpanel --restart unless-stopped \\
+	const install = `docker run -d --name rivetpanel --restart unless-stopped \\
   -p 8080:8080 \\
   -v /var/run/docker.sock:/var/run/docker.sock \\
-  -v /var/lib/botpanel:/var/lib/botpanel \\
-  ghcr.io/xenycx/botforge:latest`;
+  -v /var/lib/rivetpanel:/var/lib/rivetpanel \\
+  ghcr.io/xenycx/rivetpanel:latest`;
 	function copy() {
 		navigator.clipboard?.writeText(install).then(() => toast('Command copied', 'success'));
 	}
@@ -45,16 +45,16 @@
 </script>
 
 <svelte:head>
-	<title>BotForge · Self-hosted Discord bot hosting</title>
+	<title>RivetPanel · Self-hosted Discord bot hosting</title>
 	<meta name="description" content="Run every Discord bot on your own server with container isolation, GitHub deploys, backups, schedules and a live console. One small binary." />
 </svelte:head>
 
 <div class="landing">
 	<header class="sticky top-0 z-30 border-b border-rule-soft backdrop-blur-md" style="background: color-mix(in srgb, var(--color-paper) 80%, transparent)">
 		<nav class="mx-auto flex h-16 max-w-6xl items-center gap-6 px-5" aria-label="Main">
-			<a href="/" class="flex items-center gap-2.5" aria-label="BotForge">
+			<a href="/" class="flex items-center gap-2.5" aria-label="RivetPanel">
 				<img src="/favicon.svg" alt="" width="30" height="30" class="rounded-tile" />
-				<span class="font-semibold tracking-[0.08em] uppercase">BotForge</span>
+				<span class="font-semibold tracking-[0.08em] uppercase">RivetPanel</span>
 			</a>
 			<div class="hidden items-center gap-5 text-muted md:flex">
 				<a href="#features" class="hover:text-ink">Features</a>
@@ -206,7 +206,7 @@
 	<footer class="border-t border-rule-soft">
 		<div class="mx-auto flex max-w-6xl flex-wrap items-center gap-4 px-5 py-8 text-small text-muted">
 			<img src="/favicon.svg" alt="" width="20" height="20" class="rounded-control" />
-			<span>BotForge · self-hosted Discord bot hosting</span>
+			<span>RivetPanel · self-hosted Discord bot hosting</span>
 			<span class="flex-1"></span>
 			<a href={repo} class="hover:text-ink" target="_blank" rel="noopener">Source</a>
 			<a href="{repo}/tree/main/docs" class="hover:text-ink" target="_blank" rel="noopener">Documentation</a>

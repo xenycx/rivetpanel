@@ -1,9 +1,9 @@
 // Browser checks for the core workflows, run against a throwaway panel.
 //
-//   npm run test:e2e              (after `make build`; uses ../bin/botpanel)
-//   BOTPANEL_BIN=/path/botpanel CHROMIUM=/path/chrome npm run test:e2e
+//   npm run test:e2e              (after `make build`; uses ../bin/rivetpanel)
+//   RIVET_BIN=/path/rivetpanel CHROMIUM=/path/chrome npm run test:e2e
 //
-// The panel runs without Docker (BOTPANEL_RUNNER_MODE=none) in a temporary
+// The panel runs without Docker (RIVET_RUNNER_MODE=none) in a temporary
 // directory with generated test accounts, so nothing touches real data.
 // Screenshots of each page at phone, tablet and desktop size are written to
 // tests/e2e/out/ for visual review.
@@ -17,7 +17,7 @@ import { randomBytes } from 'node:crypto';
 import net from 'node:net';
 
 const here = dirname(fileURLToPath(import.meta.url));
-const BIN = resolve(process.env.BOTPANEL_BIN ?? join(here, '../../../bin/botpanel'));
+const BIN = resolve(process.env.RIVET_BIN ?? join(here, '../../../bin/rivetpanel'));
 const CHROME = process.env.CHROMIUM ?? join(homedir(), '.cache/ms-playwright/chromium-1243/chrome-linux64/chrome');
 const OUT = join(here, 'out');
 if (!existsSync(BIN)) throw new Error(`panel binary not found at ${BIN}; run make build first`);
@@ -50,15 +50,15 @@ function freePort() {
 }
 
 // ---- throwaway panel ----
-const dir = mkdtempSync(join(tmpdir(), 'botpanel-e2e-'));
+const dir = mkdtempSync(join(tmpdir(), 'rivetpanel-e2e-'));
 const port = await freePort();
 const sitesPort = await freePort();
 const base = `http://127.0.0.1:${port}`;
-const env = { ...process.env, BOTPANEL_ENV: 'development', BOTPANEL_LISTEN: `127.0.0.1:${port}`, BOTPANEL_RUNNER_MODE: 'none', BOTPANEL_BACKUP_INTERVAL: '0',
-	BOTPANEL_SITES_LISTEN: `127.0.0.1:${sitesPort}`, BOTPANEL_SITES_BASE_URL: `http://localhost:${sitesPort}` };
+const env = { ...process.env, RIVET_ENV: 'development', RIVET_LISTEN: `127.0.0.1:${port}`, RIVET_RUNNER_MODE: 'none', RIVET_BACKUP_INTERVAL: '0',
+	RIVET_SITES_LISTEN: `127.0.0.1:${sitesPort}`, RIVET_SITES_BASE_URL: `http://localhost:${sitesPort}` };
 const adminPw = randomBytes(12).toString('base64url');
 const userPw = randomBytes(12).toString('base64url');
-execFileSync(BIN, ['create-admin', 'admin@e2e.test'], { cwd: dir, env: { ...env, BOTPANEL_ADMIN_PASSWORD: adminPw }, stdio: 'ignore' });
+execFileSync(BIN, ['create-admin', 'admin@e2e.test'], { cwd: dir, env: { ...env, RIVET_ADMIN_PASSWORD: adminPw }, stdio: 'ignore' });
 const panel = spawn(BIN, [], { cwd: dir, env, stdio: ['ignore', 'ignore', 'pipe'] });
 let panelLog = '';
 panel.stderr.on('data', (d) => (panelLog += d));
@@ -140,7 +140,7 @@ await step('the public home and panel dashboard have distinct routes', async () 
 await step('the desktop sidebar collapses to icons and remembers the choice', async () => {
 	await page.getByRole('button', { name: 'Collapse sidebar' }).click();
 	expect((await page.locator('aside[aria-label="Sidebar"]').innerText()).trim() === '', 'collapsed sidebar still shows labels');
-	expect((await page.evaluate(() => localStorage.getItem('botforge.sidebarCollapsed'))) === '1', 'collapsed state was not saved');
+	expect((await page.evaluate(() => localStorage.getItem('rivetpanel.sidebarCollapsed'))) === '1', 'collapsed state was not saved');
 	await page.reload();
 	await page.getByRole('button', { name: 'Expand sidebar' }).waitFor();
 	await page.getByRole('button', { name: 'Expand sidebar' }).click();
@@ -314,7 +314,7 @@ await step('the workspace switcher scopes the overview', async () => {
 	await page.getByRole('button', { name: 'Switch workspace' }).first().click();
 	await page.getByRole('menuitem', { name: /E2E team/ }).click();
 	await page.getByRole('heading', { name: /No bots in E2E team yet/ }).waitFor();
-	expect((await page.evaluate(() => localStorage.getItem('botforge.workspace'))) === ws.workspace.id, 'the selection was not remembered');
+	expect((await page.evaluate(() => localStorage.getItem('rivetpanel.workspace'))) === ws.workspace.id, 'the selection was not remembered');
 	await page.getByRole('button', { name: 'Show all workspaces' }).click();
 });
 
@@ -333,7 +333,7 @@ await step('tags filter the fleet and favorites come first', async () => {
 });
 
 // Visual review at three sizes and page-wide overflow checks.
-const pages = ['/', '/register', '/dashboard', '/bots/new', `/bots/${botId}?tab=overview`, `/bots/${botId}?tab=console`, `/bots/${botId}?tab=files`, `/bots/${botId}?tab=env`, `/bots/${botId}?tab=analytics`, `/bots/${botId}?tab=backups`, `/bots/${botId}?tab=deploy`, `/bots/${botId}?tab=schedules`, `/bots/${botId}?tab=alerts`, `/bots/${botId}?tab=users`, '/activity', '/sites', '/settings/profile', '/settings/appearance', '/settings/workspaces', '/settings/connected-accounts', '/settings/security', '/settings/sftp', '/admin/users', '/admin/workspaces', '/admin/sites', '/admin/settings', '/admin/host', '/admin/host?tab=bots', '/admin/host?tab=logs', '/admin/environment', '/admin/diagnostics'];
+const pages = ['/', '/register', '/dashboard', '/bots/new', `/bots/${botId}?tab=overview`, `/bots/${botId}?tab=console`, `/bots/${botId}?tab=files`, `/bots/${botId}?tab=env`, `/bots/${botId}?tab=analytics`, `/bots/${botId}?tab=backups`, `/bots/${botId}?tab=deploy`, `/bots/${botId}?tab=schedules`, `/bots/${botId}?tab=alerts`, `/bots/${botId}?tab=users`, '/activity', '/sites', '/settings/profile', '/settings/appearance', '/settings/workspaces', '/settings/connected-accounts', '/settings/security', '/settings/sftp', '/admin/users', '/admin/workspaces', '/admin/sites', '/admin/settings', '/admin/modules', '/admin/host', '/admin/host?tab=bots', '/admin/host?tab=logs', '/admin/environment', '/admin/diagnostics'];
 for (const [label, vp] of [['phone', { width: 375, height: 812 }], ['tablet', { width: 768, height: 1024 }], ['desktop', { width: 1440, height: 900 }]]) {
 	const p = await newPage(vp);
 	await signIn(p, 'admin@e2e.test', adminPw);

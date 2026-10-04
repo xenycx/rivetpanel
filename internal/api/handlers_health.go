@@ -5,7 +5,7 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 
-	"botpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/domain"
 )
 
 type alertPrefsDTO struct {
@@ -20,7 +20,7 @@ func toPrefs(p domain.AlertPrefs) alertPrefsDTO {
 	return alertPrefsDTO{p.Crash, p.Deploy, p.Backup, p.Recovery, p.HeartbeatAfter}
 }
 
-func (s *server) getHealth(c fiber.Ctx) error {
+func (s *panel) getHealth(c fiber.Ctx) error {
 	v, err := s.health.Get(c.Context(), currentUser(c), strings.Clone(c.Params("id")))
 	if err != nil {
 		return err
@@ -29,7 +29,7 @@ func (s *server) getHealth(c fiber.Ctx) error {
 		"alerts": toPrefs(v.Prefs), "webhook": v.Webhook})
 }
 
-func (s *server) putAlerts(c fiber.Ctx) error {
+func (s *panel) putAlerts(c fiber.Ctx) error {
 	var in alertPrefsDTO
 	if err := decode(c, &in); err != nil {
 		return err
@@ -42,7 +42,7 @@ func (s *server) putAlerts(c fiber.Ctx) error {
 	return c.JSON(toPrefs(p))
 }
 
-func (s *server) testAlert(c fiber.Ctx) error {
+func (s *panel) testAlert(c fiber.Ctx) error {
 	if err := s.health.Test(c.Context(), currentUser(c), strings.Clone(c.Params("id"))); err != nil {
 		return err
 	}
@@ -70,7 +70,7 @@ func toHealthProbe(p domain.HealthProbe) healthProbeDTO {
 	return healthProbeDTO{p.Kind, p.HostPort, p.Path, p.IntervalSeconds, p.TimeoutMS, p.FailureThreshold, p.SuccessThreshold, p.StartupGraceSeconds, p.RestartUnhealthy, p.Status, p.ConsecutiveFailures, p.ConsecutiveSuccesses, p.LastCheckedAtMS, p.LastError}
 }
 
-func (s *server) getHealthProbe(c fiber.Ctx) error {
+func (s *panel) getHealthProbe(c fiber.Ctx) error {
 	p, err := s.health.GetProbe(c.Context(), currentUser(c), strings.Clone(c.Params("id")))
 	if err != nil {
 		return err
@@ -78,7 +78,7 @@ func (s *server) getHealthProbe(c fiber.Ctx) error {
 	return c.JSON(toHealthProbe(p))
 }
 
-func (s *server) putHealthProbe(c fiber.Ctx) error {
+func (s *panel) putHealthProbe(c fiber.Ctx) error {
 	var in healthProbeDTO
 	if err := decode(c, &in); err != nil {
 		return err
@@ -90,7 +90,7 @@ func (s *server) putHealthProbe(c fiber.Ctx) error {
 	return c.JSON(toHealthProbe(p))
 }
 
-func (s *server) capacity(c fiber.Ctx) error {
+func (s *panel) capacity(c fiber.Ctx) error {
 	u := currentUser(c)
 	cp, err := s.bots.Capacity(c.Context(), u)
 	if err != nil {

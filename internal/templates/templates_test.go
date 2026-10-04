@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"botpanel/internal/runtimes"
-	rtdefaults "botpanel/runtimes"
+	"github.com/xenycx/rivetpanel/internal/runtimes"
+	rtdefaults "github.com/xenycx/rivetpanel/runtimes"
 )
 
 func TestTemplates(t *testing.T) {
@@ -64,7 +64,7 @@ func TestTemplates(t *testing.T) {
 	}
 	if fs, _ := Files("discordjs"); func() bool {
 		for _, f := range fs {
-			if f.Path == "botpanel.js" {
+			if f.Path == "rivetpanel.js" {
 				return false
 			}
 		}

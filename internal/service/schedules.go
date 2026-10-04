@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"strings"
 	"sync"
@@ -10,8 +11,8 @@ import (
 
 	"github.com/google/uuid"
 
-	"botpanel/internal/domain"
-	"botpanel/internal/schedule"
+	"github.com/xenycx/rivetpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/schedule"
 )
 
 // ScheduleStore is the persistence the scheduler needs.
@@ -32,6 +33,34 @@ var scheduleActions = map[string]int{
 	"start":   domain.PermPower,
 	"stop":    domain.PermPower,
 	"restart": domain.PermPower,
+	"chain":   0, // the union of its tasks' permissions (chainPerm)
+}
+
+// Task-chain steps and the permission each one needs.
+var taskActions = map[string]int{
+	"command": domain.PermPower,
+	"start":   domain.PermPower,
+	"stop":    domain.PermPower,
+	"restart": domain.PermPower,
+	"kill":    domain.PermPower,
+	"backup":  domain.PermEditFiles,
+}
+
+const (
+	maxScheduleTasks = 20
+	maxChainDelay    = time.Hour
+)
+
+// schedulePerm is the permission a schedule needs to be managed and to run.
+func schedulePerm(sc domain.Schedule) int {
+	if sc.Action != domain.ScheduleChain {
+		return scheduleActions[sc.Action]
+	}
+	p := 0
+	for _, t := range sc.Tasks {
+		p |= taskActions[t.Action]
+	}
+	return p
 }
 
 const (
@@ -53,9 +82,15 @@ type Scheduler struct {
 	Deploy  *DeployService // nil: deploy schedules are refused
 	Log     *slog.Logger
 	Now     func() time.Time
+	// Sleep waits between chain tasks (nil = a real timer); tests replace it.
+	Sleep func(ctx context.Context, d time.Duration) bool
 
 	wake chan struct{}
 	once sync.Once
+
+	runMu   sync.Mutex
+	running map[string]bool // chain schedules currently executing
+	chains  sync.WaitGroup
 }
 
 func (s *Scheduler) now() time.Time {
@@ -74,12 +109,55 @@ func (s *Scheduler) init() {
 	})
 }
 
-// ScheduleInput creates or changes a schedule.
+// ScheduleInput creates or changes a schedule. Tasks are required when
+// Action is "chain" and replace the existing ones when given.
 type ScheduleInput struct {
 	Action   *string
 	Spec     *string
 	Timezone *string
 	Enabled  *bool
+	Tasks    *[]domain.ScheduleTask
+}
+
+// validateTasks checks a task chain and normalizes commands.
+func (s *Scheduler) validateTasks(tasks []domain.ScheduleTask) ([]domain.ScheduleTask, error) {
+	if len(tasks) == 0 || len(tasks) > maxScheduleTasks {
+		return nil, domain.Invalid(fmt.Sprintf("a task chain has 1 to %d tasks", maxScheduleTasks))
+	}
+	out := make([]domain.ScheduleTask, len(tasks))
+	total := 0
+	for i, t := range tasks {
+		t.Action = strings.TrimSpace(t.Action)
+		if _, ok := taskActions[t.Action]; !ok {
+			return nil, domain.Invalid("each task is a command, start, stop, restart, kill or backup")
+		}
+		if t.DelaySeconds < 0 || t.DelaySeconds > int(maxChainDelay/time.Second) {
+			return nil, domain.Invalid("a task waits 0 to 3600 seconds")
+		}
+		total += t.DelaySeconds
+		switch t.Action {
+		case "command":
+			t.Payload = strings.TrimSpace(t.Payload)
+			if t.Payload == "" || len(t.Payload) > MaxCommandBytes || strings.ContainsAny(t.Payload, "\n\r\x00") {
+				return nil, domain.Invalid(fmt.Sprintf("a command task needs one line of 1-%d bytes", MaxCommandBytes))
+			}
+		case "backup":
+			if s.Backups == nil {
+				return nil, domain.Invalid("backups are not enabled on this panel")
+			}
+			t.Payload = ""
+		default:
+			if s.Bots.Notifier == nil {
+				return nil, domain.ErrRunnerUnavailable
+			}
+			t.Payload = ""
+		}
+		out[i] = t
+	}
+	if time.Duration(total)*time.Second > maxChainDelay {
+		return nil, domain.Invalid("the waits of one chain add up to at most one hour")
+	}
+	return out, nil
 }
 
 // ScheduleView is a schedule with its upcoming run times.
@@ -130,9 +208,12 @@ func toMS(ts []time.Time) []int64 {
 }
 
 func (s *Scheduler) actionAvailable(action string) error {
+	if action == domain.ScheduleChain {
+		return nil // each task is checked by validateTasks
+	}
 	perm, ok := scheduleActions[action]
 	if !ok || perm == 0 {
-		return domain.Invalid("choose backup, start, stop, restart or deploy")
+		return domain.Invalid("choose backup, start, stop, restart, deploy or a task chain")
 	}
 	switch {
 	case action == "backup" && s.Backups == nil:
@@ -152,7 +233,7 @@ func (s *Scheduler) canManage(ctx context.Context, actor domain.User, b domain.B
 	if domain.HasPerm(mask, domain.PermFullAdmin) {
 		return true
 	}
-	return sc.OwnerID == actor.ID && domain.HasPerm(mask, scheduleActions[sc.Action])
+	return sc.OwnerID == actor.ID && domain.HasPerm(mask, schedulePerm(sc))
 }
 
 // List returns a bot's schedules; anyone with access to the bot may read them.
@@ -192,8 +273,22 @@ func (s *Scheduler) Create(ctx context.Context, actor domain.User, botID string,
 	if err := s.actionAvailable(action); err != nil {
 		return ScheduleView{}, err
 	}
-	b, err := s.Bots.Authorize(ctx, actor, botID, scheduleActions[action])
+	draft := domain.Schedule{Action: action}
+	if action == domain.ScheduleChain {
+		if in.Tasks == nil {
+			return ScheduleView{}, domain.Invalid("add at least one task")
+		}
+		tasks, err := s.validateTasks(*in.Tasks)
+		if err != nil {
+			return ScheduleView{}, err
+		}
+		draft.Tasks = tasks
+	}
+	b, err := s.Bots.Authorize(ctx, actor, botID, schedulePerm(draft))
 	if err != nil {
+		return ScheduleView{}, err
+	}
+	if err := scheduleRoleDenied(actor, draft); err != nil {
 		return ScheduleView{}, err
 	}
 	tz := "UTC"
@@ -218,7 +313,7 @@ func (s *Scheduler) Create(ctx context.Context, actor domain.User, botID string,
 	next := sp.Next(now, loc).UnixMilli()
 	sc := domain.Schedule{ID: uuid.NewString(), BotID: botID, OwnerID: actor.ID, OwnerEmail: actor.Email, Action: action,
 		Spec: sp.String(), Timezone: tz, Enabled: in.Enabled == nil || *in.Enabled, NextRunMS: &next,
-		CreatedAtMS: now.UnixMilli(), UpdatedAtMS: now.UnixMilli()}
+		CreatedAtMS: now.UnixMilli(), UpdatedAtMS: now.UnixMilli(), Tasks: draft.Tasks}
 	if err := s.Store.InsertSchedule(ctx, sc); err != nil {
 		return ScheduleView{}, err
 	}
@@ -244,10 +339,28 @@ func (s *Scheduler) Update(ctx context.Context, actor domain.User, botID, id str
 		if err := s.actionAvailable(a); err != nil {
 			return ScheduleView{}, err
 		}
-		if _, err := s.Bots.Authorize(ctx, actor, botID, scheduleActions[a]); err != nil {
+		sc.Action = a
+		if a != domain.ScheduleChain {
+			sc.Tasks = nil
+		}
+	}
+	if in.Tasks != nil && sc.Action == domain.ScheduleChain {
+		tasks, err := s.validateTasks(*in.Tasks)
+		if err != nil {
 			return ScheduleView{}, err
 		}
-		sc.Action = a
+		sc.Tasks = tasks
+	}
+	if sc.Action == domain.ScheduleChain && len(sc.Tasks) == 0 {
+		return ScheduleView{}, domain.Invalid("add at least one task")
+	}
+	if in.Action != nil || in.Tasks != nil {
+		if _, err := s.Bots.Authorize(ctx, actor, botID, schedulePerm(sc)); err != nil {
+			return ScheduleView{}, err
+		}
+		if err := scheduleRoleDenied(actor, sc); err != nil {
+			return ScheduleView{}, err
+		}
 	}
 	if in.Spec != nil {
 		sc.Spec = *in.Spec
@@ -403,8 +516,11 @@ func (s *Scheduler) execute(ctx context.Context, sc domain.Schedule) (status, ms
 	if err != nil || owner.Disabled {
 		return "denied", "the schedule's owner can no longer sign in, so the schedule was paused"
 	}
-	perm := scheduleActions[sc.Action]
+	perm := schedulePerm(sc)
 	b, err := s.Bots.Authorize(ctx, owner, sc.BotID, perm)
+	if err == nil {
+		err = scheduleRoleDenied(owner, sc)
+	}
 	if err != nil {
 		if errors.Is(err, domain.ErrNotFound) || errors.Is(err, domain.ErrForbidden) {
 			return "denied", owner.Email + " no longer has permission for this action, so the schedule was paused"
@@ -413,6 +529,9 @@ func (s *Scheduler) execute(ctx context.Context, sc domain.Schedule) (status, ms
 	}
 	if err := s.actionAvailable(sc.Action); err != nil {
 		return "failed", runMessage(err)
+	}
+	if sc.Action == domain.ScheduleChain {
+		return s.startChain(ctx, owner, sc)
 	}
 	switch sc.Action {
 	case "backup":
@@ -473,4 +592,123 @@ func trimMsg(s string) string {
 		return string(r[:297]) + "..."
 	}
 	return s
+}
+
+// startChain runs a task chain in the background: its waits can last up to an
+// hour and must not hold up other schedules. The run is recorded as started
+// now and updated with the outcome when the chain ends. A chain still running
+// from its previous trigger is skipped.
+func (s *Scheduler) startChain(ctx context.Context, owner domain.User, sc domain.Schedule) (string, string) {
+	s.runMu.Lock()
+	if s.running == nil {
+		s.running = map[string]bool{}
+	}
+	if s.running[sc.ID] {
+		s.runMu.Unlock()
+		return "skipped", "the previous run of this chain is still in progress"
+	}
+	s.running[sc.ID] = true
+	s.runMu.Unlock()
+	s.chains.Add(1)
+	go func() {
+		defer s.chains.Done()
+		defer func() {
+			s.runMu.Lock()
+			delete(s.running, sc.ID)
+			s.runMu.Unlock()
+		}()
+		cctx := context.WithoutCancel(ctx)
+		status, msg := s.runChain(cctx, owner, sc)
+		fctx, cancel := bg(cctx)
+		defer cancel()
+		cur, err := s.Store.GetSchedule(fctx, sc.BotID, sc.ID)
+		if err != nil {
+			return // deleted meanwhile
+		}
+		_ = s.Store.RecordScheduleRun(fctx, sc.ID, s.now().UnixMilli(), status, msg, cur.NextRunMS, status == "denied")
+	}()
+	return "ok", fmt.Sprintf("chain of %d tasks started", len(sc.Tasks))
+}
+
+// WaitChains blocks until running chains end (tests and shutdown).
+func (s *Scheduler) WaitChains() { s.chains.Wait() }
+
+func (s *Scheduler) sleep(ctx context.Context, d time.Duration) bool {
+	if s.Sleep != nil {
+		return s.Sleep(ctx, d)
+	}
+	if d <= 0 {
+		return true
+	}
+	t := time.NewTimer(d)
+	defer t.Stop()
+	select {
+	case <-ctx.Done():
+		return false
+	case <-t.C:
+		return true
+	}
+}
+
+func (s *Scheduler) runChain(ctx context.Context, owner domain.User, sc domain.Schedule) (string, string) {
+	failed := 0
+	for i, t := range sc.Tasks {
+		if !s.sleep(ctx, time.Duration(t.DelaySeconds)*time.Second) {
+			return "failed", "the panel stopped during the chain"
+		}
+		// Re-check the owner's permission for every step.
+		b, err := s.Bots.Authorize(ctx, owner, sc.BotID, taskActions[t.Action])
+		if err != nil {
+			return "denied", owner.Email + " no longer has permission for this chain, so the schedule was paused"
+		}
+		var terr error
+		switch t.Action {
+		case "command":
+			terr = s.Bots.sendCommand(ctx, b, t.Payload)
+		case "start":
+			_, terr = s.Bots.Start(ctx, owner, sc.BotID)
+		case "stop":
+			_, terr = s.Bots.Stop(ctx, owner, sc.BotID)
+		case "restart":
+			if b.DesiredState != domain.DesiredRunning {
+				terr = domain.Invalid("it is stopped")
+			} else {
+				_, terr = s.Bots.Restart(ctx, owner, sc.BotID)
+			}
+		case "kill":
+			_, terr = s.Bots.Kill(ctx, owner, sc.BotID)
+		case "backup":
+			_, terr = s.Backups.CreateScheduled(ctx, owner, sc.BotID)
+		}
+		if terr != nil {
+			failed++
+			if !t.ContinueOnFailure {
+				return "failed", trimMsg(fmt.Sprintf("task %d (%s) failed: %s", i+1, t.Action, runMessage(terr)))
+			}
+		}
+	}
+	if failed > 0 {
+		return "ok", fmt.Sprintf("%d of %d tasks ran; %d failed and were skipped", len(sc.Tasks)-failed, len(sc.Tasks), failed)
+	}
+	return "ok", fmt.Sprintf("all %d tasks ran", len(sc.Tasks))
+}
+
+// scheduleRolePerms are the role permissions a scheduled action needs beyond
+// the per-bot bits Authorize checks (power and console are bits).
+var scheduleRolePerms = map[string]string{"backup": domain.PermBotsBackups, "deploy": domain.PermBotsDeploy}
+
+// scheduleRoleDenied refuses a schedule whose actions the account's role
+// does not allow; it is checked when the schedule is saved and every time
+// it runs.
+func scheduleRoleDenied(u domain.User, sc domain.Schedule) error {
+	actions := []string{sc.Action}
+	for _, t := range sc.Tasks {
+		actions = append(actions, t.Action)
+	}
+	for _, a := range actions {
+		if p, ok := scheduleRolePerms[a]; ok && !u.Can(p) {
+			return domain.Denied(u, p)
+		}
+	}
+	return nil
 }

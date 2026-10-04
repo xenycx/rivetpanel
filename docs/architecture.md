@@ -3,19 +3,25 @@
 ```
 Browser -> Fiber API -> authn/authz -> BotService -> SQLite (desired state)
                                               |             ^
-                                    Notify (latency hint)   | observed state, generation-conditioned
-                                              v             |
-                                       Runner (reconciler) -+-> Docker SDK -> Docker Engine -> capped containers
+                                    per-node routing        | observations
+                                      /             \       |
+                         local Runner               mTLS agent hub
+                              |                           |
+                        local Docker              rivet-agent -> node Docker
 ```
 
-The panel is one Go process: API, embedded UI, in-process runner, telemetry
-sampler. The runner is behind the `runner.Docker` interface and the services
-depend on small interfaces (`service.Store`, `service.Notifier`,
-`service.Purger`), so a separate runner process can be added later. **The
-in-process runner is a logical boundary, not a security boundary**: the panel
-holds the Docker socket, which is root-equivalent on the host.
-`cmd/botrunner` (a standalone, mTLS-authenticated runner daemon) is *not*
-implemented; Phase 1 is single-host.
+The control-plane process contains the API, embedded UI, local runner and
+telemetry sampler. Per-node routing sends local work to that in-process runner
+and remote work to `rivet-agent` over a TLS 1.3 + yamux connection initiated by
+the node. The agent exposes its runner, files, logs, stdin, stats and game query
+operations only inside that authenticated connection. Desired state remains in
+the panel's SQLite database; the agent resynchronizes it after reconnecting.
+
+**Neither runner is a security boundary from its Docker daemon.** The panel
+holds the local Docker socket when local execution is enabled, and each agent
+holds its node's root-equivalent Docker socket. Node certificates authenticate
+the agent and bind it to one node; they do not attest a hostile node or enforce
+network/kernel policy. See `docs/agents.md`.
 
 ## Desired vs observed state
 
@@ -42,8 +48,8 @@ All lifecycle calls return `202` immediately; nothing waits for pulls or builds.
 One pass per bot, serialized by a per-bot lock, run by a bounded worker pool:
 
 1. Read the bot. Not found: remove any orphan containers.
-2. List managed containers by label (`botpanel.managed`, `bot_id`, `node_id`,
-   `generation`, `role`, `spec`). Containers are named `botpanel-<id>-<role>`.
+2. List managed containers by label (`rivetpanel.managed`, `bot_id`, `node_id`,
+   `generation`, `role`, `spec`). Containers are named `rivetpanel-<id>-<role>`.
 3. Reuse a runtime container only if generation and spec hash match; otherwise
    stop and remove it deliberately. Stale builders from an interrupted pass are removed.
 4. Otherwise: `building` (resolve image, prepare workspace ownership, run the
@@ -61,14 +67,16 @@ bumps the generation instead) so a label never fingerprints a secret.
 Recovery triggers: process start (live observations are demoted to `unknown`
 first), Docker events, a 30 s resync that also removes orphan containers, and
 loss of the Docker connection (the runner reports not-ready, then re-syncs).
-The runner owns restarts; Docker's restart policy is disabled.
+The runner owns restarts; Docker's restart policy is disabled. A remote runner
+also backs off when panel-backed resynchronization fails, so an offline control
+plane cannot cause a reconnect/logging hot loop.
 
 ### Add-ons
 
 A bot's add-ons (`bot_addons`) are reconciled by the same per-bot pass. Before
 the runtime container is created, the runner ensures the internal network
-`botpanel-<bot>-net`, creates or starts each add-on container
-(`botpanel-<bot>-addon-<kind>`, role `addon`, reused while its spec hash, which
+`rivetpanel-<bot>-net`, creates or starts each add-on container
+(`rivetpanel-<bot>-addon-<kind>`, role `addon`, reused while its spec hash, which
 excludes the password, is unchanged), waits for their Docker health checks,
 then creates the bot, connects it to the network and starts it. Stopping a bot
 stops its add-ons; deleting it removes their containers, the network and the
@@ -99,7 +107,7 @@ browser tab neither stops the bot nor closes its stdin.
 
 SQLite (WAL, small pool) holds six tables plus the migration table. Environment
 values are AES-256-GCM encrypted with AAD `(bot_id, name, key_id)`; keys are
-files under `BOTPANEL_KEY_DIR`. Encryption protects the database and its
+files under `RIVET_KEY_DIR`. Encryption protects the database and its
 backups; it does **not** protect values from an operator with Docker access,
 since the plaintext is in the container's environment. Logs stay in Docker's
 rotated `json-file` logs, never SQLite.

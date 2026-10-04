@@ -8,13 +8,39 @@ const (
 	DesiredDeleted = "deleted"
 )
 
-// Bot is a managed Discord bot and its desired/observed lifecycle state.
+// Kinds of hosted resources.
+const (
+	KindBot  = "bot"  // an application from a language runtime (Discord bots and similar)
+	KindGame = "game" // a game server defined by a blueprint revision
+)
+
+// Install states of a game server.
+const (
+	InstallNone       = "none" // not a game server
+	InstallPending    = "pending"
+	InstallInstalling = "installing"
+	InstallInstalled  = "installed"
+	InstallFailed     = "failed"
+)
+
+// Bot is a hosted resource (a Discord bot or similar application, or a game
+// server) and its desired/observed lifecycle state.
 type Bot struct {
-	ID                 string
-	OwnerID            string
-	WorkspaceID        string
-	NodeID             string
-	Name               string
+	ID          string
+	OwnerID     string
+	WorkspaceID string
+	NodeID      string
+	Name        string
+	// Kind is KindBot or KindGame ("" reads as KindBot).
+	Kind string
+	// Game servers: the pinned blueprint revision, the chosen image label
+	// ("" = automatic) and installation state.
+	BlueprintID        string
+	BlueprintRevision  int64
+	ImageChoice        string
+	InstallState       string
+	InstalledVersion   string       // version the last installation resolved
+	Allocations        []Allocation // game servers; loaded by GetBot only
 	Runtime            string
 	ImageRef           string
 	Argv               []string
@@ -77,6 +103,56 @@ type Bot struct {
 	LastStartedAtMS *int64
 }
 
+// IsGame reports whether the resource is a game server.
+func (b Bot) IsGame() bool { return b.Kind == KindGame }
+
+// PrimaryAllocation returns the game server's primary allocation.
+func (b Bot) PrimaryAllocation() (Allocation, bool) {
+	for _, a := range b.Allocations {
+		if a.Primary {
+			return a, true
+		}
+	}
+	return Allocation{}, false
+}
+
+// Allocation is an IP:port reservation on a node.
+type Allocation struct {
+	ID          string
+	NodeID      string
+	IP          string
+	Port        int
+	Alias       string
+	Notes       string
+	BotID       *string
+	Primary     bool
+	CreatedAtMS int64
+}
+
+// Blueprint is a game-server definition; its revisions are immutable.
+type Blueprint struct {
+	ID              string
+	Slug            string
+	Name            string
+	Category        string
+	Description     string
+	Source          string // builtin | custom
+	CurrentRevision int64
+	Enabled         bool
+	CreatedAtMS     int64
+	UpdatedAtMS     int64
+	Servers         int // number of servers using it (list views)
+}
+
+// BlueprintRevision is one immutable blueprint version.
+type BlueprintRevision struct {
+	BlueprintID string
+	Revision    int64
+	SpecYAML    string
+	SHA256      string
+	CreatedAtMS int64
+}
+
 // Machine-readable explanations for an observed state (bots.state_reason).
 const (
 	ReasonCleanExit      = "clean_exit"      // exited with code 0; never restarted
@@ -115,7 +191,7 @@ type BotAddon struct {
 // AddonPasswordVar is the system-managed variable holding an add-on's
 // generated password (sealed like any other bot variable).
 func AddonPasswordVar(kind string) string {
-	return "BOTPANEL_ADDON_" + strings.ToUpper(kind) + "_PASSWORD"
+	return "RIVET_ADDON_" + strings.ToUpper(kind) + "_PASSWORD"
 }
 
 // EnvVar is an encrypted environment variable row.

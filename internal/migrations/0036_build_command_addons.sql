@@ -6,7 +6,7 @@
 --   as the default step, without the bot's secrets.
 -- * bot_addons: companion services (PostgreSQL, Redis, MongoDB, MariaDB) that
 --   run next to the bot on a private per-bot network. Generated passwords are
---   stored as sealed BOTPANEL_ADDON_<KIND>_PASSWORD variables in
+--   stored as sealed RIVET_ADDON_<KIND>_PASSWORD variables in
 --   bot_env_vars, so key rotation, verification and backups cover them.
 ALTER TABLE bots ADD COLUMN build_command TEXT
     CHECK (build_command IS NULL OR length(build_command) BETWEEN 1 AND 4096);

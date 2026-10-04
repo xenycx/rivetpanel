@@ -36,8 +36,8 @@ func TestVerifyTOTPSkewAndReplay(t *testing.T) {
 	if _, ok := VerifyTOTP(secret, "12345", now, 0); ok {
 		t.Fatal("short code accepted")
 	}
-	if !strings.HasPrefix(TOTPURI(secret, "BotForge", "a@b.io"), "otpauth://totp/BotForge:a@b.io?") {
-		t.Fatal(TOTPURI(secret, "BotForge", "a@b.io"))
+	if !strings.HasPrefix(TOTPURI(secret, "RivetPanel", "a@b.io"), "otpauth://totp/RivetPanel:a@b.io?") {
+		t.Fatal(TOTPURI(secret, "RivetPanel", "a@b.io"))
 	}
 }
 

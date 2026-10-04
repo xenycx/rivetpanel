@@ -10,7 +10,7 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 
-	"botpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/domain"
 )
 
 type ctxKey int
@@ -47,6 +47,10 @@ type userDTO struct {
 	Role        string `json:"role"`
 	Disabled    bool   `json:"disabled"`
 	CreatedAtMS int64  `json:"created_at_ms"`
+	// RoleID is the custom role ("" = the built-in role in Role).
+	RoleID        string `json:"role_id"`
+	RoleName      string `json:"role_name"`
+	EmailVerified bool   `json:"email_verified"`
 }
 
 func toUser(u domain.User) userDTO {
@@ -54,7 +58,7 @@ func toUser(u domain.User) userDTO {
 	if len(u.AvatarJPEG) > 0 {
 		avatar = "/api/v1/users/" + u.ID + "/avatar?v=" + strconv.FormatInt(u.UpdatedAtMS, 10)
 	}
-	return userDTO{u.ID, u.Email, u.DisplayName, avatar, u.Role, u.Disabled, u.CreatedAtMS}
+	return userDTO{u.ID, u.Email, u.DisplayName, avatar, u.Role, u.Disabled, u.CreatedAtMS, u.RoleID, u.RoleName, u.EmailVerified}
 }
 
 type botDTO struct {
@@ -114,12 +118,36 @@ type botDTO struct {
 
 	Tags     []string `json:"tags"`     // shared labels
 	Favorite bool     `json:"favorite"` // the caller's star
+
+	// Kind is "bot" or "game". Game servers also carry their blueprint,
+	// image choice ("" = automatic), installation state and allocations.
+	Kind              string     `json:"kind"`
+	BlueprintID       string     `json:"blueprint_id,omitempty"`
+	BlueprintRevision int64      `json:"blueprint_revision,omitempty"`
+	ImageChoice       string     `json:"image_choice,omitempty"`
+	InstallState      string     `json:"install_state,omitempty"`
+	Allocations       []allocDTO `json:"allocations,omitempty"`
+}
+
+type allocDTO struct {
+	ID      string  `json:"id"`
+	NodeID  string  `json:"node_id"`
+	IP      string  `json:"ip"`
+	Port    int     `json:"port"`
+	Alias   string  `json:"alias"`
+	Notes   string  `json:"notes"`
+	BotID   *string `json:"bot_id"`
+	Primary bool    `json:"primary"`
+}
+
+func toAlloc(a domain.Allocation) allocDTO {
+	return allocDTO{ID: a.ID, NodeID: a.NodeID, IP: a.IP, Port: a.Port, Alias: a.Alias, Notes: a.Notes, BotID: a.BotID, Primary: a.Primary}
 }
 
 // phaseOf reduces intent, observation and the runner's explanation to one
 // lifecycle word, so no client has to infer state from error text:
 //
-//	deleting checking no_runner runner_offline queued building starting running
+//	deleting checking no_runner runner_offline queued building installing starting running
 //	restarting retrying failed exited stopping stopped
 func phaseOf(b domain.Bot, runnerErr error, hasRunner bool) string {
 	reason := ""
@@ -145,6 +173,9 @@ func phaseOf(b domain.Bot, runnerErr error, hasRunner bool) string {
 	// Wanted running.
 	switch b.ObservedState {
 	case "building":
+		if b.IsGame() {
+			return "installing"
+		}
 		return "building"
 	case "starting":
 		return "starting"
@@ -204,6 +235,9 @@ func toBot(b domain.Bot) botDTO {
 		d.RestartPolicy = domain.RestartOnFailure
 	}
 	d.RestartBackoffInitialMS, d.RestartBackoffMaxMS = b.RestartBackoffInitialMS, b.RestartBackoffMaxMS
+	for _, a := range b.Allocations {
+		d.Allocations = append(d.Allocations, toAlloc(a))
+	}
 	return d
 }
 
@@ -217,7 +251,23 @@ func toBotBase(b domain.Bot) botDTO {
 		Permissions: domain.PermAll,
 		Phase:       phaseOf(b, nil, true), StateReason: b.StateReason, RestartCount: b.RestartCount, NextRetryAtMS: b.NextRetryAtMS,
 		LastStartedAtMS: b.LastStartedAtMS, LogoURL: logoURL(b), CustomLogo: b.LogoUpdatedMS > 0,
+		Kind: kindOf(b), BlueprintID: b.BlueprintID, BlueprintRevision: b.BlueprintRevision, ImageChoice: b.ImageChoice,
+		InstallState: installStateOf(b),
 	}
+}
+
+func kindOf(b domain.Bot) string {
+	if b.Kind == "" {
+		return domain.KindBot
+	}
+	return b.Kind
+}
+
+func installStateOf(b domain.Bot) string {
+	if !b.IsGame() {
+		return ""
+	}
+	return b.InstallState
 }
 
 func logoURL(b domain.Bot) string {

@@ -13,15 +13,15 @@ import (
 	fws "github.com/gofiber/contrib/v3/websocket"
 	"github.com/gofiber/fiber/v3"
 
-	"botpanel/internal/domain"
-	"botpanel/internal/service"
-	"botpanel/sdk"
+	"github.com/xenycx/rivetpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/service"
+	"github.com/xenycx/rivetpanel/sdk"
 )
 
-const keyBotID = "botpanel.bot_id"
+const keyBotID = "rivetpanel.bot_id"
 
 // botAuth authenticates a bot by its "Authorization: Bearer bpt_..." key.
-func (s *server) botAuth(c fiber.Ctx) error {
+func (s *panel) botAuth(c fiber.Ctx) error {
 	h := c.Get(fiber.HeaderAuthorization)
 	key, ok := strings.CutPrefix(h, "Bearer ")
 	if !ok {
@@ -51,7 +51,7 @@ func decodeTelemetry(b []byte) (service.TelemetryPayload, error) {
 	return p, nil
 }
 
-func (s *server) deleteBotWidget(c fiber.Ctx) error {
+func (s *panel) deleteBotWidget(c fiber.Ctx) error {
 	b, err := s.bots.Authorize(c.Context(), currentUser(c), strings.Clone(c.Params("id")), domain.PermFullAdmin)
 	if err != nil {
 		return err
@@ -64,7 +64,7 @@ func (s *server) deleteBotWidget(c fiber.Ctx) error {
 }
 
 // botTelemetryPost ingests one push over HTTP.
-func (s *server) botTelemetryPost(c fiber.Ctx) error {
+func (s *panel) botTelemetryPost(c fiber.Ctx) error {
 	id := fiber.Locals[string](c, keyBotID)
 	if !s.analytics.Allow(id) {
 		return fiber.NewError(fiber.StatusTooManyRequests, "telemetry rate limit: at most 60 pushes per minute")
@@ -82,7 +82,7 @@ func (s *server) botTelemetryPost(c fiber.Ctx) error {
 
 // botTelemetryWS ingests pushes over a long-lived WebSocket; each text frame is
 // one payload and is answered with {"stored":n} or {"error":"..."}.
-func (s *server) botTelemetryWS(c *fws.Conn) {
+func (s *panel) botTelemetryWS(c *fws.Conn) {
 	defer c.Close()
 	id, _ := c.Locals(keyBotID).(string)
 	c.SetReadLimit(service.MaxTelemetryBody)
@@ -126,7 +126,7 @@ var analyticsWindows = map[string]time.Duration{
 }
 
 // botAnalytics returns the dashboard data for a bot the caller can view.
-func (s *server) botAnalytics(c fiber.Ctx) error {
+func (s *panel) botAnalytics(c fiber.Ctx) error {
 	b, err := s.bots.Authorize(c.Context(), currentUser(c), strings.Clone(c.Params("id")), domain.PermViewConsole)
 	if err != nil {
 		return err
@@ -143,7 +143,7 @@ func (s *server) botAnalytics(c fiber.Ctx) error {
 }
 
 // rotateTelemetryKey issues a new key (plaintext returned once).
-func (s *server) rotateTelemetryKey(c fiber.Ctx) error {
+func (s *panel) rotateTelemetryKey(c fiber.Ctx) error {
 	key, err := s.bots.RotateTelemetryKey(c.Context(), currentUser(c), strings.Clone(c.Params("id")), s.currentPublicURL())
 	if err != nil {
 		return err
@@ -152,7 +152,7 @@ func (s *server) rotateTelemetryKey(c fiber.Ctx) error {
 	return c.JSON(fiber.Map{"key": key, "url": s.currentPublicURL()})
 }
 
-func (s *server) revokeTelemetryKey(c fiber.Ctx) error {
+func (s *panel) revokeTelemetryKey(c fiber.Ctx) error {
 	if err := s.bots.RevokeTelemetryKey(c.Context(), currentUser(c), strings.Clone(c.Params("id"))); err != nil {
 		return err
 	}
@@ -160,7 +160,7 @@ func (s *server) revokeTelemetryKey(c fiber.Ctx) error {
 }
 
 // sdkFile serves an embedded telemetry snippet as plain text (never HTML).
-func (s *server) sdkFile(c fiber.Ctx) error {
+func (s *panel) sdkFile(c fiber.Ctx) error {
 	name := sdk.Files[c.Params("lang")]
 	if name == "" {
 		return fiber.ErrNotFound

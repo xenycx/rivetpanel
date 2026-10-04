@@ -12,7 +12,7 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 
-	"botpanel/internal/hostmon"
+	"github.com/xenycx/rivetpanel/internal/hostmon"
 )
 
 // panelMetrics intentionally exports bounded, low-cardinality aggregates. Bot
@@ -66,23 +66,23 @@ func (m *panelMetrics) handler(d Deps) fiber.Handler {
 			name := strings.Fields(line)[0]
 			fmt.Fprintf(&b, "# HELP %s %s\n# TYPE %s %s\n%s\n", name, help, name, typ, line)
 		}
-		metric("Panel process uptime in seconds.", "gauge", fmt.Sprintf("botpanel_uptime_seconds %.3f", time.Since(m.started).Seconds()))
-		metric("HTTP requests received since process start.", "counter", fmt.Sprintf("botpanel_http_requests_total %d", m.requests.Load()))
-		metric("HTTP requests ending in an internal error.", "counter", fmt.Sprintf("botpanel_http_errors_total %d", m.errors.Load()))
-		metric("HTTP requests currently executing.", "gauge", fmt.Sprintf("botpanel_http_requests_in_flight %d", m.inflight.Load()))
-		metric("Cumulative request execution time in seconds.", "counter", fmt.Sprintf("botpanel_http_request_duration_seconds_total %.6f", float64(m.durationNS.Load())/float64(time.Second)))
+		metric("Panel process uptime in seconds.", "gauge", fmt.Sprintf("rivetpanel_uptime_seconds %.3f", time.Since(m.started).Seconds()))
+		metric("HTTP requests received since process start.", "counter", fmt.Sprintf("rivetpanel_http_requests_total %d", m.requests.Load()))
+		metric("HTTP requests ending in an internal error.", "counter", fmt.Sprintf("rivetpanel_http_errors_total %d", m.errors.Load()))
+		metric("HTTP requests currently executing.", "gauge", fmt.Sprintf("rivetpanel_http_requests_in_flight %d", m.inflight.Load()))
+		metric("Cumulative request execution time in seconds.", "counter", fmt.Sprintf("rivetpanel_http_request_duration_seconds_total %.6f", float64(m.durationNS.Load())/float64(time.Second)))
 		dbUp := 1
 		if err := d.DB.PingContext(ctx); err != nil {
 			dbUp = 0
 		}
-		metric("Whether the panel database responds.", "gauge", fmt.Sprintf("botpanel_database_up %d", dbUp))
+		metric("Whether the panel database responds.", "gauge", fmt.Sprintf("rivetpanel_database_up %d", dbUp))
 		if d.Bots != nil {
 			if bots, err := d.Bots.Store.ListBots(ctx, ""); err == nil {
 				counts := map[string]int{}
 				for _, bot := range bots {
 					counts[bot.DesiredState+"\x00"+bot.ObservedState]++
 				}
-				b.WriteString("# HELP botpanel_bots Bots by desired and observed lifecycle state.\n# TYPE botpanel_bots gauge\n")
+				b.WriteString("# HELP rivetpanel_bots Bots by desired and observed lifecycle state.\n# TYPE rivetpanel_bots gauge\n")
 				keys := make([]string, 0, len(counts))
 				for k := range counts {
 					keys = append(keys, k)
@@ -90,13 +90,13 @@ func (m *panelMetrics) handler(d Deps) fiber.Handler {
 				sort.Strings(keys)
 				for _, k := range keys {
 					p := strings.SplitN(k, "\x00", 2)
-					fmt.Fprintf(&b, "botpanel_bots{desired=%s,observed=%s} %d\n", strconv.Quote(p[0]), strconv.Quote(p[1]), counts[k])
+					fmt.Fprintf(&b, "rivetpanel_bots{desired=%s,observed=%s} %d\n", strconv.Quote(p[0]), strconv.Quote(p[1]), counts[k])
 				}
 			}
 		}
 		if d.Nodes != nil {
 			if nodes, err := d.Nodes.ListNodes(ctx); err == nil {
-				b.WriteString("# HELP botpanel_node_cpu_percent Latest host CPU utilization.\n# TYPE botpanel_node_cpu_percent gauge\n# HELP botpanel_node_memory_used_bytes Latest host memory usage.\n# TYPE botpanel_node_memory_used_bytes gauge\n# HELP botpanel_node_disk_used_bytes Latest host disk usage.\n# TYPE botpanel_node_disk_used_bytes gauge\n# HELP botpanel_node_running_bots Latest running bot count.\n# TYPE botpanel_node_running_bots gauge\n")
+				b.WriteString("# HELP rivetpanel_node_cpu_percent Latest host CPU utilization.\n# TYPE rivetpanel_node_cpu_percent gauge\n# HELP rivetpanel_node_memory_used_bytes Latest host memory usage.\n# TYPE rivetpanel_node_memory_used_bytes gauge\n# HELP rivetpanel_node_disk_used_bytes Latest host disk usage.\n# TYPE rivetpanel_node_disk_used_bytes gauge\n# HELP rivetpanel_node_running_bots Latest running bot count.\n# TYPE rivetpanel_node_running_bots gauge\n")
 				for _, n := range nodes {
 					rows, err := d.Nodes.ListTelemetry(ctx, n.ID, 0, 1)
 					if err != nil || len(rows) == 0 {
@@ -104,7 +104,7 @@ func (m *panelMetrics) handler(d Deps) fiber.Handler {
 					}
 					x := rows[0]
 					label := strconv.Quote(n.ID)
-					fmt.Fprintf(&b, "botpanel_node_cpu_percent{node=%s} %g\nbotpanel_node_memory_used_bytes{node=%s} %d\nbotpanel_node_disk_used_bytes{node=%s} %d\nbotpanel_node_running_bots{node=%s} %d\n", label, x.CPUPercent, label, x.MemoryUsedBytes, label, x.DiskUsedBytes, label, x.RunningBots)
+					fmt.Fprintf(&b, "rivetpanel_node_cpu_percent{node=%s} %g\nrivetpanel_node_memory_used_bytes{node=%s} %d\nrivetpanel_node_disk_used_bytes{node=%s} %d\nrivetpanel_node_running_bots{node=%s} %d\n", label, x.CPUPercent, label, x.MemoryUsedBytes, label, x.DiskUsedBytes, label, x.RunningBots)
 				}
 			}
 		}
@@ -114,9 +114,9 @@ func (m *panelMetrics) handler(d Deps) fiber.Handler {
 				for _, p := range probes {
 					counts[p.Status]++
 				}
-				b.WriteString("# HELP botpanel_health_probes Configured probes by current state.\n# TYPE botpanel_health_probes gauge\n")
+				b.WriteString("# HELP rivetpanel_health_probes Configured probes by current state.\n# TYPE rivetpanel_health_probes gauge\n")
 				for _, state := range []string{"unknown", "starting", "healthy", "unhealthy"} {
-					fmt.Fprintf(&b, "botpanel_health_probes{status=%s} %d\n", strconv.Quote(state), counts[state])
+					fmt.Fprintf(&b, "rivetpanel_health_probes{status=%s} %d\n", strconv.Quote(state), counts[state])
 				}
 			}
 		}
