@@ -10,6 +10,7 @@ import (
 	"io"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/distribution/reference"
@@ -39,6 +40,9 @@ const (
 type Adapter struct {
 	cli   *client.Client
 	paths PathMap // bind sources as the Docker host sees them (see SetPathMap)
+	// ncpu and memTotal cache the daemon host's CPU count and memory (0 =
+	// not read yet).
+	ncpu, memTotal atomic.Int64
 }
 
 var _ runner.Docker = (*Adapter)(nil)
@@ -228,10 +232,43 @@ func (a *Adapter) Inspect(ctx context.Context, id string) (runner.ContainerInfo,
 	return a.inspect(ctx, id)
 }
 
+// HostResources returns the Docker host's CPU count and total memory as the
+// daemon reports them (read once, then cached).
+func (a *Adapter) HostResources(ctx context.Context) (cpus int, memBytes int64, err error) {
+	if n := a.ncpu.Load(); n > 0 {
+		return int(n), a.memTotal.Load(), nil
+	}
+	ctx, cancel := within(ctx, opTimeout)
+	defer cancel()
+	info, err := a.cli.Info(ctx)
+	if err != nil {
+		return 0, 0, err
+	}
+	if info.NCPU <= 0 {
+		return 0, 0, errors.New("the Docker daemon reported no CPUs")
+	}
+	a.memTotal.Store(info.MemTotal)
+	a.ncpu.Store(int64(info.NCPU))
+	return info.NCPU, info.MemTotal, nil
+}
+
+// fitCPUs lowers a CPU limit above the host's CPU count to that count:
+// Docker refuses such a container outright ("range of CPUs is from 0.01 to
+// N"), which would leave the server unable to start. Servers saved before
+// limits followed each node's hardware can carry such a limit.
+func (a *Adapter) fitCPUs(ctx context.Context, nano int64) int64 {
+	cpus, _, err := a.HostResources(ctx)
+	if err != nil || nano <= int64(cpus)*1e9 {
+		return nano
+	}
+	return int64(cpus) * 1e9
+}
+
 func (a *Adapter) Create(ctx context.Context, spec runner.ContainerSpec) (string, error) {
 	ctx, cancel := within(ctx, opTimeout)
 	defer cancel()
 	spec = a.translateSpec(spec)
+	spec.NanoCPUs = a.fitCPUs(ctx, spec.NanoCPUs)
 	resp, err := a.cli.ContainerCreate(ctx, ContainerConfig(spec), HostConfig(spec), NetworkingConfig(spec), nil, spec.Name)
 	if err != nil {
 		if errdefs.IsConflict(err) {

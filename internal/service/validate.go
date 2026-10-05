@@ -104,10 +104,10 @@ func validateStartup(rt runtimes.Runtime, argv, entry []string) error {
 func (l Limits) validateResources(rt runtimes.Runtime, mem, cpus, pids int64) error {
 	minMem := max(l.MinMemoryBytes, rt.MinMemoryBytes)
 	if mem < minMem || mem > l.MaxMemoryBytes {
-		return domain.Invalid(fmt.Sprintf("memory_bytes must be between %d and %d for %s", minMem, l.MaxMemoryBytes, rt.ID))
+		return domain.Invalid(fmt.Sprintf("memory must be between %d MiB and %d MiB for %s on this node", minMem>>20, l.MaxMemoryBytes>>20, rt.ID))
 	}
 	if cpus < l.MinNanoCPUs || cpus > l.MaxNanoCPUs {
-		return domain.Invalid(fmt.Sprintf("nano_cpus must be between %d and %d", l.MinNanoCPUs, l.MaxNanoCPUs))
+		return domain.Invalid(fmt.Sprintf("CPU must be between %.2f and %.2f cores on this node", float64(l.MinNanoCPUs)/1e9, float64(l.MaxNanoCPUs)/1e9))
 	}
 	if pids < 1 || pids > maxPids {
 		return domain.Invalid(fmt.Sprintf("pids_limit must be between 1 and %d", maxPids))

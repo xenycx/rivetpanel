@@ -132,10 +132,10 @@ var Vars = []VarSpec{
 		Description: "How long one build may run before it is stopped (1 minute to 2 hours)."},
 
 	// Capacity
-	{Name: "RIVET_MAX_BOT_MEMORY_BYTES", Group: GroupCapacity, Kind: KindBytes, Default: "4 GiB",
-		Description: "Largest memory limit a single bot may be given."},
-	{Name: "RIVET_MAX_BOT_NANO_CPUS", Group: GroupCapacity, Kind: KindInt, Default: "4000000000", Example: "4000000000",
-		Description: "Largest CPU limit a single bot may be given, in billionths of a CPU (1000000000 is one CPU)."},
+	{Name: "RIVET_MAX_BOT_MEMORY_BYTES", Group: GroupCapacity, Kind: KindBytes, Default: "the node's memory",
+		Description: "Largest memory limit a single bot or game server may be given. Always capped by the memory of the node it runs on; 0 or unset uses the node's memory alone."},
+	{Name: "RIVET_MAX_BOT_NANO_CPUS", Group: GroupCapacity, Kind: KindInt, Default: "the node's CPUs", Example: "4000000000",
+		Description: "Largest CPU limit a single bot or game server may be given, in billionths of a CPU (1000000000 is one CPU). Always capped by the CPU count of the node it runs on; 0 or unset uses the node's CPUs alone."},
 	{Name: "RIVET_NODE_MEMORY_BYTES", Group: GroupCapacity, Kind: KindBytes, Default: "unlimited",
 		Description: "Admission budget: the sum of memory limits of bots wanted running on this host. A start that would exceed it is refused. Bookkeeping, not a kernel limit; 0 is unlimited."},
 	{Name: "RIVET_USER_MEMORY_BYTES", Group: GroupCapacity, Kind: KindBytes, Default: "unlimited",

@@ -56,6 +56,14 @@ type nodeDTO struct {
 	PublicAddress string    `json:"public_address"`
 	ServerCount   int       `json:"server_count"`
 	Agent         *agentDTO `json:"agent,omitempty"`
+	// Limits are the largest memory and CPU limits a server on this node
+	// may have: the panel's maximums capped by the node's hardware.
+	Limits *nodeLimitsDTO `json:"limits,omitempty"`
+}
+
+type nodeLimitsDTO struct {
+	MaxMemoryBytes int64 `json:"max_memory_bytes"`
+	MaxNanoCPUs    int64 `json:"max_nano_cpus"`
 }
 
 type agentDTO struct {
@@ -117,6 +125,10 @@ func (s *panel) listNodes(c fiber.Ctx) error {
 				Hostname: st.Hostname, Capabilities: caps, CertificateSerial: st.CertificateSerial,
 				CertificateExpiresAtMS: st.CertificateExpiresAtMS, ConnectedAtMS: st.ConnectedAtMS, DisconnectedAtMS: st.DisconnectedAtMS}
 		}
+		if s.bots != nil {
+			l := s.bots.LimitsFor(c.Context(), n.ID)
+			base.Limits = &nodeLimitsDTO{MaxMemoryBytes: l.MaxMemoryBytes, MaxNanoCPUs: l.MaxNanoCPUs}
+		}
 		it := item{nodeDTO: base}
 		if rows, err := s.nodes.ListTelemetry(c.Context(), n.ID, 0, 1); err == nil && len(rows) == 1 {
 			d := toSample(rows[0])
@@ -160,6 +172,9 @@ func (s *panel) patchNode(c fiber.Ctx) error {
 		v := strings.TrimSpace(*in.PublicAddress)
 		if v != "" && (len(v) > 253 || (net.ParseIP(v) == nil && !publicAddressRE.MatchString(v))) {
 			return domain.Invalid("public address must be a host name or IP address without a scheme or port")
+		}
+		if v != "" && s.isPanelHost(v) {
+			return domain.Invalid("players cannot be sent to the panel's own address; use the node's IP or a separate DNS-only host name (for example play.example.com)")
 		}
 		in.PublicAddress = &v
 	}

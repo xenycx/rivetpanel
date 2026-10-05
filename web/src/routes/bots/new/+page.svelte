@@ -268,10 +268,14 @@
 			});
 		}
 		if (i === 3 && limits) {
-			if (effMemory < Math.max(limits.min_memory_bytes, rt?.min_memory_bytes ?? 0) || effMemory > limits.max_memory_bytes)
-				p.memory = `Choose between ${fmtBytes(Math.max(limits.min_memory_bytes, rt?.min_memory_bytes ?? 0))} and ${fmtBytes(limits.max_memory_bytes)}.`;
-			if (effCpu < limits.min_nano_cpus || effCpu > limits.max_nano_cpus)
-				p.cpu = `Choose between ${limits.min_nano_cpus / 1e9} and ${limits.max_nano_cpus / 1e9} CPU.`;
+			// Maximums follow the chosen node's own memory and CPU count.
+			const nl = nodes.find((n) => n.id === nodeId)?.limits;
+			const maxMem = nl?.max_memory_bytes ?? limits.max_memory_bytes;
+			const maxCpu = nl?.max_nano_cpus ?? limits.max_nano_cpus;
+			if (effMemory < Math.max(limits.min_memory_bytes, rt?.min_memory_bytes ?? 0) || effMemory > maxMem)
+				p.memory = `Choose between ${fmtBytes(Math.max(limits.min_memory_bytes, rt?.min_memory_bytes ?? 0))} and ${fmtBytes(maxMem)} on this node.`;
+			if (effCpu < limits.min_nano_cpus || effCpu > maxCpu)
+				p.cpu = `Choose between ${limits.min_nano_cpus / 1e9} and ${maxCpu / 1e9} CPU on this node.`;
 		}
 		problems = p;
 		return Object.keys(p).length === 0;

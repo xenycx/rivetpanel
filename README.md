@@ -171,7 +171,10 @@ not enforced (Docker has no native cap).
 ## Known limitations
 
 * Game servers are Minecraft Java plus three SteamCMD games (anonymous
-  downloads only; no Bedrock, mounts, FastDL or subdomains). The Pterodactyl
+  downloads only; no Bedrock, mounts, FastDL or automatic subdomains: give
+  players a name with a DNS-only record set as the node's public address;
+  the panel's own host is never used). Memory and CPU limits follow each
+  node's hardware. The Pterodactyl
   egg importer does not map yaml/json/xml config edits. Steam status queries
   work only for servers on the panel's own node. They can run on remote
   nodes; their backups and Modrinth installs (verified at the panel, then

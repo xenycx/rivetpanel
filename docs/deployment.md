@@ -87,7 +87,9 @@ the panel.
 
 See `deploy/systemd/rivetpanel.env.example`. Notable: `RIVET_CONTAINER_USER`
 (non-root uid:gid), `RIVET_WORKSPACE_OWNER` (host uid:gid; differs under
-rootless/userns), `RIVET_CONTAINER_NETWORK`, `RIVET_MAX_BOT_MEMORY_BYTES`,
+rootless/userns), `RIVET_CONTAINER_NETWORK`, `RIVET_MAX_BOT_MEMORY_BYTES` and
+`RIVET_MAX_BOT_NANO_CPUS` (optional caps; unset, each node's own memory and
+CPU count are the per-server maximums),
 `RIVET_RUNTIMES_DIR` (override the six recipes, e.g. to pin digests or use a
 registry mirror), `RIVET_KEY_DIR`/`RIVET_ACTIVE_KEY_ID`.
 

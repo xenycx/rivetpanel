@@ -15,6 +15,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/netip"
 	"strconv"
 	"sync"
 	"time"
@@ -78,6 +79,7 @@ type Hub struct {
 
 	mu       sync.Mutex
 	sessions map[string]*session
+	lastIP   map[string]string // node → address its agent last connected from
 }
 
 type session struct {
@@ -86,6 +88,8 @@ type session struct {
 	ys     *yamux.Session
 	client *http.Client
 	done   chan struct{}
+	// remoteIP is the address the agent connected from.
+	remoteIP string
 
 	mu  sync.Mutex
 	ops map[string]bool // build operations started through this session
@@ -194,6 +198,9 @@ func (h *Hub) handle(ctx context.Context, c *tls.Conn) {
 		return
 	}
 	s := &session{nodeID: nodeID, serial: serial, ys: ys, done: make(chan struct{}), ops: map[string]bool{}}
+	if ap, err := netip.ParseAddrPort(c.RemoteAddr().String()); err == nil {
+		s.remoteIP = ap.Addr().Unmap().String()
+	}
 	s.client = &http.Client{Transport: &http.Transport{
 		DialContext:         func(ctx context.Context, _, _ string) (net.Conn, error) { return ys.Open() },
 		MaxIdleConnsPerHost: 16, IdleConnTimeout: 60 * time.Second, ResponseHeaderTimeout: 0,
@@ -215,6 +222,12 @@ func (h *Hub) register(s *session) {
 	}
 	old := h.sessions[s.nodeID]
 	h.sessions[s.nodeID] = s
+	if s.remoteIP != "" {
+		if h.lastIP == nil {
+			h.lastIP = map[string]string{}
+		}
+		h.lastIP[s.nodeID] = s.remoteIP
+	}
 	h.mu.Unlock()
 	if old != nil {
 		old.ys.Close() // a reconnect replaces the previous connection
@@ -260,6 +273,15 @@ func (h *Hub) Connected(nodeID string) bool {
 	defer h.mu.Unlock()
 	_, ok := h.sessions[nodeID]
 	return ok
+}
+
+// RemoteIP is the address a node's agent last connected from ("" = none
+// since the panel started). Agents dial the panel directly, so this is the
+// node's own outbound address: for most hosts also where players reach it.
+func (h *Hub) RemoteIP(nodeID string) string {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.lastIP[nodeID]
 }
 
 // ConnectedNodes lists the nodes whose agents are connected now.

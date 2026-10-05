@@ -660,6 +660,7 @@ page (0 = unlimited):
 
 | Setting | Effect |
 | --- | --- |
+| `RIVET_MAX_BOT_MEMORY_BYTES`, `RIVET_MAX_BOT_NANO_CPUS` | largest memory / CPU limit of one bot or game server; always capped by the node's own memory and CPU count, which alone apply when unset |
 | `RIVET_NODE_MEMORY_BYTES` | sum of memory limits of bots wanted running; a start that would exceed it is refused (409) with the numbers |
 | `RIVET_USER_MEMORY_BYTES` | sum of a user's bot memory limits |
 | `RIVET_MAX_BOTS_PER_USER` | bots per user |

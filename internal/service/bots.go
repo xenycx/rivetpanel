@@ -84,6 +84,9 @@ type BotService struct {
 	// other tool). Allocations skip them and a start that would collide is
 	// refused. Nil skips the check (no Docker).
 	LocalPublished func(ctx context.Context) ([]runner.PublishedPort, error)
+	// NodeCapacity reports a node's CPUs and memory; resource maximums are
+	// capped by them (LimitsFor). Nil applies only the panel's maximums.
+	NodeCapacity func(ctx context.Context, nodeID string) NodeCapacity
 	// Notices receives access notifications (sharing, transfers, workspace
 	// membership, accepted invitations); nil sends none.
 	Notices *NotificationService
@@ -389,9 +392,6 @@ func (s *BotService) Create(ctx context.Context, actor domain.User, in CreateBot
 	if pids == 0 {
 		pids = rt.Defaults.PidsLimit
 	}
-	if err := s.Limits.validateResources(rt, mem, cpu, pids); err != nil {
-		return domain.Bot{}, err
-	}
 	build, err := validateBuildCommand(in.BuildCommand)
 	if err != nil {
 		return domain.Bot{}, err
@@ -409,6 +409,9 @@ func (s *BotService) Create(ctx context.Context, actor domain.User, in CreateBot
 	}
 	nodeID, err := s.chooseNode(ctx, actor, in.NodeID)
 	if err != nil {
+		return domain.Bot{}, err
+	}
+	if err := s.LimitsFor(ctx, nodeID).validateResources(rt, mem, cpu, pids); err != nil {
 		return domain.Bot{}, err
 	}
 	// Add-ons must be able to run on the chosen node: checked for each one
@@ -589,8 +592,12 @@ func (s *BotService) Update(ctx context.Context, actor domain.User, id string, i
 	if in.Entrypoint != nil {
 		b.Entrypoint = append([]string(nil), *in.Entrypoint...)
 	}
-	if err := validateStartup(rt, b.Argv, b.Entrypoint); err != nil {
-		return domain.Bot{}, err
+	// A game server's startup comes from its server type (a shell wrapper the
+	// runtime's command list does not cover) and cannot be changed here.
+	if !b.IsGame() {
+		if err := validateStartup(rt, b.Argv, b.Entrypoint); err != nil {
+			return domain.Bot{}, err
+		}
 	}
 	if in.MemoryBytes != nil {
 		b.MemoryBytes = *in.MemoryBytes
@@ -601,7 +608,7 @@ func (s *BotService) Update(ctx context.Context, actor domain.User, id string, i
 	if in.PidsLimit != nil {
 		b.PidsLimit = *in.PidsLimit
 	}
-	if err := s.Limits.validateResources(rt, b.MemoryBytes, b.NanoCPUs, b.PidsLimit); err != nil {
+	if err := s.LimitsFor(ctx, b.NodeID).validateResources(rt, b.MemoryBytes, b.NanoCPUs, b.PidsLimit); err != nil {
 		return domain.Bot{}, err
 	}
 	if in.MemoryBytes != nil {

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -476,10 +477,14 @@ func (s *panel) gameRoutes(authed fiber.Router) {
 	authed.Delete("/admin/allocations/:aid", s.requirePerm(domain.PermAllocations), s.adminDeleteAllocation)
 }
 
-// gameHosts maps node ids to the public address players use to reach game
-// servers on that node (Administration → Nodes → Public address). Nodes
-// without one are left out; clients then fall back to the panel's host.
-// The addresses are what players are given anyway, so any account may read
+// gameHosts maps node ids to the address players use to reach game servers
+// on that node: its public address (Administration → Nodes → Public
+// address), else the node's own IP when the panel knows it (a remote node's
+// agent connection, the local node's agent address). The panel's own host
+// is never given out: it is for operators, and a proxied panel name (such as
+// one behind Cloudflare) does not carry game traffic anyway. Nodes without
+// a usable address are left out and clients ask for one to be set. The
+// addresses are what players are given anyway, so any account may read
 // them; nothing else about the nodes is returned.
 func (s *panel) gameHosts(c fiber.Ctx) error {
 	if s.nodes == nil {
@@ -491,11 +496,26 @@ func (s *panel) gameHosts(c fiber.Ctx) error {
 	}
 	hosts := map[string]string{}
 	for _, n := range nodes {
-		if a := strings.TrimSpace(n.PublicAddress); a != "" {
+		a := strings.TrimSpace(n.PublicAddress)
+		if (a == "" || s.isPanelHost(a)) && s.gameAddress != nil {
+			a = s.gameAddress(n.ID)
+		}
+		if a != "" && !s.isPanelHost(a) {
 			hosts[n.ID] = a
 		}
 	}
 	return c.JSON(fiber.Map{"hosts": hosts})
+}
+
+// isPanelHost reports whether host is the name the panel itself is served
+// on. Players are never sent there.
+func (s *panel) isPanelHost(host string) bool {
+	u, err := url.Parse(s.currentPublicURL())
+	if err != nil || u.Hostname() == "" {
+		return false
+	}
+	norm := func(h string) string { return strings.TrimSuffix(strings.ToLower(strings.Trim(h, "[]")), ".") }
+	return norm(host) == norm(u.Hostname())
 }
 
 // pickFreePort moves a server off a primary port that is taken on the host.

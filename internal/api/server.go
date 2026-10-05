@@ -43,26 +43,29 @@ type Deps struct {
 	DB  Pinger
 	UI  fs.FS // built static frontend; may be empty
 
-	Auth          *service.AuthService // nil disables the authenticated API (tests/foundation)
-	Bots          *service.BotService
-	OAuth         *service.OAuthService             // nil disables OAuth routes
-	SFTP          *SFTPInfo                         // nil when the SFTP server is disabled
-	Analytics     *service.Analytics                // nil disables bot telemetry routes
-	PublicURL     string                            // externally reachable origin, handed to bots
-	Registry      *pkgmgr.Registry                  // package registry client; default used when nil
-	Stats         StatsSource                       // Docker stats stream; nil disables live gauges
-	Backups       *service.BackupService            // nil disables the backup routes
-	Deploy        *service.DeployService            // nil disables GitHub deployment routes
-	Ops           *service.Operations               // nil disables operation history routes
-	Audit         *service.Audit                    // nil disables the activity record
-	Schedules     *service.Scheduler                // nil disables scheduled actions
-	MFA           *service.MFAService               // nil disables two-step sign-in
-	Tokens        *service.TokenService             // nil disables the automation API
-	Clients       *service.APIClientService         // nil disables API clients (bearer access to the whole API)
-	OIDC          *service.OIDCService              // nil disables OpenID Connect sign-in
-	Passkeys      *service.PasskeyService           // nil disables passkeys (WebAuthn)
-	Enrollment    *service.AgentEnrollmentService   // nil disables agent enrollment
-	AgentControl  AgentControl                      // nil when no agent listener is running
+	Auth         *service.AuthService // nil disables the authenticated API (tests/foundation)
+	Bots         *service.BotService
+	OAuth        *service.OAuthService           // nil disables OAuth routes
+	SFTP         *SFTPInfo                       // nil when the SFTP server is disabled
+	Analytics    *service.Analytics              // nil disables bot telemetry routes
+	PublicURL    string                          // externally reachable origin, handed to bots
+	Registry     *pkgmgr.Registry                // package registry client; default used when nil
+	Stats        StatsSource                     // Docker stats stream; nil disables live gauges
+	Backups      *service.BackupService          // nil disables the backup routes
+	Deploy       *service.DeployService          // nil disables GitHub deployment routes
+	Ops          *service.Operations             // nil disables operation history routes
+	Audit        *service.Audit                  // nil disables the activity record
+	Schedules    *service.Scheduler              // nil disables scheduled actions
+	MFA          *service.MFAService             // nil disables two-step sign-in
+	Tokens       *service.TokenService           // nil disables the automation API
+	Clients      *service.APIClientService       // nil disables API clients (bearer access to the whole API)
+	OIDC         *service.OIDCService            // nil disables OpenID Connect sign-in
+	Passkeys     *service.PasskeyService         // nil disables passkeys (WebAuthn)
+	Enrollment   *service.AgentEnrollmentService // nil disables agent enrollment
+	AgentControl AgentControl                    // nil when no agent listener is running
+	// GameAddress is the address players use for a node that has no public
+	// address set ("" = unknown); nil = none known.
+	GameAddress   func(nodeID string) string
 	Games         *service.GameService              // nil disables game servers
 	Router        *noderoute.Router                 // per-node routing (remote agents); nil = local only
 	Health        *service.HealthService            // nil disables application health and alert rules
@@ -142,6 +145,7 @@ type panel struct {
 	passkeys      *service.PasskeyService
 	enrollment    *service.AgentEnrollmentService
 	agentControl  AgentControl
+	gameAddress   func(nodeID string) string
 	games         *service.GameService
 	trustedFiles  bool // rivet-agent file routes (see NodeFiles)
 	router        *noderoute.Router
@@ -249,7 +253,7 @@ func New(d Deps) *fiber.App {
 		return c.JSON(fiber.Map{"status": "ok", "checks": checks})
 	})
 	if d.Auth != nil && d.Bots != nil {
-		s := &panel{log: d.Log, auth: d.Auth, bots: d.Bots, oauth: d.OAuth, sftp: d.SFTP, analytics: d.Analytics, publicURL: d.PublicURL, registry: d.Registry, stats: d.Stats, backups: d.Backups, deploy: d.Deploy, ops: d.Ops, audit: d.Audit, schedules: d.Schedules, mfa: d.MFA, tokens: d.Tokens, clients: d.Clients, oidc: d.OIDC, passkeys: d.Passkeys, enrollment: d.Enrollment, agentControl: d.AgentControl, games: d.Games, router: d.Router, health: d.Health, settings: d.Settings, mail: d.Mail, notifications: d.Notifications, tickets: d.Tickets, kb: d.KB, status: d.Status, usage: d.Usage, resets: d.Resets, verify: d.Verify, mailPrefs: d.MailPrefs, sites: d.Sites, ai: d.AI, env: d.Env, host: d.Host, logs: d.Logs, logArchive: d.LogArchive, setupCodeFile: d.SetupCodeFile, onSetupDone: d.OnSetupDone, statsLimit: console.NewLimiter(0, 0, 0), catalog: d.Catalog, secureCookies: d.SecureCookies, modules: d.Modules,
+		s := &panel{log: d.Log, auth: d.Auth, bots: d.Bots, oauth: d.OAuth, sftp: d.SFTP, analytics: d.Analytics, publicURL: d.PublicURL, registry: d.Registry, stats: d.Stats, backups: d.Backups, deploy: d.Deploy, ops: d.Ops, audit: d.Audit, schedules: d.Schedules, mfa: d.MFA, tokens: d.Tokens, clients: d.Clients, oidc: d.OIDC, passkeys: d.Passkeys, enrollment: d.Enrollment, agentControl: d.AgentControl, gameAddress: d.GameAddress, games: d.Games, router: d.Router, health: d.Health, settings: d.Settings, mail: d.Mail, notifications: d.Notifications, tickets: d.Tickets, kb: d.KB, status: d.Status, usage: d.Usage, resets: d.Resets, verify: d.Verify, mailPrefs: d.MailPrefs, sites: d.Sites, ai: d.AI, env: d.Env, host: d.Host, logs: d.Logs, logArchive: d.LogArchive, setupCodeFile: d.SetupCodeFile, onSetupDone: d.OnSetupDone, statsLimit: console.NewLimiter(0, 0, 0), catalog: d.Catalog, secureCookies: d.SecureCookies, modules: d.Modules,
 			console: d.Console, consoleLimit: d.ConsoleLimit, baseCtx: d.BaseCtx, nodes: d.Nodes, files: d.Files, maxUpload: d.MaxUpload,
 			runnerReady: d.RunnerReady, buildMemory: d.BuildMemory, diagnostics: d.Diagnostics}
 		if s.buildMemory == 0 {

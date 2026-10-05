@@ -6,6 +6,39 @@ authoritative current version.
 
 ## Unreleased
 
+### Changed
+
+- **Memory and CPU limits follow each node's hardware.** The largest memory
+  and CPU a bot or game server may be given are now the memory and CPU count
+  of the node it runs on (the Docker daemon for the panel's own node, the
+  agent's report for remote nodes). `RIVET_MAX_BOT_MEMORY_BYTES` and
+  `RIVET_MAX_BOT_NANO_CPUS` are optional caps on top and are unset by
+  default (previously 4 GiB / 4 CPUs; the example environment file set
+  2 GiB). Operators who copied `RIVET_MAX_BOT_MEMORY_BYTES=2147483648` from
+  the example should remove it to offer a node's full memory. The new-server
+  form shows each node's maximums, lists the node choice above memory and
+  CPU, and re-sizes the server when another node is chosen; the memory and
+  CPU sliders now reach the maximum (the CPU slider stopped at 3.8 of 4).
+- **Players are never sent to the panel's host name.** A game server's
+  join address no longer falls back to the host the panel was opened on.
+  Without a public address it uses the node's own IP (the address a remote
+  node's agent connects from, or the `RIVET_AGENT_ADDRESS` host for the
+  panel's node); otherwise the Connect block asks an administrator to set
+  one. The panel's host is refused as a node public address. For a name,
+  point a DNS-only (not Cloudflare-proxied) record at the node.
+
+### Fixed
+
+- Saving a game server's memory or CPU failed with `command "/bin/sh" is not
+  permitted for runtime java`: the save re-checked the server type's
+  startup wrapper against the runtime's command list.
+- A server saved with more CPUs than its node has (for example 2.3 on a
+  2-CPU node) no longer fails to start with Docker's "range of CPUs is from
+  0.01 to 2.00": the container gets the node's CPU count instead, and such a
+  value can no longer be saved.
+- Resource errors now read "memory must be between 1024 MiB and 3712 MiB …
+  on this node" instead of raw byte and nano-CPU counts.
+
 ## 0.5.0 - 2026-10-05
 
 ### Added

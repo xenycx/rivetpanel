@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, untrack } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { api, ApiError, fmtBytes } from '$lib/api/client';
@@ -102,11 +102,37 @@
 		return Object.entries(out);
 	});
 
-	const maxMiB = $derived(limits ? Math.floor(limits.max_memory_bytes / 1048576) : 16384);
+	// The maximums follow the chosen node: the panel's limits capped by that
+	// node's own memory and CPU count (a 2-CPU node never offers 4 cores).
+	const nodeLimits = $derived(nodes.find((n) => n.id === nodeID)?.limits);
+	const maxMiB = $derived(Math.floor((nodeLimits?.max_memory_bytes ?? limits?.max_memory_bytes ?? 16384 * 1048576) / 1048576));
 	const minMiB = (b: Blueprint | null) => Math.max(limits ? Math.ceil(limits.min_memory_bytes / 1048576) : 64, b?.spec.resources.min_memory_mb ?? 0);
 	const tooBig = (b: Blueprint) => minMiB(b) > maxMiB;
 	const minCpu = $derived(limits ? limits.min_nano_cpus / 1e9 : 0.5);
-	const maxCpu = $derived(limits ? limits.max_nano_cpus / 1e9 : 4);
+	const maxCpu = $derived((nodeLimits?.max_nano_cpus ?? limits?.max_nano_cpus ?? 4e9) / 1e9);
+	// Slider bounds on the slider's own steps, so its far end is the maximum
+	// itself (0.05 + n × 0.25 never reaches 4).
+	const memStep = 128;
+	const memSliderMin = (b: Blueprint) => Math.ceil(minMiB(b) / memStep) * memStep;
+	const cpuStep = 0.25;
+	const cpuSliderMin = $derived(Math.min(Math.max(cpuStep, Math.ceil(minCpu / cpuStep) * cpuStep), maxCpu));
+	const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(v, hi));
+
+	// The server type's suggested size, within the chosen node's limits.
+	function suggestSize(b: Blueprint) {
+		memoryMiB = clamp(b.spec.resources.memory_mb, minMiB(b), maxMiB);
+		cpus = clamp(b.spec.resources.cpus, cpuSliderMin, maxCpu);
+	}
+	// Choosing another node (or its limits arriving) sizes the server for it.
+	let sizedFor = '';
+	$effect(() => {
+		const key = `${nodeID}|${maxMiB}|${maxCpu}`;
+		if (key === sizedFor) return;
+		sizedFor = key;
+		untrack(() => {
+			if (chosen) suggestSize(chosen);
+		});
+	});
 	const isJava = $derived(!!chosen?.spec.images.some((i) => i.java));
 	const isSteam = $derived(!!chosen?.spec.install?.steamcmd);
 
@@ -157,8 +183,7 @@
 		unstable = false;
 		moreOptions = false;
 		problems = {};
-		memoryMiB = Math.max(minMiB(b), Math.min(b.spec.resources.memory_mb, maxMiB));
-		cpus = Math.max(minCpu, Math.min(b.spec.resources.cpus, maxCpu));
+		suggestSize(b);
 		if (!nameTouched) name = `${b.name} server`;
 		workspaceID = workspaces.selected !== 'all' && !workspaces.list.find((w) => w.id === workspaces.selected)?.personal ? workspaces.selected : '';
 		for (const v of b.spec.variables) if (v.versions) loadVersions(b, v);
@@ -189,7 +214,7 @@
 		}
 		if (chosen && i === 2) {
 			if (!name.trim()) p.name = 'Give the server a name.';
-			if (tooBig(chosen)) p.memory = `${chosen.name} needs at least ${fmtBytes(minMiB(chosen) * 1048576)} of memory, more than your limit of ${fmtBytes(maxMiB * 1048576)}.`;
+			if (tooBig(chosen)) p.memory = `${chosen.name} needs at least ${fmtBytes(minMiB(chosen) * 1048576)} of memory, more than the limit of ${fmtBytes(maxMiB * 1048576)} on this node.`;
 			else if (memoryMiB < minMiB(chosen) || memoryMiB > maxMiB) p.memory = `Choose between ${fmtBytes(minMiB(chosen) * 1048576)} and ${fmtBytes(maxMiB * 1048576)}.`;
 			if (cpus < minCpu || cpus > maxCpu) p.cpu = `Choose between ${minCpu} and ${maxCpu} cores.`;
 		}
@@ -427,6 +452,14 @@
 						<span id="name-help" class="help {problems.name ? 'text-fail!' : ''}">{problems.name || 'Shown in RivetPanel only. Players see the name set in the game’s own settings.'}</span>
 					</label>
 
+					{#if nodes.length > 1}
+						<label class="block max-w-md">
+							<span class="label">Node</span>
+							<select class="field" bind:value={nodeID}>{#each nodes as n (n.id)}<option value={n.id}>{n.name}{n.transport === 'agent' ? (n.agent?.connected ? ' · connected' : ' · offline') : ' · this host'}{n.limits ? ` · up to ${fmtBytes(n.limits.max_memory_bytes)}, ${n.limits.max_nano_cpus / 1e9} CPU` : ''}</option>{/each}</select>
+							<span class="help">The machine that runs the server and keeps its files. Memory and CPU below follow its size. An offline node accepts the server and starts it when its agent reconnects.</span>
+						</label>
+					{/if}
+
 					<fieldset>
 						<legend class="label">Memory: <span class="font-mono">{fmtBytes(memoryMiB * 1048576)}</span></legend>
 						{#if presets.length}
@@ -438,7 +471,7 @@
 								{/each}
 							</div>
 						{/if}
-						<input type="range" class="mt-3 w-full accent-[var(--color-action)]" min={minMiB(chosen)} max={Math.max(maxMiB, minMiB(chosen))} step="128" bind:value={memoryMiB} aria-label="Memory in MiB" aria-invalid={problems.memory ? 'true' : undefined} />
+						<input type="range" class="mt-3 w-full accent-[var(--color-action)]" min={memSliderMin(chosen)} max={Math.max(maxMiB, memSliderMin(chosen))} step={memStep} bind:value={memoryMiB} aria-label="Memory in MiB" aria-invalid={problems.memory ? 'true' : undefined} />
 						<span class="help {problems.memory ? 'text-fail!' : ''}">
 							{problems.memory || (isJava ? `More players, mods and view distance need more memory. About ${chosen.spec.resources.heap_percent ?? 85}% goes to the Java heap.` : `${chosen.name} needs at least ${fmtBytes(minMiB(chosen) * 1048576)}. The server is stopped if it uses more than this.`)}
 						</span>
@@ -446,8 +479,8 @@
 
 					<label class="block">
 						<span class="label">CPU: <span class="font-mono">{cpus}</span> {cpus === 1 ? 'core' : 'cores'}</span>
-						<input type="range" class="w-full accent-[var(--color-action)]" min={minCpu} max={maxCpu} step="0.25" bind:value={cpus} aria-invalid={problems.cpu ? 'true' : undefined} />
-						<span class="help {problems.cpu ? 'text-fail!' : ''}">{problems.cpu || `Suggested ${chosen.spec.resources.cpus} ${chosen.spec.resources.cpus === 1 ? 'core' : 'cores'}. A limit, not a reservation: other servers can use idle CPU.`}</span>
+						<input type="range" class="w-full accent-[var(--color-action)]" min={cpuSliderMin} max={maxCpu} step={cpuStep} bind:value={cpus} aria-invalid={problems.cpu ? 'true' : undefined} />
+						<span class="help {problems.cpu ? 'text-fail!' : ''}">{problems.cpu || `Suggested ${chosen.spec.resources.cpus} ${chosen.spec.resources.cpus === 1 ? 'core' : 'cores'}, up to ${maxCpu} on this node. A limit, not a reservation: other servers can use idle CPU.`}</span>
 					</label>
 
 					{#if creatable().length > 1}
@@ -457,13 +490,6 @@
 								{#each creatable() as w (w.id)}<option value={w.personal ? '' : w.id}>{w.personal ? 'Personal workspace' : w.name}</option>{/each}
 							</select>
 							<span class="help">Members of the workspace get access according to their role.</span>
-						</label>
-					{/if}
-					{#if nodes.length > 1}
-						<label class="block max-w-md">
-							<span class="label">Node</span>
-							<select class="field" bind:value={nodeID}>{#each nodes as n (n.id)}<option value={n.id}>{n.name}{n.transport === 'agent' ? (n.agent?.connected ? ' · connected' : ' · offline') : ' · this host'}</option>{/each}</select>
-							<span class="help">The machine that runs the server and keeps its files. An offline node accepts the server and starts it when its agent reconnects.</span>
 						</label>
 					{/if}
 

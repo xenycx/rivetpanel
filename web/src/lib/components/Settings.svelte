@@ -76,7 +76,8 @@
 	}
 
 	onMount(() => {
-		api<{ runtimes: RuntimeInfo[]; limits: Limits }>('GET', '/runtimes')
+		// Limits on this server's own node (its CPUs and memory cap them).
+		api<{ runtimes: RuntimeInfo[]; limits: Limits }>('GET', `/runtimes?bot_id=${encodeURIComponent(bot.id)}`)
 			.then((r) => {
 				limits = r.limits;
 				rt = r.runtimes.find((x) => x.id === bot.runtime) ?? null;

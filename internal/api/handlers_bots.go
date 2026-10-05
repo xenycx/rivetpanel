@@ -34,7 +34,18 @@ func (s *panel) listRuntimes(c fiber.Ctx) error {
 		}
 		out = append(out, d)
 	}
-	l := s.bots.Limits
+	// Limits on one node: ?bot_id= for an existing server's node, ?node_id=
+	// for a node an administrator places a new server on; else the local
+	// node. Each node's maximums follow its own CPUs and memory.
+	l := s.bots.LimitsFor(c.Context(), "")
+	if id := c.Query("bot_id"); id != "" {
+		var err error
+		if l, err = s.bots.LimitsForBot(c.Context(), currentUser(c), strings.Clone(id)); err != nil {
+			return err
+		}
+	} else if n := c.Query("node_id"); n != "" && currentUser(c).Can(domain.PermNodesManage) {
+		l = s.bots.LimitsFor(c.Context(), strings.Clone(n))
+	}
 	if l.PortMin == 0 && l.PortMax == 0 {
 		l.PortMin, l.PortMax = 20000, 29999
 	}

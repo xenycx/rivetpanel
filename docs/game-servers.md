@@ -136,6 +136,14 @@ provided by the panel. Eggs declare no resources or ports, so the draft uses
 
 ## Creating and running a server
 
+Memory and CPU follow the chosen node: the largest values offered are that
+node's own memory and CPU count (capped further by
+`RIVET_MAX_BOT_MEMORY_BYTES` / `RIVET_MAX_BOT_NANO_CPUS` when set), and
+choosing another node re-applies the server type's suggested size within
+its limits. Saving a larger value is refused with the node's range, and a
+server saved earlier with more CPUs than its node has starts with the node's
+CPU count instead of failing (Docker refuses a CPU limit above the host's).
+
 Game servers → New server: choose the type, the version, memory and CPU, and
 accept the Minecraft EULA (required for every Minecraft type except the proxy;
 the acceptance is stored with the server and written to `eula.txt`).
@@ -147,13 +155,19 @@ address players type into the game, with a copy button and a one-line hint
 for the game. The host is resolved in this order: the primary allocation's
 alias (Administration → Allocations), the IP the allocation is bound to,
 the node's **Public address** (Administration → Nodes; the local node has
-one too), and finally the host name the panel was opened on. When the
-result is `localhost`, a loopback or a private/LAN address, the block says
+one too), and finally the node's own IP when the panel knows it: the address
+a remote node's agent connects from, or the host of `RIVET_AGENT_ADDRESS`
+for the local node. The panel's own host name is never shown to players and
+is refused as a public address: it is for operators, and a name proxied by
+Cloudflare does not carry game traffic. To give players a name, point a
+**DNS-only** (not proxied) record such as `play.example.com` at the node's
+IP and enter it as the node's public address. Without any address the block
+shows the port and asks an administrator to set one. When the result is `localhost`, a loopback or a private/LAN address, the block says
 that only this machine or the local network can use it. The port is left
 out when it is the game's default (25565 for Minecraft Java); copying always
 gives `host:port`. Games with a separate query port (Valheim, Rust) also show
 it. The servers list and the header strip use the same address.
-`GET /api/v1/game-hosts` exposes only the nodes' public addresses.
+`GET /api/v1/game-hosts` exposes only the nodes' player addresses.
 
 The first start **installs** the server:
 

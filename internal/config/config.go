@@ -213,8 +213,9 @@ func LoadLookup(look Lookup) (Config, error) {
 		ActiveKeyID:     "k1",
 		SessionTTL:      7 * 24 * time.Hour,
 		HashWorkers:     1,
-		MaxBotMemory:    4 << 30,
-		MaxBotCPUs:      4_000_000_000,
+		// 0: each node's own memory and CPU count are the maximums.
+		MaxBotMemory: 0,
+		MaxBotCPUs:   0,
 
 		DockerHost:       "unix:///var/run/docker.sock",
 		ContainerUser:    "65532:65532",
@@ -583,7 +584,7 @@ func (c Config) Validate() error {
 	if c.HashWorkers < 1 {
 		errs = append(errs, errors.New("hash workers must be >= 1"))
 	}
-	if c.MaxBotMemory < MinBotMemory || c.MaxBotCPUs < MinBotCPUs {
+	if (c.MaxBotMemory != 0 && c.MaxBotMemory < MinBotMemory) || (c.MaxBotCPUs != 0 && c.MaxBotCPUs < MinBotCPUs) {
 		errs = append(errs, errors.New("bot resource maximums are below the minimums"))
 	}
 	if uid, gid, ok := parseUser(c.ContainerUser); !ok {
@@ -609,8 +610,10 @@ func (c Config) Validate() error {
 	if c.MaxBotsPerUser < 0 || c.UserMemoryBytes < 0 || c.NodeMemoryBytes < 0 || c.MinFreeDisk < 0 {
 		errs = append(errs, errors.New("capacity budgets cannot be negative (0 means unlimited)"))
 	}
-	if c.NodeMemoryBytes > 0 && c.NodeMemoryBytes < c.MaxBotMemory {
+	if c.NodeMemoryBytes > 0 && c.MaxBotMemory > 0 && c.NodeMemoryBytes < c.MaxBotMemory {
 		errs = append(errs, errors.New("RIVET_NODE_MEMORY_BYTES is smaller than RIVET_MAX_BOT_MEMORY_BYTES; the largest bot could never start"))
+	} else if c.NodeMemoryBytes > 0 && c.NodeMemoryBytes < MinBotMemory {
+		errs = append(errs, errors.New("RIVET_NODE_MEMORY_BYTES is smaller than the smallest bot memory limit; no bot could ever start"))
 	}
 	if c.BuildTimeout < time.Minute || c.BuildTimeout > 2*time.Hour {
 		errs = append(errs, errors.New("build timeout must be between 1m and 2h"))

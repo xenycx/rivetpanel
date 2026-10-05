@@ -610,6 +610,7 @@ func serve(log *slog.Logger, logs *logbuf.Buffer) error {
 	var runnerStatus func(context.Context) (runner.Status, bool)
 	var runnerDone chan struct{}
 	var dk *docker.Adapter
+	botSvc.NodeCapacity = nodeCapacity(db.GetAgentState, func() *docker.Adapter { return dk })
 	var rn *runner.Runner
 	// Deployment problems found at start (former installation, container
 	// paths, unencrypted public address) are logged and shown in Diagnostics.
@@ -792,6 +793,19 @@ func serve(log *slog.Logger, logs *logbuf.Buffer) error {
 	var enrollmentSvc *service.AgentEnrollmentService
 	var router *noderoute.Router
 	var agentControl api.AgentControl
+	// Where players reach a node without a public address: the local node's
+	// agent address host (set explicitly, so never the panel's own name),
+	// a remote node's address from its agent connection.
+	var localGameHost string
+	if h, _, err := net.SplitHostPort(cfg.AgentAddress); err == nil {
+		localGameHost = h
+	}
+	gameAddress := func(nodeID string) string {
+		if nodeID == domain.LocalNodeID {
+			return localGameHost
+		}
+		return ""
+	}
 	if cfg.Modules.Enabled("agents") {
 		ca, err := agentcert.LoadOrCreate(filepath.Join(cfg.KeyDir, "agent-ca"))
 		if err != nil {
@@ -819,6 +833,12 @@ func serve(log *slog.Logger, logs *logbuf.Buffer) error {
 		nodeNotices.Online = hub.Connected
 		enrollmentSvc.AgentAddress = addr
 		agentControl = hub
+		gameAddress = func(nodeID string) string {
+			if nodeID == domain.LocalNodeID {
+				return localGameHost
+			}
+			return hub.RemoteIP(nodeID)
+		}
 		router = &noderoute.Router{LocalNode: domain.LocalNodeID, Hub: hub, Bots: db}
 		go router.RunNodeSampler(ctx, db, cfg.TelemetryInterval)
 		if rn != nil {
@@ -922,7 +942,7 @@ func serve(log *slog.Logger, logs *logbuf.Buffer) error {
 	app := api.New(api.Deps{Diagnostics: diagnostics, Log: log, Deploy: deploySvc, Backups: backupSvc, Stats: statsSrc, SFTP: sftpInfo, Analytics: analytics, PublicURL: cfg.PublicURL, DB: db, UI: webui.FS(), Auth: authSvc, Bots: botSvc, OAuth: oauthSvc,
 		Catalog: catalog, SecureCookies: cfg.Production, ProxyHeader: cfg.ProxyHeader, MetricsToken: cfg.MetricsToken, Modules: cfg.Modules, Checks: checks, Nodes: db, Files: wsm, MaxUpload: cfg.MaxUploadBytes,
 		Console: consoleSvc, BaseCtx: ctx, RunnerReady: runnerReady, Ops: ops, Audit: audit, Schedules: scheduler,
-		MFA: mfaSvc, Tokens: &service.TokenService{Store: db, Bots: botSvc}, Clients: &service.APIClientService{Store: db, Bots: botSvc}, Passkeys: &service.PasskeyService{Store: db, Auth: authSvc, MFA: mfaSvc, PublicURL: oauthSvc.CurrentPublicURL}, OIDC: &service.OIDCService{Store: db, Auth: authSvc, Keys: keys, PublicURL: oauthSvc.CurrentPublicURL, States: oauthSvc.States, Log: log}, Enrollment: enrollmentSvc, AgentControl: agentControl, Games: gameSvc, Router: router, Health: health,
+		MFA: mfaSvc, Tokens: &service.TokenService{Store: db, Bots: botSvc}, Clients: &service.APIClientService{Store: db, Bots: botSvc}, Passkeys: &service.PasskeyService{Store: db, Auth: authSvc, MFA: mfaSvc, PublicURL: oauthSvc.CurrentPublicURL}, OIDC: &service.OIDCService{Store: db, Auth: authSvc, Keys: keys, PublicURL: oauthSvc.CurrentPublicURL, States: oauthSvc.States, Log: log}, Enrollment: enrollmentSvc, AgentControl: agentControl, GameAddress: gameAddress, Games: gameSvc, Router: router, Health: health,
 		Settings: settingsSvc, Notifications: notices, Tickets: tickets, KB: kbSvc, Status: statusSvc, Usage: usageSvc, Mail: mailSvc, Resets: resetSvc, Verify: verifySvc, MailPrefs: db, Sites: sitesSvc, AI: aiSvc, Env: envSvc, Host: monitor, Logs: logs, LogArchive: logArchive, SetupCodeFile: setupCodeFile, OnSetupDone: func() { _ = os.Remove(setupCodeFile) }})
 	ln, err := net.Listen("tcp", cfg.Listen)
 	if err != nil {

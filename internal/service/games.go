@@ -455,29 +455,31 @@ func (g *GameService) CreateServer(ctx context.Context, actor domain.User, in Ga
 			return domain.Bot{}, domain.Invalid("unknown image")
 		}
 	}
-	// Defaults come from the blueprint, capped by the panel's limits.
+	nodeID, err := s.chooseNode(ctx, actor, in.NodeID)
+	if err != nil {
+		return domain.Bot{}, err
+	}
+	// Defaults come from the blueprint, capped by the limits on the chosen
+	// node (the panel's maximums and the node's own CPUs and memory).
+	lim := s.LimitsFor(ctx, nodeID)
 	mem, cpu := in.MemoryBytes, in.NanoCPUs
 	if mem == 0 {
-		mem = min(spec.Resources.MemoryMB<<20, s.Limits.MaxMemoryBytes)
+		mem = min(spec.Resources.MemoryMB<<20, lim.MaxMemoryBytes)
 	}
 	if cpu == 0 {
-		cpu = min(int64(spec.Resources.CPUs*1e9), s.Limits.MaxNanoCPUs)
+		cpu = min(int64(spec.Resources.CPUs*1e9), lim.MaxNanoCPUs)
 	}
-	minMem := max(s.Limits.MinMemoryBytes, spec.Resources.MinMemoryMB<<20)
-	if mem < minMem || mem > s.Limits.MaxMemoryBytes {
-		return domain.Bot{}, domain.Invalid(fmt.Sprintf("memory must be between %d MiB and %d MiB for %s", minMem>>20, s.Limits.MaxMemoryBytes>>20, spec.Name))
+	minMem := max(lim.MinMemoryBytes, spec.Resources.MinMemoryMB<<20)
+	if mem < minMem || mem > lim.MaxMemoryBytes {
+		return domain.Bot{}, domain.Invalid(fmt.Sprintf("memory must be between %d MiB and %d MiB for %s on this node", minMem>>20, lim.MaxMemoryBytes>>20, spec.Name))
 	}
-	if cpu < s.Limits.MinNanoCPUs || cpu > s.Limits.MaxNanoCPUs {
-		return domain.Bot{}, domain.Invalid(fmt.Sprintf("CPU must be between %.2f and %.2f cores", float64(s.Limits.MinNanoCPUs)/1e9, float64(s.Limits.MaxNanoCPUs)/1e9))
+	if cpu < lim.MinNanoCPUs || cpu > lim.MaxNanoCPUs {
+		return domain.Bot{}, domain.Invalid(fmt.Sprintf("CPU must be between %.2f and %.2f cores on this node", float64(lim.MinNanoCPUs)/1e9, float64(lim.MaxNanoCPUs)/1e9))
 	}
 	if err := s.checkUserBudget(ctx, actor, 1, mem); err != nil {
 		return domain.Bot{}, err
 	}
 	wsID, err := s.creatableWorkspace(ctx, actor, in.WorkspaceID)
-	if err != nil {
-		return domain.Bot{}, err
-	}
-	nodeID, err := s.chooseNode(ctx, actor, in.NodeID)
 	if err != nil {
 		return domain.Bot{}, err
 	}

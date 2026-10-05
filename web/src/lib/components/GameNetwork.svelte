@@ -5,6 +5,8 @@
 	import { toast } from '$lib/ui/toast.svelte';
 	import Icon from '$lib/components/ui/Icon.svelte';
 	import Notice from '$lib/components/ui/Notice.svelte';
+	import { onMount } from 'svelte';
+	import { loadGameHosts, nodeHost } from '$lib/connect.svelte';
 
 	let { bot, stopped, onSaved }: { bot: Bot; stopped: boolean; onSaved: (b: Bot) => void } = $props();
 	let error = $state('');
@@ -13,7 +15,9 @@
 	const allocs = $derived(bot.allocations ?? []);
 	const msg = (e: unknown) => (e instanceof ApiError ? e.message : 'The request failed.');
 
-	const host = (a: Allocation) => a.alias || (a.ip === '0.0.0.0' || a.ip === '::' ? location.hostname : a.ip);
+	onMount(() => void loadGameHosts());
+	// Never the panel's own host: players are given the node's address.
+	const host = (a: Allocation) => a.alias || (a.ip === '0.0.0.0' || a.ip === '::' ? nodeHost(bot.node_id) : a.ip);
 
 	async function refresh() {
 		onSaved(await api<Bot>('GET', `/bots/${bot.id}`));
@@ -58,7 +62,7 @@
 		</div>
 		<ul class="mt-4 divide-y divide-rule-soft rounded-tile border border-rule-soft">
 			{#each allocs as a (a.id)}
-				{@const addr = `${host(a)}:${a.port}`}
+				{@const addr = host(a) ? `${host(a)}:${a.port}` : `port ${a.port}`}
 				<li class="flex flex-wrap items-center gap-3 px-4 py-3">
 					<div class="min-w-0 flex-1">
 						<button class="flex items-center gap-1.5 font-mono text-small font-medium hover:underline" onclick={() => copy(addr)} title="Copy address">{addr}<Icon name="copy" size={12} class="text-muted" /></button>

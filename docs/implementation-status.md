@@ -811,9 +811,24 @@ items state exactly what remains.
 - [x] Game server join address: a Connect block on Manage, in the header
   strip and the servers list, resolved from allocation alias/IP, the node's
   public address (existing Administration → Nodes field, local node
-  included) or the panel host, with loopback/LAN warnings;
-  `GET /api/v1/game-hosts`. Enforcement: display only; reachability still
-  depends on the host's firewall and router port forwarding.
+  included) or the node's own IP (a remote agent's connecting address, the
+  local `RIVET_AGENT_ADDRESS` host), with loopback/LAN warnings;
+  `GET /api/v1/game-hosts`. The panel's own host is never used and is
+  refused as a node public address (application level). Enforcement:
+  display only; reachability still depends on the host's firewall, router
+  port forwarding and DNS-only (unproxied) records. Automatic subdomains are
+  not implemented.
+- [x] Per-node resource maximums: memory and CPU limits of new and existing
+  bots and game servers are capped by the node's own memory and CPU count
+  (local: Docker daemon info; remote: the agent's reported capabilities),
+  plus the optional `RIVET_MAX_BOT_MEMORY_BYTES` / `RIVET_MAX_BOT_NANO_CPUS`
+  caps, which now default to unset. The new-server form resizes to the
+  chosen node. Enforcement: application-level validation; the Docker adapter
+  additionally lowers a container's CPU limit to the host's CPU count at
+  create (Docker itself enforces the limits). No migration.
+- [x] Game server resource edits: saving memory/CPU no longer re-validates
+  the server type's `/bin/sh -c` startup against the runtime's command list
+  (the startup cannot be changed through that path anyway).
 - [x] Server page: Manage merges the former Overview tab (console, status,
   activity, log history; side column with connect, source/server type,
   backups, details); `?tab=overview` redirects; "Add-ons" renamed

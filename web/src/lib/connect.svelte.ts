@@ -1,11 +1,12 @@
 // How players reach a game server: the host and port to type into the game.
 //
 // The host is, in order: the allocation's alias (an administrator's name for
-// that IP), the allocation's own IP when it is bound to one, the node's
-// public address (Administration → Nodes → Public address, also for the
-// local node), and last the host this panel was opened on. Loopback and
-// private addresses are still shown, with a note that players elsewhere
-// cannot use them.
+// that IP), the allocation's own IP when it is bound to one, and the node's
+// address from GET /game-hosts (its public address under Administration →
+// Nodes, else the node's own IP when the panel knows it). The panel's own
+// host name is never used: it is for operators, not players. Without any of
+// these the address is empty (source 'none'). Loopback and private addresses
+// are still shown, with a note that players elsewhere cannot use them.
 import { api } from '$lib/api/client';
 import type { Bot } from '$lib/api/types';
 import type { BlueprintSpec } from '$lib/api/games';
@@ -24,17 +25,23 @@ export function loadGameHosts(): Promise<void> {
 	return loading;
 }
 
+/** A node's address for players ('' = not known). */
+export function nodeHost(nodeID: string): string {
+	return state.hosts[nodeID] ?? '';
+}
+
 export type Reach = 'public' | 'lan' | 'local';
 export type ConnectInfo = {
+	/** '' when no address is known yet (source 'none'). */
 	host: string;
 	port: number;
-	/** Always host:port, for copying. */
+	/** Always host:port, for copying ('' without a host). */
 	full: string;
 	/** What to show: the port is left out when it is the game's default. */
 	short: string;
 	reach: Reach;
 	/** Where the host came from, for the explanation under it. */
-	source: 'alias' | 'ip' | 'node' | 'panel';
+	source: 'alias' | 'ip' | 'node' | 'none';
 	queryPort?: number;
 };
 
@@ -64,11 +71,11 @@ export function connectInfo(b: Bot, spec?: BlueprintSpec | null): ConnectInfo | 
 	if (!a) return null;
 	void state.hosts; // re-evaluate when the addresses arrive
 	let host = '';
-	let source: ConnectInfo['source'] = 'panel';
+	let source: ConnectInfo['source'] = 'none';
 	if (a.alias) [host, source] = [a.alias, 'alias'];
 	else if (a.ip && a.ip !== '0.0.0.0' && a.ip !== '::') [host, source] = [a.ip, 'ip'];
 	else if (state.hosts[b.node_id]) [host, source] = [state.hosts[b.node_id], 'node'];
-	else host = typeof location === 'undefined' ? 'localhost' : location.hostname;
+	if (!host) return { host: '', port: a.port, full: '', short: '', reach: 'public', source };
 	const bracket = host.includes(':') && !host.startsWith('[') ? `[${host}]` : host;
 	const full = `${bracket}:${a.port}`;
 	const def = spec?.query ? defaultPorts[spec.query] : b.blueprint_id && a.port === 25565 ? 25565 : undefined;

@@ -31,6 +31,11 @@
 	<h2 id="connect-h" class="text-title font-semibold">Connect</h2>
 	{#if !ci}
 		<p class="mt-2 text-small text-muted">This server has no port yet. Add one under Network.</p>
+	{:else if ci.source === 'none'}
+		<p class="mt-2 text-small text-muted">
+			Port <code>{ci.port}</code>. The address players use is not known yet.
+			{#if nodesAdmin}Set it under <a class="link" href="/admin/nodes">Administration → Nodes → Public address</a>: the node's IP, or a DNS-only host name that points at it (not the panel's own address).{:else}An administrator can set a public address for this node.{/if}
+		</p>
 	{:else}
 		<button type="button" class="mt-2 flex w-full items-center gap-2 rounded-control border border-rule bg-raised px-3 py-2 text-left hover:border-muted" onclick={copy} title="Copy {ci.full}">
 			<span class="min-w-0 flex-1 truncate font-mono text-[0.9375rem] font-medium">{ci.short}</span>
@@ -45,8 +50,6 @@
 				{ci.reach === 'local' ? 'Only reachable from this machine.' : 'Only reachable on your local network.'}
 				{#if nodesAdmin}Set the address players use under <a class="link" href="/admin/nodes">Administration → Nodes → Public address</a>.{:else}An administrator can set a public address for this node.{/if}
 			</p>
-		{:else if ci.source === 'panel'}
-			<p class="mt-1.5 text-small text-muted">This is the panel's own host name.{#if nodesAdmin} If players use another one, set it under <a class="link" href="/admin/nodes">Administration → Nodes → Public address</a>.{/if}</p>
 		{/if}
 	{/if}
 </section>

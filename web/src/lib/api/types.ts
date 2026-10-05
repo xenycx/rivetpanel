@@ -173,6 +173,8 @@ export type NodeInfo = {
 	last_seen_at_ms: number | null;
 	agent?: AgentInfo;
 	latest?: Sample;
+	/** Largest limits a server on this node may have (panel maximums capped by its hardware). */
+	limits?: { max_memory_bytes: number; max_nano_cpus: number };
 };
 export type LocationInfo = { id: string; name: string; description: string; node_count: number; created_at_ms: number; updated_at_ms: number };
 
