@@ -2,7 +2,7 @@
 
 RivetPanel is a control plane for Discord bots, Minecraft servers and static
 sites, with an embedded local runner and preview remote execution nodes. The
-current project version is **0.6.0**. Start with
+current project version is **0.6.1**. Start with
 the guides below.
 
 ## Install and operate

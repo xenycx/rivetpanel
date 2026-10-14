@@ -6,6 +6,16 @@ authoritative current version.
 
 ## Unreleased
 
+## 0.6.1 - 2026-10-14
+
+### Fixed
+
+- The branch of an already linked repository could not be changed: the
+  Branch list under Deployments → Repository settings offered only the
+  current branch until the repository was picked again. It now lists the
+  repository's branches as soon as the settings open (bots, servers and
+  sites from GitHub).
+
 ## 0.6.0 - 2026-10-14
 
 ### Added

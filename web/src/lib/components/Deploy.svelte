@@ -86,6 +86,20 @@
 		}
 	}
 
+	// Opening the settings of a linked repository lists its branches, so the
+	// branch can be changed without picking the repository again.
+	let branchesFor = '';
+	$effect(() => {
+		const name = link?.full_name;
+		if (!settingsOpen || !name || branchesFor === name) return;
+		branchesFor = name;
+		api<RepoLookup>('GET', `/github/lookup?repo=${encodeURIComponent(name)}`)
+			.then((r) => {
+				if (form.full_name === name) branches = r.branches;
+			})
+			.catch((e) => (error = msg(e)));
+	});
+
 	async function save(e: SubmitEvent) {
 		e.preventDefault();
 		error = secret = '';
