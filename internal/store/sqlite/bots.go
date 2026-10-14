@@ -15,7 +15,7 @@ const botCols = `id, owner_id, node_id, name, runtime, image_ref, argv_json, mem
 	restart_count, next_retry_at_ms, state_reason, last_started_at_ms,
 	discord_user_id, discord_username, discord_avatar_url, COALESCE(workspace_id, ''), COALESCE(build_command, ''),
 	COALESCE(logo_updated_at_ms, 0), kind, COALESCE(blueprint_id, ''), COALESCE(blueprint_revision, 0), image_choice, install_state, installed_version,
-	jvm_args, jvm_args_updated_at_ms, jvm_args_generation`
+	jvm_args, jvm_args_updated_at_ms, jvm_args_generation, COALESCE(release_command, '')`
 
 func scanBot(row interface{ Scan(...any) error }) (domain.Bot, error) {
 	var b domain.Bot
@@ -30,7 +30,7 @@ func scanBot(row interface{ Scan(...any) error }) (domain.Bot, error) {
 		&b.RestartCount, &b.NextRetryAtMS, &b.StateReason, &b.LastStartedAtMS,
 		&b.DiscordUserID, &b.DiscordUsername, &b.DiscordAvatarURL, &b.WorkspaceID, &b.BuildCommand,
 		&b.LogoUpdatedMS, &b.Kind, &b.BlueprintID, &b.BlueprintRevision, &b.ImageChoice, &b.InstallState, &b.InstalledVersion,
-		&b.JVMArgs, &b.JVMArgsUpdatedMS, &b.JVMArgsGeneration)
+		&b.JVMArgs, &b.JVMArgsUpdatedMS, &b.JVMArgsGeneration, &b.ReleaseCommand)
 	if err != nil {
 		return b, mapErr(err)
 	}
@@ -104,6 +104,12 @@ func (db *DB) CreateBot(ctx context.Context, b domain.Bot) error {
 		defaultStr(b.RestartPolicy, domain.RestartOnFailure), defaultInt(b.RestartMaxAttempts, 5),
 		defaultInt(b.RestartBackoffInitialMS, 2000), defaultInt(b.RestartBackoffMaxMS, 300000), b.WorkspaceID, b.BuildCommand,
 		defaultStr(b.Kind, domain.KindBot), b.BlueprintID, b.BlueprintRevision, b.ImageChoice, defaultStr(b.InstallState, domain.InstallNone))
+	return mapErr(err)
+}
+
+// SetReleaseCommand stores a web unit's release command ("" clears it).
+func (db *DB) SetReleaseCommand(ctx context.Context, botID, cmd string) error {
+	_, err := db.ExecContext(ctx, `UPDATE bots SET release_command = NULLIF(?, '') WHERE id = ?`, cmd, botID)
 	return mapErr(err)
 }
 
@@ -196,13 +202,13 @@ func (db *DB) UpdateBotConfig(ctx context.Context, b domain.Bot, nowMS int64) er
 	res, err := db.ExecContext(ctx, `UPDATE bots SET name = ?, runtime = ?, image_ref = ?, argv_json = ?, entrypoint_json = ?,
 		memory_bytes = ?, nano_cpus = ?, pids_limit = ?, network_enabled = ?, bandwidth_kbps = ?,
 		restart_policy = ?, restart_max_attempts = ?, restart_backoff_initial_ms = ?, restart_backoff_max_ms = ?,
-		auto_backup = ?, build_command = NULLIF(?, ''),
+		auto_backup = ?, build_command = NULLIF(?, ''), release_command = NULLIF(?, ''),
 		generation = generation + 1, updated_at_ms = ?
 		WHERE id = ? AND generation = ? AND `+stoppedPredicate,
 		b.Name, b.Runtime, b.ImageRef, string(argv), entry, b.MemoryBytes, b.NanoCPUs, b.PidsLimit,
 		boolInt(!b.NetworkDisabled), b.BandwidthKbps,
 		defaultStr(b.RestartPolicy, domain.RestartOnFailure), b.RestartMaxAttempts, b.RestartBackoffInitialMS, b.RestartBackoffMaxMS,
-		boolInt(!b.AutoBackupOff), b.BuildCommand, nowMS, b.ID, b.Generation)
+		boolInt(!b.AutoBackupOff), b.BuildCommand, b.ReleaseCommand, nowMS, b.ID, b.Generation)
 	if err != nil {
 		return mapErr(err)
 	}

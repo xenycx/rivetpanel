@@ -218,7 +218,16 @@ type CreateBotInput struct {
 	BuildCommand string
 	// Addons are attached at creation (databases, caches).
 	Addons []AddonInput
+	// Kind is "" (a bot) or domain.KindWeb for the unit behind a built or
+	// running site; only SiteService creates those, always on the panel's
+	// own node (the sites listener serves them).
+	Kind string
+	// ReleaseCommand optionally runs before each start (web units).
+	ReleaseCommand string
 }
+
+// errWebUnit refuses bot operations on a site's web unit.
+var errWebUnit = domain.Invalid("this belongs to a site; manage it from the site instead")
 
 // UpdateBotInput is a partial configuration change; nil fields are unchanged.
 type UpdateBotInput struct {
@@ -240,7 +249,8 @@ type UpdateBotInput struct {
 	RestartBackoffInitialMS *int64
 	RestartBackoffMaxMS     *int64
 
-	BuildCommand *string // "" clears it
+	BuildCommand   *string // "" clears it
+	ReleaseCommand *string // web units only; "" clears it
 }
 
 // EnvView is the masked view of a variable.
@@ -396,6 +406,19 @@ func (s *BotService) Create(ctx context.Context, actor domain.User, in CreateBot
 	if err != nil {
 		return domain.Bot{}, err
 	}
+	release, err := validateBuildCommand(in.ReleaseCommand)
+	if err != nil {
+		return domain.Bot{}, err
+	}
+	switch in.Kind {
+	case "", domain.KindBot:
+		in.Kind = domain.KindBot
+		release = ""
+	case domain.KindWeb:
+		in.NodeID = s.LocalNode
+	default:
+		return domain.Bot{}, domain.Invalid("unknown kind")
+	}
 	addonMem, err := s.validateAddonInputs(in.Addons)
 	if err != nil {
 		return domain.Bot{}, err
@@ -436,6 +459,7 @@ func (s *BotService) Create(ctx context.Context, actor domain.User, in CreateBot
 		Argv: argv, MemoryBytes: mem, NanoCPUs: cpu, PidsLimit: pids,
 		DesiredState: domain.DesiredStopped, ObservedState: "stopped", CreatedAtMS: now, UpdatedAtMS: now,
 		SourceType: in.SourceType, TemplateID: in.TemplateID, RestartPolicy: domain.RestartOnFailure, BuildCommand: build,
+		Kind: in.Kind, ReleaseCommand: release,
 	}
 	// A template on a remote node is seeded through the node's agent: refuse
 	// before anything is recorded when that cannot work.
@@ -460,6 +484,12 @@ func (s *BotService) Create(ctx context.Context, actor domain.User, in CreateBot
 	if err := s.Store.CreateBot(ctx, b); err != nil {
 		s.removeWorkspace(nodeID, b.ID)
 		return domain.Bot{}, err
+	}
+	if release != "" {
+		if err := s.Store.SetReleaseCommand(ctx, b.ID, release); err != nil {
+			s.discardNew(ctx, b)
+			return domain.Bot{}, err
+		}
 	}
 	if len(seed) > 0 && seedTo == nil {
 		if err := s.seed(b.ID, seed); err != nil {
@@ -546,7 +576,7 @@ func (s *BotService) List(ctx context.Context, actor domain.User) ([]domain.Bot,
 	}
 	out := all[:0]
 	for _, b := range all {
-		if b.DesiredState != domain.DesiredDeleted && actor.Client.AllowsBot(b.ID, b.WorkspaceID) {
+		if b.DesiredState != domain.DesiredDeleted && !b.IsWeb() && actor.Client.AllowsBot(b.ID, b.WorkspaceID) {
 			out = append(out, b)
 		}
 	}
@@ -647,6 +677,14 @@ func (s *BotService) Update(ctx context.Context, actor domain.User, id string, i
 			return domain.Bot{}, err
 		}
 	}
+	if in.ReleaseCommand != nil {
+		if !b.IsWeb() {
+			return domain.Bot{}, domain.Invalid("release commands are for sites' apps")
+		}
+		if b.ReleaseCommand, err = validateBuildCommand(*in.ReleaseCommand); err != nil {
+			return domain.Bot{}, err
+		}
+	}
 	if err := s.Store.UpdateBotConfig(ctx, b, s.now()); err != nil {
 		return domain.Bot{}, err
 	}
@@ -684,9 +722,17 @@ func applyRestart(b *domain.Bot, in UpdateBotInput) error {
 // If cleanup fails the row stays marked deleted so a retry or the reconciler
 // can finish the job.
 func (s *BotService) Delete(ctx context.Context, actor domain.User, id string) error {
+	return s.delete(ctx, actor, id, false)
+}
+
+// delete removes a bot; web units only when their site is deleted.
+func (s *BotService) delete(ctx context.Context, actor domain.User, id string, web bool) error {
 	b, err := s.load(ctx, actor, id, true)
 	if err != nil {
 		return err
+	}
+	if b.IsWeb() && !web {
+		return errWebUnit
 	}
 	if s.Purger == nil && b.ContainerID != nil {
 		return domain.ErrRunnerUnavailable // a container exists but nothing can remove it

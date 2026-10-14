@@ -55,6 +55,8 @@ type DeployService struct {
 	RemotePush RemotePushes
 	// PushLimits bound one publish/push (zero: filesystem.DefaultPushLimits).
 	PushLimits filesystem.PushLimits
+	// Web finishes deployments of sites' web units (nil: none exist).
+	Web WebDeployHook
 
 	baseCtx context.Context
 	sem     chan struct{}
@@ -115,6 +117,9 @@ func (d *DeployService) publicURL() string {
 	}
 	return d.PublicURL
 }
+
+// Ready reports why GitHub deployments are unavailable (nil when they work).
+func (d *DeployService) Ready() error { return d.ready() }
 
 // ready refuses GitHub work while GitHub sign-in is not configured.
 func (d *DeployService) ready() error {
@@ -441,8 +446,12 @@ func (d *DeployService) secret(r domain.GitHubRepo) (string, error) {
 
 // Unlink removes the repository link and its webhook.
 func (d *DeployService) Unlink(ctx context.Context, actor domain.User, botID string) error {
-	if _, err := d.Bots.Authorize(ctx, actor, botID, domain.PermFullAdmin); err != nil {
+	b, err := d.Bots.Authorize(ctx, actor, botID, domain.PermFullAdmin)
+	if err != nil {
 		return err
+	}
+	if b.IsWeb() {
+		return domain.Invalid("this site is deployed from its repository; link another repository instead, or delete the site")
 	}
 	// Unlinking wins over a deployment in progress.
 	pctx, cancel := context.WithTimeout(ctx, 30*time.Second)
@@ -744,6 +753,17 @@ func (d *DeployService) run(base context.Context, botID string, req DeployReques
 		}
 		return
 	}
+	if bot.IsWeb() && d.Web != nil {
+		// A static site is built and published while the files are still
+		// claimed; an app continues below and restarts on the new code.
+		msg, handled, err := d.Web.AfterDeploy(cctx, bot, sha, op)
+		if handled || err != nil {
+			superseded := err != nil && cctx.Err() != nil && ctx.Err() == nil // before Release cancels cctx
+			claim.Release()
+			d.finishWeb(fctx, bot, op, label, sha, req, msg, err, superseded)
+			return
+		}
+	}
 	claim.Release() // deployOnce recorded the commit together with the files
 	// A running bot restarts on the new code (this also re-runs its build
 	// step). The condition is evaluated atomically against CURRENT intent, so
@@ -780,6 +800,29 @@ func (d *DeployService) run(base context.Context, botID string, req DeployReques
 	if d.Alerts.Wants(fctx, botID, "deploy") {
 		d.Alerts.Notify(fctx, bot.OwnerID, domain.NotifyDeploys, "✅ Deployed "+bot.Name,
 			fmt.Sprintf("%s · %s · %d files (%s)", label, sha[:7], n, req.Trigger), BotLink(bot))
+	}
+}
+
+// finishWeb records the outcome of a static site's build and publication.
+func (d *DeployService) finishWeb(fctx context.Context, bot domain.Bot, op, label, sha string, req DeployRequest, msg string, err error, superseded bool) {
+	if err != nil {
+		if superseded {
+			d.Ops.Finish(fctx, op, domain.OpCancelled, "superseded", "cancelled by a newer action on this site", nil)
+			return
+		}
+		emsg := deployMessage(err)
+		d.warn("site build failed", err)
+		_ = d.store().RecordDeploy(fctx, bot.ID, nil, &emsg, d.now().UnixMilli())
+		d.Ops.Finish(fctx, op, domain.OpFailed, "build_failed", emsg, map[string]any{"sha": sha})
+		if d.Alerts.Wants(fctx, bot.ID, "deploy") {
+			d.Alerts.Notify(fctx, bot.OwnerID, domain.NotifyDeploys, "❌ Site build failed: "+bot.Name, label+": "+emsg, BotLink(bot))
+		}
+		return
+	}
+	d.Ops.Finish(fctx, op, domain.OpSucceeded, "", msg, map[string]any{"sha": sha, "published": true})
+	if d.Alerts.Wants(fctx, bot.ID, "deploy") {
+		d.Alerts.Notify(fctx, bot.OwnerID, domain.NotifyDeploys, "✅ Published "+bot.Name,
+			fmt.Sprintf("%s · %s (%s)", label, sha[:7], req.Trigger), BotLink(bot))
 	}
 }
 

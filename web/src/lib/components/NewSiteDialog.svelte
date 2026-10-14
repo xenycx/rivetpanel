@@ -89,6 +89,7 @@
 				<select class="field" bind:value={form.workspace_id}>{#each creatable() as w (w.id)}<option value={w.personal ? '' : w.id}>{w.personal ? 'Personal' : w.name}</option>{/each}</select>
 			</label>
 		{/if}
+		{#if info.builds_enabled && !form.template_id}<p class="text-small text-muted">Building with npm, or running Node.js, PHP, Python, Go or Rust? <a class="link" href="/sites/new" onclick={() => (open = false)}>Deploy from a GitHub repository</a> instead.</p>{/if}
 		<label class="flex items-start gap-2.5"><input type="checkbox" class="mt-0.5" bind:checked={form.spa} /><span>Single-page application<span class="help mt-0">Unknown paths serve <code>index.html</code>, for React, Vue or Svelte apps with client-side routing.</span></span></label>
 		{#if error}<Notice tone="fail" live>{error}</Notice>{/if}
 	</form>

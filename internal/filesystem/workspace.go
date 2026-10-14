@@ -329,6 +329,20 @@ func (w *Workspace) Remove(p string) error {
 	return w.root.RemoveAll(p)
 }
 
+// EnsureDir creates a directory (and its parents) inside a bot's workspace.
+func (m *Manager) EnsureDir(botID, rel string) error {
+	w, err := m.Open(botID)
+	if err != nil {
+		return err
+	}
+	defer w.Close()
+	rel, err = clean(rel)
+	if err != nil {
+		return err
+	}
+	return w.mkdirAll(rel)
+}
+
 // Exists reports whether a workspace-relative path exists (without following
 // symlinks that leave the workspace; those report an error, not true).
 func (w *Workspace) Exists(p string) (bool, error) {

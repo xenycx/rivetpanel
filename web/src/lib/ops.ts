@@ -22,7 +22,7 @@ export const kindVerb: Record<Operation['kind'], string> = {
 export const opNoun = (o: Operation) => (o.kind === 'build' && o.bot_kind === 'game' ? 'Installation' : kindNoun[o.kind]);
 export const opVerb = (o: Operation) => (o.kind === 'build' && o.bot_kind === 'game' ? 'Installing' : kindVerb[o.kind]);
 /** The page of the bot or game server an operation belongs to. */
-export const opOwnerHref = (o: Operation) => `${o.bot_kind === 'game' ? '/servers' : '/bots'}/${o.bot_id}`;
+export const opOwnerHref = (o: Operation) => `${o.bot_kind === 'game' ? '/servers' : o.bot_kind === 'web' ? '/sites/app' : '/bots'}/${o.bot_id}`;
 
 export const statusText: Record<Operation['status'], string> = {
 	queued: 'Waiting',

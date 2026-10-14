@@ -34,6 +34,8 @@
 	let now = $state(Date.now());
 	let saving = $state(false);
 	const path = $derived(`/bots/${bot.id}/github`);
+	// A site's app unit is described as the site's app, not as a bot.
+	const noun = $derived(bot.kind === 'web' ? 'app' : 'bot');
 	const msg = (e: unknown) => (e instanceof ApiError ? e.message : 'The request failed.');
 	const short = (s: string) => s.slice(0, 7);
 
@@ -105,7 +107,7 @@
 		if (sha) {
 			const ok = await confirmDialog({
 				title: `Deploy ${short(sha)} again?`,
-				body: 'The tracked files are replaced with this commit. Files your bot created (data, logs) stay. A running bot restarts on it.',
+				body: bot.kind === 'web' ? 'The tracked files are replaced with this commit and the site is built or restarted on it. /data stays.' : 'The tracked files are replaced with this commit. Files your bot created (data, logs) stay. A running bot restarts on it.',
 				details: label ? [['Commit', label]] : undefined,
 				confirmLabel: 'Deploy this commit'
 			});
@@ -219,7 +221,7 @@
 								</ul>
 							</details>
 						{/if}
-						<p class="mt-2 text-small text-muted">Only files tracked in the repository change. Files your bot created, and <code>.env</code> files that are not in the repository, stay.</p>
+						<p class="mt-2 text-small text-muted">Only files tracked in the repository change. Files your {noun} created, and <code>.env</code> files that are not in the repository, stay.</p>
 					{/if}
 				</div>
 			{/if}
@@ -251,7 +253,7 @@
 						</OperationRow>
 					{/each}
 				</ul>
-				<p class="mt-2 text-small text-muted">Rolling back redeploys an earlier commit's tracked files. Data your bot wrote and environment variables are not rolled back.</p>
+				<p class="mt-2 text-small text-muted">Rolling back redeploys an earlier commit's tracked files. Data your {noun} wrote and environment variables are not rolled back.</p>
 			{:else}
 				<p class="mt-2 text-muted">Each deployment is listed here with its commit, trigger and result.</p>
 			{/if}

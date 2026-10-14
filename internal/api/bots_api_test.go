@@ -332,7 +332,7 @@ func TestBotValidation(t *testing.T) {
 	bad := map[string]map[string]any{
 		"empty name":      {"name": "  ", "runtime": "nodejs"},
 		"long name":       {"name": strings.Repeat("x", 65), "runtime": "nodejs"},
-		"unknown runtime": {"name": "b", "runtime": "php"},
+		"unknown runtime": {"name": "b", "runtime": "perl"},
 		"shell argv0":     {"name": "b", "runtime": "nodejs", "argv": []string{"sh", "-c", "id"}},
 		"abs argv0 go":    {"name": "b", "runtime": "go", "argv": []string{"/bin/sh"}},
 		"traversal go":    {"name": "b", "runtime": "go", "argv": []string{"../../bin/sh"}},
@@ -541,7 +541,7 @@ func TestRuntimesEndpoint(t *testing.T) {
 	u := e.user("a@example.com", domain.RoleUser)
 	var out struct{ Runtimes []map[string]any }
 	json.Unmarshal(u.mustStatus(200, "GET", "/api/v1/runtimes", nil), &out)
-	if len(out.Runtimes) != 6 {
+	if len(out.Runtimes) != 7 {
 		t.Fatalf("%d runtimes", len(out.Runtimes))
 	}
 }

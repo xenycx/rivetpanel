@@ -60,7 +60,21 @@
 		template = id;
 		open = true;
 	}
-	const status = (s: Site) => (s.disabled ? { tone: 'fail', label: 'Suspended' } : s.current_release ? { tone: 'run', label: 'Live' } : { tone: undefined, label: 'Empty' });
+	const appStates: Record<string, { tone?: string; label: string }> = {
+		running: { tone: 'run', label: 'Running' },
+		building: { tone: 'warn', label: 'Building' },
+		starting: { tone: 'warn', label: 'Starting' },
+		failed: { tone: 'fail', label: 'Failed' }
+	};
+	const status = (s: Site) =>
+		s.disabled
+			? { tone: 'fail', label: 'Suspended' }
+			: s.mode === 'app'
+				? (appStates[s.app_state] ?? { tone: undefined, label: 'Stopped' })
+				: s.current_release
+					? { tone: 'run', label: 'Live' }
+					: { tone: undefined, label: 'Empty' };
+	const kindLabel = (s: Site) => (s.mode === 'app' ? `App${s.framework ? ` · ${s.framework}` : ''}` : s.app_id ? `Build${s.framework ? ` · ${s.framework}` : ''}` : s.repo_full_name ? 'GitHub' : 'Upload');
 </script>
 
 <svelte:head><title>Sites · RivetPanel</title></svelte:head>
@@ -71,6 +85,7 @@
 	{#if info?.enabled && can('sites.create')}
 		<div class="ml-auto flex gap-2">
 			<a class="btn" href="/templates?tab=sites"><Icon name="layers" size={14} />Templates</a>
+			{#if info.builds_enabled}<a class="btn" href="/sites/new"><Icon name="github" size={14} />From GitHub</a>{/if}
 			<button class="btn btn-primary" onclick={() => start()}><Icon name="plus" />New site</button>
 		</div>
 	{/if}
@@ -124,12 +139,12 @@
 							{/if}
 							<div class="min-w-0">
 								<a href="/sites/{s.id}" class="block truncate font-medium hover:underline">{s.name}</a>
-								<p class="truncate text-small text-muted">{s.repo_full_name ? 'GitHub' : 'Upload'}{multi && workspaceName(s.workspace_id) ? `, ${workspaceName(s.workspace_id)}` : ''}</p>
+								<p class="truncate text-small text-muted">{kindLabel(s)}{multi && workspaceName(s.workspace_id) ? `, ${workspaceName(s.workspace_id)}` : ''}</p>
 							</div>
 						</div>
 						<span role="cell"><span class="pill" data-tone={st.tone}>{st.label}</span></span>
 						<a href={s.url} target="_blank" rel="noopener" class="hidden truncate font-mono text-small hover:underline md:block" role="cell">{s.url.replace(/^https?:\/\//, '')}</a>
-						<span class="hidden font-mono text-small md:block" role="cell">{s.current_release ? fmtBytes(s.release_bytes) : '–'}</span>
+						<span class="hidden font-mono text-small md:block" role="cell">{s.mode !== 'app' && s.current_release ? fmtBytes(s.release_bytes) : '–'}</span>
 						<span class="hidden font-mono text-small md:block" role="cell">{s.domains}</span>
 						<span class="hidden text-small text-muted md:block" role="cell">{fmtAgo(s.updated_at_ms)}</span>
 						<a href={s.url} target="_blank" rel="noopener" class="btn btn-quiet btn-icon btn-sm justify-self-end" aria-label="Open {s.name} in a new tab" title="Open site" role="cell"><Icon name="external" size={14} /></a>

@@ -15,7 +15,7 @@ import (
 )
 
 // Allowed runtime IDs; must match the CHECK constraint on bots.runtime.
-var validIDs = map[string]bool{"nodejs": true, "python": true, "rust": true, "go": true, "java": true, "ruby": true}
+var validIDs = map[string]bool{"nodejs": true, "python": true, "rust": true, "go": true, "java": true, "ruby": true, "php": true}
 
 var (
 	// repo[:tag][@sha256:digest] with no whitespace or shell metacharacters.

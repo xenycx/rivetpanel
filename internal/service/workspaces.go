@@ -259,9 +259,16 @@ func (s *BotService) RemoveWorkspaceMember(ctx context.Context, actor domain.Use
 // as its owner (or a workspace admin of its current workspace) and be at
 // least a developer in the target.
 func (s *BotService) MoveBot(ctx context.Context, actor domain.User, botID, workspaceID string) (domain.Bot, error) {
+	return s.moveBot(ctx, actor, botID, workspaceID, false)
+}
+
+func (s *BotService) moveBot(ctx context.Context, actor domain.User, botID, workspaceID string, web bool) (domain.Bot, error) {
 	b, err := s.load(ctx, actor, botID, false)
 	if err != nil {
 		return domain.Bot{}, err
+	}
+	if b.IsWeb() && !web {
+		return domain.Bot{}, errWebUnit
 	}
 	if b.WorkspaceID == workspaceID {
 		return b, nil

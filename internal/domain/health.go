@@ -47,4 +47,13 @@ type HealthProbe struct {
 	LastCheckedAtMS      *int64
 	LastError            *string
 	UpdatedAtMS          int64
+	// Target is ProbeHost (HostPort is a published port on the node) or
+	// ProbeApp (HostPort is a site app's port, dialled on its container).
+	Target string
 }
+
+// Health probe targets.
+const (
+	ProbeHost = "host"
+	ProbeApp  = "app"
+)

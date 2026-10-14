@@ -113,12 +113,12 @@ func scanHealthProbe(row interface{ Scan(...any) error }) (domain.HealthProbe, e
 	var restart int
 	err := row.Scan(&p.BotID, &p.Kind, &p.HostPort, &p.Path, &p.IntervalSeconds, &p.TimeoutMS,
 		&p.FailureThreshold, &p.SuccessThreshold, &p.StartupGraceSeconds, &restart, &p.Status,
-		&p.ConsecutiveFailures, &p.ConsecutiveSuccesses, &p.LastCheckedAtMS, &p.LastError, &p.UpdatedAtMS)
+		&p.ConsecutiveFailures, &p.ConsecutiveSuccesses, &p.LastCheckedAtMS, &p.LastError, &p.UpdatedAtMS, &p.Target)
 	p.RestartUnhealthy = restart == 1
 	return p, mapErr(err)
 }
 
-const healthProbeCols = `bot_id,kind,host_port,path,interval_s,timeout_ms,failure_threshold,success_threshold,startup_grace_s,restart_unhealthy,status,consecutive_failures,consecutive_successes,last_checked_at_ms,last_error,updated_at_ms`
+const healthProbeCols = `bot_id,kind,host_port,path,interval_s,timeout_ms,failure_threshold,success_threshold,startup_grace_s,restart_unhealthy,status,consecutive_failures,consecutive_successes,last_checked_at_ms,last_error,updated_at_ms,target`
 
 func (db *DB) GetHealthProbe(ctx context.Context, botID string) (domain.HealthProbe, error) {
 	return scanHealthProbe(db.QueryRowContext(ctx, `SELECT `+healthProbeCols+` FROM bot_health_probes WHERE bot_id=?`, botID))
@@ -142,7 +142,7 @@ func (db *DB) ListHealthProbes(ctx context.Context) ([]domain.HealthProbe, error
 }
 
 func (db *DB) SetHealthProbe(ctx context.Context, p domain.HealthProbe) error {
-	_, err := db.ExecContext(ctx, `INSERT INTO bot_health_probes (bot_id,kind,host_port,path,interval_s,timeout_ms,failure_threshold,success_threshold,startup_grace_s,restart_unhealthy,updated_at_ms) VALUES (?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(bot_id) DO UPDATE SET kind=excluded.kind,host_port=excluded.host_port,path=excluded.path,interval_s=excluded.interval_s,timeout_ms=excluded.timeout_ms,failure_threshold=excluded.failure_threshold,success_threshold=excluded.success_threshold,startup_grace_s=excluded.startup_grace_s,restart_unhealthy=excluded.restart_unhealthy,status='unknown',consecutive_failures=0,consecutive_successes=0,last_checked_at_ms=NULL,last_error=NULL,updated_at_ms=excluded.updated_at_ms`, p.BotID, p.Kind, p.HostPort, p.Path, p.IntervalSeconds, p.TimeoutMS, p.FailureThreshold, p.SuccessThreshold, p.StartupGraceSeconds, boolInt(p.RestartUnhealthy), p.UpdatedAtMS)
+	_, err := db.ExecContext(ctx, `INSERT INTO bot_health_probes (bot_id,kind,host_port,path,interval_s,timeout_ms,failure_threshold,success_threshold,startup_grace_s,restart_unhealthy,updated_at_ms,target) VALUES (?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(bot_id) DO UPDATE SET kind=excluded.kind,target=excluded.target,host_port=excluded.host_port,path=excluded.path,interval_s=excluded.interval_s,timeout_ms=excluded.timeout_ms,failure_threshold=excluded.failure_threshold,success_threshold=excluded.success_threshold,startup_grace_s=excluded.startup_grace_s,restart_unhealthy=excluded.restart_unhealthy,status='unknown',consecutive_failures=0,consecutive_successes=0,last_checked_at_ms=NULL,last_error=NULL,updated_at_ms=excluded.updated_at_ms`, p.BotID, p.Kind, p.HostPort, p.Path, p.IntervalSeconds, p.TimeoutMS, p.FailureThreshold, p.SuccessThreshold, p.StartupGraceSeconds, boolInt(p.RestartUnhealthy), p.UpdatedAtMS, defaultStr(p.Target, domain.ProbeHost))
 	return mapErr(err)
 }
 

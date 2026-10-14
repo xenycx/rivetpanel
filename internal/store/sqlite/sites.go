@@ -13,10 +13,11 @@ const siteCols = `s.id, s.workspace_id, s.owner_id, s.name, s.slug, s.spa, s.cle
 	s.bot_id, s.mode, s.page_title, s.page_description, s.page_theme, s.page_accent, s.page_html, s.page_css, s.widgets_public,
 	s.domain_id, COALESCE(bd.domain, ''), COALESCE(u.email, ''), COALESCE(w.name, ''),
 	(SELECT count(*) FROM site_domains d WHERE d.site_id = s.id),
-	COALESCE((SELECT r.bytes FROM site_releases r WHERE r.id = s.current_release), 0), COALESCE(s.logo_updated_at_ms, 0)`
+	COALESCE((SELECT r.bytes FROM site_releases r WHERE r.id = s.current_release), 0), COALESCE(s.logo_updated_at_ms, 0),
+	s.app_id, s.framework, s.build_output_dir, COALESCE(s.app_port, 0), s.health_path, s.max_body_bytes, COALESCE(ab.observed_state, '')`
 
 const siteFrom = ` FROM sites s LEFT JOIN users u ON u.id = s.owner_id LEFT JOIN workspaces w ON w.id = s.workspace_id
-	LEFT JOIN site_base_domains bd ON bd.id = s.domain_id`
+	LEFT JOIN site_base_domains bd ON bd.id = s.domain_id LEFT JOIN bots ab ON ab.id = s.app_id`
 
 func scanSite(row interface{ Scan(...any) error }) (domain.Site, error) {
 	var s domain.Site
@@ -24,7 +25,8 @@ func scanSite(row interface{ Scan(...any) error }) (domain.Site, error) {
 	err := row.Scan(&s.ID, &s.WorkspaceID, &s.OwnerID, &s.Name, &s.Slug, &spa, &clean, &s.CurrentRelease, &disabled,
 		&s.RepoFullName, &s.RepoBranch, &s.RepoRoot, &s.RepoTokenUser, &s.CreatedAtMS, &s.UpdatedAtMS,
 		&s.BotID, &s.Mode, &s.PageTitle, &s.PageDescription, &s.PageTheme, &s.PageAccent, &s.PageHTML, &s.PageCSS, &widgetsPublic,
-		&s.DomainID, &s.BaseDomain, &s.OwnerEmail, &s.WorkspaceName, &s.Domains, &s.ReleaseBytes, &s.LogoUpdatedMS)
+		&s.DomainID, &s.BaseDomain, &s.OwnerEmail, &s.WorkspaceName, &s.Domains, &s.ReleaseBytes, &s.LogoUpdatedMS,
+		&s.AppID, &s.Framework, &s.BuildOutputDir, &s.AppPort, &s.HealthPath, &s.MaxBodyBytes, &s.AppState)
 	s.SPA, s.CleanURLs, s.Disabled, s.WidgetsPublic = spa == 1, clean == 1, disabled == 1, widgetsPublic == 1
 	return s, mapErr(err)
 }
@@ -58,10 +60,15 @@ func (db *DB) CreateSite(ctx context.Context, s domain.Site) error {
 	if s.PageAccent == "" {
 		s.PageAccent = "#5865f2"
 	}
+	if s.HealthPath == "" {
+		s.HealthPath = "/"
+	}
 	_, err := db.ExecContext(ctx, `INSERT INTO sites (id, workspace_id, owner_id, bot_id, name, slug, domain_id, spa, clean_urls, mode,
-		page_title, page_description, page_theme, page_accent, page_html, page_css, widgets_public, created_at_ms, updated_at_ms)
-		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, s.ID, s.WorkspaceID, s.OwnerID, s.BotID, s.Name, s.Slug, s.DomainID, boolInt(s.SPA), boolInt(s.CleanURLs), s.Mode,
-		s.PageTitle, s.PageDescription, s.PageTheme, s.PageAccent, s.PageHTML, s.PageCSS, boolInt(s.WidgetsPublic), s.CreatedAtMS, s.UpdatedAtMS)
+		page_title, page_description, page_theme, page_accent, page_html, page_css, widgets_public, created_at_ms, updated_at_ms,
+		app_id, framework, build_output_dir, app_port, health_path, max_body_bytes)
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,NULLIF(?, 0),?,?)`, s.ID, s.WorkspaceID, s.OwnerID, s.BotID, s.Name, s.Slug, s.DomainID, boolInt(s.SPA), boolInt(s.CleanURLs), s.Mode,
+		s.PageTitle, s.PageDescription, s.PageTheme, s.PageAccent, s.PageHTML, s.PageCSS, boolInt(s.WidgetsPublic), s.CreatedAtMS, s.UpdatedAtMS,
+		s.AppID, s.Framework, s.BuildOutputDir, s.AppPort, s.HealthPath, s.MaxBodyBytes)
 	return mapErr(err)
 }
 
@@ -73,6 +80,11 @@ func (db *DB) GetSite(ctx context.Context, id string) (domain.Site, error) {
 // GetSiteForBot returns the single public site attached to a bot.
 func (db *DB) GetSiteForBot(ctx context.Context, botID string) (domain.Site, error) {
 	return scanSite(db.QueryRowContext(ctx, `SELECT `+siteCols+siteFrom+` WHERE s.bot_id = ?`, botID))
+}
+
+// GetSiteForApp returns the site a web unit belongs to.
+func (db *DB) GetSiteForApp(ctx context.Context, appID string) (domain.Site, error) {
+	return scanSite(db.QueryRowContext(ctx, `SELECT `+siteCols+siteFrom+` WHERE s.app_id = ?`, appID))
 }
 
 // ListSitesForUser returns the sites in the workspaces userID belongs to.
@@ -102,9 +114,11 @@ func (db *DB) CountOwnedSites(ctx context.Context, userID string) (int, error) {
 func (db *DB) UpdateSite(ctx context.Context, s domain.Site) error {
 	res, err := db.ExecContext(ctx, `UPDATE sites SET name = ?, slug = ?, domain_id = ?, spa = ?, clean_urls = ?, repo_full_name = ?, repo_branch = ?, repo_root = ?,
 		repo_token_user = ?, workspace_id = ?, mode = ?, page_title = ?, page_description = ?, page_theme = ?, page_accent = ?,
-		page_html = ?, page_css = ?, widgets_public = ?, updated_at_ms = ? WHERE id = ?`,
+		page_html = ?, page_css = ?, widgets_public = ?, updated_at_ms = ?,
+		app_id = ?, framework = ?, build_output_dir = ?, app_port = NULLIF(?, 0), health_path = ?, max_body_bytes = ? WHERE id = ?`,
 		s.Name, s.Slug, s.DomainID, boolInt(s.SPA), boolInt(s.CleanURLs), s.RepoFullName, s.RepoBranch, s.RepoRoot, s.RepoTokenUser, s.WorkspaceID,
-		s.Mode, s.PageTitle, s.PageDescription, s.PageTheme, s.PageAccent, s.PageHTML, s.PageCSS, boolInt(s.WidgetsPublic), s.UpdatedAtMS, s.ID)
+		s.Mode, s.PageTitle, s.PageDescription, s.PageTheme, s.PageAccent, s.PageHTML, s.PageCSS, boolInt(s.WidgetsPublic), s.UpdatedAtMS,
+		s.AppID, s.Framework, s.BuildOutputDir, s.AppPort, defaultStr(s.HealthPath, "/"), s.MaxBodyBytes, s.ID)
 	if err != nil {
 		return mapErr(err)
 	}
@@ -154,14 +168,14 @@ func (db *DB) DeleteSite(ctx context.Context, id string) error {
 
 // InsertRelease records a new release.
 func (db *DB) InsertRelease(ctx context.Context, r domain.SiteRelease) error {
-	_, err := db.ExecContext(ctx, `INSERT INTO site_releases (id, site_id, source, source_label, files, bytes, actor_id, created_at_ms)
-		VALUES (?,?,?,?,?,?,?,?)`, r.ID, r.SiteID, r.Source, r.SourceLabel, r.Files, r.Bytes, r.ActorID, r.CreatedAtMS)
+	_, err := db.ExecContext(ctx, `INSERT INTO site_releases (id, site_id, source, source_label, files, bytes, actor_id, created_at_ms, source_ref)
+		VALUES (?,?,?,?,?,?,?,?,?)`, r.ID, r.SiteID, r.Source, r.SourceLabel, r.Files, r.Bytes, r.ActorID, r.CreatedAtMS, r.SourceRef)
 	return mapErr(err)
 }
 
 // ListReleases returns a site's releases, newest first.
 func (db *DB) ListReleases(ctx context.Context, siteID string) ([]domain.SiteRelease, error) {
-	rows, err := db.QueryContext(ctx, `SELECT r.id, r.site_id, r.source, r.source_label, r.files, r.bytes, r.actor_id, u.email, r.created_at_ms
+	rows, err := db.QueryContext(ctx, `SELECT r.id, r.site_id, r.source, r.source_label, r.files, r.bytes, r.actor_id, u.email, r.created_at_ms, r.source_ref
 		FROM site_releases r LEFT JOIN users u ON u.id = r.actor_id WHERE r.site_id = ? ORDER BY r.created_at_ms DESC, r.rowid DESC LIMIT 100`, siteID)
 	if err != nil {
 		return nil, err
@@ -170,7 +184,7 @@ func (db *DB) ListReleases(ctx context.Context, siteID string) ([]domain.SiteRel
 	var out []domain.SiteRelease
 	for rows.Next() {
 		var r domain.SiteRelease
-		if err := rows.Scan(&r.ID, &r.SiteID, &r.Source, &r.SourceLabel, &r.Files, &r.Bytes, &r.ActorID, &r.ActorEmail, &r.CreatedAtMS); err != nil {
+		if err := rows.Scan(&r.ID, &r.SiteID, &r.Source, &r.SourceLabel, &r.Files, &r.Bytes, &r.ActorID, &r.ActorEmail, &r.CreatedAtMS, &r.SourceRef); err != nil {
 			return nil, err
 		}
 		out = append(out, r)
@@ -298,8 +312,10 @@ func (db *DB) SiteRoutes(ctx context.Context) (domain.SiteRouteTable, error) {
 			t.Bases = append(t.Bases, b)
 		}
 	}
-	rows, err := db.QueryContext(ctx, `SELECT s.id, s.slug, COALESCE(s.domain_id, ''), COALESCE(s.current_release, ''), s.spa, s.clean_urls, s.disabled, s.mode, d.domain
-		FROM sites s LEFT JOIN site_domains d ON d.site_id = s.id AND d.verified_at_ms IS NOT NULL`)
+	rows, err := db.QueryContext(ctx, `SELECT s.id, s.slug, COALESCE(s.domain_id, ''), COALESCE(s.current_release, ''), s.spa, s.clean_urls, s.disabled, s.mode, d.domain,
+		COALESCE(s.app_id, ''), COALESCE(b.container_id, ''), COALESCE(b.observed_state, ''), COALESCE(s.app_port, 0), s.max_body_bytes
+		FROM sites s LEFT JOIN site_domains d ON d.site_id = s.id AND d.verified_at_ms IS NOT NULL
+		LEFT JOIN bots b ON b.id = s.app_id`)
 	if err != nil {
 		return t, err
 	}
@@ -309,7 +325,8 @@ func (db *DB) SiteRoutes(ctx context.Context) (domain.SiteRouteTable, error) {
 		var slug, domainID string
 		var host *string
 		var spa, clean, disabled int
-		if err := rows.Scan(&r.SiteID, &slug, &domainID, &r.Release, &spa, &clean, &disabled, &r.Mode, &host); err != nil {
+		if err := rows.Scan(&r.SiteID, &slug, &domainID, &r.Release, &spa, &clean, &disabled, &r.Mode, &host,
+			&r.AppID, &r.ContainerID, &r.AppState, &r.AppPort, &r.MaxBody); err != nil {
 			return t, err
 		}
 		r.SPA, r.CleanURLs, r.Disabled = spa == 1, clean == 1, disabled == 1

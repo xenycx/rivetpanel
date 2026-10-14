@@ -12,6 +12,10 @@ const (
 const (
 	KindBot  = "bot"  // an application from a language runtime (Discord bots and similar)
 	KindGame = "game" // a game server defined by a blueprint revision
+	// KindWeb is the unit behind a built or running site: its checkout,
+	// builds, environment and (for app sites) container. It is managed
+	// through the site, never listed or changed as a bot.
+	KindWeb = "web"
 )
 
 // Install states of a game server.
@@ -31,7 +35,7 @@ type Bot struct {
 	WorkspaceID string
 	NodeID      string
 	Name        string
-	// Kind is KindBot or KindGame ("" reads as KindBot).
+	// Kind is KindBot, KindGame or KindWeb ("" reads as KindBot).
 	Kind string
 	// Game servers: the pinned blueprint revision, the chosen image label
 	// ("" = automatic) and installation state.
@@ -84,6 +88,9 @@ type Bot struct {
 	// BuildCommand, when set, is a shell script that replaces the runtime's
 	// default build step. It runs in the builder container (no bot secrets).
 	BuildCommand string
+	// ReleaseCommand, when set, runs once per generation after the build and
+	// before the start, with the full environment (database migrations).
+	ReleaseCommand string
 	// Addons are companion services on the bot's private network (loaded by
 	// GetBot only).
 	Addons []BotAddon
@@ -111,6 +118,9 @@ type Bot struct {
 
 // IsGame reports whether the resource is a game server.
 func (b Bot) IsGame() bool { return b.Kind == KindGame }
+
+// IsWeb reports whether the resource is the web unit of a site.
+func (b Bot) IsWeb() bool { return b.Kind == KindWeb }
 
 // PrimaryAllocation returns the game server's primary allocation.
 func (b Bot) PrimaryAllocation() (Allocation, bool) {

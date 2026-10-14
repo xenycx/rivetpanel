@@ -1,0 +1,37 @@
+id: php
+display_name: PHP
+# FrankenPHP: Caddy with PHP built in, one process serving PHP files and
+# static assets. The image's binary carries a file capability
+# (cap_net_bind_service), which the kernel refuses to exec under
+# no-new-privileges; the build therefore copies it into the workspace (a
+# copy has no capabilities) and the app runs that copy on an unprivileged
+# port.
+image: dunglas/frankenphp:1-php8.4-alpine
+builder_image: dunglas/frankenphp:1-php8.4-alpine
+build_argv:
+  - sh
+  - -c
+  - |
+    set -e
+    mkdir -p .rivet-bin
+    cp /usr/local/bin/frankenphp .rivet-bin/frankenphp
+    if [ -f composer.json ]; then
+      if [ ! -f .rivet-bin/composer.phar ]; then
+        php -r "copy('https://getcomposer.org/download/latest-stable/composer.phar', '.rivet-bin/composer.phar');"
+      fi
+      php .rivet-bin/composer.phar install --no-dev --optimize-autoloader --no-interaction --no-progress
+    fi
+default_argv: [./.rivet-bin/frankenphp, php-server, --listen, ":8080", --root, .]
+allowed_commands: [./.rivet-bin/frankenphp, php]
+env:
+  XDG_CONFIG_HOME: /tmp/caddy-config
+  XDG_DATA_HOME: /tmp/caddy-data
+  COMPOSER_HOME: /workspace/.composer
+  SERVER_NAME: ":8080"
+diagnostic_commands:
+  - [php, --version]
+  - [php, -v]
+  - [php, -l]
+  - [php, -m]
+defaults: {memory_bytes: 268435456, nano_cpus: 500000000, pids_limit: 256}
+min_memory_bytes: 67108864

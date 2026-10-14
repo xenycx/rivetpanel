@@ -146,6 +146,9 @@ func BotLink(b domain.Bot) string {
 	if b.IsGame() {
 		return "/servers/" + b.ID
 	}
+	if b.IsWeb() {
+		return "/sites/app/" + b.ID // resolves to the site the unit belongs to
+	}
 	return "/bots/" + b.ID
 }
 

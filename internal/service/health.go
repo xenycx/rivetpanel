@@ -42,11 +42,14 @@ const (
 // pushes), separately from Docker's process state, and evaluates the
 // heartbeat alert rule. Missing SDK data means "unknown", never "failed".
 type HealthService struct {
-	Store  HealthStore
-	Bots   *BotService
-	Alerts *AlertService // nil: rules are evaluated but nothing is sent
-	Log    *slog.Logger
-	Now    func() time.Time
+	Store HealthStore
+	Bots  *BotService
+	// AppAddr returns the address (ip:port) of a site app's container for
+	// probes with target "app"; nil disables them.
+	AppAddr func(ctx context.Context, botID string, port int) (string, bool)
+	Alerts  *AlertService // nil: rules are evaluated but nothing is sent
+	Log     *slog.Logger
+	Now     func() time.Time
 
 	mu      sync.Mutex
 	written map[string]time.Time
@@ -220,15 +223,24 @@ func (h *HealthService) SetProbe(ctx context.Context, actor domain.User, botID s
 	if p.Kind != "tcp" && p.Kind != "http" {
 		return domain.HealthProbe{}, domain.Invalid("probe kind must be tcp or http")
 	}
-	portOK := false
-	for _, port := range b.Ports {
-		if port.HostPort == p.HostPort && port.Protocol == "tcp" {
-			portOK = true
-			break
+	if b.IsWeb() {
+		// A site app is probed on its own port, inside its container.
+		p.Target = domain.ProbeApp
+		if p.HostPort < 1 || p.HostPort > 65535 {
+			return domain.HealthProbe{}, domain.Invalid("probe port must be the port the app listens on")
 		}
-	}
-	if !portOK {
-		return domain.HealthProbe{}, domain.Invalid("probe port must be one of the bot's published TCP host ports")
+	} else {
+		p.Target = domain.ProbeHost
+		portOK := false
+		for _, port := range b.Ports {
+			if port.HostPort == p.HostPort && port.Protocol == "tcp" {
+				portOK = true
+				break
+			}
+		}
+		if !portOK {
+			return domain.HealthProbe{}, domain.Invalid("probe port must be one of the bot's published TCP host ports")
+		}
 	}
 	if p.Path == "" {
 		p.Path = "/"
@@ -259,6 +271,16 @@ func (h *HealthService) SetProbe(ctx context.Context, actor domain.User, botID s
 		return domain.HealthProbe{}, err
 	}
 	return p, nil
+}
+
+// SetAppProbe creates or replaces the HTTP health check of a site app with
+// the defaults for web servers (restart after three failed checks).
+func (h *HealthService) SetAppProbe(ctx context.Context, botID string, port int, path string) error {
+	return h.Store.SetHealthProbe(ctx, domain.HealthProbe{
+		BotID: botID, Kind: "http", HostPort: port, Path: path, IntervalSeconds: 30, TimeoutMS: 5000,
+		FailureThreshold: 3, SuccessThreshold: 1, StartupGraceSeconds: 60, RestartUnhealthy: true,
+		Status: "unknown", UpdatedAtMS: h.now().UnixMilli(), Target: domain.ProbeApp,
+	})
 }
 
 // Run evaluates the heartbeat rule every minute until ctx ends.
@@ -328,6 +350,16 @@ func (h *HealthService) checkProbe(parent context.Context, p domain.HealthProbe)
 	defer cancel()
 	addr := net.JoinHostPort("127.0.0.1", strconv.Itoa(p.HostPort))
 	var checkErr error
+	if p.Target == domain.ProbeApp {
+		a, ok := "", false
+		if h.AppAddr != nil {
+			a, ok = h.AppAddr(ctx, p.BotID, p.HostPort)
+		}
+		if !ok {
+			return // the app's address is not known yet (starting, or apps are unavailable)
+		}
+		addr = a
+	}
 	if p.Kind == "tcp" {
 		var c net.Conn
 		c, checkErr = (&net.Dialer{}).DialContext(ctx, "tcp", addr)

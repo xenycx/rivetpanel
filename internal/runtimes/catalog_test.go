@@ -8,12 +8,12 @@ import (
 	rt "github.com/xenycx/rivetpanel/runtimes"
 )
 
-func TestEmbeddedCatalogLoadsAllSix(t *testing.T) {
+func TestEmbeddedCatalogLoadsAll(t *testing.T) {
 	c, err := Load(rt.FS)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if n := len(c.List()); n != 6 {
+	if n := len(c.List()); n != 7 {
 		t.Fatalf("runtimes = %d", n)
 	}
 	node, _ := c.Get("nodejs")
@@ -23,6 +23,10 @@ func TestEmbeddedCatalogLoadsAllSix(t *testing.T) {
 	g, _ := c.Get("go")
 	if !g.CommandAllowed("./app") || !g.CommandAllowed("bin/app") || g.CommandAllowed("../app") || g.CommandAllowed("/bin/sh") {
 		t.Fatal("go binary policy wrong")
+	}
+	php, _ := c.Get("php")
+	if !php.CommandAllowed("./.rivet-bin/frankenphp") || !php.CommandAllowed("php") || php.CommandAllowed("./other") || php.CommandAllowed("frankenphp") {
+		t.Fatal("php command policy wrong")
 	}
 }
 
@@ -47,7 +51,7 @@ func TestValidation(t *testing.T) {
 		t.Fatal(err)
 	}
 	bad := map[string]string{
-		"id":      strings.Replace(base, "id: nodejs", "id: php", 1),
+		"id":      strings.Replace(base, "id: nodejs", "id: perl", 1),
 		"image":   strings.Replace(base, "image: node:24-alpine", "image: 'node; rm -rf /'", 1),
 		"digest":  base + "digest: sha256:zz\n",
 		"unknown": base + "privileged: true\n",

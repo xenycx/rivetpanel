@@ -27,6 +27,10 @@ type BackupLimits struct {
 	MaxFile    int64
 }
 
+// DataDir is the workspace directory a site app keeps its persistent data in
+// (mounted at /data). Deployments never write or remove anything under it.
+const DataDir = ".rivet-data"
+
 // DefaultBackupLimits allow large projects while stopping runaway archives.
 var DefaultBackupLimits = BackupLimits{MaxEntries: 200000, MaxBytes: 2 << 30, MaxFile: 1 << 30}
 
@@ -459,8 +463,9 @@ func (w *Workspace) DeployTarGzCommit(src io.Reader, rootDir string, lim BackupL
 			return 0, nil, reject("unsafe path in archive: %q", hdr.Name)
 		}
 		top, _, _ := strings.Cut(name, "/")
-		if name == DeployManifest || name == LegacyDeployManifest || strings.HasPrefix(top, ".restore-") || strings.HasPrefix(top, ".deploy-") {
-			continue
+		if name == DeployManifest || name == LegacyDeployManifest || strings.HasPrefix(top, ".restore-") || strings.HasPrefix(top, ".deploy-") ||
+			top == DataDir {
+			continue // DataDir is a site app's persistent data: never from a repository
 		}
 		switch hdr.Typeflag {
 		case tar.TypeDir:

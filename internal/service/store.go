@@ -75,6 +75,7 @@ type Store interface {
 	TakePendingPushes(ctx context.Context, nodeID string) ([]sqlite.PendingPush, error)
 	GetPendingPush(ctx context.Context, botID string) (sqlite.PendingPush, error)
 	SetBotPorts(ctx context.Context, botID string, gen int64, ports []domain.BotPort, nowMS int64) error
+	SetReleaseCommand(ctx context.Context, botID, cmd string) error
 	SetBotTelemetryKey(ctx context.Context, botID string, hash []byte, nowMS int64) error
 
 	GetNode(ctx context.Context, id string) (domain.Node, error)

@@ -15,6 +15,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -23,9 +24,11 @@ import (
 	"golang.org/x/net/idna"
 
 	"github.com/xenycx/rivetpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/events"
 	"github.com/xenycx/rivetpanel/internal/filesystem"
 	"github.com/xenycx/rivetpanel/internal/github"
 	"github.com/xenycx/rivetpanel/internal/lazyre"
+	"github.com/xenycx/rivetpanel/internal/siterules"
 	"github.com/xenycx/rivetpanel/internal/sitetemplates"
 )
 
@@ -36,6 +39,7 @@ type SiteStore interface {
 	CreateSite(ctx context.Context, s domain.Site) error
 	GetSite(ctx context.Context, id string) (domain.Site, error)
 	GetSiteForBot(ctx context.Context, botID string) (domain.Site, error)
+	GetSiteForApp(ctx context.Context, appID string) (domain.Site, error)
 	ListSitesForUser(ctx context.Context, userID string) ([]domain.Site, error)
 	ListAllSites(ctx context.Context) ([]domain.Site, error)
 	ListWorkspaceSites(ctx context.Context, workspaceID string) ([]domain.Site, error)
@@ -101,8 +105,12 @@ type SiteService struct {
 	MaxBytes     int64          // largest release
 	MaxPerUser   int            // sites an account may create; 0 = unlimited
 	Resolver     TXTResolver    // nil: net.DefaultResolver
-	Log          *slog.Logger
-	Now          func() time.Time
+	// Building and running sites (all nil: only uploaded static sites).
+	Deploys *DeployService
+	Builder SiteBuilder
+	Health  *HealthService
+	Log     *slog.Logger
+	Now     func() time.Time
 
 	root    *filesystem.Manager
 	drafts  *filesystem.Manager
@@ -111,6 +119,7 @@ type SiteService struct {
 
 	mu     sync.RWMutex
 	routes domain.SiteRouteTable // Bases sorted most specific first
+	apps   map[string]bool       // web units of routed app sites
 
 	jobMu   sync.Mutex
 	jobs    map[string]*SiteJob
@@ -158,6 +167,14 @@ func (s *SiteService) Start(ctx context.Context) error {
 	if err := s.Reload(ctx); err != nil {
 		return err
 	}
+	// A site app's container changes on every deployment and restart: its
+	// route follows the status events instead of waiting for the next pass.
+	var statuses <-chan events.Status
+	if s.Bots != nil && s.Bots.Bus != nil {
+		sub := s.Bots.Bus.SubscribeAll()
+		statuses = sub.C
+		context.AfterFunc(ctx, sub.Close)
+	}
 	s.wg.Add(1)
 	go func() {
 		defer s.wg.Done()
@@ -169,6 +186,16 @@ func (s *SiteService) Start(ctx context.Context) error {
 			select {
 			case <-ctx.Done():
 				return
+			case st, ok := <-statuses:
+				if !ok {
+					statuses = nil
+					continue
+				}
+				if s.servesApp(st.BotID) {
+					if err := s.Reload(ctx); err != nil && ctx.Err() == nil {
+						s.warn("reload routes", err)
+					}
+				}
 			case <-reload.C:
 				if err := s.Reload(ctx); err != nil && ctx.Err() == nil {
 					s.warn("reload routes", err)
@@ -255,10 +282,23 @@ func (s *SiteService) Reload(ctx context.Context) error {
 	sort.SliceStable(t.Bases, func(i, j int) bool {
 		return strings.Count(t.Bases[i].Domain, ".") > strings.Count(t.Bases[j].Domain, ".")
 	})
+	apps := map[string]bool{}
+	for _, r := range t.BySlug {
+		if r.AppID != "" {
+			apps[r.AppID] = true
+		}
+	}
 	s.mu.Lock()
-	s.routes = t
+	s.routes, s.apps = t, apps
 	s.mu.Unlock()
 	return nil
+}
+
+// servesApp reports whether a bot is the app of a routed site.
+func (s *SiteService) servesApp(botID string) bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.apps[botID]
 }
 
 func (s *SiteService) reloadSoon() {
@@ -457,6 +497,9 @@ type SiteDetail struct {
 	Domains  []domain.SiteDomain
 	Releases []domain.SiteRelease
 	Job      SiteJob
+	// Built and app sites: the web unit and its repository link.
+	App  *domain.Bot
+	Repo *RepoView
 }
 
 // List returns the sites in the actor's workspaces.
@@ -494,7 +537,17 @@ func (s *SiteService) Get(ctx context.Context, actor domain.User, id string) (Si
 	if err != nil {
 		return SiteDetail{}, err
 	}
-	return SiteDetail{Site: st, Role: role, Domains: ds, Releases: rs, Job: s.job(id)}, nil
+	d := SiteDetail{Site: st, Role: role, Domains: ds, Releases: rs, Job: s.job(id)}
+	if st.AppID != nil && s.Deploys != nil {
+		if b, err := s.Bots.Store.GetBot(ctx, *st.AppID); err == nil {
+			d.App = &b
+		}
+		if r, err := s.Deploys.store().GetGitHubRepo(ctx, *st.AppID); err == nil {
+			v := s.Deploys.view(r)
+			d.Repo = &v
+		}
+	}
+	return d, nil
 }
 
 func (s *SiteService) job(id string) SiteJob {
@@ -768,6 +821,11 @@ type UpdateSiteInput struct {
 	PageHTML        *string
 	PageCSS         *string
 	WidgetsPublic   *bool
+	// Built and app sites.
+	OutputDir    *string
+	AppPort      *int
+	HealthPath   *string
+	MaxBodyBytes *int64
 }
 
 var hexColorRe = lazyre.New(`^#[0-9a-fA-F]{6}$`)
@@ -823,6 +881,65 @@ func (s *SiteService) Update(ctx context.Context, actor domain.User, id string, 
 	}
 	if in.CleanURLs != nil {
 		st.CleanURLs = *in.CleanURLs
+	}
+	if st.AppID != nil {
+		if in.Mode != nil && *in.Mode != st.Mode {
+			return domain.Site{}, domain.Invalid("a site deployed from a repository keeps its type; create a new site to change it")
+		}
+		if in.Repo != nil {
+			return domain.Site{}, domain.Invalid("change this site's repository under Deployments")
+		}
+		in.Mode = nil
+	} else if in.OutputDir != nil || in.AppPort != nil || in.HealthPath != nil || in.MaxBodyBytes != nil {
+		return domain.Site{}, domain.Invalid("build and app settings apply only to sites deployed from a repository")
+	}
+	probeChanged := false
+	if in.OutputDir != nil {
+		if st.Mode == domain.SiteModeApp {
+			return domain.Site{}, domain.Invalid("an app site has no output directory")
+		}
+		if st.BuildOutputDir, err = cleanOutputDir(*in.OutputDir); err != nil {
+			return domain.Site{}, err
+		}
+	}
+	if in.AppPort != nil || in.HealthPath != nil || in.MaxBodyBytes != nil {
+		if st.Mode != domain.SiteModeApp {
+			return domain.Site{}, domain.Invalid("port, health check and body limit apply only to app sites")
+		}
+		if in.AppPort != nil {
+			if *in.AppPort < 1 || *in.AppPort > 65535 {
+				return domain.Site{}, domain.Invalid("port must be between 1 and 65535")
+			}
+			if *in.AppPort != st.Port() {
+				// $PORT tells the app where to listen: it changes with the
+				// container, so only while the app is stopped.
+				b, err := s.Bots.Store.GetBot(ctx, *st.AppID)
+				if err != nil {
+					return domain.Site{}, err
+				}
+				if err := s.Bots.putEnv(ctx, b, map[string]string{"PORT": strconv.Itoa(*in.AppPort)}, true); errors.Is(err, domain.ErrNotStopped) {
+					return domain.Site{}, domain.Invalid("stop the app before changing its port")
+				} else if err != nil {
+					return domain.Site{}, err
+				}
+				probeChanged = true
+			}
+			st.AppPort = *in.AppPort
+		}
+		if in.HealthPath != nil {
+			hp, err := cleanHealthPath(*in.HealthPath)
+			if err != nil {
+				return domain.Site{}, err
+			}
+			probeChanged = probeChanged || hp != st.HealthPath
+			st.HealthPath = hp
+		}
+		if in.MaxBodyBytes != nil {
+			if *in.MaxBodyBytes < 0 || *in.MaxBodyBytes > maxSiteBody {
+				return domain.Site{}, domain.Invalid("request body limit must be between 0 and 4 GiB")
+			}
+			st.MaxBodyBytes = *in.MaxBodyBytes
+		}
 	}
 	if in.Mode != nil {
 		if *in.Mode != "files" && *in.Mode != "page" {
@@ -889,6 +1006,19 @@ func (s *SiteService) Update(ctx context.Context, actor domain.User, id string, 
 	} else if err != nil {
 		return domain.Site{}, err
 	}
+	if st.AppID != nil {
+		// The web unit lives in the site's workspace.
+		if b, err := s.Bots.Store.GetBot(ctx, *st.AppID); err == nil && b.WorkspaceID != st.WorkspaceID {
+			if _, err := s.Bots.moveBot(ctx, actor, b.ID, st.WorkspaceID, true); err != nil {
+				return domain.Site{}, err
+			}
+		}
+		if probeChanged && s.Health != nil {
+			if err := s.Health.SetAppProbe(ctx, *st.AppID, st.Port(), st.HealthPath); err != nil {
+				s.warn("update the app's health check", err)
+			}
+		}
+	}
 	s.reloadSoon()
 	return s.Store.GetSite(ctx, id)
 }
@@ -950,8 +1080,16 @@ func (s *SiteService) linkRepo(ctx context.Context, actor domain.User, st *domai
 
 // Delete removes a site, its domains and every release (workspace admin).
 func (s *SiteService) Delete(ctx context.Context, actor domain.User, id string) error {
-	if _, _, err := s.requireSite(ctx, actor, id, domain.WorkspaceAdmin); err != nil {
+	st, _, err := s.requireSite(ctx, actor, id, domain.WorkspaceAdmin)
+	if err != nil {
 		return err
+	}
+	if st.AppID != nil {
+		// The app (container, checkout, add-ons, webhook) goes first: a
+		// failure leaves the site in place to try again.
+		if err := s.Bots.delete(ctx, actor, *st.AppID, true); err != nil && !errors.Is(err, domain.ErrNotFound) {
+			return err
+		}
 	}
 	if err := s.Store.DeleteSite(ctx, id); err != nil {
 		return err
@@ -1031,8 +1169,10 @@ func (s *SiteService) copyReleaseToDraft(siteID, releaseID string, dst *filesyst
 	if _, _, err := src.WriteTarGz(&buf, nil, lim); err != nil {
 		return err
 	}
-	_, err = dst.RestoreTarGz(&buf, lim)
-	return err
+	if _, err = dst.RestoreTarGz(&buf, lim); err != nil {
+		return err
+	}
+	return dst.Remove(siterules.Dir) // generated at publish; not part of the source
 }
 
 // PublishDraft snapshots the private editable workspace into a new immutable
@@ -1080,6 +1220,14 @@ func (s *SiteService) SetDisabled(ctx context.Context, actor domain.User, id str
 	}
 	if err := s.Store.SetSiteDisabled(ctx, id, disabled, s.now().UnixMilli()); err != nil {
 		return err
+	}
+	if disabled {
+		// A suspended app stops running, not only receiving traffic.
+		if st, err := s.Store.GetSite(ctx, id); err == nil && st.AppID != nil && st.Mode == domain.SiteModeApp {
+			if _, err := s.Bots.setIntent(ctx, actor, *st.AppID, domain.DesiredStopped, false); err != nil {
+				s.warn("stop a suspended site's app", err)
+			}
+		}
 	}
 	s.reloadSoon()
 	return nil
@@ -1177,8 +1325,16 @@ func (s *SiteService) Upload(ctx context.Context, actor domain.User, id string, 
 
 // finish counts a staged release, records it, serves it and prunes old ones.
 func (s *SiteService) finish(ctx context.Context, st domain.Site, rel string, w *filesystem.Workspace, source string, label, actorID *string) (domain.SiteRelease, error) {
-	if _, err := w.FlattenSingleDir(); err != nil {
-		return domain.SiteRelease{}, err
+	return s.finishRelease(ctx, st, rel, w, source, label, actorID, nil, true)
+}
+
+// finishRelease is finish for a release built from ref; flatten lifts a lone
+// top-level folder (uploaded archives of dist/), never done for build output.
+func (s *SiteService) finishRelease(ctx context.Context, st domain.Site, rel string, w *filesystem.Workspace, source string, label, actorID, ref *string, flatten bool) (domain.SiteRelease, error) {
+	if flatten {
+		if _, err := w.FlattenSingleDir(); err != nil {
+			return domain.SiteRelease{}, err
+		}
 	}
 	_ = w.Remove(filesystem.DeployManifest) // written by tarball deploys; not part of the site
 	_ = w.Remove(filesystem.LegacyDeployManifest)
@@ -1189,8 +1345,11 @@ func (s *SiteService) finish(ctx context.Context, st domain.Site, rel string, w 
 	if files == 0 {
 		return domain.SiteRelease{}, domain.Invalid("there are no files to publish")
 	}
+	if err := s.prepareRelease(st.ID, rel); err != nil {
+		return domain.SiteRelease{}, err
+	}
 	r := domain.SiteRelease{ID: rel, SiteID: st.ID, Source: source, SourceLabel: label, Files: files, Bytes: bytes,
-		ActorID: actorID, CreatedAtMS: s.now().UnixMilli()}
+		ActorID: actorID, SourceRef: ref, CreatedAtMS: s.now().UnixMilli()}
 	if err := s.Store.InsertRelease(ctx, r); err != nil {
 		return domain.SiteRelease{}, err
 	}
@@ -1200,6 +1359,24 @@ func (s *SiteService) finish(ctx context.Context, st domain.Site, rel string, w 
 	s.reloadSoon()
 	s.prune(ctx, st.ID)
 	return r, nil
+}
+
+// prepareRelease compiles _redirects/_headers and writes compressed copies
+// inside the staged release. Invalid rules refuse the release.
+func (s *SiteService) prepareRelease(siteID, rel string) error {
+	root, err := s.ReleaseRoot(siteID, rel)
+	if err != nil {
+		return err
+	}
+	defer root.Close()
+	if err := siterules.Publish(root); err != nil {
+		var le *siterules.LineError
+		if errors.As(err, &le) {
+			return domain.Invalid(le.Error())
+		}
+		return err
+	}
+	return nil
 }
 
 // prune keeps the newest releases (the serving one is never removed).

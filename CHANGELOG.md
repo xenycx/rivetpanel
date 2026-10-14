@@ -6,7 +6,60 @@ authoritative current version.
 
 ## Unreleased
 
+## 0.6.0 - 2026-10-14
+
+### Added
+
+- **Sites from GitHub: static builds and apps.** Sites → From GitHub creates a
+  site from a repository (private ones through the connected GitHub account)
+  and proposes how to host it after reading the branch: **static files**,
+  a **static build** (Vite, SvelteKit adapter-static, Astro, Next.js export,
+  Nuxt generate) that runs on the server on every deployment and publishes
+  its output folder as a release, or an **app**: a server process (Node.js
+  and TypeScript with Express, Hono, Fastify, SvelteKit adapter-node,
+  Next.js, Nuxt or Astro; PHP and Laravel; FastAPI, Flask, Django; Go; Rust)
+  that receives every request for the site's addresses. Pushes deploy
+  automatically through a webhook or by polling. Apps get variables, a
+  persistent `/data` folder (kept across deployments and included in
+  backups), the PostgreSQL/MariaDB/Redis/MongoDB add-ons, logs, an HTTP health
+  check that restarts them after three failures, and an optional release
+  command (database migrations) that runs before each start. The site page
+  gains Deployments, Logs, Variables, Add-ons, Files and Build and run tabs
+  for these sites; a failed build keeps the live release. API:
+  `POST /sites/analyze`, `POST /sites/from-repo`, `GET /site-presets`,
+  `GET /sites/by-app/{app}`, and `POST /sites/{id}/deploy` accepts a commit.
+- **PHP runtime** (`php`, FrankenPHP with PHP 8.4), used by PHP and Laravel
+  site apps. Composer runs when `composer.json` exists. Because the image's
+  binary carries a file capability that cannot run under
+  no-new-privileges, the build copies it into the checkout and the app runs
+  the copy.
+- New settings: `RIVET_APPS_NETWORK` (the Docker network apps run on, default
+  `rivetpanel-apps`; a containerised panel joins it at start and Diagnostics
+  reports when it cannot), `RIVET_SITES_TRUSTED_PROXIES`,
+  `RIVET_SITES_CLIENT_IP_HEADER` and `RIVET_SITES_MAX_BODY_BYTES`.
+- **`_redirects` and `_headers` for static sites** (the Netlify / Cloudflare
+  Pages formats). Rules are checked when a release is published (a bad line
+  refuses the release and names the file and line) and applied when it is
+  served: 301/302/303/307/308 redirects, `200` rewrites (for example
+  `/* /index.html 200`), custom `404`/`410` pages, `:placeholder` and `*`
+  splat matching, and extra response headers per path. An existing file
+  wins over a rule unless the status ends in `!`. Headers that would break
+  the listener (`Set-Cookie`, hop-by-hop headers, `Content-Length` and the
+  like) are refused. Up to 1,000 rules per file.
+- **Compressed static files.** Text assets (HTML, CSS, JS, JSON, SVG, fonts
+  and similar) of 1 KiB or more are gzipped when a release is published and
+  sent compressed to browsers that accept it. A site's own `.br` or `.gz`
+  files next to the original (SvelteKit's `precompress`, Vite plugins) are
+  preferred, brotli first.
+
 ### Changed
+
+- **Static sites are cached properly.** Fingerprinted build output
+  (`_app/immutable/`, `_astro/`, `_next/static/`, `_nuxt/` and hash-named
+  files under `assets/`) is sent with a one-year `immutable` cache, so
+  browsers and Cloudflare stop re-downloading it. Other assets keep a one-hour
+  cache and may now be served stale for a day while they revalidate; HTML
+  still revalidates on every visit. `_headers` can override any of this.
 
 - **Memory and CPU limits follow each node's hardware.** The largest memory
   and CPU a bot or game server may be given are now the memory and CPU count
@@ -26,6 +79,29 @@ authoritative current version.
   panel's node); otherwise the Connect block asks an administrator to set
   one. The panel's host is refused as a node public address. For a name,
   point a DNS-only (not Cloudflare-proxied) record at the node.
+
+- **Migration `0054_web_apps`** rebuilds the `bots` and `sites` tables (to
+  allow the `web` kind, the `php` runtime and the `app` site mode) and adds
+  release commands, app settings, release commits and app health checks.
+  Every row is copied by name and foreign keys are verified before the
+  migration commits. Take a backup before upgrading, as for any release.
+
+### Security
+
+- App sites get only headers the sites listener checked:
+  `X-Forwarded-For`, `X-Real-IP`, `X-Forwarded-Host` and
+  `X-Forwarded-Proto` are rewritten, and incoming values (or the client
+  address header) are believed only from `RIVET_SITES_TRUSTED_PROXIES`.
+  Request bodies over the site's limit are refused before they reach the app.
+- Builds of sites receive no secrets: only variables with public framework
+  prefixes (`VITE_`, `PUBLIC_`, `NEXT_PUBLIC_`, `NUXT_PUBLIC_`, `REACT_APP_`,
+  `GATSBY_`). A repository can never write into an app's `/data` folder
+  (`.rivet-data` entries are skipped when deploying).
+- A site's app unit cannot be deleted, given published ports, transferred,
+  moved or unlinked from its repository through the bot API, and always runs
+  on the panel's own node. Not enforced: isolation between apps on the
+  shared apps network, which can reach each other's ports like bots on the
+  default network.
 
 ### Fixed
 

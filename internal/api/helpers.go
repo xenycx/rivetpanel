@@ -97,6 +97,7 @@ type botDTO struct {
 	Ports          []portDTO `json:"ports"`
 	AutoBackup     bool      `json:"auto_backup"`
 	BuildCommand   string    `json:"build_command"`
+	ReleaseCommand string    `json:"release_command"`
 	// LogoURL is the custom logo, else the Discord avatar ("" = neither).
 	LogoURL    string   `json:"logo_url"`
 	CustomLogo bool     `json:"custom_logo"`
@@ -222,7 +223,7 @@ func toBot(b domain.Bot) botDTO {
 	}
 	d.NetworkEnabled, d.BandwidthKbps = !b.NetworkDisabled, b.BandwidthKbps
 	d.AutoBackup = !b.AutoBackupOff
-	d.BuildCommand = b.BuildCommand
+	d.BuildCommand, d.ReleaseCommand = b.BuildCommand, b.ReleaseCommand
 	d.Addons = make([]string, len(b.Addons))
 	for i, a := range b.Addons {
 		d.Addons[i] = a.Kind

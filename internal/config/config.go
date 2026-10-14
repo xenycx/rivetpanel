@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/netip"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -144,6 +145,17 @@ type Config struct {
 	// SitesDNSTarget is the host name custom domains should CNAME to (shown in
 	// the domain instructions); defaults to the host of SitesBaseURL.
 	SitesDNSTarget string
+	// AppsNetwork is the Docker network site apps run on; the sites listener
+	// proxies to them over it (the panel joins it when it runs in a
+	// container).
+	AppsNetwork string
+	// SitesTrustedProxies are the peers (the TLS proxy in front of the sites
+	// listener) whose forwarded headers are believed; loopback always is.
+	SitesTrustedProxies []netip.Prefix
+	// SitesClientIPHeader names the header holding the visitor's address
+	// (CF-Connecting-IP behind Cloudflare); "" uses X-Forwarded-For.
+	SitesClientIPHeader string
+	SitesMaxBodyBytes   int64 // default request body limit of app sites
 }
 
 // SitesDomain is the host part of SitesBaseURL ("" when unset).
@@ -410,6 +422,33 @@ func LoadLookup(look Lookup) (Config, error) {
 		}
 		c.SiteMaxBytes = n
 	}
+	c.AppsNetwork = "rivetpanel-apps"
+	if v, ok := look("RIVET_APPS_NETWORK"); ok {
+		c.AppsNetwork = strings.TrimSpace(v)
+	}
+	for _, v := range strings.Split(getenv("RIVET_SITES_TRUSTED_PROXIES"), ",") {
+		if v = strings.TrimSpace(v); v == "" {
+			continue
+		}
+		pf, err := netip.ParsePrefix(v)
+		if err != nil {
+			a, aerr := netip.ParseAddr(v)
+			if aerr != nil {
+				return Config{}, fmt.Errorf("RIVET_SITES_TRUSTED_PROXIES: %q is not an address or CIDR range", v)
+			}
+			pf = netip.PrefixFrom(a, a.BitLen())
+		}
+		c.SitesTrustedProxies = append(c.SitesTrustedProxies, pf.Masked())
+	}
+	c.SitesClientIPHeader = strings.TrimSpace(getenv("RIVET_SITES_CLIENT_IP_HEADER"))
+	c.SitesMaxBodyBytes = 100 << 20
+	if v := getenv("RIVET_SITES_MAX_BODY_BYTES"); v != "" {
+		n, err := strconv.ParseInt(v, 10, 64)
+		if err != nil {
+			return Config{}, fmt.Errorf("RIVET_SITES_MAX_BODY_BYTES: %w", err)
+		}
+		c.SitesMaxBodyBytes = n
+	}
 	if v := getenv("RIVET_MAX_SITES_PER_USER"); v != "" {
 		n, err := strconv.Atoi(v)
 		if err != nil {
@@ -514,8 +553,22 @@ func (c Config) validateSites() []error {
 	if c.MaxSitesPerUser < 0 {
 		errs = append(errs, errors.New("RIVET_MAX_SITES_PER_USER cannot be negative (0 means unlimited)"))
 	}
+	if c.AppsNetwork != "" && !dockerNameRe.MatchString(c.AppsNetwork) {
+		errs = append(errs, errors.New("RIVET_APPS_NETWORK must be a Docker network name such as rivetpanel-apps"))
+	}
+	if c.SitesClientIPHeader != "" && !headerNameRe.MatchString(c.SitesClientIPHeader) {
+		errs = append(errs, errors.New("RIVET_SITES_CLIENT_IP_HEADER must be a header name such as CF-Connecting-IP"))
+	}
+	if c.SitesMaxBodyBytes < 1<<10 || c.SitesMaxBodyBytes > 4<<30 {
+		errs = append(errs, errors.New("RIVET_SITES_MAX_BODY_BYTES must be between 1 KiB and 4 GiB"))
+	}
 	return errs
 }
+
+var (
+	dockerNameRe = lazyre.New(`^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,62}$`)
+	headerNameRe = lazyre.New(`^[A-Za-z0-9-]{1,64}$`)
+)
 
 var hostLabelRe = lazyre.New(`^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$`)
 

@@ -41,6 +41,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime/debug"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"syscall"
@@ -633,6 +634,7 @@ func serve(log *slog.Logger, logs *logbuf.Buffer) error {
 			return err
 		}
 		deployChecks = append(deployChecks, pathChecks...)
+		deployChecks = append(deployChecks, appsNetworkCheck(ctx, log, cfg, dk)...)
 		// Add-on (database) data lives next to the database, outside every
 		// bot workspace.
 		addonRoot, err := filepath.Abs(filepath.Join(filepath.Dir(cfg.DBPath), "addons"))
@@ -643,7 +645,8 @@ func serve(log *slog.Logger, logs *logbuf.Buffer) error {
 		rn, err = runner.New(runner.Deps{Store: db, Docker: dk, Env: botSvc, Workspaces: wsm, Catalog: catalog, Log: log, Bus: bus, Builds: ops,
 			Providers: gameProviders},
 			runner.Options{NodeID: domain.LocalNodeID, InstallID: installID, User: cfg.ContainerUser, WorkspaceOwner: cfg.WorkspaceOwner, Network: cfg.ContainerNetwork,
-				Workers: cfg.RunnerWorkers, BuildTimeout: cfg.BuildTimeout, MaxBuilds: cfg.MaxBuilds, AddonData: addonData})
+				Workers: cfg.RunnerWorkers, BuildTimeout: cfg.BuildTimeout, MaxBuilds: cfg.MaxBuilds, AddonData: addonData,
+				AppsNetwork: appsNetwork(cfg)})
 		if err != nil {
 			return fmt.Errorf("runner: %w", err)
 		}
@@ -716,6 +719,19 @@ func serve(log *slog.Logger, logs *logbuf.Buffer) error {
 	botSvc.OnDelete = func(id string) { backupSvc.PurgeBot(id); logArchive.PurgeBot(id) }
 	scheduler := &service.Scheduler{Store: db, Bots: botSvc, Backups: backupSvc, Deploy: deploySvc, Log: log}
 	health := &service.HealthService{Store: db, Bots: botSvc, Alerts: alerts, Log: log}
+	if dk != nil && appsNetwork(cfg) != "" {
+		health.AppAddr = func(ctx context.Context, botID string, port int) (string, bool) {
+			b, err := db.GetBot(ctx, botID)
+			if err != nil || b.ContainerID == nil {
+				return "", false
+			}
+			ip, err := dk.ContainerIP(ctx, *b.ContainerID, cfg.AppsNetwork)
+			if err != nil {
+				return "", false
+			}
+			return net.JoinHostPort(ip, strconv.Itoa(port)), true
+		}
+	}
 	go health.Run(ctx)
 	analytics := &service.Analytics{Store: db, Heartbeat: health.Heartbeat}
 	// Pruning of old rows, one task at a time (see runMaintenance).
@@ -746,7 +762,12 @@ func serve(log *slog.Logger, logs *logbuf.Buffer) error {
 		}
 		sitesSvc = &service.SiteService{Store: db, Bots: botSvc, OAuth: oauthSvc, GH: &github.Client{}, Dir: cfg.SitesDir,
 			BaseURL: cfg.SitesBaseURL, ExtraDomains: cfg.SitesDomains, DNSTarget: cfg.SitesDNSTarget, PanelHost: panelHost, PanelURL: cfg.PublicURL, MaxBytes: cfg.SiteMaxBytes,
-			MaxPerUser: cfg.MaxSitesPerUser, Log: log}
+			MaxPerUser: cfg.MaxSitesPerUser, Log: log, Deploys: deploySvc, Health: health}
+		if rn != nil {
+			// Sites are built and run by the panel's own runner.
+			sitesSvc.Builder = rn
+			deploySvc.Web = sitesSvc
+		}
 		if err := sitesSvc.Start(ctx); err != nil {
 			return err
 		}
@@ -754,7 +775,12 @@ func serve(log *slog.Logger, logs *logbuf.Buffer) error {
 		if err != nil {
 			return fmt.Errorf("sites listen: %w", err)
 		}
-		sitesSrv = sitehost.NewServer(&sitehost.Handler{Sites: sitesSvc, Log: log})
+		proxy := &sitehost.Proxy{Network: cfg.AppsNetwork, Trusted: cfg.SitesTrustedProxies,
+			ClientIPHeader: cfg.SitesClientIPHeader, MaxBody: cfg.SitesMaxBodyBytes}
+		if dk != nil && appsNetwork(cfg) != "" {
+			proxy.Apps = dk
+		}
+		sitesSrv = sitehost.NewServer(&sitehost.Handler{Sites: sitesSvc, Log: log, Proxy: proxy})
 		log.Info("sites listening", "addr", sln.Addr().String(), "base_url", cfg.SitesBaseURL)
 		go func() {
 			if err := sitesSrv.Serve(sln); err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -1194,4 +1220,13 @@ func (a nodeAddons) AddonLogs(ctx context.Context, nodeID, botID, kind string, l
 
 func (a nodeAddons) RemoveAddonData(ctx context.Context, nodeID, botID, kind string) error {
 	return a.r.RemoveAddonData(ctx, nodeID, botID, kind)
+}
+
+// appsNetwork is the network app sites run on ("" without site hosting:
+// apps then never exist).
+func appsNetwork(cfg config.Config) string {
+	if cfg.SitesListen == "" {
+		return ""
+	}
+	return cfg.AppsNetwork
 }

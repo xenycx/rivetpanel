@@ -5,9 +5,10 @@ and [the implementation status](docs/implementation-status.md) for the staged
 platform-overhaul checklist.
 
 A lightweight self-hosted control plane for Discord bots and other isolated
-applications, **Minecraft servers**, and static sites, with remote nodes and
+applications, **Minecraft servers**, and websites (static, built or running
+apps), with remote nodes and
 other modules being added as opt-in previews. The existing application runtimes cover Node.js, Python, Rust,
-Go, Java and Ruby. The control plane uses Go, Fiber, SQLite and an embedded
+Go, Java, Ruby and PHP. The control plane uses Go, Fiber, SQLite and an embedded
 SvelteKit interface; Docker provides the current execution boundary.
 
 RivetPanel is a clean-break namespace. It does not read or automatically
@@ -71,10 +72,15 @@ convert databases created by the predecessor product. Start with a new
   server on every route, with delegated administration and audited changes;
   **email verification** with one-use links and an optional restriction for
   unverified accounts (`docs/permissions.md`)
-* **Static site hosting** on a separate listener: ZIP or GitHub publishing,
-  instant rollback, editable site addresses, several sites domains (added at
-  runtime with DNS verification), custom domains with DNS verification,
-  on-demand TLS via the reverse proxy (`docs/sites.md`)
+* **Site hosting** on a separate listener: static sites (ZIP, editor or
+  GitHub), **static builds** (Vite, SvelteKit, Astro, Next.js export, Nuxt)
+  built on every push, and **apps** from GitHub (Node.js/TypeScript, PHP and
+  Laravel, Python, Go, Rust) running behind the site's addresses with
+  variables, a persistent `/data` folder, databases, logs, health checks and
+  release commands; private repositories, `_redirects`/`_headers`, proper
+  caching and compression, instant rollback, editable site addresses, several
+  sites domains, custom domains with DNS verification, on-demand TLS via the
+  reverse proxy (`docs/sites.md`)
 * Integrated **Bot Sites** in every Discord bot: a generated public page with
   custom HTML/CSS and opt-in live widgets, or full HTML/CSS/JS files edited in
   a private draft and published as immutable releases
@@ -136,7 +142,7 @@ Start at the [documentation index](docs/README.md). The project home is
 * `docs/features.md`: every panel feature, its limits and what it does not do
 * `docs/workspaces.md`: team workspaces, roles and administrator oversight
 * `docs/permissions.md`: account roles, the permission catalog, delegated administration and email verification
-* `docs/sites.md`: static site hosting, custom domains, DNS and reverse proxy setup
+* `docs/sites.md`: site hosting (static, builds and apps), custom domains, DNS and reverse proxy setup
 * `docs/agents.md`: remote-node installation, enrollment, placement, certificate lifecycle and limits
 * `docs/logs.md`: daily log files, the log archive job (gzip at a configurable time, retention) and how long graph data is kept
 * [CHANGELOG.md](CHANGELOG.md): versioned release history

@@ -37,7 +37,7 @@
 	const times = $derived(pts.map((p) => p.t));
 	const tot = $derived(data?.totals);
 	const per = $derived(data ? fmtResolution(data.resolution_s) : 'bucket');
-	const href = (c: OverviewConsumer) => `${c.kind === 'game' ? '/servers' : '/bots'}/${c.bot_id}?tab=usage`;
+	const href = (c: OverviewConsumer) => (c.kind === 'web' ? `/sites/app/${c.bot_id}` : `${c.kind === 'game' ? '/servers' : '/bots'}/${c.bot_id}?tab=usage`);
 	const tables = $derived(
 		data
 			? [
@@ -159,7 +159,7 @@
 						<ol class="mt-2 grid gap-1.5">
 							{#each t.rows as c (c.bot_id)}
 								<li class="flex items-baseline justify-between gap-3">
-									<span class="min-w-0 truncate"><a class="link" href={href(c)}>{c.name}</a>{#if c.kind === 'game'}<span class="ml-1.5 text-small text-muted">server</span>{/if}{#if c.owner}<span class="block truncate text-small text-muted">{c.owner}</span>{/if}</span>
+									<span class="min-w-0 truncate"><a class="link" href={href(c)}>{c.name}</a>{#if c.kind === 'game'}<span class="ml-1.5 text-small text-muted">server</span>{:else if c.kind === 'web'}<span class="ml-1.5 text-small text-muted">site</span>{/if}{#if c.owner}<span class="block truncate text-small text-muted">{c.owner}</span>{/if}</span>
 									<span class="shrink-0 font-mono text-small">{t.value(c)}</span>
 								</li>
 							{/each}

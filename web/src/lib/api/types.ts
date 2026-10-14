@@ -56,6 +56,8 @@ export type Bot = {
 	custom_logo: boolean;
 	/** Custom build script; "" = the runtime's default build. */
 	build_command: string;
+	/** Site apps: a command run before each start (database migrations). */
+	release_command?: string;
 	/** Attached add-on kinds (bot detail responses). */
 	addons?: string[];
 	restart_policy: 'never' | 'on_failure';
@@ -69,8 +71,8 @@ export type Bot = {
 	last_started_at_ms: number | null;
 	tags: string[];
 	favorite: boolean;
-	/** "bot" (an application such as a Discord bot) or "game" (a game server). */
-	kind: 'bot' | 'game';
+	/** "bot" (an application such as a Discord bot), "game" (a game server) or "web" (a site's app). */
+	kind: 'bot' | 'game' | 'web';
 	blueprint_id?: string;
 	blueprint_revision?: number;
 	/** Chosen image label; "" = automatic (decided when installing). */
@@ -330,7 +332,7 @@ export type Operation = {
 	bot_id: string;
 	bot_name: string;
 	/** Absent from responses of panels older than this field. */
-	bot_kind?: 'bot' | 'game';
+	bot_kind?: 'bot' | 'game' | 'web';
 	kind: OpKind;
 	trigger: 'manual' | 'push' | 'schedule' | 'initial' | 'start' | 'api' | 'system';
 	actor: string | null;
@@ -425,7 +427,7 @@ export type Site = {
 	url: string;
 	spa: boolean;
 	clean_urls: boolean;
-	mode: 'page' | 'files';
+	mode: 'page' | 'files' | 'app';
 	page_title: string;
 	page_description: string;
 	page_theme: 'midnight' | 'daylight' | 'system';
@@ -445,6 +447,14 @@ export type Site = {
 	/** Custom logo, release favicon or bot logo; 404 when none. */
 	icon_url: string;
 	custom_logo: boolean;
+	/** Sites deployed from a repository: the unit that builds (and for apps, runs) the site. */
+	app_id: string | null;
+	app_state: string;
+	framework: string;
+	build_output_dir: string;
+	app_port: number;
+	health_path: string;
+	max_body_bytes: number;
 };
 export type SiteDomain = {
 	domain: string;
@@ -467,6 +477,8 @@ export type SiteRelease = {
 	actor: string | null;
 	current: boolean;
 	created_at_ms: number;
+	/** The commit a build was made from. */
+	source_ref: string | null;
 };
 /** A domain sites can be placed under: a site's address is <slug>.<domain>. */
 export type SiteBaseChoice = { id: string; domain: string; label: string; primary: boolean; example_url: string };
@@ -477,7 +489,34 @@ export type SitesInfo = {
 	domains?: SiteBaseChoice[];
 	max_bytes?: number;
 	max_domains?: number;
+	/** Sites can be built from GitHub repositories. */
+	builds_enabled?: boolean;
+	/** App sites (servers) can run on this panel. */
+	apps_enabled?: boolean;
+	github?: boolean;
 };
+export type WebKind = 'static' | 'static_build' | 'app';
+/** A way to host a repository as a site (a preset or an analysis result). */
+export type WebPlan = {
+	kind: WebKind;
+	framework: string;
+	label: string;
+	runtime: string;
+	build_command: string;
+	output_dir: string;
+	argv: string[] | null;
+	port: number;
+	health_path: string;
+	release_command: string;
+	spa: boolean;
+	env: { name: string; description: string; required: boolean; secret: boolean; value: string }[] | null;
+	addons: string[] | null;
+	memory_bytes: number;
+	summary: string;
+	notes: string[] | null;
+	evidence: string[] | null;
+};
+export type WebAnalysis = { repo: GitHubRepo; branch: string; root_dir: string; sha: string; plan: WebPlan; files: number; truncated: boolean };
 /** A built-in site starter (GET /site-templates). */
 export type SiteTemplate = {
 	id: string;

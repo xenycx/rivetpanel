@@ -74,6 +74,9 @@ type Options struct {
 
 	// AddonData holds add-on data directories; empty disables add-ons.
 	AddonData addons.DataRoot
+	// AppsNetwork is the routable network site apps run on, which the
+	// sites listener reaches them through ("" = Network).
+	AppsNetwork string
 
 	Now func() time.Time
 }
@@ -140,6 +143,7 @@ type botState struct {
 	finalReason string    // domain.Reason* for finalExit
 	builtGen    int64     // generation whose build stage completed in this process
 	built       bool
+	releasedGen int64 // generation whose release command succeeded in this process
 	countGen    int64  // generation the crash counter belongs to
 	seeded      bool   // counter restored from the database after a panel restart
 	prepFailGen int64  // generation whose pre-build failure was recorded

@@ -35,6 +35,9 @@ const (
 	RoleRuntime    Role = "runtime"
 	RoleBuilder    Role = "builder"
 	RoleDiagnostic Role = "diagnostic"
+	// RoleRelease runs a web unit's release command (database migrations)
+	// once per generation, after the build and before the start.
+	RoleRelease Role = "release"
 	// RoleAddon is a companion service (database, cache) of a bot.
 	RoleAddon Role = "addon"
 )

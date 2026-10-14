@@ -63,7 +63,10 @@ var keyNames = map[string]bool{
 	".env.example": true, ".env.sample": true, ".env.template": true, ".env.dist": true, "example.env": true,
 	"sample.env": true, "env.example": true, "app.example.env": true, ".env.defaults": true,
 	"procfile": true, "app.json": true, "railway.json": true, "railway.toml": true, "nixpacks.toml": true, "fly.toml": true,
-	"render.yaml": true, "schema.prisma": true,
+	"render.yaml": true, "schema.prisma": true, "composer.json": true, "manage.py": true,
+	"svelte.config.js": true, "svelte.config.ts": true, "svelte.config.mjs": true,
+	"next.config.js": true, "next.config.mjs": true, "next.config.ts": true,
+	"astro.config.mjs": true, "astro.config.ts": true, "nuxt.config.ts": true, "nuxt.config.js": true,
 	"config.example.json": true, "config.example.yml": true, "config.example.yaml": true, "config.example.toml": true,
 	"config.sample.json": true, "config.sample.yml": true, "config.sample.yaml": true, "config.json.example": true,
 }

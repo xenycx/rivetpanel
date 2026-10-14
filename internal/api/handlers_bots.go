@@ -293,7 +293,8 @@ func (s *panel) patchBot(c fiber.Ctx) error {
 		RestartBackoffInitialMS *int64  `json:"restart_backoff_initial_ms"`
 		RestartBackoffMaxMS     *int64  `json:"restart_backoff_max_ms"`
 
-		BuildCommand *string `json:"build_command"`
+		BuildCommand   *string `json:"build_command"`
+		ReleaseCommand *string `json:"release_command"`
 	}
 	if err := decode(c, &in); err != nil {
 		return err
@@ -303,7 +304,7 @@ func (s *panel) patchBot(c fiber.Ctx) error {
 		Runtime: in.Runtime, Entrypoint: in.Entrypoint, NetworkEnabled: in.NetworkEnabled, BandwidthKbps: in.BandwidthKbps, AutoBackup: in.AutoBackup,
 		RestartPolicy: in.RestartPolicy, RestartMaxAttempts: in.RestartMaxAttempts,
 		RestartBackoffInitialMS: in.RestartBackoffInitialMS, RestartBackoffMaxMS: in.RestartBackoffMaxMS,
-		BuildCommand: in.BuildCommand,
+		BuildCommand: in.BuildCommand, ReleaseCommand: in.ReleaseCommand,
 	})
 	if err != nil {
 		return err

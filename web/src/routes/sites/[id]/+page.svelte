@@ -3,7 +3,7 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { api, ApiError, fmtBytes, upload } from '$lib/api/client';
-	import { roleRank, type Connection, type GitHubRepo, type Site, type SiteBaseChoice, type SiteDomain, type SiteRelease, type SitesInfo, type WorkspaceRole } from '$lib/api/types';
+	import { roleRank, type Bot, type Connection, type GitHubRepo, type Site, type SiteBaseChoice, type SiteDomain, type SiteRelease, type SitesInfo, type WorkspaceRole } from '$lib/api/types';
 	import { fmtAgo, fmtWhen } from '$lib/args';
 	import { session } from '$lib/session.svelte';
 	import { confirmDialog } from '$lib/ui/dialogs.svelte';
@@ -13,9 +13,10 @@
 	import Notice from '$lib/components/ui/Notice.svelte';
 	import Skeleton from '$lib/components/ui/Skeleton.svelte';
 	import LogoEditor from '$lib/components/LogoEditor.svelte';
+	import SiteApp from '$lib/components/SiteApp.svelte';
 	import { publishTarget } from '$lib/ai/context.svelte';
 
-	type Detail = { site: Site; role: WorkspaceRole; domains: SiteDomain[]; releases: SiteRelease[]; deploy: { running: boolean; last_error: string; finished_at_ms: number } };
+	type Detail = { site: Site; role: WorkspaceRole; domains: SiteDomain[]; releases: SiteRelease[]; deploy: { running: boolean; last_error: string; finished_at_ms: number }; app?: Bot };
 	const id = $derived(page.params.id ?? '');
 	let d = $state<Detail | null>(null);
 	let logoBusy = $state(false);
@@ -79,14 +80,17 @@
 				.catch(() => {});
 		}
 		const t = setInterval(() => {
-			if (document.visibilityState === 'visible' && d?.deploy.running) load();
-		}, 2000);
+			const a = d?.app;
+			const busy = d?.deploy.running || (a && (a.observed_state === 'building' || a.observed_state === 'starting' || a.observed_state === 'stopping' || a.desired_state !== a.observed_state));
+			if (document.visibilityState === 'visible' && (busy || a)) load();
+		}, 3000);
 		return () => clearInterval(t);
 	});
 
 	const canEdit = $derived(roleRank[d?.role ?? ''] >= roleRank.developer);
 	const canAdmin = $derived(roleRank[d?.role ?? ''] >= roleRank.admin);
-	const live = $derived(!!d?.site.current_release && !d.site.disabled);
+	const isApp = $derived(d?.site.mode === 'app');
+	const live = $derived(!!d && !d.site.disabled && (isApp ? d.app?.observed_state === 'running' : !!d.site.current_release));
 	// Domains the site can move to, plus its current one even when that no
 	// longer takes new sites.
 	const addressChoices = $derived.by(() => {
@@ -226,7 +230,9 @@
 	async function destroy() {
 		const ok = await confirmDialog({
 			title: `Delete ${d?.site.name}?`,
-			body: 'Every release and custom domain is removed and the address stops working immediately. This cannot be undone.',
+			body: d?.app
+				? `The app, its files and /data, its add-ons and their data, every release and custom domain are removed, and the address stops working immediately. This cannot be undone.`
+				: 'Every release and custom domain is removed and the address stops working immediately. This cannot be undone.',
 			confirmLabel: 'Delete site',
 			tone: 'danger'
 		});
@@ -254,7 +260,7 @@
 		<div class="min-w-0 flex-1 basis-72">
 			<div class="flex flex-wrap items-center gap-2">
 				<h1 class="truncate text-section">{d.site.name}</h1>
-				<span class="pill" data-tone={d.site.disabled ? 'fail' : live ? 'run' : undefined}>{d.site.disabled ? 'Suspended' : live ? 'Live' : 'Nothing published'}</span>
+				<span class="pill" data-tone={d.site.disabled ? 'fail' : live ? 'run' : undefined}>{d.site.disabled ? 'Suspended' : live ? 'Live' : isApp ? 'Not running' : 'Nothing published'}</span>
 			</div>
 			<a href={d.site.url} target="_blank" rel="noopener" class="mt-0.5 inline-flex max-w-full items-center gap-1.5 font-mono text-small text-action hover:underline"><span class="truncate">{d.site.url}</span><Icon name="external" size={12} /></a>
 			<p class="text-small text-muted">{d.site.workspace_name === 'Personal' ? 'Personal workspace' : d.site.workspace_name} · created by {d.site.owner_email}</p>
@@ -265,6 +271,9 @@
 
 	<div class="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,24rem)]">
 		<div class="grid min-w-0 content-start gap-6">
+			{#if d.app}
+				<SiteApp site={d.site} app={d.app} {canEdit} {canAdmin} onChanged={load} />
+			{:else}
 			<!-- Publishing -->
 			<section class="card p-5" aria-labelledby="pub-h">
 				<h2 id="pub-h" class="text-title font-semibold">Publish</h2>
@@ -316,6 +325,9 @@
 				</div>
 			</section>
 
+			{/if}
+
+			{#if !isApp}
 			<!-- Releases -->
 			<section class="card overflow-hidden" aria-labelledby="rel-h">
 				<div class="flex items-center justify-between gap-2 px-5 pt-5 pb-3">
@@ -328,7 +340,7 @@
 							<li class="flex flex-wrap items-center gap-3 px-5 py-3">
 								<span class="grid size-8 shrink-0 place-items-center rounded-control {r.current ? 'bg-run/12 text-run' : 'bg-paper-2 text-muted'}"><Icon name={r.source === 'github' ? 'github' : 'upload'} size={14} /></span>
 								<div class="min-w-0 flex-1 basis-56">
-									<p class="truncate font-medium">{r.source_label ?? 'ZIP upload'}{#if r.current}<span class="pill ml-2 align-middle" data-tone="run">Serving</span>{/if}</p>
+									<p class="truncate font-medium">{r.source_label ?? 'ZIP upload'}{#if r.source_ref} <code class="text-small font-normal text-muted">{r.source_ref.slice(0, 7)}</code>{/if}{#if r.current}<span class="pill ml-2 align-middle" data-tone="run">Serving</span>{/if}</p>
 									<p class="text-small text-muted">{r.files} files · {fmtBytes(r.bytes)} · {fmtAgo(r.created_at_ms)}{r.actor ? ` by ${r.actor}` : ''}</p>
 								</div>
 								{#if !r.current && canEdit}<button class="btn btn-sm" onclick={() => activate(r)}>Serve this</button>{/if}
@@ -339,6 +351,7 @@
 					<p class="border-t border-rule-soft px-5 py-4 text-small text-muted">Nothing published yet. Visitors see a “nothing published” page until the first release.</p>
 				{/if}
 			</section>
+			{/if}
 		</div>
 
 		<div class="grid min-w-0 content-start gap-6">
@@ -414,8 +427,10 @@
 							</div>
 							<span id="address-help" class="help">{#if addressChanged}Moves to <code class="text-ink">{newAddress}</code>; the current address stops working.{:else}Lower-case letters, digits and hyphens. Unique on each sites domain.{/if}</span>
 						</label>
+						{#if !isApp}
 						<label class="flex items-start gap-2.5"><input type="checkbox" class="mt-0.5" bind:checked={settings.spa} /><span>Single-page application<span class="help mt-0">Unknown paths serve <code>index.html</code>.</span></span></label>
 						<label class="flex items-start gap-2.5"><input type="checkbox" class="mt-0.5" bind:checked={settings.clean_urls} /><span>Clean URLs<span class="help mt-0"><code>/about</code> serves <code>about.html</code>.</span></span></label>
+						{/if}
 						{#if canAdmin && creatable().length > 1}
 							<label class="block"><span class="label">Workspace</span>
 								<select class="field" bind:value={settings.workspace_id}>{#each creatable() as w (w.id)}<option value={w.id}>{w.personal ? 'Personal' : w.name}</option>{/each}</select>
@@ -425,7 +440,7 @@
 					</form>
 					{#if canAdmin}
 						<div class="mt-5 flex flex-wrap items-center gap-3 border-t border-rule-soft pt-4">
-							<p class="min-w-0 flex-1 text-small text-muted">Deleting removes every release and domain.</p>
+							<p class="min-w-0 flex-1 text-small text-muted">Deleting removes every release and domain{isApp ? ', and the app with its data' : d.app ? ', and the build checkout' : ''}.</p>
 							<button class="btn btn-sm btn-danger" onclick={destroy}>Delete site</button>
 						</div>
 					{/if}

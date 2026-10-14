@@ -4,7 +4,9 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
+	"io"
 	"io/fs"
+	"os"
 	"path"
 )
 
@@ -63,4 +65,76 @@ func (w *Workspace) FlattenSingleDir() (bool, error) {
 		}
 	}
 	return true, w.root.RemoveAll(tmp)
+}
+
+// CopyTree copies the directories and regular files under sub (a
+// workspace-relative directory, "." for the root) into the root of dst, for
+// publishing a build's output as a site release. Symlinks are skipped, never
+// followed. Limits bound the entries, total bytes and file size; exceeding
+// them returns an *ErrArchive.
+func (w *Workspace) CopyTree(sub string, dst *Workspace, lim BackupLimits) (files int, bytes int64, err error) {
+	if sub != "." {
+		if sub, err = clean(sub); err != nil {
+			return 0, 0, err
+		}
+	}
+	st, err := w.root.Lstat(sub)
+	if err != nil || !st.IsDir() {
+		return 0, 0, reject("%s is not a directory", sub)
+	}
+	src, err := w.root.OpenRoot(sub)
+	if err != nil {
+		return 0, 0, err
+	}
+	defer src.Close()
+	entries := 0
+	err = fs.WalkDir(src.FS(), ".", func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if p == "." {
+			return nil
+		}
+		entries++
+		if lim.MaxEntries > 0 && entries > lim.MaxEntries {
+			return reject("the output has more than %d files", lim.MaxEntries)
+		}
+		switch {
+		case d.IsDir():
+			return dst.mkdirAll(p)
+		case !d.Type().IsRegular():
+			return nil
+		}
+		info, err := d.Info()
+		if err != nil {
+			return err
+		}
+		if lim.MaxFile > 0 && info.Size() > lim.MaxFile {
+			return reject("%s is larger than %d MiB", p, lim.MaxFile>>20)
+		}
+		if lim.MaxBytes > 0 && bytes+info.Size() > lim.MaxBytes {
+			return reject("the output is larger than %d MiB", lim.MaxBytes>>20)
+		}
+		in, err := src.Open(p)
+		if err != nil {
+			return err
+		}
+		defer in.Close()
+		out, err := dst.root.OpenFile(p, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+		if err != nil {
+			return err
+		}
+		n, err := io.Copy(out, io.LimitReader(in, info.Size()+1))
+		if cerr := out.Close(); err == nil {
+			err = cerr
+		}
+		if err != nil {
+			return err
+		}
+		dst.chown(p)
+		files++
+		bytes += n
+		return nil
+	})
+	return files, bytes, err
 }

@@ -863,6 +863,53 @@ items state exactly what remains.
   only after verification (application level). TLS is **not** terminated by
   RivetPanel: certificates are issued by the reverse proxy; RivetPanel only answers
   its on-demand permission check.
+- [x] Sites from GitHub, built or run (migration `0054`, schema assertion
+  55, tables assertion unchanged): `POST /api/v1/sites/from-repo` creates a
+  static, static-build or app site whose **app unit** is a `bots` row of the
+  new kind `web` (`sites.app_id`), reusing GitHub deployments (private
+  repositories through the connected account, push webhooks and polling,
+  deploy by commit), operations, variables, add-ons, console, files, backups
+  and limits. `POST /api/v1/sites/analyze` and `GET /api/v1/site-presets`
+  detect Vite, SvelteKit (static/node), Astro, Next.js, Nuxt,
+  Express/Hono/Fastify, FastAPI, Flask, Django, Go, Rust, Laravel and plain
+  PHP (new `php` runtime: FrankenPHP 8.4, run from a capability-free copy
+  made by the build). Static builds run once per deployment in a builder
+  (`Runner.BuildOnce`) and publish the output folder as a release with its
+  commit (`site_releases.source_ref`); apps are restarted by the runner on
+  the new code, after an optional release command (`bots.release_command`,
+  one-shot container per generation). Apps run on `RIVET_APPS_NETWORK`
+  (alias `rp-app-<id>`, the panel's own container joins it at start) with
+  `/data` bind-mounted from `<workspace>/.rivet-data`, which deployments
+  never write or remove; the sites listener reverse-proxies to the container
+  address (all methods, WebSockets, server-sent events, per-site body limit,
+  "Deploying…"/stopped/502 pages). App health checks probe the container
+  (`bot_health_probes.target = 'app'`). Verified on real Docker 29.7
+  (`tests/integration/webapp_test.go`: build without secrets, app through the
+  proxy, `/data` across restarts, release command, PHP).
+  Enforcement: the builder receives only public variables (`VITE_`,
+  `PUBLIC_`, `NEXT_PUBLIC_`, `NUXT_PUBLIC_`, `REACT_APP_`, `GATSBY_`) —
+  application level; containers keep the bot policy (read-only root, all
+  capabilities dropped, no-new-privileges, unprivileged user, memory, CPU and
+  PID limits) — Docker-runtime level; repository entries under `.rivet-data`
+  are skipped by the contained extractor — application level; forwarded
+  headers are rewritten and believed only from `RIVET_SITES_TRUSTED_PROXIES`
+  — application level; web units are refused through the bot API (delete,
+  ports, transfer, workspace move, unlink) and pinned to the panel's node —
+  application level. **Not enforced**: app-to-app isolation on the shared
+  apps network (any app can reach another app's port, as bots on the default
+  network can); cookie isolation between sites on one sites domain (only a
+  Public Suffix List entry or separate registrable domains do that). Not
+  implemented: health-gated zero-downtime swaps (a redeploy restarts the app),
+  apps on remote nodes, Dockerfile builds.
+- [x] Static site delivery: `_redirects` and `_headers` (Netlify/Cloudflare
+  Pages formats; checked at publish into `.rivet/rules.json` with
+  file/line errors, at most 1,000 rules; redirects, 200 rewrites, 404/410,
+  placeholders and splats, shadowing unless forced; headers from an
+  allowlist), one-year `immutable` caching for fingerprinted build output,
+  stale-while-revalidate for other assets, gzip copies generated at publish
+  and shipped `.br`/`.gz` siblings served by `Accept-Encoding`. Enforcement:
+  application level in the sites listener; `.rivet/` and the rules sources
+  are never served.
 - [x] Settings redesign (side-by-side sections, sticky navigation, folded
   password form), themed checkboxes/radios, accent-aware dark glows, and a
   corner-style preference including a fully square mode.
@@ -906,7 +953,7 @@ items state exactly what remains.
   Docker-runtime-level.
 
 Migrations added since 0.2.0 (the schema-version assertion in
-`internal/store/sqlite/db_test.go` checks 43 applied migrations):
+`internal/store/sqlite/db_test.go` checks 55 applied migrations):
 
 | Migration | Purpose |
 | --- | --- |
@@ -940,6 +987,7 @@ Migrations added since 0.2.0 (the schema-version assertion in
 | `0051_status_page.sql` | Additive: `status_components` (panel/node/bot source, public name and description), `status_incidents` (incident or maintenance, impact, status, window), `status_incident_components`, `status_incident_updates` (timeline), `status_samples` (per component and UTC day counts) |
 | `0052_usage_analytics.sql` | Additive: `bot_usage` (per bot, 5-minute/hourly/daily buckets of sample counts, CPU/memory sums and peaks, network bytes, workspace size, crashes, starts, deployment and backup counts), `node_usage` (hourly/daily rollups of `node_telemetry`), `usage_marks` (rollup watermarks). Retention is applied by the application |
 | `0053_game_jvm_args.sql` | Additive: `bots.jvm_args` (validated extra JVM options of a Java game server), `jvm_args_updated_at_ms` (0 = never set) and `jvm_args_generation` (generation when saved, for "Restart to apply") |
+| `0054_web_apps.sql` | Rebuilds `bots` (kind gains `web`, runtime gains `php`, new `release_command`) and `sites` (mode gains `app`; `app_id`, `framework`, `build_output_dir`, `app_port`, `health_path`, `max_body_bytes`) with explicit column lists and foreign keys off (checked with `PRAGMA foreign_key_check`; all indexes recreated); additive `site_releases.source_ref` and `bot_health_probes.target` (`host`/`app`). Covered by `apps_migration_test.go` |
 | `0030_ai_global_chat.sql` | Rebuilds `ai_conversations` so a chat may have no target; `ai_runs.bot_id`/`site_id`, `ai_messages.context_json` (the conversation subtree is stashed and restored, rows preserved) |
 
 Known gaps in this work:
@@ -951,9 +999,12 @@ Known gaps in this work:
 - [ ] Sites domains: the panel does not write reverse-proxy routes or install
   certificates (no Cloudflare Origin CA or ACME integration); a site lives
   under one sites domain and is not aliased under the others.
-- [ ] Sites have no automation-API upload route, redirects/headers files,
-  password protection, per-site analytics, bandwidth limits, or server-side
-  builds; uploads are not malware-scanned.
+- [ ] Sites have no automation-API upload route, password protection,
+  per-site analytics or bandwidth limits; uploads are not malware-scanned.
+- [ ] App sites: no health-gated zero-downtime swap (redeploys restart the
+  app; visitors see "Deploying…"), no remote-node placement, no Dockerfile
+  builds, no isolation between apps on the shared apps network, and `/data`
+  counts against `RIVET_BACKUP_MAX_BYTES` like any workspace file.
 - [ ] Workspace-level quotas (limits still apply per bot owner) and ownership
   transfer of a workspace. Account invitations can now be emailed (Mailgun);
   workspace and bot-share invitations are still links only.
@@ -1085,7 +1136,8 @@ network, filesystem, or container-runtime mechanism.
 - [ ] Pull-request previews and health-gated blue/green or canary rollout.
 - [ ] A supported panel plugin model for custom pages and jobs (extensions:
   backlog, not scheduled — user decision 2026-10-04).
-- [ ] .NET, Deno/Bun, PHP, and opt-in custom Dockerfile runtimes.
+- [ ] .NET, Deno/Bun and opt-in custom Dockerfile runtimes (PHP is available
+  since site apps; see above).
 - [ ] Signed callback action widgets, dashboard filters, and drill-down.
 - [ ] SMTP-backed self-service signup/reset/alert workflows.
 

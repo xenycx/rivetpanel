@@ -134,3 +134,25 @@ func healthCmd() error {
 	fmt.Println("ok")
 	return nil
 }
+
+// appsNetworkCheck creates the network app sites run on and, when the panel
+// runs in a container, joins the panel to it so the sites listener can reach
+// the apps. Problems are reported in Diagnostics; static sites keep working.
+func appsNetworkCheck(ctx context.Context, log *slog.Logger, cfg config.Config, dk *docker.Adapter) []diag.Check {
+	if dk == nil || cfg.SitesListen == "" || cfg.AppsNetwork == "" {
+		return nil
+	}
+	fail := func(err error, fix string) []diag.Check {
+		log.Warn("app sites network", "network", cfg.AppsNetwork, "err", err)
+		return []diag.Check{{ID: "apps_network", Group: "Host", Title: "App sites network", Status: diag.Warn,
+			Detail: err.Error(), Fix: fix}}
+	}
+	if err := dk.EnsureAppsNetwork(ctx, cfg.AppsNetwork); err != nil {
+		return fail(err, "Check that the Docker daemon is reachable and that "+cfg.AppsNetwork+" is a normal (not internal) bridge network.")
+	}
+	if err := dk.JoinSelf(ctx, cfg.AppsNetwork); err != nil {
+		return fail(err, "Add the network to the panel's service in compose.yaml (networks: ["+cfg.AppsNetwork+"], declared external) so the sites listener can reach app sites.")
+	}
+	return []diag.Check{{ID: "apps_network", Group: "Host", Title: "App sites network", Status: diag.OK,
+		Detail: "App sites run on " + cfg.AppsNetwork + " and the sites listener can reach them."}}
+}

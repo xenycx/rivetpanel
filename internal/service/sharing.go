@@ -153,6 +153,9 @@ func (s *BotService) SetPorts(ctx context.Context, actor domain.User, id string,
 	if err != nil {
 		return domain.Bot{}, err
 	}
+	if b.IsWeb() {
+		return domain.Bot{}, domain.Invalid("a site's app is reached through the site's addresses, not published ports")
+	}
 	if len(in) > 0 && b.IsGame() {
 		// A game server publishes its allocations (TCP and UDP); bot port
 		// mappings would never be applied and would only hold host ports.
@@ -215,6 +218,9 @@ func (s *BotService) TransferBot(ctx context.Context, actor domain.User, botID, 
 	b, err := s.load(ctx, actor, botID, false)
 	if err != nil {
 		return false, err
+	}
+	if b.IsWeb() {
+		return false, errWebUnit
 	}
 	norm, err := NormalizeEmail(email)
 	if err != nil {

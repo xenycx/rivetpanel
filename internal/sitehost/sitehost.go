@@ -20,9 +20,11 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/xenycx/rivetpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/siterules"
 )
 
 // Router resolves hosts to releases (service.SiteService).
@@ -37,7 +39,13 @@ type Router interface {
 type Handler struct {
 	Sites Router
 	Log   *slog.Logger
+	Proxy *Proxy // app sites (nil: they answer 503)
+
+	rulesMu sync.Mutex
+	rules   map[string]*siterules.Rules // by release ID; nil = no rules
 }
+
+const maxCachedRules = 512
 
 // TLSAskPath answers on-demand TLS permission checks (Caddy's "ask").
 const TLSAskPath = "/.well-known/rivetpanel/tls-allowed"
@@ -55,15 +63,8 @@ func NewServer(h *Handler) *http.Server {
 }
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("X-Content-Type-Options", "nosniff")
-	w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
 	if r.URL.Path == TLSAskPath {
 		h.tlsAsk(w, r)
-		return
-	}
-	if r.Method != http.MethodGet && r.Method != http.MethodHead {
-		w.Header().Set("Allow", "GET, HEAD")
-		page(w, http.StatusMethodNotAllowed, "Method not allowed", "Hosted sites are static: only GET and HEAD requests are served.")
 		return
 	}
 	route, ok := h.Sites.Resolve(r.Host)
@@ -74,6 +75,19 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case route.Disabled:
 		page(w, http.StatusServiceUnavailable, "Site unavailable", "This site has been suspended by the administrator of this server.")
 		return
+	case route.Mode == domain.SiteModeApp:
+		// The app answers everything itself, headers included.
+		h.serveApp(w, r, route)
+		return
+	}
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		w.Header().Set("Allow", "GET, HEAD")
+		page(w, http.StatusMethodNotAllowed, "Method not allowed", "Hosted sites are static: only GET and HEAD requests are served.")
+		return
+	}
+	switch {
 	case route.Mode == "page":
 		h.publicPage(w, r, route)
 		return
@@ -190,8 +204,12 @@ func (h *Handler) tlsAsk(w http.ResponseWriter, r *http.Request) {
 }
 
 // hidden reports whether a path has a dot-segment other than .well-known:
-// .git, .env and similar files are never served even when uploaded.
+// .git, .env and similar files are never served even when uploaded. The
+// rules sources at the root are not served either.
 func hidden(p string) bool {
+	if p == siterules.RedirectsFile || p == siterules.HeadersFile {
+		return true
+	}
 	for _, seg := range strings.Split(p, "/") {
 		if strings.HasPrefix(seg, ".") && seg != ".well-known" {
 			return true
@@ -203,47 +221,95 @@ func hidden(p string) bool {
 func (h *Handler) serve(w http.ResponseWriter, r *http.Request, root *os.Root, route domain.SiteRoute) {
 	clean := path.Clean("/" + r.URL.Path)
 	rel := strings.TrimPrefix(clean, "/")
+	rules := h.rulesFor(root, route.Release)
+	rules.Apply(w.Header(), clean)
 	if hidden(rel) {
 		h.notFound(w, r, root, route)
 		return
 	}
-	var candidates []string
-	switch {
-	case rel == "":
-		candidates = []string{"index.html"}
-	case strings.HasSuffix(r.URL.Path, "/"):
-		candidates = []string{rel + "/index.html"}
-	default:
-		candidates = []string{rel}
-		if route.CleanURLs && path.Ext(rel) == "" {
-			candidates = append(candidates, rel+".html")
-		}
+	name, dir := resolve(root, rel, strings.HasSuffix(r.URL.Path, "/"), route.CleanURLs)
+	if m, ok := rules.Redirect(clean, name != "" || dir); ok {
+		h.redirect(w, r, root, route, m)
+		return
 	}
-	for _, name := range candidates {
-		st, err := root.Stat(name)
-		if err != nil {
-			continue
+	if dir {
+		// /docs → /docs/ so relative links inside the page resolve.
+		target := clean + "/"
+		if r.URL.RawQuery != "" {
+			target += "?" + r.URL.RawQuery
 		}
-		if st.IsDir() {
-			// /docs → /docs/ so relative links inside the page resolve.
-			if _, err := root.Stat(path.Join(name, "index.html")); err == nil {
-				target := clean + "/"
-				if r.URL.RawQuery != "" {
-					target += "?" + r.URL.RawQuery
-				}
-				http.Redirect(w, r, target, http.StatusMovedPermanently)
-				return
-			}
-			continue
-		}
-		if h.file(w, r, root, name, http.StatusOK, route.Release) {
-			return
-		}
+		http.Redirect(w, r, target, http.StatusMovedPermanently)
+		return
+	}
+	if name != "" && h.file(w, r, root, name, http.StatusOK, route.Release) {
+		return
 	}
 	if route.SPA && (path.Ext(rel) == "" || strings.HasSuffix(rel, ".html")) {
 		if h.file(w, r, root, "index.html", http.StatusOK, route.Release) {
 			return
 		}
+	}
+	h.notFound(w, r, root, route)
+}
+
+// resolve maps a release-relative path to the file that answers it. dir
+// reports a directory with an index that needs a trailing-slash redirect.
+func resolve(root *os.Root, rel string, slash, cleanURLs bool) (name string, dir bool) {
+	var candidates []string
+	switch {
+	case rel == "":
+		candidates = []string{"index.html"}
+	case slash:
+		candidates = []string{rel + "/index.html"}
+	default:
+		candidates = []string{rel}
+		if cleanURLs && path.Ext(rel) == "" {
+			candidates = append(candidates, rel+".html")
+		}
+	}
+	for _, c := range candidates {
+		st, err := root.Stat(c)
+		if err != nil {
+			continue
+		}
+		if st.IsDir() {
+			if _, err := root.Stat(path.Join(c, "index.html")); err == nil {
+				return "", true
+			}
+			continue
+		}
+		if st.Mode().IsRegular() {
+			return c, false
+		}
+	}
+	return "", false
+}
+
+// redirect applies a _redirects match: an HTTP redirect, an internal rewrite
+// (200) or a custom error page (404/410).
+func (h *Handler) redirect(w http.ResponseWriter, r *http.Request, root *os.Root, route domain.SiteRoute, m siterules.Match) {
+	if m.Status >= 300 && m.Status < 400 {
+		target := m.Target
+		if !strings.Contains(target, "?") && r.URL.RawQuery != "" {
+			target += "?" + r.URL.RawQuery
+		}
+		http.Redirect(w, r, target, m.Status)
+		return
+	}
+	tpath, _, _ := strings.Cut(m.Target, "?")
+	trel := strings.TrimPrefix(path.Clean("/"+tpath), "/")
+	if !hidden(trel) {
+		name, dir := resolve(root, trel, strings.HasSuffix(tpath, "/"), route.CleanURLs)
+		if dir {
+			name = path.Join(trel, "index.html")
+		}
+		if name != "" && h.file(w, r, root, name, m.Status, route.Release) {
+			return
+		}
+	}
+	if m.Status == http.StatusGone {
+		page(w, http.StatusGone, "Page removed", "This page has been removed.")
+		return
 	}
 	h.notFound(w, r, root, route)
 }
@@ -255,8 +321,37 @@ func (h *Handler) notFound(w http.ResponseWriter, r *http.Request, root *os.Root
 	page(w, http.StatusNotFound, "Page not found", "There is no page at this address.")
 }
 
+// rulesFor returns the compiled _redirects/_headers of a release. Releases
+// are immutable, so the parsed rules are cached by release ID.
+func (h *Handler) rulesFor(root *os.Root, release string) *siterules.Rules {
+	h.rulesMu.Lock()
+	rules, ok := h.rules[release]
+	h.rulesMu.Unlock()
+	if ok {
+		return rules
+	}
+	data, err := root.ReadFile(siterules.CompiledFile)
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		h.warn("read site rules", err)
+	}
+	if len(data) > 0 {
+		if rules, err = siterules.Load(data); err != nil {
+			h.warn("load site rules", err)
+			rules = nil
+		}
+	}
+	h.rulesMu.Lock()
+	if h.rules == nil || len(h.rules) >= maxCachedRules {
+		h.rules = map[string]*siterules.Rules{}
+	}
+	h.rules[release] = rules
+	h.rulesMu.Unlock()
+	return rules
+}
+
 // file serves one regular file; false means it does not exist (or is not a
-// regular file). Conditional and range requests are handled for 200s.
+// regular file). Conditional and range requests are handled for 200s, and
+// compressed copies are preferred when the client accepts them.
 func (h *Handler) file(w http.ResponseWriter, r *http.Request, root *os.Root, name string, status int, release string) bool {
 	f, err := root.Open(name)
 	if err != nil {
@@ -271,15 +366,14 @@ func (h *Handler) file(w http.ResponseWriter, r *http.Request, root *os.Root, na
 		return false
 	}
 	ext := strings.ToLower(filepath.Ext(name))
-	if ct := mime.TypeByExtension(ext); ct != "" {
-		w.Header().Set("Content-Type", ct)
+	hdr := w.Header()
+	if hdr.Get("Content-Type") == "" {
+		if ct := mime.TypeByExtension(ext); ct != "" {
+			hdr.Set("Content-Type", ct)
+		}
 	}
-	// HTML revalidates on every visit so a new release shows immediately;
-	// other assets are cached briefly (build tools fingerprint their names).
-	if ext == ".html" || ext == ".htm" || ext == "" {
-		w.Header().Set("Cache-Control", "no-cache")
-	} else {
-		w.Header().Set("Cache-Control", "public, max-age=3600")
+	if hdr.Get("Cache-Control") == "" {
+		hdr.Set("Cache-Control", cacheControl(name, ext))
 	}
 	if status != http.StatusOK {
 		w.WriteHeader(status)
@@ -288,9 +382,63 @@ func (h *Handler) file(w http.ResponseWriter, r *http.Request, root *os.Root, na
 		}
 		return true
 	}
-	w.Header().Set("ETag", `"`+release[:8]+"-"+strconv.FormatInt(st.Size(), 36)+"-"+strconv.FormatInt(st.ModTime().UnixNano(), 36)+`"`)
+	etag := `"` + release[:8] + "-" + strconv.FormatInt(st.Size(), 36) + "-" + strconv.FormatInt(st.ModTime().UnixNano(), 36)
+	if siterules.Compressible(ext) {
+		hdr.Add("Vary", "Accept-Encoding")
+		if r.Header.Get("Range") == "" {
+			if cf, enc := compressed(root, r.Header.Get("Accept-Encoding"), name); cf != nil {
+				defer cf.Close()
+				if cst, err := cf.Stat(); err == nil && cst.Mode().IsRegular() {
+					hdr.Set("Content-Encoding", enc)
+					hdr.Set("ETag", etag+"-"+enc+`"`)
+					http.ServeContent(w, r, name, st.ModTime(), cf)
+					return true
+				}
+			}
+		}
+	}
+	hdr.Set("ETag", etag+`"`)
 	http.ServeContent(w, r, name, st.ModTime(), f)
 	return true
+}
+
+// compressed opens the best precompressed copy of name the client accepts:
+// a brotli or gzip sibling shipped with the site, then the gzip copy made at
+// publish.
+func compressed(root *os.Root, accept, name string) (*os.File, string) {
+	if accept == "" {
+		return nil, ""
+	}
+	if acceptsEncoding(accept, "br") {
+		if f, err := root.Open(name + ".br"); err == nil {
+			return f, "br"
+		}
+	}
+	if acceptsEncoding(accept, "gzip") {
+		for _, p := range []string{name + ".gz", path.Join(siterules.GzipDir, name+".gz")} {
+			if f, err := root.Open(p); err == nil {
+				return f, "gzip"
+			}
+		}
+	}
+	return nil, ""
+}
+
+// acceptsEncoding reports whether an Accept-Encoding header allows enc.
+func acceptsEncoding(header, enc string) bool {
+	for _, part := range strings.Split(header, ",") {
+		name, params, _ := strings.Cut(part, ";")
+		if !strings.EqualFold(strings.TrimSpace(name), enc) {
+			continue
+		}
+		params = strings.ReplaceAll(strings.TrimSpace(params), " ", "")
+		if q, ok := strings.CutPrefix(params, "q="); ok {
+			v, err := strconv.ParseFloat(q, 64)
+			return err == nil && v > 0
+		}
+		return true
+	}
+	return false
 }
 
 func copyN(w http.ResponseWriter, f *os.File, n int64) (int64, error) {

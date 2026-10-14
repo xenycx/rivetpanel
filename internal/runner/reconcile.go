@@ -505,6 +505,11 @@ func (r *Runner) create(ctx context.Context, bot domain.Bot, rt runtimes.Runtime
 			return fail("runtime image is unavailable", err)
 		}
 	}
+	if bot.IsWeb() {
+		if err := r.prepareWeb(ctx, bot); err != nil {
+			return fail("the app's data directory or network could not be prepared", err)
+		}
+	}
 	if err := r.ws.Prepare(bot.ID, r.uid, r.gid); err != nil {
 		return fail("workspace ownership could not be prepared", err)
 	}
@@ -573,6 +578,12 @@ func (r *Runner) create(ctx context.Context, bot domain.Bot, rt runtimes.Runtime
 		if r.intentChanged(ctx, bot) {
 			return immediate
 		}
+	}
+	if msg, err := r.releaseStage(ctx, bot, rt, image, host, envMap, st); err != nil {
+		if ctx.Err() != nil {
+			return immediate
+		}
+		return r.fail(ctx, bot, msg, err, st)
 	}
 	if bot.IsGame() {
 		if err := r.applyGameConfig(ctx, bot, envMap); err != nil {
@@ -732,7 +743,11 @@ func (r *Runner) buildStage(ctx context.Context, bot domain.Bot, rt runtimes.Run
 	if err != nil {
 		return "builder image is unavailable", err
 	}
-	id, err := r.docker.Create(ctx, r.builderSpec(bot, rt, image, host))
+	spec := r.builderSpec(bot, rt, image, host)
+	if bot.IsWeb() {
+		spec.Env = envList(rt.Env, r.publicBuildEnv(ctx, bot))
+	}
+	id, err := r.docker.Create(ctx, spec)
 	if err != nil {
 		return "build container could not be created", err
 	}

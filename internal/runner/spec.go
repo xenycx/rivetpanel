@@ -49,8 +49,10 @@ func specHash(role Role, imageRef string, argv []string, s ContainerSpec) string
 		Entrypoint []string      `json:",omitempty"`
 		Ports      []PortBinding `json:",omitempty"`
 		Networks   []string      `json:",omitempty"`
+		Mounts     []Mount       `json:",omitempty"`
+		Aliases    []string      `json:",omitempty"`
 	}{role, imageRef, argv, s.User, s.Network, s.WorkspaceHostPath, s.MemoryBytes, s.NanoCPUs, s.PidsLimit, s.TmpfsBytes, s.OpenStdin,
-		s.Entrypoint, s.Ports, s.Networks})
+		s.Entrypoint, s.Ports, s.Networks, s.Mounts, s.NetworkAliases})
 	h := sha256.Sum256(b)
 	return hex.EncodeToString(h[:16])
 }
@@ -71,6 +73,14 @@ func (r *Runner) runtimeSpec(bot domain.Bot, rt runtimes.Runtime, image, host st
 			network, extra = extra[0], nil
 		}
 	}
+	if bot.IsWeb() {
+		// A site app is reached through the sites listener on the apps
+		// network; it never publishes ports and always has a network.
+		network = r.opts.Network
+		if len(bot.Addons) > 0 {
+			extra = []string{AddonNetwork(bot.ID)}
+		}
+	}
 	provided, own := addonEnv(bot, botEnv)
 	ports, env := portBindings(bot), envList(rt.Env, provided, own)
 	if bot.IsGame() {
@@ -86,6 +96,10 @@ func (r *Runner) runtimeSpec(bot domain.Bot, rt runtimes.Runtime, image, host st
 		WorkspaceHostPath: host, User: r.opts.User, Network: network,
 		MemoryBytes: bot.MemoryBytes, NanoCPUs: bot.NanoCPUs, PidsLimit: bot.PidsLimit,
 		TmpfsBytes: r.opts.TmpfsBytes, OpenStdin: true,
+	}
+	if bot.IsWeb() {
+		s.Ports = nil
+		r.applyWeb(bot, &s, host, rt.Env, provided, own)
 	}
 	s.SpecHash = specHash(RoleRuntime, rt.ImageRef(), bot.Argv, s)
 	return s

@@ -52,46 +52,11 @@ const analyzeTimeout = 2 * time.Minute
 func (d *DeployService) Analyze(ctx context.Context, actor domain.User, in AnalyzeInput) (Analysis, error) {
 	ctx, cancel := context.WithTimeout(ctx, analyzeTimeout)
 	defer cancel()
-	ref, err := github.ParseRepoRef(in.Repo)
-	if err != nil {
-		return Analysis{}, domain.Invalid("enter a GitHub repository such as owner/name or https://github.com/owner/name")
-	}
-	tok, err := d.optToken(ctx, actor.ID)
+	out, snap, err := d.snapshot(ctx, actor, in)
 	if err != nil {
 		return Analysis{}, err
 	}
-	repo, err := d.GH.GetRepo(ctx, tok, ref.FullName)
-	if err != nil {
-		return Analysis{}, ghError(err)
-	}
-	branch := strings.TrimSpace(in.Branch)
-	if branch == "" {
-		branch = ref.Branch
-	}
-	if branch == "" {
-		branch = repo.DefaultBranch
-	}
-	root := in.RootDir
-	if root == "" {
-		root = ref.Path
-	}
-	if root, err = cleanRoot(root); err != nil {
-		return Analysis{}, err
-	}
-	sha, err := d.GH.BranchSHA(ctx, tok, repo.FullName, branch)
-	if err != nil {
-		return Analysis{}, ghError(err)
-	}
-	body, err := d.GH.Tarball(ctx, tok, repo.FullName, sha)
-	if err != nil {
-		return Analysis{}, ghError(err)
-	}
-	snap, err := reposcan.Scan(body, root, reposcan.DefaultLimits)
-	body.Close()
-	if err != nil {
-		return Analysis{}, domain.Invalid(err.Error())
-	}
-	out := Analysis{Repo: repo, Branch: branch, RootDir: root, SHA: sha, Files: snap.TotalFiles, Truncated: snap.Truncated}
+	repo, branch, root := out.Repo, out.Branch, out.RootDir
 	out.AI.Available = d.AI.AIAvailable(ctx)
 	name := repo.FullName[strings.Index(repo.FullName, "/")+1:]
 	if r, ok := reposcan.RecipeFor(repo.FullName); ok && root == "" {
@@ -110,6 +75,87 @@ func (d *DeployService) Analyze(ctx context.Context, actor domain.User, in Analy
 	}
 	d.sanitizePlan(&out.Plan)
 	return out, nil
+}
+
+// WebAnalysis is a suggested way to host a repository as a site.
+type WebAnalysis struct {
+	Repo      github.Repo      `json:"repo"`
+	Branch    string           `json:"branch"`
+	RootDir   string           `json:"root_dir"`
+	SHA       string           `json:"sha"`
+	Plan      reposcan.WebPlan `json:"plan"`
+	Files     int              `json:"files"`
+	Truncated bool             `json:"truncated"`
+}
+
+// AnalyzeWeb downloads a branch and suggests a site type and framework
+// preset for it. Nothing is created or run.
+func (d *DeployService) AnalyzeWeb(ctx context.Context, actor domain.User, in AnalyzeInput) (WebAnalysis, error) {
+	ctx, cancel := context.WithTimeout(ctx, analyzeTimeout)
+	defer cancel()
+	a, snap, err := d.snapshot(ctx, actor, in)
+	if err != nil {
+		return WebAnalysis{}, err
+	}
+	plan := reposcan.DetectWeb(snap)
+	if p := reposcan.Detect(snap, ""); len(p.Env) > 0 {
+		// Variables the code reads (process.env.X and similar) are worth
+		// asking for; the preset's own values come first.
+		have := map[string]bool{}
+		for _, e := range plan.Env {
+			have[e.Name] = true
+		}
+		for _, e := range p.Env {
+			if !have[e.Name] {
+				plan.Env = append(plan.Env, e)
+			}
+		}
+	}
+	return WebAnalysis{Repo: a.Repo, Branch: a.Branch, RootDir: a.RootDir, SHA: a.SHA, Plan: plan, Files: a.Files, Truncated: a.Truncated}, nil
+}
+
+// snapshot downloads and scans the selected branch of a repository.
+func (d *DeployService) snapshot(ctx context.Context, actor domain.User, in AnalyzeInput) (Analysis, *reposcan.Snapshot, error) {
+	ref, err := github.ParseRepoRef(in.Repo)
+	if err != nil {
+		return Analysis{}, nil, domain.Invalid("enter a GitHub repository such as owner/name or https://github.com/owner/name")
+	}
+	tok, err := d.optToken(ctx, actor.ID)
+	if err != nil {
+		return Analysis{}, nil, err
+	}
+	repo, err := d.GH.GetRepo(ctx, tok, ref.FullName)
+	if err != nil {
+		return Analysis{}, nil, ghError(err)
+	}
+	branch := strings.TrimSpace(in.Branch)
+	if branch == "" {
+		branch = ref.Branch
+	}
+	if branch == "" {
+		branch = repo.DefaultBranch
+	}
+	root := in.RootDir
+	if root == "" {
+		root = ref.Path
+	}
+	if root, err = cleanRoot(root); err != nil {
+		return Analysis{}, nil, err
+	}
+	sha, err := d.GH.BranchSHA(ctx, tok, repo.FullName, branch)
+	if err != nil {
+		return Analysis{}, nil, ghError(err)
+	}
+	body, err := d.GH.Tarball(ctx, tok, repo.FullName, sha)
+	if err != nil {
+		return Analysis{}, nil, ghError(err)
+	}
+	snap, err := reposcan.Scan(body, root, reposcan.DefaultLimits)
+	body.Close()
+	if err != nil {
+		return Analysis{}, nil, domain.Invalid(err.Error())
+	}
+	return Analysis{Repo: repo, Branch: branch, RootDir: root, SHA: sha, Files: snap.TotalFiles, Truncated: snap.Truncated}, snap, nil
 }
 
 // sanitizePlan drops whatever this panel cannot run, so a suggestion

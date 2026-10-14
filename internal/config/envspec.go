@@ -177,6 +177,14 @@ var Vars = []VarSpec{
 		Description: "Sites one account may create. Administrators are exempt; 0 is unlimited."},
 	{Name: "RIVET_SITES_DNS_TARGET", Group: GroupSites, Kind: KindText, Example: "sites.example.com",
 		Description: "Host name custom domains should point a CNAME at. Defaults to the host of the sites base URL."},
+	{Name: "RIVET_APPS_NETWORK", Group: GroupSites, Kind: KindText, Boot: true, Default: "rivetpanel-apps",
+		Description: "Docker network app sites run on. The sites listener proxies to the apps over it; a panel running in a container joins it at start."},
+	{Name: "RIVET_SITES_TRUSTED_PROXIES", Group: GroupSites, Kind: KindText, Example: "172.16.0.0/12",
+		Description: "Comma-separated addresses or CIDR ranges of the proxy in front of the sites listener. Only their X-Forwarded-* and client-address headers reach apps; loopback is always trusted."},
+	{Name: "RIVET_SITES_CLIENT_IP_HEADER", Group: GroupSites, Kind: KindText, Example: "CF-Connecting-IP",
+		Description: "Header from a trusted proxy that holds the visitor's address (CF-Connecting-IP behind Cloudflare). Empty uses X-Forwarded-For."},
+	{Name: "RIVET_SITES_MAX_BODY_BYTES", Group: GroupSites, Kind: KindBytes, Default: "100 MiB",
+		Description: "Largest request body an app site accepts unless the site sets its own limit (1 KiB to 4 GiB)."},
 
 	// SFTP
 	{Name: "RIVET_SFTP_LISTEN", Group: GroupSFTP, Kind: KindText, Example: "0.0.0.0:2022",

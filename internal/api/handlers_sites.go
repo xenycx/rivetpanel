@@ -7,6 +7,8 @@ import (
 	"github.com/gofiber/fiber/v3"
 
 	"github.com/xenycx/rivetpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/reposcan"
+	"github.com/xenycx/rivetpanel/internal/runner"
 	"github.com/xenycx/rivetpanel/internal/service"
 	"github.com/xenycx/rivetpanel/internal/sitetemplates"
 )
@@ -46,6 +48,15 @@ type siteDTO struct {
 	// (404 when there is none); the version changes when any of them may have.
 	IconURL    string `json:"icon_url"`
 	CustomLogo bool   `json:"custom_logo"`
+	// Sites deployed from a repository: the web unit that builds (and for
+	// mode "app", runs) the site, its state and settings.
+	AppID          *string `json:"app_id"`
+	AppState       string  `json:"app_state"`
+	Framework      string  `json:"framework"`
+	BuildOutputDir string  `json:"build_output_dir"`
+	AppPort        int     `json:"app_port"`
+	HealthPath     string  `json:"health_path"`
+	MaxBodyBytes   int64   `json:"max_body_bytes"`
 }
 
 func (s *panel) toSite(st domain.Site) siteDTO {
@@ -55,7 +66,9 @@ func (s *panel) toSite(st domain.Site) siteDTO {
 		PageHTML: st.PageHTML, PageCSS: st.PageCSS, WidgetsPublic: st.WidgetsPublic, CurrentRelease: st.CurrentRelease,
 		ReleaseBytes: st.ReleaseBytes, Disabled: st.Disabled, Domains: st.Domains, RepoFullName: st.RepoFullName, RepoBranch: st.RepoBranch,
 		RepoRoot: st.RepoRoot, CreatedAtMS: st.CreatedAtMS, UpdatedAtMS: st.UpdatedAtMS, CustomLogo: st.LogoUpdatedMS > 0,
-		IconURL: fmt.Sprintf("/api/v1/sites/%s/icon?v=%d-%s", st.ID, st.LogoUpdatedMS, strOr(st.CurrentRelease))}
+		IconURL: fmt.Sprintf("/api/v1/sites/%s/icon?v=%d-%s", st.ID, st.LogoUpdatedMS, strOr(st.CurrentRelease)),
+		AppID:   st.AppID, AppState: st.AppState, Framework: st.Framework, BuildOutputDir: st.BuildOutputDir, AppPort: st.Port(),
+		HealthPath: st.HealthPath, MaxBodyBytes: st.MaxBodyBytes}
 }
 
 func strOr(p *string) string {
@@ -112,6 +125,7 @@ type releaseDTO struct {
 	ID          string  `json:"id"`
 	Source      string  `json:"source"`
 	SourceLabel *string `json:"source_label"`
+	SourceRef   *string `json:"source_ref"`
 	Files       int     `json:"files"`
 	Bytes       int64   `json:"bytes"`
 	Actor       *string `json:"actor"`
@@ -142,7 +156,8 @@ func (s *panel) sitesInfo(c fiber.Ctx) error {
 		choices[i] = baseChoiceDTO{b.ID, b.Domain, b.Label, b.Primary, s.sites.SiteURL("example", b.Domain)}
 	}
 	return c.JSON(fiber.Map{"enabled": true, "domain": s.sites.SitesDomain(), "example_url": s.sites.SiteURL("example", ""),
-		"domains": choices, "max_bytes": s.sites.MaxBytes, "max_domains": service.MaxDomainsPerSite})
+		"domains": choices, "max_bytes": s.sites.MaxBytes, "max_domains": service.MaxDomainsPerSite,
+		"builds_enabled": s.sites.AppsEnabled(), "apps_enabled": s.sites.RunsApps(), "github": s.deploy != nil && s.deploy.Ready() == nil})
 }
 
 func (s *panel) listSites(c fiber.Ctx) error {
@@ -227,7 +242,7 @@ func (s *panel) createBotSite(c fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	return c.Status(fiber.StatusCreated).JSON(s.siteDetailJSON(d))
+	return c.Status(fiber.StatusCreated).JSON(s.siteDetailJSON(c, d))
 }
 
 func (s *panel) getBotSite(c fiber.Ctx) error {
@@ -235,7 +250,7 @@ func (s *panel) getBotSite(c fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	return c.JSON(s.siteDetailJSON(d))
+	return c.JSON(s.siteDetailJSON(c, d))
 }
 
 func (s *panel) getSite(c fiber.Ctx) error {
@@ -243,21 +258,28 @@ func (s *panel) getSite(c fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	return c.JSON(s.siteDetailJSON(d))
+	return c.JSON(s.siteDetailJSON(c, d))
 }
 
-func (s *panel) siteDetailJSON(d service.SiteDetail) fiber.Map {
+func (s *panel) siteDetailJSON(c fiber.Ctx, d service.SiteDetail) fiber.Map {
 	domains := make([]domainDTO, len(d.Domains))
 	for i, x := range d.Domains {
 		domains[i] = s.toDomain(x, d.Site)
 	}
 	releases := make([]releaseDTO, len(d.Releases))
 	for i, r := range d.Releases {
-		releases[i] = releaseDTO{r.ID, r.Source, r.SourceLabel, r.Files, r.Bytes, r.ActorEmail,
+		releases[i] = releaseDTO{r.ID, r.Source, r.SourceLabel, r.SourceRef, r.Files, r.Bytes, r.ActorEmail,
 			d.Site.CurrentRelease != nil && *d.Site.CurrentRelease == r.ID, r.CreatedAtMS}
 	}
-	return fiber.Map{"site": s.toSite(d.Site), "role": d.Role, "domains": domains, "releases": releases,
+	m := fiber.Map{"site": s.toSite(d.Site), "role": d.Role, "domains": domains, "releases": releases,
 		"deploy": fiber.Map{"running": d.Job.Running, "last_error": d.Job.LastError, "finished_at_ms": d.Job.FinishedMS}}
+	if d.App != nil {
+		m["app"] = s.viewBot(c, *d.App)
+	}
+	if d.Repo != nil {
+		m["repo"] = toRepo(*d.Repo)
+	}
+	return m
 }
 
 func (s *panel) patchSite(c fiber.Ctx) error {
@@ -282,13 +304,18 @@ func (s *panel) patchSite(c fiber.Ctx) error {
 			RootDir  string `json:"root_dir"`
 			Clear    bool   `json:"clear"`
 		} `json:"repo"`
+		BuildOutputDir *string `json:"build_output_dir"`
+		AppPort        *int    `json:"app_port"`
+		HealthPath     *string `json:"health_path"`
+		MaxBodyBytes   *int64  `json:"max_body_bytes"`
 	}
 	if err := decode(c, &in); err != nil {
 		return err
 	}
 	up := service.UpdateSiteInput{Name: in.Name, Slug: in.Slug, DomainID: in.DomainID, SPA: in.SPA, CleanURLs: in.CleanURLs, WorkspaceID: in.WorkspaceID,
 		Mode: in.Mode, PageTitle: in.PageTitle, PageDescription: in.PageDescription, PageTheme: in.PageTheme,
-		PageAccent: in.PageAccent, PageHTML: in.PageHTML, PageCSS: in.PageCSS, WidgetsPublic: in.WidgetsPublic}
+		PageAccent: in.PageAccent, PageHTML: in.PageHTML, PageCSS: in.PageCSS, WidgetsPublic: in.WidgetsPublic,
+		OutputDir: in.BuildOutputDir, AppPort: in.AppPort, HealthPath: in.HealthPath, MaxBodyBytes: in.MaxBodyBytes}
 	if in.Repo != nil {
 		up.Repo = &service.RepoInput{FullName: in.Repo.FullName, Branch: in.Repo.Branch, RootDir: in.Repo.RootDir, Clear: in.Repo.Clear}
 	}
@@ -318,7 +345,15 @@ func (s *panel) uploadSite(c fiber.Ctx) error {
 }
 
 func (s *panel) deploySite(c fiber.Ctx) error {
-	if err := s.sites.Deploy(c.Context(), currentUser(c), strings.Clone(c.Params("sid"))); err != nil {
+	var in struct {
+		SHA string `json:"sha"` // a commit to deploy again (rollback); "" = the branch head
+	}
+	if len(c.Body()) > 0 {
+		if err := decode(c, &in); err != nil {
+			return err
+		}
+	}
+	if err := s.sites.DeployLatest(c.Context(), currentUser(c), strings.Clone(c.Params("sid")), in.SHA); err != nil {
 		return err
 	}
 	return c.Status(fiber.StatusAccepted).JSON(fiber.Map{"status": "queued"})
@@ -502,4 +537,87 @@ func (s *panel) adminDeleteBaseDomain(c fiber.Ctx) error {
 		return err
 	}
 	return c.SendStatus(fiber.StatusNoContent)
+}
+
+// sitePresets lists the frameworks sites can be built or run with.
+func (s *panel) sitePresets(c fiber.Ctx) error {
+	return c.JSON(fiber.Map{"presets": reposcan.WebPresets(), "public_build_prefixes": runner.PublicBuildPrefixes()})
+}
+
+// analyzeSite suggests a site type and framework for a repository.
+func (s *panel) analyzeSite(c fiber.Ctx) error {
+	var in struct {
+		Repo    string `json:"repo"`
+		Branch  string `json:"branch"`
+		RootDir string `json:"root_dir"`
+	}
+	if err := decode(c, &in); err != nil {
+		return err
+	}
+	if s.deploy == nil {
+		return domain.Invalid("GitHub is not configured on this panel")
+	}
+	a, err := s.deploy.AnalyzeWeb(c.Context(), currentUser(c), service.AnalyzeInput{Repo: in.Repo, Branch: in.Branch, RootDir: in.RootDir})
+	if err != nil {
+		return err
+	}
+	return c.JSON(a)
+}
+
+// createBuiltSite makes a site deployed from a GitHub repository.
+func (s *panel) createBuiltSite(c fiber.Ctx) error {
+	var in struct {
+		Name        string `json:"name"`
+		Slug        string `json:"slug"`
+		DomainID    string `json:"domain_id"`
+		WorkspaceID string `json:"workspace_id"`
+		Kind        string `json:"kind"`
+		Framework   string `json:"framework"`
+		Repo        struct {
+			FullName   string `json:"full_name"`
+			Branch     string `json:"branch"`
+			RootDir    string `json:"root_dir"`
+			AutoDeploy bool   `json:"auto_deploy"`
+		} `json:"repo"`
+		Runtime        string            `json:"runtime"`
+		BuildCommand   string            `json:"build_command"`
+		OutputDir      string            `json:"output_dir"`
+		SPA            bool              `json:"spa"`
+		Argv           []string          `json:"argv"`
+		Port           int               `json:"port"`
+		HealthPath     string            `json:"health_path"`
+		ReleaseCommand string            `json:"release_command"`
+		MemoryBytes    int64             `json:"memory_bytes"`
+		NanoCPUs       int64             `json:"nano_cpus"`
+		MaxBodyBytes   int64             `json:"max_body_bytes"`
+		Env            map[string]string `json:"env"`
+		Addons         []addonIn         `json:"addons"`
+	}
+	if err := decode(c, &in); err != nil {
+		return err
+	}
+	var addons []service.AddonInput
+	for _, a := range in.Addons {
+		addons = append(addons, serviceAddon(a))
+	}
+	st, err := s.sites.CreateBuilt(c.Context(), currentUser(c), service.CreateBuiltSiteInput{
+		Name: in.Name, Slug: in.Slug, DomainID: in.DomainID, WorkspaceID: in.WorkspaceID, Kind: in.Kind, Framework: in.Framework,
+		Repo:    service.ConfigureInput{FullName: in.Repo.FullName, Branch: in.Repo.Branch, RootDir: in.Repo.RootDir, AutoDeploy: in.Repo.AutoDeploy},
+		Runtime: in.Runtime, BuildCommand: in.BuildCommand, OutputDir: in.OutputDir, SPA: in.SPA, Argv: in.Argv, Port: in.Port,
+		HealthPath: in.HealthPath, ReleaseCommand: in.ReleaseCommand, MemoryBytes: in.MemoryBytes, NanoCPUs: in.NanoCPUs,
+		MaxBodyBytes: in.MaxBodyBytes, Env: in.Env, Addons: addons,
+	})
+	if err != nil {
+		return err
+	}
+	return c.Status(fiber.StatusCreated).JSON(s.toSite(st))
+}
+
+// siteForApp resolves a web unit to its site (links in notifications).
+func (s *panel) siteForApp(c fiber.Ctx) error {
+	st, err := s.sites.ForApp(c.Context(), currentUser(c), strings.Clone(c.Params("id")))
+	if err != nil {
+		return err
+	}
+	return c.JSON(fiber.Map{"site_id": st.ID})
 }

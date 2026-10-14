@@ -1,7 +1,8 @@
 package domain
 
-// Site is a static website served by the sites listener. It serves exactly
-// one immutable release (CurrentRelease) at a time.
+// Site is a website served by the sites listener. A static site serves
+// exactly one immutable release (CurrentRelease) at a time; an app site
+// (Mode SiteModeApp) is proxied to the container of its web unit (AppID).
 type Site struct {
 	ID              string
 	WorkspaceID     string
@@ -12,7 +13,7 @@ type Site struct {
 	DomainID        *string // base domain the slug lives under (nil only before start-up assigns one)
 	SPA             bool    // unknown paths serve /index.html (client-side routing)
 	CleanURLs       bool    // /about serves about.html or about/index.html
-	Mode            string  // page | files
+	Mode            string  // page | files | app
 	PageTitle       string
 	PageDescription string
 	PageTheme       string // midnight | daylight | system
@@ -30,13 +31,44 @@ type Site struct {
 	UpdatedAtMS     int64
 	LogoUpdatedMS   int64 // when a custom logo was set (0 = none)
 
+	// AppID is the web unit (a bots row of KindWeb) that builds the site from
+	// its repository and, for app sites, runs it. Nil for uploaded sites.
+	AppID          *string
+	Framework      string // preset id the site was created from (informational)
+	BuildOutputDir string // static builds: the directory published as a release
+	AppPort        int    // app sites: the port the app listens on (0 = default)
+	HealthPath     string // app sites: path probed before traffic is sent
+	MaxBodyBytes   int64  // app sites: request body limit (0 = panel default)
+
 	// Filled by listing queries.
 	OwnerEmail    string
 	WorkspaceName string
 	BaseDomain    string // host of DomainID ("" when unassigned)
 	Domains       int
-	ReleaseBytes  int64 // size of the current release
+	ReleaseBytes  int64  // size of the current release
+	AppState      string // observed state of the web unit ("" without one)
 }
+
+// Site modes.
+const (
+	SiteModePage  = "page"  // a generated bot page
+	SiteModeFiles = "files" // static files (uploaded, edited, or built)
+	SiteModeApp   = "app"   // a running web app behind the sites listener
+)
+
+// DefaultAppPort is the port an app site listens on when none is set ($PORT).
+const DefaultAppPort = 3000
+
+// Port returns the port the app listens on.
+func (s Site) Port() int {
+	if s.AppPort > 0 {
+		return s.AppPort
+	}
+	return DefaultAppPort
+}
+
+// Built reports whether the site's files come from a build of its web unit.
+func (s Site) Built() bool { return s.AppID != nil && s.Mode == SiteModeFiles }
 
 // SiteRelease is one deployed, immutable set of files.
 type SiteRelease struct {
@@ -48,6 +80,7 @@ type SiteRelease struct {
 	Bytes       int64
 	ActorID     *string
 	ActorEmail  *string
+	SourceRef   *string // commit the release was built from
 	CreatedAtMS int64
 }
 
@@ -107,6 +140,14 @@ type SiteRoute struct {
 	CleanURLs bool
 	Disabled  bool
 	Mode      string
+
+	// App sites: the web unit, its container and state, where it listens and
+	// the request body limit.
+	AppID       string
+	ContainerID string
+	AppState    string
+	AppPort     int
+	MaxBody     int64
 }
 
 // PublicSitePage is the deliberately small, public view used by the separate
