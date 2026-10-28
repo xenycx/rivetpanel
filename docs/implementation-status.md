@@ -863,6 +863,16 @@ items state exactly what remains.
   only after verification (application level). TLS is **not** terminated by
   RivetPanel: certificates are issued by the reverse proxy; RivetPanel only answers
   its on-demand permission check.
+- [x] Account deletion: `DELETE /api/v1/users/{id}` and Users → Delete
+  account… (built-in administrators; typed confirmation; audited as
+  `admin.user_delete`). Disables the account, deletes its sites and bots
+  through the normal deletion paths, then removes the user row in one
+  transaction with its GitHub-token repository links and leftover sites;
+  everything else follows by `ON DELETE CASCADE`/`SET NULL`. Refused for the
+  actor, for administrators and while an owned team workspace holds other
+  accounts' bots or sites. Enforcement: application level. Not done: no
+  self-service deletion; GitHub webhooks of removed links are left on GitHub;
+  servers on an offline remote node block the final step until purged.
 - [x] Per-account quotas (migration `0055`, schema assertion 56, tables
   assertion 48): an administrator sets an account's limits for bots, game
   servers, web apps, all apps, sites and memory under Administration → Users

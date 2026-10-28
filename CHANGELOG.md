@@ -6,7 +6,18 @@ authoritative current version.
 
 ## Unreleased
 
+## 0.7.0 - 2026-10-28
+
 ### Added
+
+- **Delete accounts.** Administration → Users → Delete account… removes an
+  account permanently, after typing its address, with everything it owns:
+  bots and game servers (files, backups and databases), sites, the
+  workspaces it owns, keys, tokens, notifications, support tickets and its
+  quota. The account is signed out at once and the activity log keeps the
+  history. Only built-in administrators can delete accounts; administrators
+  must be changed to user first, and an account whose team workspace holds
+  other people's bots or sites is refused until they are moved out.
 
 - **Per-account quotas.** Administrators can give one account its own limits
   under Administration → Users → the account → Limits: bots, game servers and

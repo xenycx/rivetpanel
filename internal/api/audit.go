@@ -118,6 +118,7 @@ var auditRoutes = map[string]auditRoute{
 	"PATCH /api/v1/admin/roles/:rid":                          {"admin.role_update", param("rid")},
 	"DELETE /api/v1/admin/roles/:rid":                         {"admin.role_delete", param("rid")},
 	"PATCH /api/v1/users/:id":                                 {"admin.user_update", param("id")},
+	"DELETE /api/v1/users/:id":                                {"admin.user_delete", param("id")},
 	"PUT /api/v1/admin/users/:id/quota":                       {"admin.user_quota_set", nil},
 	"DELETE /api/v1/admin/users/:id/quota":                    {"admin.user_quota_clear", nil},
 	"PUT /api/v1/admin/settings":                              {"admin.settings", nil},

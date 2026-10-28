@@ -603,6 +603,7 @@ func (s *panel) routes(v1 fiber.Router) {
 	authed.Post("/users", s.requirePerm(domain.PermUsersManage), s.createUser)
 	authed.Get("/users", s.requirePerm(domain.PermUsersView), s.listUsers)
 	authed.Patch("/users/:id", s.requirePerm(domain.PermUsersManage), s.patchUser)
+	authed.Delete("/users/:id", s.requirePerm(domain.PermUsersManage), s.deleteUser)
 	authed.Get("/admin/account-invites", s.requirePerm(domain.PermUsersManage), s.listAccountInvites)
 	authed.Post("/admin/account-invites", s.requirePerm(domain.PermUsersManage), s.createAccountInvite)
 	authed.Delete("/admin/account-invites/:id", s.requirePerm(domain.PermUsersManage), s.deleteAccountInvite)

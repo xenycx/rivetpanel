@@ -16,6 +16,8 @@ type Store interface {
 	GetUserByID(ctx context.Context, id string) (domain.User, error)
 	ListUsers(ctx context.Context) ([]domain.User, error)
 	SetUserDisabled(ctx context.Context, id string, disabled bool, nowMS int64) error
+	AccountHoldings(ctx context.Context, userID string) (bots, sites, shared []string, err error)
+	DeleteUserAccount(ctx context.Context, userID string) error
 	SetUserRole(ctx context.Context, id, role string, nowMS int64) error
 	SetUserCustomRole(ctx context.Context, id, roleID string, nowMS int64) error
 	ListRoles(ctx context.Context) ([]domain.Role, error)

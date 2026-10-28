@@ -216,6 +216,9 @@ not enforced (Docker has no native cap).
   per-run limits, all audited), encrypted OpenAI-compatible providers
   configurable in `/setup` or Administration, cited web research, and staged
   diffs with undo.
+* Account deletion: an administrator can delete an account permanently with
+  its bots, servers, sites and workspaces, instead of only disabling it
+  (`docs/features.md`).
 * Per-account quotas: an administrator can give one account its own limits
   for bots, game servers, web apps, all apps together, sites and memory (for
   example one bot and nothing else), in place of the panel-wide defaults;

@@ -109,6 +109,24 @@
 		if (!r) return;
 		await patch(u, { disabled: true, stop_bots: r.checked }, `Disabled ${u.email}`);
 	}
+	async function remove(u: AdminUser) {
+		const owns = u.bots ? `the ${u.bots} bot${u.bots === 1 ? '' : 's'} and server${u.bots === 1 ? '' : 's'} they own (with files, backups and databases), ` : '';
+		const ok = await confirmDialog({
+			title: `Delete ${u.email}?`,
+			body: `The account is removed permanently with ${owns}their sites, workspaces, keys, tokens, notifications and support tickets. They are signed out at once. The activity log keeps its history. This cannot be undone.`,
+			confirmLabel: 'Delete account permanently',
+			tone: 'danger',
+			typeToConfirm: u.email
+		});
+		if (!ok) return;
+		try {
+			await api('DELETE', `/users/${u.id}`);
+			toast(`Deleted ${u.email}`);
+		} catch (e) {
+			toast(msg(e), 'fail');
+		}
+		await load();
+	}
 	function openRole(u: AdminUser) {
 		roleFor = u;
 		roleChoice = roleOf(u);
@@ -171,7 +189,8 @@
 			'separator',
 			u.disabled
 				? { label: 'Enable account', disabled: adminTarget, hint: adminTarget ? adminHint : undefined, onselect: () => patch(u, { disabled: false }, `Enabled ${u.email}`) }
-				: { label: 'Disable account', danger: true, disabled: self || lastAdmin || adminTarget, hint: self ? 'You cannot disable yourself' : adminTarget ? adminHint : undefined, onselect: () => disable(u) }
+				: { label: 'Disable account', danger: true, disabled: self || lastAdmin || adminTarget, hint: self ? 'You cannot disable yourself' : adminTarget ? adminHint : undefined, onselect: () => disable(u) },
+			{ label: 'Delete account…', danger: true, disabled: self || !isAdmin || u.role === 'admin', hint: self ? 'You cannot delete yourself' : !isAdmin ? 'Administrators only' : u.role === 'admin' ? 'Change the role to user first' : undefined, onselect: () => remove(u) }
 		];
 	}
 </script>

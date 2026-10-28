@@ -347,6 +347,21 @@ func (s *panel) patchUser(c fiber.Ctx) error {
 	return c.SendStatus(fiber.StatusNoContent)
 }
 
+// deleteUser deletes an account and everything it owns (administrators
+// only). The audit record names the deleted address.
+func (s *panel) deleteUser(c fiber.Ctx) error {
+	var sites *service.SiteService
+	if s.sites.Enabled() {
+		sites = s.sites
+	}
+	u, err := s.bots.DeleteAccount(c.Context(), currentUser(c), strings.Clone(c.Params("id")), sites)
+	if err != nil {
+		return err
+	}
+	c.Locals(keyAuditTarget, u.Email)
+	return c.SendStatus(fiber.StatusNoContent)
+}
+
 // recordSignIn keeps successful and failed password/provider sign-ins in the
 // account's activity (failed attempts only for existing accounts).
 func (s *panel) recordSignIn(c fiber.Ctx, u domain.User, email string, err error, method string) {

@@ -62,6 +62,7 @@ export const actionText: Record<string, string> = {
 	'account.mfa_disable': 'turned off two-step sign-in',
 	'admin.user_create': 'added a user',
 	'admin.user_update': 'changed a user',
+	'admin.user_delete': 'deleted a user',
 	'admin.user_quota_set': "changed a user's limits",
 	'admin.user_quota_clear': "reset a user's limits to the panel defaults",
 	'admin.site_update': 'suspended or restored a site',

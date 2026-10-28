@@ -164,6 +164,22 @@ Ownership transfer removes the GitHub link (it uses the old owner's GitHub
 access) and moves the bot into the new owner's personal workspace. The last
 administrator cannot be removed or disabled.
 
+**Deleting an account** (Administration → Users → the account's menu →
+Delete account…, `DELETE /api/v1/users/{id}`; built-in administrators only,
+confirmed by typing the address) removes it permanently with everything it
+owns: its bots and game servers (containers, files, backups and add-on data,
+as a normal deletion), its sites, the workspaces it owns and their
+memberships, sessions, keys, tokens, notifications, support tickets and quota.
+Repository links on other accounts' bots made with its GitHub token are
+removed (the webhook on GitHub stays but can no longer deploy). Operations,
+backups and releases it started keep their records without the name, and the
+activity log keeps its events (`admin.user_delete`). It is refused for your
+own account, for administrators (change the role first) and while a team
+workspace the account owns holds other accounts' bots or sites. The account is
+disabled first, so it is signed out at once; if a step fails (for example a
+server on an offline remote node is still being removed) it stays disabled
+and the deletion can be repeated. The address can register again afterwards.
+
 **Workspaces** grant access to every bot in them by role (owner, admin,
 developer, viewer) on top of these per-bot grants; see
 [workspaces.md](workspaces.md). Static websites are covered in
