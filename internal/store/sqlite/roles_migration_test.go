@@ -4,7 +4,6 @@ import (
 	"context"
 	"io/fs"
 	"path/filepath"
-	"strings"
 	"testing"
 	"testing/fstest"
 
@@ -24,7 +23,9 @@ func TestRolesMigrationKeepsAccounts(t *testing.T) {
 	before := fstest.MapFS{}
 	all, _ := fs.Glob(migrations.FS, "*.sql")
 	for _, f := range all {
-		if !strings.HasPrefix(f, "0044_") {
+		// Later migrations (0057 onwards) change the roles table, so stop
+		// before 0044 and let the second run apply it and everything after.
+		if f < "0044_" {
 			b, _ := fs.ReadFile(migrations.FS, f)
 			before[f] = &fstest.MapFile{Data: b}
 		}

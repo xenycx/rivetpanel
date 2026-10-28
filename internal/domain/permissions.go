@@ -21,6 +21,7 @@ const (
 	PermBotsShare        = "bots.share"
 	PermSitesCreate      = "sites.create"
 	PermWorkspacesCreate = "workspaces.create"
+	PermWorkspacesRename = "workspaces.rename"
 	PermAPIKeys          = "api_keys.manage"
 	PermAIUse            = "ai.use"
 	PermTicketsCreate    = "tickets.create"
@@ -38,6 +39,7 @@ const (
 	PermAIManage         = "ai.manage"
 	PermSitesManage      = "sites.manage"
 	PermWorkspacesView   = "workspaces.view"
+	PermWorkspacesManage = "workspaces.manage"
 	PermSystemView       = "system.view"
 	PermTicketsViewAll   = "tickets.view_all"
 	PermTicketsManage    = "tickets.manage"
@@ -67,6 +69,7 @@ var Permissions = []PermissionInfo{
 	{PermBotsShare, "resources", "Sharing", "Share apps with other accounts, invitations and ownership transfer."},
 	{PermSitesCreate, "resources", "Create sites", "Create static sites."},
 	{PermWorkspacesCreate, "resources", "Create workspaces", "Create team workspaces."},
+	{PermWorkspacesRename, "resources", "Rename workspaces", "Rename workspaces where the account is a workspace owner or admin, including the personal workspace."},
 	{PermAPIKeys, "resources", "API keys and tokens", "Create SFTP API keys, automation tokens and API clients."},
 	{PermAIUse, "resources", "AI assistant", "Use the AI assistant."},
 	{PermTicketsCreate, "resources", "Support tickets", "Open support tickets and reply to the account's own tickets."},
@@ -82,6 +85,7 @@ var Permissions = []PermissionInfo{
 	{PermAIManage, "administration", "AI providers", "AI provider profiles and web search settings."},
 	{PermSitesManage, "administration", "Sites and domains", "Every site, site base domains and disabling sites."},
 	{PermWorkspacesView, "administration", "View workspaces", "List every workspace and read its details."},
+	{PermWorkspacesManage, "administration", "Manage workspaces", "Rename and delete any workspace and manage its members from Administration → Workspaces. Limits stay with built-in administrators and node placement with node managers."},
 	{PermSystemView, "administration", "Host and diagnostics", "Host monitoring, panel logs and the diagnostics report."},
 	{PermTicketsViewAll, "administration", "View all tickets", "Read every support ticket, including internal staff notes."},
 	{PermTicketsManage, "administration", "Answer tickets", "Read and answer every support ticket, write internal notes, change status and priority, and assign tickets."},
@@ -100,9 +104,12 @@ func ValidPermission(p string) bool {
 	return false
 }
 
-// DefaultUserPermissions is what the built-in user role grants: every
-// resource permission and nothing in the administration area (the behaviour
-// regular accounts had before roles existed).
+// DefaultUserPermissions is the factory default of the built-in User role:
+// every resource permission in the catalog and nothing in the administration
+// area (the behaviour regular accounts had before roles existed). From
+// migration 0057 on, the role's stored permission list is what accounts with
+// it get; this list seeded that row and is what "Restore defaults" restores.
+// Migration 0057 spells the list out literally, and a test keeps the two equal.
 func DefaultUserPermissions() []string {
 	var out []string
 	for _, x := range Permissions {

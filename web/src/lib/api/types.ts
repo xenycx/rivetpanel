@@ -12,7 +12,18 @@ export type User = {
 	email_verified: boolean;
 };
 
-export type Role = { id: string; name: string; description: string; permissions: string[]; system: boolean; users: number; created_at_ms: number; updated_at_ms: number };
+export type Role = {
+	id: string;
+	name: string;
+	description: string;
+	permissions: string[];
+	system: boolean;
+	/** Whether the permissions can be changed (every role except the built-in Administrator). */
+	editable: boolean;
+	users: number;
+	created_at_ms: number;
+	updated_at_ms: number;
+};
 export type PermissionInfo = { name: string; group: 'resources' | 'administration'; label: string; description: string };
 export type EmailVerification = { verified: boolean; withheld: string[]; available: boolean; pending_email: string; sent_at_ms: number };
 
@@ -81,6 +92,9 @@ export type Bot = {
 	/** Game servers: the version the last installation resolved, such as 1.21.11. */
 	installed_version?: string;
 	allocations?: Allocation[];
+	/** Name and connection state of the app's node (bot detail responses). */
+	node_name?: string;
+	node_online?: boolean;
 };
 
 export type Allocation = { id: string; node_id: string; ip: string; port: number; alias: string; notes: string; bot_id: string | null; primary: boolean };
@@ -177,6 +191,24 @@ export type NodeInfo = {
 	latest?: Sample;
 	/** Largest limits a server on this node may have (panel maximums capped by its hardware). */
 	limits?: { max_memory_bytes: number; max_nano_cpus: number };
+	/** The panel's default node for new apps. */
+	default: boolean;
+};
+
+/** Where new apps in a workspace are created (GET /placement?workspace=). */
+export type Placement = {
+	node: {
+		id: string;
+		name: string;
+		location: string;
+		transport: 'local' | 'agent' | 'https';
+		online: boolean;
+		limits: { max_memory_bytes: number; max_nano_cpus: number };
+	};
+	/** Why this node: the workspace's pin, the panel default, or the local host. */
+	reason: 'workspace' | 'panel' | 'local';
+	/** Whether the account may choose another node (nodes.manage). */
+	can_choose: boolean;
 };
 export type LocationInfo = { id: string; name: string; description: string; node_count: number; created_at_ms: number; updated_at_ms: number };
 
@@ -413,6 +445,8 @@ export type Workspace = {
 	owner_id: string;
 	owner_email: string;
 	personal: boolean;
+	/** Node new apps in this workspace are created on ("" = panel default). */
+	node_id: string;
 	role: WorkspaceRole | '';
 	members: number;
 	bots: number;
@@ -423,6 +457,27 @@ export type Workspace = {
 	created_at_ms: number;
 	/** The workspace's own limits (administrator list only; absent = panel defaults). */
 	quota?: WorkspaceQuota;
+};
+/** A pending account invitation and the setup it applies (GET /admin/account-invites). */
+export type AccountInvite = {
+	id: string;
+	email: string;
+	role: 'admin' | 'user';
+	/** Custom role id ("" = the built-in role in `role`). */
+	role_id: string;
+	role_name: string;
+	created_at_ms: number;
+	expires_at_ms: number;
+	created_by_email: string;
+	/** Limits for the invitee's personal workspace (null = panel defaults). */
+	quota: WorkspaceQuota | null;
+	/** Node for the invitee's apps ("" = automatic). */
+	node_id: string;
+	node_name: string;
+	/** Team workspace the invitee joins ("" = none). */
+	workspace_id: string;
+	workspace_name: string;
+	workspace_role: WorkspaceRole | '';
 };
 export type WorkspaceMember = { user_id: string; email: string; display_name: string; role: WorkspaceRole; created_at_ms: number };
 export const roleRank: Record<WorkspaceRole | '', number> = { '': 0, viewer: 1, developer: 2, admin: 3, owner: 4 };
