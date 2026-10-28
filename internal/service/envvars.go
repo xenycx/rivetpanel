@@ -167,7 +167,8 @@ func (s *PanelEnvService) View(ctx context.Context, actor domain.User) (PanelEnv
 			v.Source = "default"
 		}
 		if spec.Managed != "" {
-			// Another page owns these; the environment still wins there, so say so.
+			// Another page owns these (the environment wins for sign-in and the
+			// address; it is the fallback for limits and retention).
 			v.Editable, v.Override = false, false
 			if envSet {
 				v.Source = "environment"
@@ -208,7 +209,7 @@ func (s *PanelEnvService) Update(ctx context.Context, actor domain.User, ch Pane
 		case !ok:
 			return spec, domain.Invalid(name + " is not a RivetPanel setting")
 		case spec.Managed != "":
-			return spec, domain.Invalid(name + " is changed under Panel settings")
+			return spec, domain.Invalid(name + " is changed on another page of the panel (" + spec.Managed + ")")
 		case spec.Boot:
 			return spec, domain.Invalid(name + " is read before the database opens or controls what the panel may do to the host; change it in the environment file")
 		}

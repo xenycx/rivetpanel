@@ -8,8 +8,8 @@ different is where its startup comes from. A bot runs your own code with a
 language runtime; a game server is defined by a **server type** (a blueprint)
 that knows how to download, install, configure and start the game.
 
-The `game_servers` module is on by default as a preview. Turn it off with
-`RIVET_MODULES=game_servers=off`.
+The `game_servers` module is on by default as a preview. Turn it off under
+Administration → Modules, or with `RIVET_MODULES=game_servers=off`.
 
 ## Server types
 

@@ -2,12 +2,13 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { canAdminister, session } from '$lib/session.svelte';
-	import { adminLinks } from '$lib/adminNav';
+	import { adminGroups, adminLinks } from '$lib/adminNav';
 	import SubNav from '$lib/components/ui/SubNav.svelte';
 	let { children } = $props();
 	// Sections follow the account's role permissions; the server refuses the
 	// rest whatever the interface shows.
 	const links = $derived(session.user ? adminLinks() : []);
+	const groups = $derived(session.user ? adminGroups() : []);
 	$effect(() => {
 		if (!session.user) return;
 		if (!canAdminister()) goto('/dashboard');
@@ -23,7 +24,7 @@
 		</p>
 	</header>
 	<div class="mt-6 flex flex-col gap-6 md:flex-row md:gap-10">
-		<SubNav {links} label="Administration sections" />
+		<SubNav {groups} label="Administration sections" />
 		<div class="min-w-0 flex-1">{@render children()}</div>
 	</div>
 {/if}

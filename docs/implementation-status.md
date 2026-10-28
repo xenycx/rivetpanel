@@ -11,7 +11,10 @@ items state exactly what remains.
   default data/configuration paths, container labels, DNS records, UI and
   operator documentation. Historical changelog entries remain unchanged.
 - [x] Preview module catalog with `off`, `preview` and `stable` states,
-  `RIVET_MODULES` overrides and authenticated `GET /api/v1/modules` discovery.
+  `RIVET_MODULES` overrides and authenticated `GET /api/v1/modules` discovery
+  (each module also reports its built-in `default`). Administration → Modules
+  writes `RIVET_MODULES` through the Environment API and offers a restart;
+  enforcement stays application level at start-up.
   Existing application, site and AI capabilities are stable; game servers are
   a default-on preview; remote node, identity and support modules default to
   off. Enforcement is application-level configuration and API

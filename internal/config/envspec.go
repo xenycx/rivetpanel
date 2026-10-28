@@ -38,7 +38,9 @@ type VarSpec struct {
 	// changed in the environment file so a mistake cannot lock the panel out.
 	Boot bool `json:"boot,omitempty"`
 	// Managed names the page that owns a variable the panel already stores
-	// itself (sign-in providers and the public address).
+	// itself (sign-in providers, the public address, default limits and
+	// retention). For limits and retention the panel's value wins and the
+	// environment is the fallback.
 	Managed string `json:"managed,omitempty"`
 	// Danger is an extra warning shown (and confirmed) before saving.
 	Danger string `json:"danger,omitempty"`
@@ -56,7 +58,7 @@ func (v VarSpec) Editable() bool { return !v.Boot && v.Managed == "" }
 const (
 	GroupPanel    = "Panel"
 	GroupModules  = "Preview modules"
-	GroupRunner   = "Bots and Docker"
+	GroupRunner   = "Apps and Docker"
 	GroupCapacity = "Capacity and limits"
 	GroupBackups  = "Backups"
 	GroupPorts    = "Published ports"
@@ -82,7 +84,7 @@ var Vars = []VarSpec{
 	{Name: "RIVET_DB_MAX_CONNS", Group: GroupPanel, Kind: KindInt, Default: "4", Boot: true,
 		Description: "Database connections the panel may open (1 to 16). Applied when the database opens."},
 	{Name: "RIVET_DATA_ROOT", Group: GroupPanel, Kind: KindPath, Default: "/var/lib/rivetpanel/bots", Boot: true,
-		Description: "Parent directory of every bot workspace. Command-line backups and restores read it too, so it stays in the environment file."},
+		Description: "Parent directory of every app's files. Command-line backups and restores read it too, so it stays in the environment file."},
 	{Name: "RIVET_KEY_DIR", Group: GroupPanel, Kind: KindPath, Default: "/etc/rivetpanel/keys", Boot: true,
 		Description: "Directory of encryption key files. Stored values cannot be read without them."},
 	{Name: "RIVET_ACTIVE_KEY_ID", Group: GroupPanel, Kind: KindText, Default: "k1", Boot: true,
@@ -92,7 +94,7 @@ var Vars = []VarSpec{
 	{Name: "RIVET_SESSION_TTL", Group: GroupPanel, Kind: KindDuration, Default: "168h", Example: "168h",
 		Description: "How long a sign-in lasts without activity being renewed (1 minute to 90 days)."},
 	{Name: "RIVET_SHUTDOWN_TIMEOUT", Group: GroupPanel, Kind: KindDuration, Default: "10s", Example: "10s",
-		Description: "How long a restart waits for requests in progress. Bot containers keep running either way."},
+		Description: "How long a restart waits for requests in progress. App containers keep running either way."},
 	{Name: "RIVET_MAX_UPLOAD_BYTES", Group: GroupPanel, Kind: KindBytes, Default: "32 MiB",
 		Description: "Largest single file or archive an upload may carry (1 KiB to 1 GiB)."},
 	{Name: "RIVET_PROXY_HEADER", Group: GroupPanel, Kind: KindText, Boot: true, Example: "CF-Connecting-IP",
@@ -108,24 +110,24 @@ var Vars = []VarSpec{
 	{Name: "RIVET_AGENT_HOSTS", Group: GroupModules, Kind: KindText, Example: "panel.example.com,10.0.0.5",
 		Description: "Comma-separated host names and IP addresses in the agent listener's certificate. Empty: the agent address's host, localhost and 127.0.0.1."},
 
-	// Bots and Docker
+	// Apps and Docker
 	{Name: "RIVET_RUNNER_MODE", Group: GroupRunner, Kind: KindEnum, Options: []string{"local", "none"}, Default: "local",
-		Description: "local runs bots in Docker on this host; none turns the runner off so only the control plane runs.",
-		Danger:      "Setting this to none stops managing bot containers after the restart: bots can no longer be started, stopped or built from the panel."},
+		Description: "local runs apps in Docker on this host; none turns the runner off so only the control plane runs.",
+		Danger:      "Setting this to none stops managing app containers after the restart: apps can no longer be started, stopped or built from the panel."},
 	{Name: "RIVET_DOCKER_HOST", Group: GroupRunner, Kind: KindText, Default: "unix:///var/run/docker.sock", Boot: true,
-		Description: "Docker endpoint. A wrong value stops every bot from starting, so it stays in the environment file."},
+		Description: "Docker endpoint. A wrong value stops every app from starting, so it stays in the environment file."},
 	{Name: "RIVET_CONTAINER_USER", Group: GroupRunner, Kind: KindText, Default: "65532:65532", Boot: true, Example: "65532:65532",
-		Description: "uid:gid bot processes run as. Changing it changes who owns every workspace, so it stays in the environment file. When this and RIVET_WORKSPACE_OWNER are unset and the panel is neither root nor holds CAP_CHOWN, bots run as the panel's own uid:gid instead (development, or production with RIVET_ALLOW_SHARED_UID=1; otherwise the panel refuses to start)."},
+		Description: "uid:gid app processes run as. Changing it changes who owns every workspace, so it stays in the environment file. When this and RIVET_WORKSPACE_OWNER are unset and the panel is neither root nor holds CAP_CHOWN, apps run as the panel's own uid:gid instead (development, or production with RIVET_ALLOW_SHARED_UID=1; otherwise the panel refuses to start)."},
 	{Name: "RIVET_WORKSPACE_OWNER", Group: GroupRunner, Kind: KindText, Boot: true,
 		Description: "uid:gid that owns workspace files when it differs from the container user."},
 	{Name: "RIVET_ALLOW_ROOT_CONTAINER_USER", Group: GroupRunner, Kind: KindBool, Default: "0", Boot: true,
-		Description: "Permits uid 0 inside bot containers. Only sensible with a rootless Docker daemon, so it stays in the environment file."},
+		Description: "Permits uid 0 inside app containers. Only sensible with a rootless Docker daemon, so it stays in the environment file."},
 	{Name: "RIVET_ALLOW_SHARED_UID", Group: GroupRunner, Kind: KindBool, Default: "0", Boot: true,
-		Description: "In production, lets a panel that is neither root nor holds CAP_CHOWN run bot containers as its own uid:gid, the uid that also owns the database and keys. Without it such a panel refuses to start; development falls back automatically."},
+		Description: "In production, lets a panel that is neither root nor holds CAP_CHOWN run app containers as its own uid:gid, the uid that also owns the database and keys. Without it such a panel refuses to start; development falls back automatically."},
 	{Name: "RIVET_CONTAINER_NETWORK", Group: GroupRunner, Kind: KindText, Default: "bridge", Boot: true,
-		Description: "Docker network mode for bot and build containers. It decides what bots can reach, so it stays in the environment file."},
+		Description: "Docker network mode for app and build containers. It decides what apps can reach, so it stays in the environment file."},
 	{Name: "RIVET_RUNNER_WORKERS", Group: GroupRunner, Kind: KindInt, Default: "2", Example: "2",
-		Description: "Bots that may start, stop or restart at the same time (1 to 16)."},
+		Description: "Apps that may start, stop or restart at the same time (1 to 16)."},
 	{Name: "RIVET_MAX_BUILDS", Group: GroupRunner, Kind: KindInt, Default: "1", Example: "1",
 		Description: "Build containers that may run at once (1 to 16). Each can use its runtime's build memory, 3 GiB for Rust."},
 	{Name: "RIVET_BUILD_TIMEOUT", Group: GroupRunner, Kind: KindDuration, Default: "10m", Example: "10m",
@@ -133,34 +135,34 @@ var Vars = []VarSpec{
 
 	// Capacity
 	{Name: "RIVET_MAX_BOT_MEMORY_BYTES", Group: GroupCapacity, Kind: KindBytes, Default: "the node's memory",
-		Description: "Largest memory limit a single bot or game server may be given. Always capped by the memory of the node it runs on; 0 or unset uses the node's memory alone."},
+		Description: "Largest memory limit a single app may be given. Always capped by the memory of the node it runs on; 0 or unset uses the node's memory alone."},
 	{Name: "RIVET_MAX_BOT_NANO_CPUS", Group: GroupCapacity, Kind: KindInt, Default: "the node's CPUs", Example: "4000000000",
-		Description: "Largest CPU limit a single bot or game server may be given, in billionths of a CPU (1000000000 is one CPU). Always capped by the CPU count of the node it runs on; 0 or unset uses the node's CPUs alone."},
+		Description: "Largest CPU limit a single app may be given, in billionths of a CPU (1000000000 is one CPU). Always capped by the CPU count of the node it runs on; 0 or unset uses the node's CPUs alone."},
 	{Name: "RIVET_NODE_MEMORY_BYTES", Group: GroupCapacity, Kind: KindBytes, Default: "unlimited",
-		Description: "Admission budget: the sum of memory limits of bots wanted running on this host. A start that would exceed it is refused. Bookkeeping, not a kernel limit; 0 is unlimited."},
-	{Name: "RIVET_USER_MEMORY_BYTES", Group: GroupCapacity, Kind: KindBytes, Default: "unlimited",
+		Description: "Admission budget: the sum of memory limits of apps wanted running on this host. A start that would exceed it is refused. Bookkeeping, not a kernel limit; 0 is unlimited."},
+	{Name: "RIVET_USER_MEMORY_BYTES", Group: GroupCapacity, Kind: KindBytes, Managed: "/admin/settings#limits", Default: "unlimited",
 		Description: "Default memory (sum of app memory limits, add-ons included) for each workspace, used when Panel settings → Default limits sets none. Workspaces owned by administrators are exempt; 0 is unlimited. A workspace's own limits (Administration → Workspaces) replace it."},
-	{Name: "RIVET_MAX_BOTS_PER_USER", Group: GroupCapacity, Kind: KindInt, Default: "unlimited",
+	{Name: "RIVET_MAX_BOTS_PER_USER", Group: GroupCapacity, Kind: KindInt, Managed: "/admin/settings#limits", Default: "unlimited",
 		Description: "Default number of apps (bots, game servers and web apps together) for each workspace, used when Panel settings → Default limits sets none. Workspaces owned by administrators are exempt; 0 is unlimited. A workspace's own limits (Administration → Workspaces) replace it."},
 	{Name: "RIVET_MIN_FREE_DISK_BYTES", Group: GroupCapacity, Kind: KindBytes, Default: "1 GiB",
 		Description: "Free space backups, restores and deployments need before they start; 0 turns the check off."},
 
 	// Backups
 	{Name: "RIVET_BACKUP_DIR", Group: GroupBackups, Kind: KindPath, Default: "/var/lib/rivetpanel/backups",
-		Description: "Where per-bot backup archives are written. Existing archives are not moved when this changes."},
+		Description: "Where per-app backup archives are written. Existing archives are not moved when this changes."},
 	{Name: "RIVET_BACKUP_INTERVAL", Group: GroupBackups, Kind: KindDuration, Default: "24h", Example: "24h",
-		Description: "Time between scheduled backups of every bot (1 hour to 90 days); 0 turns scheduled backups off."},
+		Description: "Time between scheduled backups of every app (1 hour to 90 days); 0 turns scheduled backups off."},
 	{Name: "RIVET_BACKUP_KEEP", Group: GroupBackups, Kind: KindInt, Default: "7", Example: "7",
-		Description: "Scheduled backups kept per bot (1 to 45); older ones are deleted."},
+		Description: "Scheduled backups kept per app (1 to 45); older ones are deleted."},
 	{Name: "RIVET_BACKUP_MAX_BYTES", Group: GroupBackups, Kind: KindBytes, Default: "2 GiB",
 		Description: "Largest workspace a backup will include."},
 
 	// Ports
 	{Name: "RIVET_PORT_RANGE", Group: GroupPorts, Kind: KindText, Default: "20000-29999", Example: "20000-29999",
-		Description: "Host ports bots may publish (within 1024 to 65535). Bots opt in per bot."},
+		Description: "Host ports apps may publish (within 1024 to 65535). Each app opts in on its own."},
 	{Name: "RIVET_PORT_PUBLIC_BIND", Group: GroupPorts, Kind: KindBool, Default: "0",
 		Description: "1 lets published ports bind beyond 127.0.0.1, which exposes them to the network.",
-		Danger:      "Published bot ports become reachable from outside this host. Make sure a firewall limits them."},
+		Danger:      "Published app ports become reachable from outside this host. Make sure a firewall limits them."},
 
 	// Sites
 	{Name: "RIVET_SITES_LISTEN", Group: GroupSites, Kind: KindText, Example: "127.0.0.1:8081",
@@ -173,7 +175,7 @@ var Vars = []VarSpec{
 		Description: "Directory holding site releases."},
 	{Name: "RIVET_SITE_MAX_BYTES", Group: GroupSites, Kind: KindBytes, Default: "100 MiB",
 		Description: "Largest site release, uncompressed (1 MiB to 4 GiB)."},
-	{Name: "RIVET_MAX_SITES_PER_USER", Group: GroupSites, Kind: KindInt, Default: "10",
+	{Name: "RIVET_MAX_SITES_PER_USER", Group: GroupSites, Kind: KindInt, Managed: "/admin/settings#limits", Default: "10",
 		Description: "Default number of sites for each workspace, used when Panel settings → Default limits sets none. Workspaces owned by administrators are exempt; 0 is unlimited. A workspace's own limits (Administration → Workspaces) replace it."},
 	{Name: "RIVET_SITES_DNS_TARGET", Group: GroupSites, Kind: KindText, Example: "sites.example.com",
 		Description: "Host name custom domains should point a CNAME at. Defaults to the host of the sites base URL."},
@@ -197,8 +199,8 @@ var Vars = []VarSpec{
 	// Monitoring
 	{Name: "RIVET_TELEMETRY_INTERVAL", Group: GroupMonitor, Kind: KindDuration, Default: "30s", Example: "30s",
 		Description: "How often host CPU, memory, disk and network are sampled (30 to 60 seconds)."},
-	{Name: "RIVET_TELEMETRY_RETENTION", Group: GroupMonitor, Kind: KindDuration, Default: "168h", Example: "168h",
-		Description: "How long host samples are kept (1 hour to 365 days). The charts on the Host page can show at most this much."},
+	{Name: "RIVET_TELEMETRY_RETENTION", Group: GroupMonitor, Kind: KindDuration, Managed: "/admin/logs", Default: "168h", Example: "168h",
+		Description: "How long host samples are kept (1 hour to 365 days) when Logs and retention sets nothing. The charts on the Host page can show at most this much."},
 	{Name: "RIVET_METRICS_TOKEN", Group: GroupMonitor, Kind: KindSecret,
 		Description: "Bearer secret (24 or more characters) that enables the Prometheus /metrics endpoint. Empty keeps the endpoint off."},
 

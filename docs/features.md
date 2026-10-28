@@ -661,12 +661,22 @@ Not editable here: variables read before the database opens (`RIVET_ENV`,
 `_ACTIVE_KEY_ID`, `_RUNTIMES_DIR`), ones that decide what the panel may do to
 the host (`_DOCKER_HOST`, `_CONTAINER_USER`, `_WORKSPACE_OWNER`,
 `_ALLOW_ROOT_CONTAINER_USER`, `_CONTAINER_NETWORK`, `_PROXY_HEADER`), and the
-sign-in and address variables, which Panel settings owns. Every save is checked
+variables another page manages, marked **Managed**: sign-in and address
+(Panel settings, where the environment file wins), the default limits
+`_MAX_BOTS_PER_USER`, `_MAX_SITES_PER_USER` and `_USER_MEMORY_BYTES` (Panel
+settings → Default limits) and `_TELEMETRY_RETENTION` (Logs and retention),
+where the panel's value wins and the environment file is the fallback. Less
+common groups start collapsed. Every save is checked
 as a whole configuration first; if a saved set ever stops validating, the panel
 starts without it and says so on the page. **Restart panel** exits with code 75
 and needs systemd (`Restart=on-failure`) or a container restart policy; without
-a detected supervisor the button is hidden. Bot containers keep running through
-a restart. From the host: `rivetpanel env` lists the saved values and `rivetpanel
+a detected supervisor the button is hidden. App containers keep running through
+a restart.
+
+**Administration → Modules** switches each module Off, Preview or On. The
+choice is saved to `RIVET_MODULES` (only modules that differ from their
+built-in state are written) and applies after a restart, which the page
+offers. Core hosting is always on. From the host: `rivetpanel env` lists the saved values and `rivetpanel
 env reset [NAME…]` drops them.
 
 ## Capacity and admission

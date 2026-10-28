@@ -22,6 +22,8 @@ type Descriptor struct {
 	Label       string `json:"label"`
 	Description string `json:"description"`
 	State       State  `json:"state"`
+	// Default is the built-in state, before RIVET_MODULES.
+	Default State `json:"default"`
 }
 
 // Registry is the complete module catalog keyed by stable machine name.
@@ -43,6 +45,7 @@ var catalog = []Descriptor{
 func Default() Registry {
 	r := make(Registry, len(catalog))
 	for _, d := range catalog {
+		d.Default = d.State
 		r[d.Key] = d
 	}
 	return r

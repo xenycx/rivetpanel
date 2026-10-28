@@ -26,7 +26,7 @@
 		if (v.kind === 'bytes' && Number.isFinite(n)) return fmtBytes(n);
 		return v.value;
 	};
-	const scope: Record<string, string> = { RIVET_NODE_MEMORY_BYTES: 'Host', RIVET_USER_MEMORY_BYTES: 'Account', RIVET_MAX_BOTS_PER_USER: 'Account', RIVET_MAX_BUILDS: 'Host', RIVET_MIN_FREE_DISK_BYTES: 'Host', RIVET_MAX_BOT_MEMORY_BYTES: 'App', RIVET_MAX_SITES_PER_USER: 'Account' };
+	const scope: Record<string, string> = { RIVET_NODE_MEMORY_BYTES: 'Host', RIVET_USER_MEMORY_BYTES: 'Workspace (fallback)', RIVET_MAX_BOTS_PER_USER: 'Workspace (fallback)', RIVET_MAX_BUILDS: 'Host', RIVET_MIN_FREE_DISK_BYTES: 'Host', RIVET_MAX_BOT_MEMORY_BYTES: 'App', RIVET_MAX_SITES_PER_USER: 'Workspace (fallback)' };
 	const srcText = { default: 'Default', environment: 'Environment file', panel: 'Set here' } as const;
 </script>
 
@@ -50,7 +50,7 @@
 {/if}
 
 <h3 class="mt-8 text-title font-semibold">Budgets and limits</h3>
-<p class="mt-1 max-w-3xl text-small text-muted">0 means unlimited. Administrators are exempt from per-account limits. Changes are made on the Environment page and apply after a restart.</p>
+<p class="mt-1 max-w-3xl text-small text-muted">0 means unlimited. Host and app budgets are changed on the Environment page and apply after a restart. The workspace values are only the fallback for <a class="link" href="/admin/settings#limits">Panel settings → Default limits</a>, which apply at once; workspaces owned by administrators are exempt.</p>
 <div class="card mt-3 overflow-x-auto">
 	<table class="w-full min-w-[40rem] text-left">
 		<thead class="border-b border-rule-soft"><tr class="[&>th]:px-4 [&>th]:py-2.5 [&>th]:font-normal"><th class="eyebrow">Setting</th><th class="eyebrow">Limits</th><th class="eyebrow">Scope</th><th class="eyebrow text-right">Now</th><th class="eyebrow text-right">From</th></tr></thead>

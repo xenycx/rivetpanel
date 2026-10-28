@@ -26,7 +26,8 @@ agent holds the Docker socket on its node. A Docker socket is root-equivalent.
 
 ## Enable and expose the agent listener
 
-On the control plane, set:
+On the control plane, set (Remote nodes can also be switched to Preview under
+Administration → Modules):
 
 ```ini
 RIVET_MODULES=agents=preview,game_servers=preview

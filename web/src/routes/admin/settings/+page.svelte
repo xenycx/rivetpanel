@@ -9,6 +9,7 @@
 	import Skeleton from '$lib/components/ui/Skeleton.svelte';
 	import ProviderSetup from '$lib/components/ProviderSetup.svelte';
 	import AISettings from '$lib/components/AISettings.svelte';
+	import DefaultLimitsForm from '$lib/components/DefaultLimitsForm.svelte';
 
 	type View = {
 		public_url: string;
@@ -153,7 +154,10 @@
 
 {#if manageSettings}
 <h2 class="text-section">Panel settings</h2>
-<p class="mt-1 max-w-3xl text-muted">Applied immediately, without a restart. Values set in the environment file are shown read-only and always win.</p>
+<p class="mt-1 max-w-3xl text-muted">Applied immediately, without a restart. Address, sign-in and email values set in the environment file are shown read-only and replace what is set here. Default limits work the other way: a value set here wins, and the environment file is the fallback.</p>
+<nav class="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-small" aria-label="Settings sections">
+	{#each [['general', 'General'], ['sign-in', 'Sign-in'], ['email', 'Email'], ['limits', 'Limits'], ['ai', 'AI']] as [id, label] (id)}<a class="link" href="#{id}">{label}</a>{/each}
+</nav>
 {#if warning}<Notice tone="warn" class="mt-3" title="Setup finished, but some settings were not saved">{warning}</Notice>{/if}
 {#if error}<Notice tone="fail" class="mt-3" live>{error}</Notice>{/if}
 
@@ -161,6 +165,7 @@
 	<div class="mt-4"><Skeleton rows={4} label="Loading settings" /></div>
 {:else if v}
 	<form class="mt-6 grid w-full min-w-0 grid-cols-[minmax(0,1fr)] gap-4 xl:grid-cols-2" onsubmit={save}>
+		<h3 id="general" class="eyebrow scroll-mt-24 xl:col-span-2">General</h3>
 		<section class="card flex flex-col p-5 sm:p-6">
 			<div class="flex items-center gap-2"><Icon name="globe" size={18} class="text-muted" /><h3 class="text-title font-semibold">Panel address</h3></div>
 			<p class="mt-1 text-small text-muted">The https origin people use to reach this panel. Sign-in providers return to it, and bots send statistics to it.</p>
@@ -180,6 +185,7 @@
 			</label>
 		</section>
 
+		<h3 id="sign-in" class="eyebrow mt-4 scroll-mt-24 xl:col-span-2">Sign-in</h3>
 		{#each [{ id: 'github', label: 'GitHub', on: v.github_enabled, icon: 'github' }, { id: 'discord', label: 'Discord', on: v.discord_enabled, icon: 'discord' }] as p (p.id)}
 			<section class="card p-5 sm:p-6">
 				<div class="flex flex-wrap items-center gap-2">
@@ -199,32 +205,13 @@
 				</div>
 			</section>
 		{/each}
+		<a href="/admin/sign-in" class="card flex items-center gap-3 p-4 transition-colors hover:border-rule xl:col-span-2">
+			<Icon name="lock" size={18} class="text-muted" />
+			<span class="min-w-0 flex-1"><span class="block font-medium">Single sign-on</span><span class="block text-small text-muted">OpenID Connect providers such as Google Workspace, Microsoft Entra or Keycloak.</span></span>
+			<Icon name="chevronRight" size={14} class="text-muted" />
+		</a>
 
-
-		<section class="card p-5 sm:p-6 xl:col-span-2" id="unverified">
-			<div class="flex flex-wrap items-center gap-2">
-				<Icon name="shield" size={20} class="text-muted" />
-				<h3 class="text-title font-semibold">Unverified email addresses</h3>
-				<span class="pill" data-tone={restrictOn ? 'warn' : 'idle'}>{restrictOn ? 'Restricted' : 'Not restricted'}</span>
-			</div>
-			<p class="mt-1 text-small text-muted">New accounts confirm their address through an emailed link. Accounts that existed before verification, accounts created through GitHub or Discord, and administrators count as verified. The server refuses what is withheld until the address is confirmed.</p>
-			<label class="mt-4 flex items-start gap-2.5">
-				<input type="checkbox" class="mt-0.5" bind:checked={restrictOn} onchange={() => { if (restrictOn && restrict.length === 0) restrict = [...suggested]; }} />
-				<span>Restrict accounts until their email address is verified<span class="help">{v.mail_enabled ? 'They can send themselves a link from their profile.' : 'Email is off, so people cannot verify themselves: an account manager has to mark addresses verified on the Users page.'}</span></span>
-			</label>
-			{#if restrictOn}
-				<p class="label mt-4">Withhold these permissions</p>
-				<div class="mt-1 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-					{#each catalog as p (p.name)}
-						<label class="flex items-start gap-2.5 text-small">
-							<input type="checkbox" class="mt-0.5" checked={restrict.includes(p.name)} onchange={(e) => toggleRestrict(p.name, e.currentTarget.checked)} />
-							<span>{p.label}{#if p.group === 'administration'}<span class="text-muted"> (administration)</span>{/if}</span>
-						</label>
-					{/each}
-				</div>
-			{/if}
-		</section>
-
+		<h3 id="email" class="eyebrow mt-4 scroll-mt-24 xl:col-span-2">Email</h3>
 		<section class="card p-5 sm:p-6 xl:col-span-2">
 			<div class="flex flex-wrap items-center gap-2">
 				<Icon name="send" size={20} class="text-muted" />
@@ -276,12 +263,48 @@
 			</div>
 		</section>
 
+		<details class="group xl:col-span-2" id="unverified" open={restrictOn}>
+			<summary class="flex cursor-pointer items-center gap-2 py-1 text-small font-medium text-muted hover:text-ink"><Icon name="chevronRight" size={14} class="transition-transform group-open:rotate-90" />Advanced: restrict unverified email addresses{#if restrictOn}<span class="pill" data-tone="warn">On</span>{/if}</summary>
+			<div class="mt-3">
+				<section class="card p-5 sm:p-6">
+					<div class="flex flex-wrap items-center gap-2">
+						<Icon name="shield" size={20} class="text-muted" />
+						<h3 class="text-title font-semibold">Unverified email addresses</h3>
+						<span class="pill" data-tone={restrictOn ? 'warn' : 'idle'}>{restrictOn ? 'Restricted' : 'Not restricted'}</span>
+					</div>
+					<p class="mt-1 text-small text-muted">New accounts confirm their address through an emailed link. Accounts that existed before verification, accounts created through GitHub or Discord, and administrators count as verified. The server refuses what is withheld until the address is confirmed.</p>
+					<label class="mt-4 flex items-start gap-2.5">
+						<input type="checkbox" class="mt-0.5" bind:checked={restrictOn} onchange={() => { if (restrictOn && restrict.length === 0) restrict = [...suggested]; }} />
+						<span>Restrict accounts until their email address is verified<span class="help">{v.mail_enabled ? 'They can send themselves a link from their profile.' : 'Email is off, so people cannot verify themselves: an account manager has to mark addresses verified on the Users page.'}</span></span>
+					</label>
+					{#if restrictOn}
+						<p class="label mt-4">Withhold these permissions</p>
+						<div class="mt-1 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+							{#each catalog as p (p.name)}
+								<label class="flex items-start gap-2.5 text-small">
+									<input type="checkbox" class="mt-0.5" checked={restrict.includes(p.name)} onchange={(e) => toggleRestrict(p.name, e.currentTarget.checked)} />
+									<span>{p.label}{#if p.group === 'administration'}<span class="text-muted"> (administration)</span>{/if}</span>
+								</label>
+							{/each}
+						</div>
+					{/if}
+				</section>
+			</div>
+		</details>
+
 		<div class="sticky bottom-4 flex justify-end xl:col-span-2"><button class="btn btn-primary shadow-overlay" disabled={saving}>{saving ? 'Saving…' : 'Save and apply'}</button></div>
 	</form>
+
+	<section class="mt-10 scroll-mt-24 border-t border-rule-soft pt-8" id="limits" aria-labelledby="limits-h">
+		<p class="eyebrow">Limits</p>
+		<h2 id="limits-h" class="mt-1 text-section">Default limits</h2>
+		<p class="mt-1 max-w-3xl text-muted">What every workspace may hold unless it has its own limits (Administration → Workspaces). Every member's apps and sites in a workspace count together; stopped apps count until deleted; workspaces owned by administrators are exempt. An empty field falls back to the environment file, else no limit; 0 allows none. Changes apply to the next app or site created and never stop anything.</p>
+		<div class="card mt-4 p-5 sm:p-6"><DefaultLimitsForm /></div>
+	</section>
 {/if}
 {/if}
 {#if can('ai.manage') && (!manageSettings || v)}
-	<div class={manageSettings ? 'mt-10 border-t border-rule-soft pt-8' : ''}>
+	<div class="scroll-mt-24 {manageSettings ? 'mt-10 border-t border-rule-soft pt-8' : ''}" id="ai">
 		<p class="eyebrow">AI operator</p>
 		<h2 class="mt-1 text-section">AI assistant</h2>
 		<p class="mt-1 max-w-3xl text-muted">The assistant behind Ask AI. It needs one provider; web research is an optional extra. Nothing here affects hosting.</p>

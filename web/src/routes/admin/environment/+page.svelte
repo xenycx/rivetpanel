@@ -5,6 +5,7 @@
 	import type { EnvVar, EnvView } from '$lib/api/admin';
 	import { confirmDialog } from '$lib/ui/dialogs.svelte';
 	import { toast } from '$lib/ui/toast.svelte';
+	import { restartConfirm, restartPanel } from '$lib/restart';
 	import BytesField from '$lib/components/BytesField.svelte';
 	import Icon from '$lib/components/ui/Icon.svelte';
 	import Notice from '$lib/components/ui/Notice.svelte';
@@ -84,6 +85,14 @@
 	};
 	const shown = $derived(editable.filter(matches));
 	const groups = $derived((view?.groups ?? []).map((g) => ({ name: g, vars: shown.filter((v) => v.group === g) })).filter((g) => g.vars.length));
+	// Groups most panels tune stay open; the rest start collapsed unless a
+	// search or filter is active, or one of their variables is set here,
+	// changed or waiting for a restart.
+	const common = new Set(['Capacity and limits', 'Backups', 'Published ports']);
+	let opened = $state<Record<string, boolean>>({});
+	const isOpen = (g: { name: string; vars: EnvVar[] }) =>
+		opened[g.name] ?? (common.has(g.name) || find.trim() !== '' || show !== 'all' || g.vars.some((v) => v.override || v.pending || changed(v) || flash === v.name));
+	const managedPage: Record<string, string> = { '/admin/settings': 'Panel settings', '/admin/settings#limits': 'Panel settings → Default limits', '/admin/logs': 'Logs and retention' };
 
 	async function save() {
 		if (!dirty.length) return;
@@ -118,31 +127,15 @@
 	}
 
 	async function restart() {
-		const ok = await confirmDialog({
-			title: 'Restart RivetPanel now?',
-			body: 'The panel exits and your service manager (systemd, or Docker’s restart policy) starts it again with the saved values. The page is unavailable for a few seconds. Bots keep running.\nIf nothing starts it again, the panel stays down until you start it yourself.',
-			confirmLabel: 'Restart panel',
-			tone: 'danger'
-		});
-		if (!ok) return;
+		if (!(await confirmDialog(restartConfirm))) return;
 		const before = view?.started_at_ms;
+		restarting = true;
 		try {
-			await api('POST', '/admin/environment/restart');
+			await restartPanel();
 		} catch (e) {
+			restarting = false;
 			error = e instanceof ApiError ? e.message : 'The restart could not be requested.';
 			return;
-		}
-		restarting = true;
-		let sawDown = false;
-		for (let i = 0; i < 90; i++) {
-			await new Promise((r) => setTimeout(r, 1000));
-			try {
-				const r = await fetch('/api/v1/healthz', { cache: 'no-store' });
-				if (r.ok && sawDown) break;
-				if (!r.ok) sawDown = true;
-			} catch {
-				sawDown = true;
-			}
 		}
 		await load();
 		restarting = false;
@@ -202,8 +195,12 @@
 
 	<div class="mt-5 grid gap-6">
 		{#each groups as g (g.name)}
+			{@const open = isOpen(g)}
 			<section aria-labelledby="g-{g.name}">
-				<h3 id="g-{g.name}" class="eyebrow mb-2">{g.name}</h3>
+				<h3 id="g-{g.name}" class="eyebrow mb-2">
+					<button class="flex items-center gap-1.5 hover:text-ink" aria-expanded={open} onclick={() => (opened = { ...opened, [g.name]: !open })}><Icon name={open ? 'chevronDown' : 'chevronRight'} size={12} />{g.name}<span class="font-normal normal-case">· {g.vars.length}</span></button>
+				</h3>
+				{#if open}
 				<ul class="list-card">
 					{#each g.vars as v (v.name)}
 						{@const val = current(v)}
@@ -255,6 +252,7 @@
 						</li>
 					{/each}
 				</ul>
+				{/if}
 			</section>
 		{:else}
 			<p class="card px-4 py-6 text-center text-muted">No variable matches.</p>
@@ -266,7 +264,7 @@
 			<button class="flex items-center gap-1.5" aria-expanded={showFixed} onclick={() => (showFixed = !showFixed)}><Icon name={showFixed ? 'chevronDown' : 'chevronRight'} size={14} />Not editable here</button>
 			<span class="pill">{fixed.length}</span>
 		</h3>
-		<p class="mt-1 max-w-3xl text-small text-muted">Read before the database opens, or able to lock the panel out or widen what it may do to the host, so they stay in the environment file. Sign-in providers and the public address live on Panel settings.</p>
+		<p class="mt-1 max-w-3xl text-small text-muted">Read before the database opens, or able to lock the panel out or widen what it may do to the host, so they stay in the environment file. Sign-in providers, the public address and default limits live on Panel settings, and retention on Logs and retention; there the panel's value is used and the environment file is the fallback for limits and retention.</p>
 		{#if showFixed}
 			<ul class="list-card mt-3">
 				{#each fixed as v (v.name)}
@@ -277,7 +275,7 @@
 						</div>
 						<div class="min-w-0 text-small">
 							<p class="font-mono break-all">{v.secret ? (v.set ? 'set' : 'not set') : v.value === '' ? (v.default ? `${v.default} (default)` : 'not set') : v.value}</p>
-							<p class="text-muted">{#if v.managed}<a class="link" href={v.managed}>Edit under Panel settings</a>{:else}Change it in the environment file{/if}</p>
+							<p class="text-muted">{#if v.managed}<span class="pill mr-1.5">Managed</span><a class="link" href={v.managed}>Edit under {managedPage[v.managed] ?? 'Panel settings'}</a>{:else}Change it in the environment file{/if}</p>
 						</div>
 					</li>
 				{/each}

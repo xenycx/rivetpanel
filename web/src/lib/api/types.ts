@@ -17,7 +17,7 @@ export type PermissionInfo = { name: string; group: 'resources' | 'administratio
 export type EmailVerification = { verified: boolean; withheld: string[]; available: boolean; pending_email: string; sent_at_ms: number };
 
 export type ModuleState = 'off' | 'preview' | 'stable';
-export type Module = { key: string; label: string; description: string; state: ModuleState };
+export type Module = { key: string; label: string; description: string; state: ModuleState; /** The built-in state, before RIVET_MODULES. */ default: ModuleState };
 
 export type Bot = {
 	id: string;

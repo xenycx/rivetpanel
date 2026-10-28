@@ -33,8 +33,26 @@ authoritative current version.
   dashboard, settings, activity, notification categories and backup
   messages.
 
+- **Simpler administration.** The sidebar groups its 20 sections under
+  People, Hosting, Monitoring and Panel; Host and Single sign-on have their
+  own icons. Panel settings is ordered General, Sign-in (with a link to
+  single sign-on), Email, Limits and AI, and the unverified-email
+  permissions sit behind "Advanced". The Environment page collapses less
+  common groups and marks `RIVET_MAX_BOTS_PER_USER`,
+  `RIVET_MAX_SITES_PER_USER`, `RIVET_USER_MEMORY_BYTES` and
+  `RIVET_TELEMETRY_RETENTION` as **Managed** by the page that owns them.
+  Values saved for them earlier on the Environment page keep working as the
+  fallback. Environment help text says "app" where any app is meant.
+
 ### Added
 
+- **Default limits** under Panel settings: apps, bots, game servers, web
+  apps, sites, memory, CPU and team workspaces per account for every
+  workspace, applied at once without a restart. They replace typing
+  `RIVET_MAX_*` values on the Environment page.
+- **Module switches.** Administration → Modules turns each module Off,
+  Preview or On, saves `RIVET_MODULES` and offers a restart, instead of
+  editing the raw string.
 - Moving an app or a site into another workspace, and transferring an app
   (it lands in the recipient's personal workspace), are refused when that
   workspace has no room. Raising an app's CPU is checked like memory.
