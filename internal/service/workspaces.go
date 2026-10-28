@@ -287,7 +287,7 @@ func (s *BotService) moveBot(ctx context.Context, actor domain.User, botID, work
 	if _, err := s.creatableWorkspace(ctx, actor, workspaceID); err != nil {
 		return domain.Bot{}, err
 	}
-	if err := s.checkMove(ctx, b, workspaceID); err != nil {
+	if err := s.checkMove(ctx, actor, b, workspaceID); err != nil {
 		return domain.Bot{}, err
 	}
 	if err := s.Store.SetBotWorkspace(ctx, botID, workspaceID, s.now()); err != nil {

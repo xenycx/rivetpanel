@@ -15,8 +15,10 @@ import (
 // RIVET_MAX_SITES_PER_USER and RIVET_USER_MEMORY_BYTES; unlimited where
 // neither sets one). An administrator can give one workspace its own limits
 // (workspace_quotas) that replace a default field by field. Every member's
-// apps and sites in a workspace count together. Workspaces owned by
-// administrators are exempt.
+// apps and sites in a workspace count together. No workspace is exempt: a
+// built-in administrator is never refused by a limit, whatever workspace
+// they act in, while every other member of that workspace is bounded, even
+// when an administrator owns it.
 //
 // Apps count until they are deleted, running or stopped: a stopped app keeps
 // its place, so a workspace cannot hold many stopped apps and then start
@@ -66,7 +68,7 @@ func (l workspaceLimit) over(after, added int64) bool {
 type WorkspaceLimits struct {
 	Name                                       string // the workspace's, for messages
 	Apps, Bots, Games, Web, Sites, Memory, CPU workspaceLimit
-	Exempt                                     bool // owned by an administrator
+	Exempt                                     bool // the actor is a built-in administrator; nothing refuses them
 }
 
 func (l WorkspaceLimits) unlimited() bool {
@@ -124,17 +126,10 @@ func (s *BotService) LimitDefaults(ctx context.Context) (LimitDefaults, error) {
 	return d, nil
 }
 
-// workspaceLimits resolves a workspace's limits: its own where they set a
-// field, else the panel default.
-func (s *BotService) workspaceLimits(ctx context.Context, w domain.Workspace) (WorkspaceLimits, error) {
-	owner, err := s.Store.GetUserByID(ctx, w.OwnerID)
-	if err != nil {
-		return WorkspaceLimits{}, err
-	}
-	none := workspaceLimit{Max: -1}
-	if owner.IsAdmin() {
-		return WorkspaceLimits{Name: w.Name, Exempt: true, Apps: none, Bots: none, Games: none, Web: none, Sites: none, Memory: none, CPU: none}, nil
-	}
+// resolveLimits resolves a workspace's limits: its own where they set a
+// field, else the panel default. It never exempts anyone; the read views
+// (quotaView) show these limits whoever looks.
+func (s *BotService) resolveLimits(ctx context.Context, w domain.Workspace) (WorkspaceLimits, error) {
 	q, err := s.Store.GetWorkspaceQuota(ctx, w.ID)
 	if err != nil && !errors.Is(err, domain.ErrNotFound) {
 		return WorkspaceLimits{}, err
@@ -153,6 +148,17 @@ func (s *BotService) workspaceLimits(ctx context.Context, w domain.Workspace) (W
 		Memory: limitOf(q.MemoryBytes, d.Memory),
 		CPU:    limitOf(q.NanoCPUs, d.CPU),
 	}, nil
+}
+
+// limitsFor returns the limits that apply to actor acting in w: exempt when
+// actor is a built-in administrator (the name stays, for messages), else the
+// workspace's resolved limits.
+func (s *BotService) limitsFor(ctx context.Context, actor domain.User, w domain.Workspace) (WorkspaceLimits, error) {
+	if actor.IsAdmin() {
+		none := workspaceLimit{Max: -1}
+		return WorkspaceLimits{Name: w.Name, Exempt: true, Apps: none, Bots: none, Games: none, Web: none, Sites: none, Memory: none, CPU: none}, nil
+	}
+	return s.resolveLimits(ctx, w)
 }
 
 func cores(n int64) string { return strconv.FormatFloat(float64(n)/1e9, 'f', -1, 64) }
@@ -224,16 +230,16 @@ func appUsage(b domain.Bot) domain.WorkspaceUsage {
 	return newApp(b.Kind, mem, b.NanoCPUs)
 }
 
-// checkWorkspace refuses growing a workspace by added beyond its limits.
-// Creations repeat the check inside the transaction that inserts the row
-// (createBot, CreateSiteChecked); this early check refuses before any other
-// work is done.
-func (s *BotService) checkWorkspace(ctx context.Context, workspaceID string, added domain.WorkspaceUsage) error {
+// checkWorkspace refuses growing a workspace by added beyond its limits
+// when actor is not a built-in administrator. Creations repeat the check
+// inside the transaction that inserts the row (createBot, CreateSiteChecked);
+// this early check refuses before any other work is done.
+func (s *BotService) checkWorkspace(ctx context.Context, actor domain.User, workspaceID string, added domain.WorkspaceUsage) error {
 	w, err := s.Store.GetWorkspace(ctx, workspaceID)
 	if err != nil {
 		return err
 	}
-	lim, err := s.workspaceLimits(ctx, w)
+	lim, err := s.limitsFor(ctx, actor, w)
 	if err != nil || lim.unlimited() {
 		return err
 	}
@@ -246,14 +252,15 @@ func (s *BotService) checkWorkspace(ctx context.Context, workspaceID string, add
 
 // createBot inserts b and checks its workspace's limits in the same
 // transaction, so concurrent creations cannot both take the last of a
-// limit. extraMemory is memory added with the bot but not yet stored (its
-// add-ons).
-func (s *BotService) createBot(ctx context.Context, b domain.Bot, extraMemory int64) error {
+// limit. actor is the account creating it (a built-in administrator is not
+// checked); extraMemory is memory added with the bot but not yet stored
+// (its add-ons).
+func (s *BotService) createBot(ctx context.Context, actor domain.User, b domain.Bot, extraMemory int64) error {
 	w, err := s.Store.GetWorkspace(ctx, b.WorkspaceID)
 	if err != nil {
 		return err
 	}
-	lim, err := s.workspaceLimits(ctx, w)
+	lim, err := s.limitsFor(ctx, actor, w)
 	if err != nil {
 		return err
 	}
@@ -267,19 +274,20 @@ func (s *BotService) createBot(ctx context.Context, b domain.Bot, extraMemory in
 	})
 }
 
-// siteCheck returns the in-transaction check for one new site in a
-// workspace (nil when it has no limits), after checking once up front.
-func (s *BotService) siteCheck(ctx context.Context, workspaceID string) (func(domain.WorkspaceUsage) error, error) {
+// siteCheck returns the in-transaction check for one new site that actor
+// creates in a workspace (nil when no limit applies to them), after
+// checking once up front.
+func (s *BotService) siteCheck(ctx context.Context, actor domain.User, workspaceID string) (func(domain.WorkspaceUsage) error, error) {
 	w, err := s.Store.GetWorkspace(ctx, workspaceID)
 	if err != nil {
 		return nil, err
 	}
-	lim, err := s.workspaceLimits(ctx, w)
+	lim, err := s.limitsFor(ctx, actor, w)
 	if err != nil || lim.unlimited() {
 		return nil, err
 	}
 	oneSite := domain.WorkspaceUsage{Sites: 1}
-	if err := s.checkWorkspace(ctx, workspaceID, oneSite); err != nil {
+	if err := s.checkWorkspace(ctx, actor, workspaceID, oneSite); err != nil {
 		return nil, err
 	}
 	return func(u domain.WorkspaceUsage) error { return lim.allows(u, oneSite) }, nil
@@ -292,7 +300,8 @@ type QuotaInput struct {
 }
 
 // QuotaView is a workspace's own limits, what it holds and the limits that
-// apply (its own or the panel default; Max < 0 = unlimited).
+// apply (its own or the panel default; Max < 0 = unlimited). It is a read
+// view: it never reports anyone exempt.
 type QuotaView struct {
 	Workspace domain.Workspace
 	Quota     domain.WorkspaceQuota
@@ -311,7 +320,7 @@ func (s *BotService) quotaView(ctx context.Context, w domain.Workspace) (QuotaVi
 	if v.Usage, err = s.Store.WorkspaceUsage(ctx, w.ID); err != nil {
 		return QuotaView{}, err
 	}
-	if v.Limits, err = s.workspaceLimits(ctx, w); err != nil {
+	if v.Limits, err = s.resolveLimits(ctx, w); err != nil {
 		return QuotaView{}, err
 	}
 	v.Defaults, err = s.LimitDefaults(ctx)
@@ -471,22 +480,22 @@ func (s *BotService) SetLimitDefaults(ctx context.Context, actor domain.User, in
 	return s.Store.PutSettings(ctx, set, s.now())
 }
 
-// checkMove refuses moving app b into a workspace with no room for it.
-func (s *BotService) checkMove(ctx context.Context, b domain.Bot, workspaceID string) error {
+// checkMove refuses actor moving app b into a workspace with no room for it.
+func (s *BotService) checkMove(ctx context.Context, actor domain.User, b domain.Bot, workspaceID string) error {
 	if b.WorkspaceID == workspaceID {
 		return nil
 	}
-	return s.checkWorkspace(ctx, workspaceID, appUsage(b))
+	return s.checkWorkspace(ctx, actor, workspaceID, appUsage(b))
 }
 
-// checkTransfer refuses handing b to an account whose personal workspace,
-// where a transferred app goes, has no room for it.
-func (s *BotService) checkTransfer(ctx context.Context, target domain.User, b domain.Bot) error {
+// checkTransfer refuses actor handing b to an account whose personal
+// workspace, where a transferred app goes, has no room for it.
+func (s *BotService) checkTransfer(ctx context.Context, actor, target domain.User, b domain.Bot) error {
 	w, err := s.Store.PersonalWorkspace(ctx, target.ID)
 	if err != nil {
 		return err
 	}
-	if err := s.checkMove(ctx, b, w.ID); err != nil {
+	if err := s.checkMove(ctx, actor, b, w.ID); err != nil {
 		var v *domain.ValidationError
 		if errors.As(err, &v) {
 			return domain.Invalid("that account's personal workspace has no room for this app: " + v.Error())

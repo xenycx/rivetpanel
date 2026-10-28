@@ -6,6 +6,18 @@ authoritative current version.
 
 ## Unreleased
 
+### Changed
+
+- **Limit exemption follows the acting administrator, not the workspace
+  owner.** A built-in administrator is still never refused by a workspace
+  limit, wherever they create, resize, move or transfer. Every other member
+  of a workspace is now bounded by its limits even when an administrator owns
+  it; before, such members were unlimited. `GET /me/capacity` reports
+  `exempt` for the calling account, and the limits views
+  (`GET /workspaces/:id/limits`, the admin quota view) never report an
+  exemption. After upgrading, members of administrator-owned workspaces are
+  bounded by the panel defaults until that workspace gets its own limits.
+
 ## 0.8.0 - 2026-10-28
 
 ### Changed

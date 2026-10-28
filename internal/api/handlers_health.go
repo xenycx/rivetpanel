@@ -90,6 +90,10 @@ func (s *panel) putHealthProbe(c fiber.Ctx) error {
 	return c.JSON(toHealthProbe(p))
 }
 
+// capacity reports the usage and limits that apply to the caller in a
+// workspace. exempt means the caller is a built-in administrator; nothing
+// refuses them. Any other member of the same workspace is bounded, whoever
+// owns it.
 func (s *panel) capacity(c fiber.Ctx) error {
 	u := currentUser(c)
 	cp, err := s.bots.Capacity(c.Context(), u, strings.Clone(c.Query("workspace")))

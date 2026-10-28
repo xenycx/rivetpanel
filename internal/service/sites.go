@@ -672,7 +672,7 @@ func (s *SiteService) Create(ctx context.Context, actor domain.User, in CreateSi
 	// The workspace's site limit is checked here and again inside the
 	// insert's transaction (CreateSiteChecked), so concurrent creations
 	// cannot both take the last site of a limit.
-	check, err := s.Bots.siteCheck(ctx, wsID)
+	check, err := s.Bots.siteCheck(ctx, actor, wsID)
 	if err != nil {
 		return domain.Site{}, err
 	}
@@ -997,7 +997,7 @@ func (s *SiteService) Update(ctx context.Context, actor domain.User, id string, 
 				grow = plusUsage(grow, appUsage(b))
 			}
 		}
-		if err := s.Bots.checkWorkspace(ctx, st.WorkspaceID, grow); err != nil {
+		if err := s.Bots.checkWorkspace(ctx, actor, st.WorkspaceID, grow); err != nil {
 			return domain.Site{}, err
 		}
 	}

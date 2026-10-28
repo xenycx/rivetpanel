@@ -51,6 +51,9 @@ func defaultLimits(d service.LimitDefaults) fiber.Map {
 		"nano_cpus": unlimited(d.CPU), "team_workspaces": d.TeamWorkspaces}
 }
 
+// quotaView is the read view of a workspace's limits. Its exempt field is
+// always false: exemption belongs to the acting account, not the workspace
+// (see the capacity handler), and a read view has no acting account.
 func quotaView(v service.QuotaView) fiber.Map {
 	out := fiber.Map{"workspace": fiber.Map{"id": v.Workspace.ID, "name": v.Workspace.Name, "personal": v.Workspace.Personal},
 		"quota": toQuota(v.Quota), "usage": toUsage(v.Usage), "limits": capacityLimits(v.Limits), "exempt": v.Limits.Exempt,

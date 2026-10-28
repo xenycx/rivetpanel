@@ -196,9 +196,74 @@ func TestWorkspaceQuotaOverridesPanelDefaults(t *testing.T) {
 		t.Fatalf("defaults after clearing %+v", d)
 	}
 
-	// Workspaces owned by administrators are exempt.
+	// A built-in administrator is never refused, whatever workspace they
+	// act in; the exemption is theirs, not their workspace's.
 	for i := range 3 {
 		admin.mustStatus(201, "POST", "/api/v1/bots", bot(fmt.Sprint("r", i)))
+	}
+}
+
+// A workspace owned by an administrator is not exempt: its other members
+// are bounded by its limits, while the administrator acting there is not.
+func TestAdminOwnedWorkspaceMembersAreBounded(t *testing.T) {
+	r := newQuotaRig(t)
+	e := r.e
+	admin := e.user("root@x.io", domain.RoleAdmin)
+	u := e.user("member@x.io", domain.RoleUser)
+	ws := teamWS(admin, "Ops")
+	admin.mustStatus(200, "PUT", quotaPath(ws), map[string]any{"max_bots": 1})
+	admin.mustStatus(200, "PUT", "/api/v1/workspaces/"+ws+"/members", map[string]any{"email": "member@x.io", "role": "developer"})
+
+	app := func(n string) map[string]any {
+		return map[string]any{"name": n, "runtime": "nodejs", "workspace_id": ws}
+	}
+	u.mustStatus(201, "POST", "/api/v1/bots", app("first"))
+	expect400(t, u, "POST", "/api/v1/bots", app("second"), `workspace \"Ops\" allows at most 1 bots and 1 already exist`)
+	admin.mustStatus(201, "POST", "/api/v1/bots", app("admins"))
+	// Still bounded afterwards: the administrator's app counts too.
+	expect400(t, u, "POST", "/api/v1/bots", app("third"), `workspace \"Ops\" allows at most 1 bots and 2 already exist`)
+	if use, _ := e.db.WorkspaceUsage(t.Context(), ws); use.Bots != 2 {
+		t.Fatalf("usage %+v", use)
+	}
+}
+
+// Capacity reports exempt for the acting administrator only; the read view
+// of a workspace's limits never does.
+func TestCapacityExemptIsActorBased(t *testing.T) {
+	r := newQuotaRig(t)
+	e := r.e
+	admin := e.user("root@x.io", domain.RoleAdmin)
+	u := e.user("member@x.io", domain.RoleUser)
+	ws := teamWS(admin, "Ops")
+	admin.mustStatus(200, "PUT", quotaPath(ws), map[string]any{"max_bots": 1})
+	admin.mustStatus(200, "PUT", "/api/v1/workspaces/"+ws+"/members", map[string]any{"email": "member@x.io", "role": "developer"})
+
+	var cp struct {
+		Exempt bool              `json:"exempt"`
+		Limits map[string]*int64 `json:"limits"`
+	}
+	json.Unmarshal(u.mustStatus(200, "GET", "/api/v1/me/capacity?workspace="+ws, nil), &cp)
+	if cp.Exempt || cp.Limits["bots"] == nil || *cp.Limits["bots"] != 1 {
+		t.Fatalf("member capacity %+v", cp)
+	}
+	json.Unmarshal(admin.mustStatus(200, "GET", "/api/v1/me/capacity?workspace="+ws, nil), &cp)
+	if !cp.Exempt || cp.Limits["bots"] != nil {
+		t.Fatalf("admin capacity %+v", cp)
+	}
+	// The administrator's own personal workspace is exempt for them too.
+	json.Unmarshal(admin.mustStatus(200, "GET", "/api/v1/me/capacity", nil), &cp)
+	if !cp.Exempt {
+		t.Fatalf("admin personal capacity %+v", cp)
+	}
+	// The read views show the workspace's limits, never an exemption.
+	for _, c := range []struct {
+		who  *client
+		path string
+	}{{admin, "/api/v1/workspaces/" + ws + "/limits"}, {u, "/api/v1/workspaces/" + ws + "/limits"}, {admin, quotaPath(ws)}} {
+		json.Unmarshal(c.who.mustStatus(200, "GET", c.path, nil), &cp)
+		if cp.Exempt || cp.Limits["bots"] == nil || *cp.Limits["bots"] != 1 {
+			t.Fatalf("%s: %+v", c.path, cp)
+		}
 	}
 }
 

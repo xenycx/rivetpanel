@@ -480,7 +480,7 @@ func (g *GameService) CreateServer(ctx context.Context, actor domain.User, in Ga
 	if err != nil {
 		return domain.Bot{}, err
 	}
-	if err := s.checkWorkspace(ctx, wsID, newApp(domain.KindGame, mem, cpu)); err != nil {
+	if err := s.checkWorkspace(ctx, actor, wsID, newApp(domain.KindGame, mem, cpu)); err != nil {
 		return domain.Bot{}, err
 	}
 	image := spec.Images[0]
@@ -500,7 +500,7 @@ func (g *GameService) CreateServer(ctx context.Context, actor domain.User, in Ga
 	if err := s.createWorkspace(nodeID, b.ID); err != nil {
 		return domain.Bot{}, fmt.Errorf("create workspace: %w", err)
 	}
-	if err := s.createBot(ctx, b, 0); err != nil {
+	if err := s.createBot(ctx, actor, b, 0); err != nil {
 		s.removeWorkspace(nodeID, b.ID)
 		return domain.Bot{}, err
 	}
