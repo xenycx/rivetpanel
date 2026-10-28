@@ -69,13 +69,16 @@ func VerifyEmail(link string, ttlHours int, change bool) Body {
 		"If you did not ask for this, ignore this email; nothing changes.")
 }
 
-// Invitation is sent to the address an administrator invited.
-func Invitation(link, role string, days int) Body {
-	return compose("You are invited to RivetPanel", "You have been invited",
-		[]string{
-			"An administrator invited you to create a " + role + " account on a RivetPanel panel.",
-			"The link is for one account and expires in " + strconv.Itoa(days) + " days.",
-		}, "Create your account", link,
+// Invitation is sent to the address an administrator invited. roleName is
+// the role as shown to people ("Administrator", "User" or a custom role's
+// name); workspace names a team workspace the account joins, or "".
+func Invitation(link, roleName, workspace string, days int) Body {
+	paras := []string{"An administrator invited you to create an account on a RivetPanel panel with the role " + strip(roleName) + "."}
+	if workspace != "" {
+		paras = append(paras, "You will join the workspace "+strip(workspace)+".")
+	}
+	paras = append(paras, "The link is for one account and expires in "+strconv.Itoa(days)+" days.")
+	return compose("You are invited to RivetPanel", "You have been invited", paras, "Create your account", link,
 		"If you were not expecting this, you can ignore the email.")
 }
 

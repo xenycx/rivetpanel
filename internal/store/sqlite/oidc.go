@@ -170,6 +170,7 @@ func (db *DB) CreateUserWithOIDC(ctx context.Context, u domain.User, i domain.OI
 			VALUES (?,?,?,?,?,?,?)`, i.ProviderID, i.Subject, u.ID, nullStr(i.Email), boolInt(i.EmailVerified), i.CreatedAtMS, i.LastLoginAtMS); err != nil {
 			return mapErr(err)
 		}
-		return createPersonalWorkspace(ctx, tx, u)
+		_, err := createPersonalWorkspace(ctx, tx, u)
+		return err
 	})
 }

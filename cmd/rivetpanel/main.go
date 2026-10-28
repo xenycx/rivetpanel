@@ -537,6 +537,7 @@ func serve(log *slog.Logger, logs *logbuf.Buffer) error {
 			PortMin: cfg.PortMin, PortMax: cfg.PortMax, PortPublicBind: cfg.PortPublicBind,
 			MaxBotsPerUser: cfg.MaxBotsPerUser, MaxSitesPerUser: cfg.MaxSitesPerUser, UserMemoryBytes: cfg.UserMemoryBytes, NodeMemoryBytes: cfg.NodeMemoryBytes},
 	}
+	authSvc.Placement = botSvc // invitations pin nodes and join workspaces
 	// OAuth always exists: providers come from the environment or from the
 	// settings page, and can change while the panel runs.
 	oauthSvc := &service.OAuthService{Store: db, Auth: authSvc, Keys: keys, Providers: map[string]oauth.Provider{},

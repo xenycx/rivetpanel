@@ -107,7 +107,7 @@ func (db *DB) CreateUser(ctx context.Context, u domain.User) error {
 		u.ID, u.Email, u.DisplayName, u.AvatarJPEG, u.PasswordHash, u.Role, boolInt(u.Disabled), u.CreatedAtMS, u.UpdatedAtMS, boolInt(u.EmailVerified)); err != nil {
 		return mapErr(err)
 	}
-	if err := createPersonalWorkspace(ctx, tx, u); err != nil {
+	if _, err := createPersonalWorkspace(ctx, tx, u); err != nil {
 		return err
 	}
 	return tx.Commit()
