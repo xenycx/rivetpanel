@@ -145,36 +145,6 @@ func (s *BotService) RemoteFiles(b domain.Bot, what string) (NodeFiles, bool, er
 	return s.NodeFiles, true, nil
 }
 
-// chooseNode resolves the node a new server is created on: this panel's own
-// node unless an administrator picks another eligible one.
-func (s *BotService) chooseNode(ctx context.Context, actor domain.User, nodeID string) (string, error) {
-	if nodeID == "" {
-		nodeID = s.LocalNode
-	}
-	if nodeID != s.LocalNode && !actor.Can(domain.PermNodesManage) {
-		return "", domain.Invalid("only administrators can choose the node for a new server")
-	}
-	if err := s.placeable(ctx, nodeID); err != nil {
-		return "", err
-	}
-	return nodeID, nil
-}
-
-// placeable checks that new servers may be placed on a node.
-func (s *BotService) placeable(ctx context.Context, nodeID string) error {
-	node, err := s.Store.GetNode(ctx, nodeID)
-	if err != nil || !node.Enabled {
-		return domain.Invalid("node is unavailable")
-	}
-	if node.Draining {
-		return domain.Invalid("that node is draining and accepts no new servers")
-	}
-	if node.Transport != "local" && !s.remote(nodeID) {
-		return domain.Invalid("node is unavailable")
-	}
-	return nil
-}
-
 // createWorkspace makes a new server's directory on the panel; servers on
 // remote nodes get theirs on the node at first use.
 func (s *BotService) createWorkspace(nodeID, id string) error {
@@ -430,7 +400,7 @@ func (s *BotService) Create(ctx context.Context, actor domain.User, in CreateBot
 	if err := s.checkWorkspace(ctx, actor, wsID, newApp(in.Kind, mem+addonMem, cpu)); err != nil {
 		return domain.Bot{}, err
 	}
-	nodeID, err := s.chooseNode(ctx, actor, in.NodeID)
+	nodeID, err := s.chooseNode(ctx, actor, wsID, in.NodeID)
 	if err != nil {
 		return domain.Bot{}, err
 	}

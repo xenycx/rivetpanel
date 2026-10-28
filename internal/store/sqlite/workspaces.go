@@ -42,12 +42,12 @@ func (db *DB) CreateWorkspace(ctx context.Context, w domain.Workspace) error {
 	return tx.Commit()
 }
 
-const workspaceCols = `w.id, w.name, w.owner_id, w.personal, w.created_at_ms, w.updated_at_ms`
+const workspaceCols = `w.id, w.name, w.owner_id, w.personal, COALESCE(w.node_id, ''), w.created_at_ms, w.updated_at_ms`
 
 func scanWorkspace(row interface{ Scan(...any) error }, extra ...any) (domain.Workspace, error) {
 	var w domain.Workspace
 	var personal int
-	err := row.Scan(append([]any{&w.ID, &w.Name, &w.OwnerID, &personal, &w.CreatedAtMS, &w.UpdatedAtMS}, extra...)...)
+	err := row.Scan(append([]any{&w.ID, &w.Name, &w.OwnerID, &personal, &w.NodeID, &w.CreatedAtMS, &w.UpdatedAtMS}, extra...)...)
 	w.Personal = personal == 1
 	return w, mapErr(err)
 }
@@ -331,4 +331,21 @@ func (db *DB) ListWorkspaceBots(ctx context.Context, workspaceID string) ([]doma
 		out = append(out, b)
 	}
 	return out, rows.Err()
+}
+
+// SetWorkspaceNode pins a workspace's new apps to a node; "" clears the pin
+// (NULL). Deleting the node clears it too (ON DELETE SET NULL).
+func (db *DB) SetWorkspaceNode(ctx context.Context, id, nodeID string, nowMS int64) error {
+	var node any
+	if nodeID != "" {
+		node = nodeID
+	}
+	res, err := db.ExecContext(ctx, `UPDATE workspaces SET node_id = ?, updated_at_ms = ? WHERE id = ?`, node, nowMS, id)
+	if err != nil {
+		return mapErr(err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return domain.ErrNotFound
+	}
+	return nil
 }

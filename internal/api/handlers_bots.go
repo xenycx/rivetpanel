@@ -35,16 +35,18 @@ func (s *panel) listRuntimes(c fiber.Ctx) error {
 		out = append(out, d)
 	}
 	// Limits on one node: ?bot_id= for an existing server's node, ?node_id=
-	// for a node an administrator places a new server on; else the local
-	// node. Each node's maximums follow its own CPUs and memory.
+	// for a node an account that manages nodes places a new app on, or the
+	// node ?workspace='s new apps are placed on (GET /placement) for anyone
+	// else; else the local node. Each node's maximums follow its own CPUs
+	// and memory.
 	l := s.bots.LimitsFor(c.Context(), "")
 	if id := c.Query("bot_id"); id != "" {
 		var err error
 		if l, err = s.bots.LimitsForBot(c.Context(), currentUser(c), strings.Clone(id)); err != nil {
 			return err
 		}
-	} else if n := c.Query("node_id"); n != "" && currentUser(c).Can(domain.PermNodesManage) {
-		l = s.bots.LimitsFor(c.Context(), strings.Clone(n))
+	} else if n := strings.Clone(c.Query("node_id")); n != "" && (currentUser(c).Can(domain.PermNodesManage) || s.placementAllows(c, n)) {
+		l = s.bots.LimitsFor(c.Context(), n)
 	}
 	if l.PortMin == 0 && l.PortMax == 0 {
 		l.PortMin, l.PortMax = 20000, 29999
@@ -204,6 +206,10 @@ func (s *panel) getBot(c fiber.Ctx) error {
 		return err
 	}
 	d := s.viewBot(c, b)
+	if n, err := s.bots.Store.GetNode(c.Context(), b.NodeID); err == nil {
+		online := s.bots.NodeOnline(n.ID)
+		d.NodeName, d.NodeOnline = n.Name, &online
+	}
 	if tags, favs, err := s.bots.TagsAndFavorites(c.Context(), currentUser(c)); err == nil {
 		d.Tags, d.Favorite = tags[b.ID], favs[b.ID]
 	}

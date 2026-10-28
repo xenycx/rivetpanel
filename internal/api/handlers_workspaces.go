@@ -16,7 +16,8 @@ type workspaceDTO struct {
 	OwnerID      string `json:"owner_id"`
 	OwnerEmail   string `json:"owner_email"`
 	Personal     bool   `json:"personal"`
-	Role         string `json:"role"` // the caller's role ("" for administrators who are not members)
+	NodeID       string `json:"node_id"` // node new apps are pinned to ("" = panel default)
+	Role         string `json:"role"`    // the caller's role ("" for administrators who are not members)
 	Members      int    `json:"members"`
 	Bots         int    `json:"bots"`
 	RunningBots  int    `json:"running_bots"`
@@ -30,7 +31,7 @@ type workspaceDTO struct {
 }
 
 func toWorkspace(w domain.WorkspaceSummary) workspaceDTO {
-	return workspaceDTO{w.ID, w.Name, w.OwnerID, w.OwnerEmail, w.Personal, w.Role, w.Members, w.Bots, w.RunningBots,
+	return workspaceDTO{w.ID, w.Name, w.OwnerID, w.OwnerEmail, w.Personal, w.NodeID, w.Role, w.Members, w.Bots, w.RunningBots,
 		w.MemoryBytes, w.Sites, w.LastActiveMS, w.CreatedAtMS, nil}
 }
 

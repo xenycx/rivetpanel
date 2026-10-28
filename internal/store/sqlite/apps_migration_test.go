@@ -52,14 +52,14 @@ func TestWebAppsMigrationKeepsBotsAndSites(t *testing.T) {
 		return
 	}
 	seed(t, db)
-	w, _ := db.PersonalWorkspace(ctx, "u1")
+	wsID := personalWorkspaceID(t, db, "u1")
 	exec(`UPDATE bots SET kind = 'game', build_command = 'make', jvm_args = '-Xmx1G', container_id = 'c2' WHERE id = 'b2'`)
 	exec(`INSERT INTO bot_env_vars (bot_id,name,ciphertext,nonce,key_id,created_at_ms,updated_at_ms) VALUES ('b1','TOKEN',zeroblob(16),zeroblob(12),'k',1,1),('b2','A',zeroblob(16),zeroblob(12),'k',1,1)`)
 	exec(`INSERT INTO github_repos (bot_id,token_user_id,full_name,branch,webhook_secret_ciphertext,webhook_secret_nonce,webhook_secret_key_id,created_at_ms,updated_at_ms)
 		VALUES ('b1','u1','me/repo','main',zeroblob(16),zeroblob(12),'k',1,1)`)
 	exec(`INSERT INTO operations (id,bot_id,kind,trigger,status,created_at_ms) VALUES ('o1','b1','deploy','push','succeeded',1),('o2','b2','build','start','failed',1)`)
-	exec(`INSERT INTO sites (id,workspace_id,owner_id,bot_id,mode,name,slug,created_at_ms,updated_at_ms) VALUES ('s1',?,'u1','b1','page','Page','page',1,2)`, w.ID)
-	exec(`INSERT INTO sites (id,workspace_id,owner_id,name,slug,created_at_ms,updated_at_ms) VALUES ('s2',?,'u1','Blog','blog',1,2)`, w.ID)
+	exec(`INSERT INTO sites (id,workspace_id,owner_id,bot_id,mode,name,slug,created_at_ms,updated_at_ms) VALUES ('s1',?,'u1','b1','page','Page','page',1,2)`, wsID)
+	exec(`INSERT INTO sites (id,workspace_id,owner_id,name,slug,created_at_ms,updated_at_ms) VALUES ('s2',?,'u1','Blog','blog',1,2)`, wsID)
 	exec(`INSERT INTO site_releases (id,site_id,source,files,bytes,created_at_ms) VALUES ('r1','s2','upload',1,1,1)`)
 	exec(`UPDATE sites SET current_release = 'r1' WHERE id = 's2'`)
 

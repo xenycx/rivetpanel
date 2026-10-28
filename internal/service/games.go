@@ -455,7 +455,12 @@ func (g *GameService) CreateServer(ctx context.Context, actor domain.User, in Ga
 			return domain.Bot{}, domain.Invalid("unknown image")
 		}
 	}
-	nodeID, err := s.chooseNode(ctx, actor, in.NodeID)
+	// The workspace comes first: it decides where the server is placed.
+	wsID, err := s.creatableWorkspace(ctx, actor, in.WorkspaceID)
+	if err != nil {
+		return domain.Bot{}, err
+	}
+	nodeID, err := s.chooseNode(ctx, actor, wsID, in.NodeID)
 	if err != nil {
 		return domain.Bot{}, err
 	}
@@ -475,10 +480,6 @@ func (g *GameService) CreateServer(ctx context.Context, actor domain.User, in Ga
 	}
 	if cpu < lim.MinNanoCPUs || cpu > lim.MaxNanoCPUs {
 		return domain.Bot{}, domain.Invalid(fmt.Sprintf("CPU must be between %.2f and %.2f cores on this node", float64(lim.MinNanoCPUs)/1e9, float64(lim.MaxNanoCPUs)/1e9))
-	}
-	wsID, err := s.creatableWorkspace(ctx, actor, in.WorkspaceID)
-	if err != nil {
-		return domain.Bot{}, err
 	}
 	if err := s.checkWorkspace(ctx, actor, wsID, newApp(domain.KindGame, mem, cpu)); err != nil {
 		return domain.Bot{}, err
