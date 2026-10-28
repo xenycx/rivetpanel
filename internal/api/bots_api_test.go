@@ -75,6 +75,7 @@ func newEnv(t *testing.T) *env {
 	rec := &recorder{}
 	bs := &service.BotService{Notifier: rec, Store: db, Catalog: cat, Keys: keys, Workspaces: wsm, LocalNode: domain.LocalNodeID,
 		Limits: service.Limits{MinMemoryBytes: 32 << 20, MaxMemoryBytes: 1 << 30, MinNanoCPUs: 50_000_000, MaxNanoCPUs: 2e9}}
+	as.Placement = bs
 	src, bus := newWSSource(), events.NewBus()
 	bs.Bus = bus
 	csvc := &console.Service{Src: src, Bus: bus, Opts: console.Options{AccessRecheck: 50 * time.Millisecond, StatusPoll: 20 * time.Millisecond}}

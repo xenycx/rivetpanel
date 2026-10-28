@@ -119,6 +119,8 @@ var auditRoutes = map[string]auditRoute{
 	"DELETE /api/v1/admin/roles/:rid":                         {"admin.role_delete", param("rid")},
 	"PATCH /api/v1/users/:id":                                 {"admin.user_update", param("id")},
 	"DELETE /api/v1/users/:id":                                {"admin.user_delete", param("id")},
+	"POST /api/v1/admin/account-invites":                      {"admin.invite_create", bodyField("email")},
+	"DELETE /api/v1/admin/account-invites/:id":                {"admin.invite_revoke", param("id")},
 	"PATCH /api/v1/admin/workspaces/:wid":                     {"admin.workspace_rename", param("wid")},
 	"POST /api/v1/admin/workspaces/:wid/delete":               {"admin.workspace_delete", param("wid")},
 	"PUT /api/v1/admin/workspaces/:wid/quota":                 {"admin.workspace_quota_set", nil},

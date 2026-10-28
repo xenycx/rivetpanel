@@ -30,12 +30,23 @@ type Session struct {
 	User        domain.User
 }
 
+// Placement answers the questions an invitation's setup asks of the app
+// service: whether a node accepts new apps and whether the actor
+// administers a team workspace. BotService implements it.
+type Placement interface {
+	NodePlaceable(ctx context.Context, nodeID string) error
+	WorkspaceAdmin(ctx context.Context, actor domain.User, workspaceID string) error
+}
+
 // AuthService handles accounts and sessions.
 type AuthService struct {
 	Store  Store
 	Hasher *auth.Hasher
 	TTL    time.Duration
 	Now    func() time.Time
+	// Placement validates the node pin and workspace join of an invitation;
+	// without it those parts of an invitation are refused.
+	Placement Placement
 
 	dummyOnce sync.Once
 	dummyHash string
@@ -111,10 +122,35 @@ func accountInviteHash(token string) ([]byte, error) {
 	return auth.HashToken(token), nil
 }
 
-func (s *AuthService) CreateAccountInvite(ctx context.Context, actor domain.User, email, role string, days int) (domain.AccountInvite, string, error) {
-	if !actor.Can(domain.PermUsersManage) || (role == domain.RoleAdmin && !actor.IsAdmin()) {
+// AccountInviteInput describes an invitation: who may register (Email, or
+// anyone with the link), the role the account gets ("admin", "user" or a
+// custom role id), how long the link lives, and the account's optional
+// setup: limits for its personal workspace, the node that workspace is
+// pinned to, and a team workspace it joins as WorkspaceRole.
+type AccountInviteInput struct {
+	Email, Role   string
+	Days          int
+	Quota         *QuotaInput
+	NodeID        string
+	WorkspaceID   string
+	WorkspaceRole string
+}
+
+// MaxInviteDays bounds an invitation's life.
+const MaxInviteDays = 30
+
+// CreateAccountInvite stores an invitation and returns it with its one-time
+// token. What the actor may hand out mirrors the rest of administration:
+// the administrator role only from a built-in administrator; the user role
+// and custom roles only when the actor holds everything they grant; limits
+// only from a built-in administrator (as SetWorkspaceQuota); a node pin with
+// nodes.manage and a node that accepts apps; a team workspace the actor
+// administers.
+func (s *AuthService) CreateAccountInvite(ctx context.Context, actor domain.User, in AccountInviteInput) (domain.AccountInvite, string, error) {
+	if !actor.Can(domain.PermUsersManage) || (in.Role == domain.RoleAdmin && !actor.IsAdmin()) {
 		return domain.AccountInvite{}, "", domain.ErrForbidden
 	}
+	email := in.Email
 	if email != "" {
 		var err error
 		email, err = NormalizeEmail(email)
@@ -122,12 +158,13 @@ func (s *AuthService) CreateAccountInvite(ctx context.Context, actor domain.User
 			return domain.AccountInvite{}, "", err
 		}
 	}
-	if role != domain.RoleAdmin && role != domain.RoleUser {
-		return domain.AccountInvite{}, "", domain.Invalid("role must be admin or user")
-	}
-	// A delegated account manager may only hand out the built-in user role
-	// when it holds everything the role currently grants (as for AssignRole).
-	if role == domain.RoleUser {
+	v := domain.AccountInvite{Email: email, CreatedBy: actor.ID, CreatedByEmail: actor.Email}
+	switch in.Role {
+	case domain.RoleAdmin:
+		v.Role = domain.RoleAdmin
+	case domain.RoleUser:
+		// A delegated account manager may only hand out the built-in user
+		// role when it holds everything the role currently grants.
 		perms, err := userRolePermissions(ctx, s.Store)
 		if err != nil {
 			return domain.AccountInvite{}, "", err
@@ -135,9 +172,72 @@ func (s *AuthService) CreateAccountInvite(ctx context.Context, actor domain.User
 		if err := grantable(actor, perms); err != nil {
 			return domain.AccountInvite{}, "", err
 		}
+		v.Role = domain.RoleUser
+	case "":
+		return domain.AccountInvite{}, "", domain.Invalid("role must be admin, user or a role id")
+	default:
+		r, err := s.Store.GetRole(ctx, in.Role)
+		if errors.Is(err, domain.ErrNotFound) || (err == nil && r.System) {
+			return domain.AccountInvite{}, "", domain.Invalid("unknown role")
+		}
+		if err != nil {
+			return domain.AccountInvite{}, "", err
+		}
+		if err := grantable(actor, r.Permissions); err != nil {
+			return domain.AccountInvite{}, "", err
+		}
+		v.Role, v.RoleID, v.RoleName = domain.RoleUser, r.ID, r.Name
 	}
-	if days < 1 || days > 14 {
-		return domain.AccountInvite{}, "", domain.Invalid("invitation expiry must be between 1 and 14 days")
+	if v.RoleName == "" {
+		v.RoleName = roleDisplayName(ctx, s.Store, v.Role)
+	}
+	if in.Quota != nil {
+		if !actor.IsAdmin() {
+			return domain.AccountInvite{}, "", domain.ErrForbidden
+		}
+		if err := validateQuota(*in.Quota); err != nil {
+			return domain.AccountInvite{}, "", err
+		}
+		q := domain.WorkspaceQuota{MaxApps: in.Quota.MaxApps, MaxBots: in.Quota.MaxBots, MaxGames: in.Quota.MaxGames,
+			MaxWebApps: in.Quota.MaxWebApps, MaxSites: in.Quota.MaxSites, MemoryBytes: in.Quota.MemoryBytes, NanoCPUs: in.Quota.NanoCPUs}
+		if !q.Empty() {
+			v.Quota = &q
+		}
+	}
+	if in.NodeID != "" {
+		if !actor.Can(domain.PermNodesManage) {
+			return domain.AccountInvite{}, "", domain.ErrForbidden
+		}
+		if s.Placement == nil {
+			return domain.AccountInvite{}, "", domain.Invalid("node placement is not available")
+		}
+		if err := s.Placement.NodePlaceable(ctx, in.NodeID); err != nil {
+			return domain.AccountInvite{}, "", err
+		}
+		n, err := s.Store.GetNode(ctx, in.NodeID)
+		if err != nil {
+			return domain.AccountInvite{}, "", err
+		}
+		v.NodeID, v.NodeName = n.ID, n.Name
+	}
+	if in.WorkspaceID != "" {
+		if !domain.ValidWorkspaceRole(in.WorkspaceRole) {
+			return domain.AccountInvite{}, "", domain.Invalid("workspace role must be admin, developer or viewer")
+		}
+		if s.Placement == nil {
+			return domain.AccountInvite{}, "", domain.Invalid("workspace membership is not available")
+		}
+		if err := s.Placement.WorkspaceAdmin(ctx, actor, in.WorkspaceID); err != nil {
+			return domain.AccountInvite{}, "", err
+		}
+		w, err := s.Store.GetWorkspace(ctx, in.WorkspaceID)
+		if err != nil {
+			return domain.AccountInvite{}, "", err
+		}
+		v.WorkspaceID, v.WorkspaceName, v.WorkspaceRole = w.ID, w.Name, in.WorkspaceRole
+	}
+	if in.Days < 1 || in.Days > MaxInviteDays {
+		return domain.AccountInvite{}, "", domain.Invalid("invitation expiry must be between 1 and 30 days")
 	}
 	raw := make([]byte, 32)
 	if _, err := rand.Read(raw); err != nil {
@@ -145,11 +245,23 @@ func (s *AuthService) CreateAccountInvite(ctx context.Context, actor domain.User
 	}
 	token := accountInvitePrefix + base64.RawURLEncoding.EncodeToString(raw)
 	now := s.now()
-	v := domain.AccountInvite{ID: uuid.NewString(), Email: email, Role: role, CreatedBy: actor.ID, CreatedAtMS: now.UnixMilli(), ExpiresAtMS: now.Add(time.Duration(days) * 24 * time.Hour).UnixMilli()}
+	v.ID, v.CreatedAtMS, v.ExpiresAtMS = uuid.NewString(), now.UnixMilli(), now.Add(time.Duration(in.Days)*24*time.Hour).UnixMilli()
 	if err := s.Store.InsertAccountInvite(ctx, v, auth.HashToken(token)); err != nil {
 		return domain.AccountInvite{}, "", err
 	}
 	return v, token, nil
+}
+
+// roleDisplayName is a built-in role's name as shown to people: the stored
+// row's name, else the factory name.
+func roleDisplayName(ctx context.Context, store roleReader, role string) string {
+	if r, err := store.GetRole(ctx, role); err == nil && r.Name != "" {
+		return r.Name
+	}
+	if role == domain.RoleAdmin {
+		return "Administrator"
+	}
+	return "User"
 }
 
 func (s *AuthService) ListAccountInvites(ctx context.Context, actor domain.User) ([]domain.AccountInvite, error) {
@@ -167,38 +279,45 @@ func (s *AuthService) PreviewAccountInvite(ctx context.Context, token string) (d
 	return s.Store.AccountInviteByHash(ctx, h, s.now().UnixMilli())
 }
 
-func (s *AuthService) RegisterWithInvite(ctx context.Context, token, email, password string) (domain.User, error) {
+// RegisterWithInvite creates the invited account. The store applies the
+// invitation's role and setup in the same transaction (the returned user is
+// read back so it carries its custom role); the used invitation is returned
+// for the audit trail.
+func (s *AuthService) RegisterWithInvite(ctx context.Context, token, email, password string) (domain.User, domain.AccountInvite, error) {
 	h, err := accountInviteHash(token)
 	if err != nil {
-		return domain.User{}, err
+		return domain.User{}, domain.AccountInvite{}, err
 	}
 	v, err := s.Store.AccountInviteByHash(ctx, h, s.now().UnixMilli())
 	if err != nil {
-		return domain.User{}, err
+		return domain.User{}, domain.AccountInvite{}, err
 	}
 	email, err = NormalizeEmail(email)
 	if err != nil {
-		return domain.User{}, err
+		return domain.User{}, domain.AccountInvite{}, err
 	}
 	if v.Email != "" && !strings.EqualFold(v.Email, email) {
-		return domain.User{}, domain.Invalid("this invitation was sent to a different email address")
+		return domain.User{}, domain.AccountInvite{}, domain.Invalid("this invitation was sent to a different email address")
 	}
 	if err := validatePassword(password); err != nil {
-		return domain.User{}, err
+		return domain.User{}, domain.AccountInvite{}, err
 	}
 	hash, err := s.Hasher.Hash(ctx, password)
 	if err != nil {
-		return domain.User{}, err
+		return domain.User{}, domain.AccountInvite{}, err
 	}
 	now := s.now().UnixMilli()
 	u := domain.User{ID: uuid.NewString(), Email: email, PasswordHash: hash, Role: v.Role, CreatedAtMS: now, UpdatedAtMS: now}
 	if err := s.Store.UseAccountInvite(ctx, h, u, now); err != nil {
 		if errors.Is(err, domain.ErrConflict) {
-			return domain.User{}, domain.Invalid("email is already registered")
+			return domain.User{}, domain.AccountInvite{}, domain.Invalid("email is already registered")
 		}
-		return domain.User{}, err
+		return domain.User{}, domain.AccountInvite{}, err
 	}
-	return u, nil
+	if stored, err := s.Store.GetUserByID(ctx, u.ID); err == nil {
+		u = stored
+	}
+	return u, v, nil
 }
 
 func (s *AuthService) DeleteAccountInvite(ctx context.Context, actor domain.User, id string) error {

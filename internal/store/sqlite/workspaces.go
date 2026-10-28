@@ -12,16 +12,16 @@ import (
 )
 
 // createPersonalWorkspace gives a new account its personal workspace, in the
-// transaction that creates the account.
-func createPersonalWorkspace(ctx context.Context, tx *sql.Tx, u domain.User) error {
+// transaction that creates the account, and returns the workspace id.
+func createPersonalWorkspace(ctx context.Context, tx *sql.Tx, u domain.User) (string, error) {
 	id := uuid.NewString()
 	if _, err := tx.ExecContext(ctx, `INSERT INTO workspaces (id, name, owner_id, personal, created_at_ms, updated_at_ms)
 		VALUES (?, 'Personal', ?, 1, ?, ?)`, id, u.ID, u.CreatedAtMS, u.CreatedAtMS); err != nil {
-		return mapErr(err)
+		return "", mapErr(err)
 	}
 	_, err := tx.ExecContext(ctx, `INSERT INTO workspace_members (workspace_id, user_id, role, created_at_ms, updated_at_ms)
 		VALUES (?, ?, 'owner', ?, ?)`, id, u.ID, u.CreatedAtMS, u.CreatedAtMS)
-	return mapErr(err)
+	return id, mapErr(err)
 }
 
 // CreateWorkspace inserts a team workspace with its owner as the first member.
@@ -75,7 +75,7 @@ func (db *DB) PersonalWorkspace(ctx context.Context, userID string) (domain.Work
 		return domain.Workspace{}, err
 	}
 	defer tx.Rollback()
-	if err := createPersonalWorkspace(ctx, tx, u); err != nil && !errors.Is(err, domain.ErrConflict) {
+	if _, err := createPersonalWorkspace(ctx, tx, u); err != nil && !errors.Is(err, domain.ErrConflict) {
 		return domain.Workspace{}, err
 	}
 	if err := tx.Commit(); err != nil {
