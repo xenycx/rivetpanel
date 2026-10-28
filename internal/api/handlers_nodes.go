@@ -109,8 +109,12 @@ func (s *panel) listNodes(c fiber.Ctx) error {
 	}
 	type item struct {
 		nodeDTO
-		Latest *sampleDTO `json:"latest,omitempty"`
+		// Default marks the node new apps go to when their workspace pins
+		// none (PUT /nodes/default; the local host when unset).
+		Default bool       `json:"default"`
+		Latest  *sampleDTO `json:"latest,omitempty"`
 	}
+	defaultNode := s.defaultNodeID(c)
 	out := make([]item, 0, len(nodes))
 	for _, n := range nodes {
 		count, err := s.nodes.CountNodeBots(c.Context(), n.ID)
@@ -129,7 +133,7 @@ func (s *panel) listNodes(c fiber.Ctx) error {
 			l := s.bots.LimitsFor(c.Context(), n.ID)
 			base.Limits = &nodeLimitsDTO{MaxMemoryBytes: l.MaxMemoryBytes, MaxNanoCPUs: l.MaxNanoCPUs}
 		}
-		it := item{nodeDTO: base}
+		it := item{nodeDTO: base, Default: n.ID == defaultNode}
 		if rows, err := s.nodes.ListTelemetry(c.Context(), n.ID, 0, 1); err == nil && len(rows) == 1 {
 			d := toSample(rows[0])
 			it.Latest = &d

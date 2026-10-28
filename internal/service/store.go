@@ -132,6 +132,7 @@ type Store interface {
 	RemoveWorkspaceMember(ctx context.Context, workspaceID, userID string) error
 	SetBotWorkspace(ctx context.Context, botID, workspaceID string, nowMS int64) error
 	ListWorkspaceBots(ctx context.Context, workspaceID string) ([]domain.Bot, error)
+	SetWorkspaceNode(ctx context.Context, id, nodeID string, nowMS int64) error
 
 	ListEnv(ctx context.Context, botID string) ([]domain.EnvVar, error)
 	UpsertEnv(ctx context.Context, botID string, vars []domain.EnvVar, nowMS int64) error

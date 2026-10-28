@@ -24,12 +24,12 @@ func TestWorkspaceQuotasMigrationOnPopulatedDatabase(t *testing.T) {
 		t.Fatal(err)
 	}
 	seed(t, db)
-	w, _ := db.PersonalWorkspace(ctx, "u1")
+	wsID := personalWorkspaceID(t, db, "u1")
 	for _, q := range []string{
-		`UPDATE bots SET workspace_id = '` + w.ID + `'`,
+		`UPDATE bots SET workspace_id = '` + wsID + `'`,
 		`UPDATE bots SET kind = 'game' WHERE id = 'b2'`,
 		`UPDATE bots SET memory_bytes = 100, nano_cpus = 500000000 WHERE id = 'b1'`,
-		`INSERT INTO sites (id,workspace_id,owner_id,name,slug,created_at_ms,updated_at_ms) VALUES ('s1','` + w.ID + `','u1','Blog','blog',1,2)`,
+		`INSERT INTO sites (id,workspace_id,owner_id,name,slug,created_at_ms,updated_at_ms) VALUES ('s1','` + wsID + `','u1','Blog','blog',1,2)`,
 		`INSERT INTO user_quotas (user_id,max_apps,max_bots,max_games,max_web_apps,max_sites,memory_bytes,updated_by,created_at_ms,updated_at_ms)
 			VALUES ('u1',NULL,1,0,NULL,2,1073741824,'u3',10,20)`,
 	} {
@@ -44,7 +44,7 @@ func TestWorkspaceQuotasMigrationOnPopulatedDatabase(t *testing.T) {
 	if err := db.QueryRowContext(ctx, `SELECT count(*) FROM sqlite_master WHERE name = 'user_quotas'`).Scan(&left); err != nil || left != 0 {
 		t.Fatalf("user_quotas still exists: %d %v", left, err)
 	}
-	q, err := db.GetWorkspaceQuota(ctx, w.ID)
+	q, err := db.GetWorkspaceQuota(ctx, wsID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -56,7 +56,7 @@ func TestWorkspaceQuotasMigrationOnPopulatedDatabase(t *testing.T) {
 	if err != nil || len(all) != 1 {
 		t.Fatalf("quota rows after migration: %d %v", len(all), err)
 	}
-	u, err := db.WorkspaceUsage(ctx, w.ID)
+	u, err := db.WorkspaceUsage(ctx, wsID)
 	if err != nil || u != (domain.WorkspaceUsage{Apps: 2, Bots: 1, Games: 1, Sites: 1, Memory: 101, CPU: 500000001}) {
 		t.Fatalf("usage %+v %v", u, err)
 	}

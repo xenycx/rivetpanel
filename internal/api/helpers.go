@@ -62,10 +62,13 @@ func toUser(u domain.User) userDTO {
 }
 
 type botDTO struct {
-	ID                 string   `json:"id"`
-	OwnerID            string   `json:"owner_id"`
-	WorkspaceID        string   `json:"workspace_id"`
-	NodeID             string   `json:"node_id"`
+	ID          string `json:"id"`
+	OwnerID     string `json:"owner_id"`
+	WorkspaceID string `json:"workspace_id"`
+	NodeID      string `json:"node_id"`
+	// NodeName and NodeOnline describe the app's node (bot detail only).
+	NodeName           string   `json:"node_name,omitempty"`
+	NodeOnline         *bool    `json:"node_online,omitempty"`
 	Name               string   `json:"name"`
 	Runtime            string   `json:"runtime"`
 	ImageRef           string   `json:"image_ref"`

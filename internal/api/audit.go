@@ -121,6 +121,8 @@ var auditRoutes = map[string]auditRoute{
 	"DELETE /api/v1/users/:id":                                {"admin.user_delete", param("id")},
 	"PUT /api/v1/admin/workspaces/:wid/quota":                 {"admin.workspace_quota_set", nil},
 	"DELETE /api/v1/admin/workspaces/:wid/quota":              {"admin.workspace_quota_clear", nil},
+	"PUT /api/v1/admin/workspaces/:wid/node":                  {"admin.workspace_node", param("wid")},
+	"PUT /api/v1/nodes/default":                               {"admin.node_default", bodyField("node_id")},
 	"PUT /api/v1/admin/limits":                                {"admin.limits", nil},
 	"PUT /api/v1/admin/settings":                              {"admin.settings", nil},
 	"POST /api/v1/admin/settings/mail/test":                   {"admin.mail_test", nil},

@@ -502,6 +502,7 @@ func (s *panel) routes(v1 fiber.Router) {
 		authed.Get("/me/identities", s.listIdentities)
 	}
 	authed.Get("/me/capacity", s.capacity)
+	authed.Get("/placement", s.placement)
 	authed.Get("/me/sftp", s.sftpInfo)
 	authed.Get("/me/api-keys", s.listAPIKeys)
 	authed.Post("/me/api-keys", s.requirePerm(domain.PermAPIKeys), s.createAPIKey)
@@ -557,6 +558,7 @@ func (s *panel) routes(v1 fiber.Router) {
 	authed.Get("/admin/workspaces/:wid/quota", s.requirePerm(domain.PermWorkspacesView), s.adminGetWorkspaceQuota)
 	authed.Put("/admin/workspaces/:wid/quota", s.requirePerm(domain.PermWorkspacesView), s.adminPutWorkspaceQuota)
 	authed.Delete("/admin/workspaces/:wid/quota", s.requirePerm(domain.PermWorkspacesView), s.adminDeleteWorkspaceQuota)
+	authed.Put("/admin/workspaces/:wid/node", s.requirePerm(domain.PermNodesManage), s.adminPutWorkspaceNode)
 	authed.Get("/workspaces/:wid/limits", s.workspaceLimits)
 	authed.Get("/admin/limits", s.requirePerm(domain.PermSettingsManage), s.getLimitDefaults)
 	authed.Put("/admin/limits", s.requirePerm(domain.PermSettingsManage), s.putLimitDefaults)
@@ -632,6 +634,7 @@ func (s *panel) routes(v1 fiber.Router) {
 	if s.nodes != nil {
 		nodes := authed.Group("/nodes", s.requirePerm(domain.PermNodesManage))
 		nodes.Get("", s.listNodes)
+		nodes.Put("/default", s.putDefaultNode)
 		nodes.Patch("/:id", s.patchNode)
 		nodes.Delete("/:id", s.deleteNode)
 		nodes.Post("/:id/revoke-certificates", s.revokeNodeCertificates)

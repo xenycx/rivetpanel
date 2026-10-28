@@ -10,10 +10,13 @@ const (
 
 // Workspace groups bots and sites. Every account has one Personal workspace.
 type Workspace struct {
-	ID          string
-	Name        string
-	OwnerID     string
-	Personal    bool
+	ID       string
+	Name     string
+	OwnerID  string
+	Personal bool
+	// NodeID pins new apps of the workspace to a node ("" = the panel's
+	// default node, then the local host). Existing apps stay where they are.
+	NodeID      string
 	CreatedAtMS int64
 	UpdatedAtMS int64
 }
