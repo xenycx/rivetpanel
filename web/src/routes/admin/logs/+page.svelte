@@ -201,7 +201,7 @@
 <div class="flex flex-wrap items-end justify-between gap-3">
 	<div>
 		<h2 class="text-section">Logs and retention</h2>
-		<p class="mt-1 max-w-3xl text-muted">Console output of every bot and game server and the panel's own log are written to one file per day. Once a day has ended it is compressed into the archive folder and kept for the time set here. Graph history is kept on its own schedule below.</p>
+		<p class="mt-1 max-w-3xl text-muted">Console output of every app and the panel's own log are written to one file per day. Once a day has ended it is compressed into the archive folder and kept for the time set here. Graph history is kept on its own schedule below.</p>
 	</div>
 	{#if manage && v}<button class="btn btn-primary" onclick={runNow} disabled={running || v.running}><Icon name="archive" />{running || v.running ? 'Archiving…' : 'Run archival now'}</button>{/if}
 </div>
@@ -282,7 +282,7 @@
 
 			<SettingsSection title="What is written" description="Day files are created with owner-only permissions next to the database and are not part of rivetpanel backup.">
 				<div class="space-y-4">
-					<Switch label="Keep console output of bots and game servers" bind:checked={f.capture_bots}>
+					<Switch label="Keep console output of apps" bind:checked={f.capture_bots}>
 						Copied from Docker, or from the node's agent for remote servers, and stored on the panel.{#if !v.capture_available} This panel has no container runtime and no nodes, so there is nothing to copy right now.{/if}
 					</Switch>
 					<label class="block pl-12">
@@ -297,7 +297,7 @@
 			<SettingsSection title="Graph history" description="How long the data behind charts is kept. Older data is deleted by the hourly cleanup.">
 				<div class="grid gap-4 sm:grid-cols-2">
 					{#each [
-						{ k: 'telemetry_hours', unit: 'hours', help: (n: number) => `CPU, memory and network graphs of the host, nodes and each bot keep 30-second samples for ${days(n)}.` },
+						{ k: 'telemetry_hours', unit: 'hours', help: (n: number) => `CPU, memory and network graphs of the host, nodes and each app keep 30-second samples for ${days(n)}.` },
 						{ k: 'usage_5m_days', unit: 'days', help: (n: number) => `Analytics keeps 5-minute detail for ${n} day${n === 1 ? '' : 's'}.` },
 						{ k: 'usage_1h_days', unit: 'days', help: (n: number) => `Then hourly detail for ${n} days.` },
 						{ k: 'usage_1d_days', unit: 'days', help: (n: number) => `Then daily totals for ${n} days (about ${(n / 365).toFixed(1)} years).` },

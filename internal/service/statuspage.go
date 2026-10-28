@@ -607,11 +607,11 @@ func (s *StatusService) checkSource(ctx context.Context, actor domain.User, kind
 		return domain.Invalid("unknown node")
 	case domain.ComponentBot:
 		if s.Bots == nil || !validUUID(ref) {
-			return domain.Invalid("unknown bot or server")
+			return domain.Invalid("unknown app")
 		}
 		if _, err := s.Bots.Get(ctx, actor, ref); err != nil {
 			if errors.Is(err, domain.ErrNotFound) || errors.Is(err, domain.ErrForbidden) {
-				return domain.Invalid("unknown bot or server")
+				return domain.Invalid("unknown app")
 			}
 			return err
 		}

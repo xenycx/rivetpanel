@@ -47,7 +47,7 @@ export type Entry = {
 };
 
 export const pages: Entry[] = [
-	{ key: 'p-overview', group: 'page', label: 'Overview', hint: 'Capacity, servers and bots at a glance', icon: 'home', href: '/dashboard', words: 'dashboard home fleet capacity' },
+	{ key: 'p-overview', group: 'page', label: 'Overview', hint: 'Capacity and apps at a glance', icon: 'home', href: '/dashboard', words: 'dashboard home fleet capacity' },
 	{ key: 'p-bots', group: 'page', label: 'Bots', hint: 'Every Discord bot, with filters', icon: 'box', href: '/bots', words: 'discord bots list filter batch' },
 	{ key: 'p-servers', group: 'page', label: 'Game servers', hint: 'Minecraft and Steam servers', icon: 'gamepad', href: '/servers', words: 'game minecraft paper fabric forge valheim rust zomboid steam' },
 	{ key: 'p-templates', group: 'page', label: 'Templates', hint: 'Bot templates, game server types and site templates', icon: 'layers', href: '/templates', words: 'starter discord.js discord.py jda example bot templates blueprints eggs server types site templates' },
@@ -78,7 +78,7 @@ export const adminPages: Entry[] = [
 	{ key: 'a-sites', group: 'admin', label: 'Sites and domains', hint: 'Administration · hosted sites', icon: 'globe', href: '/admin/sites', words: 'static hosting custom domain dns suspend' },
 	{ key: 'a-analytics', group: 'admin', label: 'Analytics', hint: 'Administration · usage trends across the panel', icon: 'chart', href: '/admin/analytics', words: 'usage trends statistics stats reports top consumers deployments backups uptime accounts tickets csv export' },
 	{ key: 'a-host', group: 'admin', label: 'Host', hint: 'Administration · CPU, memory, disk, network', icon: 'chart', href: '/admin/host', words: 'resources monitoring cpu memory ram disk network load swap capacity server machine usage' },
-	{ key: 'a-host-bots', group: 'admin', label: 'Resource use per bot', hint: 'Host · what each bot consumes', icon: 'chart', href: '/admin/host?tab=bots', words: 'top cpu memory network pids consumers heavy' },
+	{ key: 'a-host-bots', group: 'admin', label: 'Resource use per app', hint: 'Host · what each app consumes', icon: 'chart', href: '/admin/host?tab=bots', words: 'top cpu memory network pids consumers heavy' },
 	{ key: 'a-host-capacity', group: 'admin', label: 'Capacity and budgets', hint: 'Host · memory reserved, limits', icon: 'chart', href: '/admin/host?tab=capacity', words: 'budget admission memory limit node reserved' },
 	{ key: 'a-logs', group: 'admin', label: 'Panel logs', hint: 'Host · what RivetPanel itself logged', icon: 'terminal', href: '/admin/host?tab=logs', words: 'log errors warnings server output debug journal' },
 	{ key: 'a-log-archive', group: 'admin', label: 'Logs and retention', hint: 'Administration · daily log archive, graph history', icon: 'archive', href: '/admin/logs', words: 'log archive retention gzip days history download console output graph telemetry metrics keep delete disk' },

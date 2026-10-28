@@ -77,6 +77,7 @@ export type HostSnapshot = {
 export type BotUsage = {
 	id: string;
 	name: string;
+	kind: 'bot' | 'game' | 'web';
 	owner: string;
 	runtime: string;
 	state: string;

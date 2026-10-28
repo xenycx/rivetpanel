@@ -371,6 +371,7 @@ func (m *Monitor) docker(ctx context.Context) DockerFacts {
 type BotUsage struct {
 	ID          string  `json:"id"`
 	Name        string  `json:"name"`
+	Kind        string  `json:"kind"`
 	Owner       string  `json:"owner"`
 	Runtime     string  `json:"runtime"`
 	State       string  `json:"state"`
@@ -444,7 +445,7 @@ func (m *Monitor) measureBots(ctx context.Context) (BotsReport, error) {
 	rep := BotsReport{GeneratedAtMS: time.Now().UnixMilli(), Total: len(list), Bots: make([]BotUsage, 0, len(list))}
 	var measure []int
 	for _, b := range list {
-		u := BotUsage{ID: b.ID, Name: b.Name, Owner: owners[b.OwnerID], Runtime: b.Runtime, State: b.ObservedState,
+		u := BotUsage{ID: b.ID, Name: b.Name, Kind: b.Kind, Owner: owners[b.OwnerID], Runtime: b.Runtime, State: b.ObservedState,
 			Running: b.ObservedState == "running", CPULimit: float64(b.NanoCPUs) / 1e9, MemLimit: b.MemoryBytes, DiskBytes: -1}
 		if b.LastStartedAtMS != nil {
 			u.StartedAtMS = *b.LastStartedAtMS

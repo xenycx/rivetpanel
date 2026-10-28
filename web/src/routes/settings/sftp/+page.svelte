@@ -59,7 +59,7 @@
 
 <svelte:head><title>SFTP & API keys · RivetPanel</title></svelte:head>
 
-<SettingsSection title="SFTP access" description="Use any SFTP client (FileZilla, Cyberduck, sftp). You see one folder per bot you can edit.">
+<SettingsSection title="SFTP access" description="Use any SFTP client (FileZilla, Cyberduck, sftp). You see one folder per app you can edit.">
 	{#if sftp && !sftp.enabled}
 		<Notice>The SFTP server is turned off on this panel. The administrator can enable it with <code class="font-mono">RIVET_SFTP_LISTEN</code>.</Notice>
 	{:else if sftp}

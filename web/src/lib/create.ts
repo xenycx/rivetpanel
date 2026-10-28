@@ -32,7 +32,7 @@ export function createOptions(): CreateOption[] {
 			{ key: 'site-template', action: 'New site from a template', group: 'Site', label: 'From a template', hint: 'Landing page, docs, portfolio and more', icon: 'layers', href: '/templates?tab=sites', words: 'site template starter landing docs portfolio coming soon game community static website' }
 		);
 	if (session.features.workspaces && can('workspaces.create'))
-		out.push({ key: 'workspace', group: 'More', label: 'Workspace', hint: 'Share bots and servers with a team', icon: 'building', href: '/settings/workspaces?new=1', words: 'team workspace members' });
+		out.push({ key: 'workspace', group: 'More', label: 'Workspace', hint: 'Share apps with a team', icon: 'building', href: '/settings/workspaces?new=1', words: 'team workspace members' });
 	if (can('tickets.create'))
 		out.push({ key: 'ticket', group: 'More', label: 'Support ticket', hint: 'Ask the panel staff for help', icon: 'lifebuoy', href: '/support?new=1', words: 'help support ticket question' });
 	if (can('api_keys.manage'))

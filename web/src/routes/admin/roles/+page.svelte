@@ -28,7 +28,7 @@
 	const isAdmin = $derived(session.user?.role === 'admin');
 	const msg = (e: unknown) => (e instanceof ApiError ? e.message.charAt(0).toUpperCase() + e.message.slice(1) : 'The request failed.');
 	const groups = [
-		{ id: 'resources', title: 'Bots, servers and sites', help: 'What accounts with this role may do with what they own or what is shared with them.' },
+		{ id: 'resources', title: 'Apps and sites', help: 'What accounts with this role may do with what they own or what is shared with them.' },
 		{ id: 'administration', title: 'Administration', help: 'Parts of the administration area this role opens.' }
 	] as const;
 	const label = (p: string) => catalog.find((x) => x.name === p)?.label ?? p;
@@ -148,7 +148,7 @@
 			{/each}
 		</ul>
 		<p class="mt-3 max-w-prose text-small text-muted">
-			Built-in roles cannot be changed: administrators hold every permission, including the environment editor and making other administrators; users hold every permission for their own bots, servers and sites and nothing in the administration. Assign roles on the Users page.
+			Built-in roles cannot be changed: administrators hold every permission, including the environment editor and making other administrators; users hold every permission for their own apps and sites and nothing in the administration. Assign roles on the Users page.
 			{#if !isAdmin}You can only grant permissions you hold yourself.{/if}
 		</p>
 	{/if}

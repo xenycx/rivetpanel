@@ -75,7 +75,7 @@
 		</table>
 	</div>
 	<p class="mt-3 text-small text-muted">
-		Email goes only to a verified address. Alerts, deployments, backups and node notices are emailed only while <a class="link" href="/settings/profile">Alert emails</a> is on; Discord alerts follow each bot's alert settings. Security notices about your account are always emailed. Notifications are kept for 90 days (at most 200).
+		Email goes only to a verified address. Alerts, deployments, backups and node notices are emailed only while <a class="link" href="/settings/profile">Alert emails</a> is on; Discord alerts follow each app's alert settings. Security notices about your account are always emailed. Notifications are kept for 90 days (at most 200).
 	</p>
 	{#if error}<Notice tone="fail" class="mt-3" live>{error}</Notice>{/if}
 </SettingsSection>

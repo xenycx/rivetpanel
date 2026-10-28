@@ -100,7 +100,7 @@
 <svelte:head><title>Nodes · RivetPanel</title></svelte:head>
 
 <div class="flex flex-wrap items-start justify-between gap-3">
-	<div><h2 class="text-section">Nodes</h2><p class="mt-1 max-w-3xl text-muted">Hosts that run bots and game servers. Drain a node before maintenance to keep new servers off it.</p></div>
+	<div><h2 class="text-section">Nodes</h2><p class="mt-1 max-w-3xl text-muted">Hosts that run apps. Drain a node before maintenance to keep new apps off it.</p></div>
 	{#if session.features.agents}<button class="btn btn-primary" onclick={openAdd}><Icon name="plus" />Add remote node</button>{/if}
 </div>
 

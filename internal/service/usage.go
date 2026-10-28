@@ -849,7 +849,7 @@ func (s *UsageService) Overview(ctx context.Context, actor domain.User, rangeNam
 	if err != nil {
 		return ov, err
 	}
-	ov.Bots = map[string]OverviewCount{domain.KindBot: {}, domain.KindGame: {}}
+	ov.Bots = map[string]OverviewCount{domain.KindBot: {}, domain.KindGame: {}, domain.KindWeb: {}}
 	for k, v := range counts {
 		ov.Bots[k] = OverviewCount{Total: v[0], Running: v[1]}
 	}

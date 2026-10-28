@@ -95,15 +95,15 @@
 <svelte:head><title>Activity · RivetPanel</title></svelte:head>
 
 <h1 class="text-page">Activity</h1>
-<p class="mt-0.5 max-w-prose text-muted">What happened on the bots and servers you can see: long-running work, and who changed what.</p>
+<p class="mt-0.5 max-w-prose text-muted">What happened on the apps you can see: long-running work, and who changed what.</p>
 
 <div class="mt-5 flex flex-wrap items-center gap-2">
 	<div class="inline-flex rounded-control border border-rule bg-raised p-0.5" role="group" aria-label="Show">
 		<button class="rounded-inner px-3 py-1 font-medium {view === 'work' ? 'bg-ink text-paper' : 'text-ink/75 hover:bg-paper'}" aria-pressed={view === 'work'} onclick={() => (view = 'work')}>Work</button>
 		<button class="rounded-inner px-3 py-1 font-medium {view === 'changes' ? 'bg-ink text-paper' : 'text-ink/75 hover:bg-paper'}" aria-pressed={view === 'changes'} onclick={() => (view = 'changes')}>Changes</button>
 	</div>
-	<select class="field w-auto" bind:value={botF} aria-label="Bot or server">
-		<option value="">All bots and servers</option>
+	<select class="field w-auto" bind:value={botF} aria-label="App">
+		<option value="">All apps</option>
 		{#each bots as b (b.id)}<option value={b.id}>{b.name}</option>{/each}
 	</select>
 	{#if view === 'work'}
@@ -123,7 +123,7 @@
 		{#if changes === null}
 			<Skeleton rows={5} label="Loading changes" />
 		{:else if changes.length === 0}
-			<EmptyState title="No changes recorded yet" compact><p>Starting and stopping bots and servers, editing files and variables, sharing and account changes are recorded here, without any values.</p></EmptyState>
+			<EmptyState title="No changes recorded yet" compact><p>Starting and stopping apps, editing files and variables, sharing and account changes are recorded here, without any values.</p></EmptyState>
 		{:else}
 			<ChangeList events={changes} showBot={!botF} {now} />
 			{#if nextChange}<div class="mt-3"><button class="btn" onclick={() => loadChanges(nextChange)}>Show older</button></div>{/if}

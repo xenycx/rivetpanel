@@ -25,11 +25,14 @@ const reasonText: Record<string, string> = {
 	cleanup_failed: 'Removing it did not finish. The panel keeps retrying.'
 };
 
-/** The reason sentence, naming a game server "the server" instead of "the bot". */
+/** What to call the app in a sentence: a game server is "the server", a web app "the app". */
+const noun = (b: Bot) => (b.kind === 'game' ? 'server' : b.kind === 'web' ? 'app' : 'bot');
+
+/** The reason sentence, with the noun that fits the kind. */
 function reasonFor(b: Bot, reason: string): string | undefined {
 	if (b.kind === 'game' && reason === 'build_failed') return 'The installation failed.';
 	const t = reasonText[reason];
-	return t && b.kind === 'game' ? t.replace(/^The bot\b/, 'The server') : t;
+	return t?.replace(/^The bot\b/, `The ${noun(b)}`);
 }
 
 function exitPart(b: Bot): string {
@@ -47,7 +50,7 @@ export function fmtCountdown(s: number): string {
 	return s % 60 ? `${m} min ${s % 60} s` : `${m} min`;
 }
 
-/** The single lifecycle vocabulary used by the fleet, bot header and overview. */
+/** The single lifecycle vocabulary used by the lists, the app header and the overview. */
 export function describe(b: Bot, now = Date.now()): Described {
 	const phase: Phase = b.phase ?? 'checking';
 	const reason = b.state_reason ?? '';
@@ -94,9 +97,9 @@ export function describe(b: Bot, now = Date.now()): Described {
 		case 'checking':
 			return { label: 'Checking host', tone: 'warn', busy: true, detail: 'Confirming the container state with Docker.' };
 		case 'runner_offline':
-			return { label: 'Runner offline', tone: 'fail', busy: false, detail: `Docker is not reachable. The ${b.kind === 'game' ? 'server' : 'bot'} starts as soon as the runner is back.` };
+			return { label: 'Runner offline', tone: 'fail', busy: false, detail: `Docker is not reachable. The ${noun(b)} starts as soon as the runner is back.` };
 		case 'no_runner':
-			return { label: 'No runner', tone: 'fail', busy: false, detail: `This panel runs without Docker, so ${b.kind === 'game' ? 'servers' : 'bots'} cannot be started here.` };
+			return { label: 'No runner', tone: 'fail', busy: false, detail: `This panel runs without Docker, so ${noun(b)}s cannot be started here.` };
 		case 'deleting':
 			return { label: 'Deleting', tone: 'warn', busy: true, detail: '' };
 		case 'stopped':

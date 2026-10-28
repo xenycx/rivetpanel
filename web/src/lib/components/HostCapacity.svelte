@@ -26,14 +26,14 @@
 		if (v.kind === 'bytes' && Number.isFinite(n)) return fmtBytes(n);
 		return v.value;
 	};
-	const scope: Record<string, string> = { RIVET_NODE_MEMORY_BYTES: 'Host', RIVET_USER_MEMORY_BYTES: 'Account', RIVET_MAX_BOTS_PER_USER: 'Account', RIVET_MAX_BUILDS: 'Host', RIVET_MIN_FREE_DISK_BYTES: 'Host', RIVET_MAX_BOT_MEMORY_BYTES: 'Bot', RIVET_MAX_SITES_PER_USER: 'Account' };
+	const scope: Record<string, string> = { RIVET_NODE_MEMORY_BYTES: 'Host', RIVET_USER_MEMORY_BYTES: 'Account', RIVET_MAX_BOTS_PER_USER: 'Account', RIVET_MAX_BUILDS: 'Host', RIVET_MIN_FREE_DISK_BYTES: 'Host', RIVET_MAX_BOT_MEMORY_BYTES: 'App', RIVET_MAX_SITES_PER_USER: 'Account' };
 	const srcText = { default: 'Default', environment: 'Environment file', panel: 'Set here' } as const;
 </script>
 
 {#if cap?.node}
 	{@const node = cap.node}
 	<h3 class="text-title font-semibold">Capacity</h3>
-	<p class="mt-1 max-w-3xl text-small text-muted">Memory limits of bots that are wanted running, counted against the admission budget. A start that would exceed it is refused with an explanation. This is bookkeeping for admission, not a kernel limit.</p>
+	<p class="mt-1 max-w-3xl text-small text-muted">Memory limits of apps that are wanted running, counted against the admission budget. A start that would exceed it is refused with an explanation. This is bookkeeping for admission, not a kernel limit.</p>
 	<div class="mt-3 grid gap-3 md:grid-cols-3">
 		<div class="stat md:col-span-2">
 			<CapacityMeter label="Reserved memory" value={node.reserved_bytes} max={node.budget_bytes} format={fmtBytes} />
@@ -42,7 +42,7 @@
 			</p>
 		</div>
 		<div class="stat">
-			<p class="eyebrow">Bots wanted running</p>
+			<p class="eyebrow">Apps wanted running</p>
 			<p class="mt-1 font-mono text-section font-semibold">{node.running}</p>
 			<p class="text-small text-muted">Each build may use up to {fmtBytes(cap.build_memory_bytes)} on top.</p>
 		</div>

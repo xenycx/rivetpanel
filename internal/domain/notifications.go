@@ -42,11 +42,11 @@ type NotificationCategory struct {
 
 // NotificationCategories is the catalog, in display order.
 var NotificationCategories = []NotificationCategory{
-	{NotifyBotAlerts, "Bot and server alerts", "A bot or server crashed, stopped reporting or recovered.", true, true, ""},
+	{NotifyBotAlerts, "App alerts", "An app crashed, stopped reporting or recovered.", true, true, ""},
 	{NotifyDeploys, "Deployments", "GitHub deployments that finished or failed.", true, true, ""},
 	{NotifyBackups, "Backups", "Backups that failed.", true, true, ""},
 	{NotifyNodes, "Nodes", "A node's agent went offline or came back (accounts that manage nodes).", true, true, PermNodesManage},
-	{NotifyAccess, "Access and invitations", "Someone shared a bot with you, added you to a workspace, transferred a bot to you or accepted your invitation.", true, false, ""},
+	{NotifyAccess, "Access and invitations", "Someone shared an app with you, added you to a workspace, transferred an app to you or accepted your invitation.", true, false, ""},
 	{NotifyAnnouncements, "Announcements", "Announcements from the panel's administrators.", false, false, ""},
 	{NotifyTickets, "Support tickets", "Replies and status changes on support tickets.", true, false, ""},
 }

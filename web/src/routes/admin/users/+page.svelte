@@ -101,16 +101,16 @@
 	async function disable(u: AdminUser) {
 		const r = await confirmWithOption({
 			title: `Disable ${u.email}?`,
-			body: 'They are signed out everywhere at once: browser sessions, consoles and SFTP. Their bots stay as they are unless you stop them here.',
+			body: 'They are signed out everywhere at once: browser sessions, consoles and SFTP. Their apps stay as they are unless you stop them here.',
 			confirmLabel: 'Disable account',
 			tone: 'danger',
-			checkbox: u.bots ? { label: `Also stop the ${u.bots} bot${u.bots === 1 ? '' : 's'} they own`, checked: false } : undefined
+			checkbox: u.bots ? { label: `Also stop the ${u.bots} app${u.bots === 1 ? '' : 's'} they own`, checked: false } : undefined
 		});
 		if (!r) return;
 		await patch(u, { disabled: true, stop_bots: r.checked }, `Disabled ${u.email}`);
 	}
 	async function remove(u: AdminUser) {
-		const owns = u.bots ? `the ${u.bots} bot${u.bots === 1 ? '' : 's'} and server${u.bots === 1 ? '' : 's'} they own (with files, backups and databases), ` : '';
+		const owns = u.bots ? `the ${u.bots} app${u.bots === 1 ? '' : 's'} they own (with files, backups and databases), ` : '';
 		const ok = await confirmDialog({
 			title: `Delete ${u.email}?`,
 			body: `The account is removed permanently with ${owns}their sites, workspaces, keys, tokens, notifications and support tickets. They are signed out at once. The activity log keeps its history. This cannot be undone.`,
@@ -143,7 +143,7 @@
 		if (roleChoice === 'admin') {
 			const ok = await confirmDialog({
 				title: `Make ${u.email} an administrator?`,
-				body: 'Administrators can see and change every bot and every account on this panel.',
+				body: 'Administrators can see and change every app and every account on this panel.',
 				confirmLabel: 'Make administrator',
 				tone: 'primary'
 			});
@@ -224,10 +224,10 @@
 					<div class="min-w-0 flex-1 basis-60">
 						<p class="font-medium break-all"><a class="hover:underline" href="/admin/users/{u.id}">{u.display_name || u.email}</a>{#if u.id === session.user?.id}<span class="ml-2 text-small font-normal text-muted">You</span>{/if}<span class="pill ml-2 align-middle" data-tone={u.email_verified ? 'run' : 'warn'} title={u.email_verified ? 'Email address verified' : 'Email address not verified'}>{u.email_verified ? 'Verified' : 'Unverified'}</span></p>
 						<p class="text-small text-muted">
-							{u.display_name ? `${u.email} · ` : ''}{roleLabel(u)}{u.disabled ? ', disabled' : ''}. {u.bots} bot{u.bots === 1 ? '' : 's'}. {u.has_password ? 'Password' : 'Provider sign-in only'}. Joined {fmtWhen(u.created_at_ms)}.
+							{u.display_name ? `${u.email} · ` : ''}{roleLabel(u)}{u.disabled ? ', disabled' : ''}. {u.bots} app{u.bots === 1 ? '' : 's'}. {u.has_password ? 'Password' : 'Provider sign-in only'}. Joined {fmtWhen(u.created_at_ms)}.
 						</p>
 					</div>
-					<a class="btn btn-sm hidden sm:inline-flex" href="/admin/users/{u.id}">Workspaces and bots<Icon name="chevronRight" size={13} /></a>
+					<a class="btn btn-sm hidden sm:inline-flex" href="/admin/users/{u.id}">Workspaces and apps<Icon name="chevronRight" size={13} /></a>
 					{#if manage}<Menu label="Actions for {u.email}" items={menu(u)} />{/if}
 				</li>
 			{/each}

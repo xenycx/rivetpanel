@@ -86,7 +86,7 @@
 	const attention = $derived.by<Attn[]>(() => {
 		const out: Attn[] = [];
 		if (!snap) return out;
-		if (snap.docker.enabled && !snap.docker.ready) out.push({ tone: 'fail', text: `Docker is not usable: ${snap.docker.error ?? 'unknown error'}. Bots cannot start or build.` });
+		if (snap.docker.enabled && !snap.docker.ready) out.push({ tone: 'fail', text: `Docker is not usable: ${snap.docker.error ?? 'unknown error'}. Apps cannot start or build.` });
 		if (snap.docker.problem) out.push({ tone: 'warn', text: snap.docker.problem });
 		if (diskPct >= 90) out.push({ tone: 'fail', text: `The data disk is ${diskPct}% full. Builds, deployments and backups will fail.` });
 		else if (diskPct >= 80) out.push({ tone: 'warn', text: `The data disk is ${diskPct}% full.` });
@@ -167,9 +167,9 @@
 				<dd class="mt-1 text-small text-muted">block devices</dd>
 			</div>
 			<div class="stat">
-				<dt class="eyebrow">Running bots</dt>
+				<dt class="eyebrow">Running apps</dt>
 				<dd class="mt-1 font-mono text-section font-semibold">{last.running_bots}</dd>
-				<dd class="mt-2 text-small"><button class="link" onclick={() => goto('bots')}>Usage per bot</button></dd>
+				<dd class="mt-2 text-small"><button class="link" onclick={() => goto('bots')}>Usage per app</button></dd>
 			</div>
 		</dl>
 	{:else}
@@ -281,19 +281,19 @@
 			{#if dk?.enabled}<span class="pill ml-auto" data-tone={dk.ready ? 'run' : 'fail'}>{dk.ready ? 'Ready' : 'Unavailable'}</span>{/if}
 		</h3>
 		{#if dk && !dk.enabled}
-			<p class="mt-3 text-small text-muted">The local runner is turned off (<code>RIVET_RUNNER_MODE=none</code>). Bots cannot start on this panel.</p>
+			<p class="mt-3 text-small text-muted">The local runner is turned off (<code>RIVET_RUNNER_MODE=none</code>). Apps cannot start on this panel.</p>
 		{:else if dk}
 			{#if dk.error}<p class="mt-2 text-small text-fail">{dk.error}</p>{/if}
 			<dl class="mt-3 grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1.5 text-small [&>dd]:text-right [&>dt]:text-muted">
 				<dt>Docker Engine</dt><dd class="font-mono">{dk.version || '—'}</dd>
 				<dt>cgroups</dt><dd>{dk.cgroup_v2 ? 'v2' : 'v1'}{dk.rootless ? ' · rootless' : ''}</dd>
 				<dt>Swap limits</dt><dd>{dk.swap_limit ? 'enforced' : 'not enforced'}</dd>
-				<dt>Bot containers</dt><dd class="font-mono">{dk.containers_running} running · {dk.containers_stopped} stopped</dd>
+				<dt>App containers</dt><dd class="font-mono">{dk.containers_running} running · {dk.containers_stopped} stopped</dd>
 				<dt>Builds running</dt><dd class="font-mono">{dk.builders}</dd>
 				<dt>AI diagnostics running</dt><dd class="font-mono">{dk.diagnostics}</dd>
 				<dt>Workers</dt><dd class="font-mono">{dk.workers}</dd>
 				<dt>Waiting for a worker</dt><dd class="font-mono {dk.queued ? 'text-warn' : ''}">{dk.queued}</dd>
-				<dt>Bots tracked in memory</dt><dd class="font-mono">{dk.tracked}</dd>
+				<dt>Apps tracked in memory</dt><dd class="font-mono">{dk.tracked}</dd>
 				<dt>Containers run as</dt><dd class="font-mono">{dk.user || '—'}</dd>
 			</dl>
 		{:else}<p class="mt-3 text-small text-muted">Loading…</p>{/if}

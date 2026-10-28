@@ -50,7 +50,7 @@
 
 <svelte:head><title>Workspaces · RivetPanel</title></svelte:head>
 
-<SettingsSection title="Your workspaces" description="A workspace groups bots{session.features.sites ? ' and sites' : ''} for a person or a team. Members see everything in it and act according to their role; your personal workspace is where things go by default.">
+<SettingsSection title="Your workspaces" description="A workspace groups apps{session.features.sites ? ' and sites' : ''} for a person or a team. Members see everything in it and act according to their role; your personal workspace is where things go by default.">
 	{#if !workspaces.loaded}
 		<Skeleton rows={2} />
 	{:else}
@@ -66,7 +66,7 @@
 						{#if workspaces.selected === w.id}<span class="pill" data-tone="run">Selected</span>{/if}
 					</div>
 					<dl class="mt-4 grid grid-cols-4 gap-2 border-t border-rule-soft pt-3 text-small">
-						<div><dt class="eyebrow">Bots</dt><dd class="font-mono font-medium">{w.running_bots}/{w.bots}</dd></div>
+						<div><dt class="eyebrow">Apps</dt><dd class="font-mono font-medium">{w.running_bots}/{w.bots}</dd></div>
 						<div><dt class="eyebrow">Sites</dt><dd class="font-mono font-medium">{w.sites}</dd></div>
 						<div><dt class="eyebrow">Members</dt><dd class="font-mono font-medium">{w.members}</dd></div>
 						<div><dt class="eyebrow">RAM</dt><dd class="font-mono font-medium">{fmtBytes(w.memory_bytes)}</dd></div>

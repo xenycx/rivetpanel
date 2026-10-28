@@ -41,7 +41,7 @@
 	}
 
 	// Components
-	const kindLabel: Record<string, string> = { panel: 'Panel', node: 'Node', bot: 'Bot or server' };
+	const kindLabel: Record<string, string> = { panel: 'Panel', node: 'Node', bot: 'App' };
 	const shown = $derived(new Set((data?.components ?? []).map((c) => `${c.source?.kind}:${c.source?.id}`)));
 	const available = $derived(candidates.filter((c) => !shown.has(`${c.kind}:${c.id}`)));
 	let pick = $state('');
@@ -162,7 +162,7 @@
 
 	<section class="mt-8">
 		<h3 class="text-title font-semibold">Components</h3>
-		<p class="text-small text-muted">States are automatic: the panel is up while it answers; a node follows its agent connection; a bot follows its running state and health check. Open incidents raise the state to their impact; maintenance in its window shows as maintenance.</p>
+		<p class="text-small text-muted">States are automatic: the panel is up while it answers; a node follows its agent connection; an app follows its running state and health check. Open incidents raise the state to their impact; maintenance in its window shows as maintenance.</p>
 		{#if data.components.length}
 			<ul class="card mt-3 divide-y divide-rule-soft">
 				{#each data.components as c, i (c.id)}
@@ -194,7 +194,7 @@
 			<label class="block"><span class="label">Description (optional)</span><input class="field" maxlength="300" bind:value={newDesc} /></label>
 			<button class="btn btn-primary"><Icon name="plus" />Add</button>
 		</form>
-		<p class="mt-1 text-small text-muted">You can add nodes with the Nodes permission, and bots and servers you can open.</p>
+		<p class="mt-1 text-small text-muted">You can add nodes with the Nodes permission, and apps you can open.</p>
 	</section>
 
 	<section class="mt-8">

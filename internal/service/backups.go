@@ -238,16 +238,16 @@ func (s *BackupService) beginWith(ctx context.Context, b domain.Bot, kind string
 	// safety (pre-restore) backups always have room. Those make room by
 	// removing their own oldest copies, never the newest ready backup.
 	if kind == "manual" && countKind(existing, "manual") >= MaxBackupsPerBot-reservedSlots {
-		return domain.Backup{}, domain.Invalid(fmt.Sprintf("manual backups are limited to %d per bot; delete an old one first", MaxBackupsPerBot-reservedSlots))
+		return domain.Backup{}, domain.Invalid(fmt.Sprintf("manual backups are limited to %d per app; delete an old one first", MaxBackupsPerBot-reservedSlots))
 	}
 	if len(existing) >= MaxBackupsPerBot {
 		if !s.makeRoom(ctx, existing, kind) {
-			return domain.Backup{}, domain.Invalid(fmt.Sprintf("this bot already keeps %d backups; delete old ones so scheduled backups can continue", MaxBackupsPerBot))
+			return domain.Backup{}, domain.Invalid(fmt.Sprintf("this app already keeps %d backups; delete old ones so scheduled backups can continue", MaxBackupsPerBot))
 		}
 	}
 	for _, e := range existing {
 		if e.Status == "creating" && kind != "pre_restore" {
-			return domain.Backup{}, domain.Invalid("a backup of this bot is already in progress")
+			return domain.Backup{}, domain.Invalid("a backup of this app is already in progress")
 		}
 	}
 	id := uuid.NewString()
@@ -345,7 +345,7 @@ func (s *BackupService) create(ctx context.Context, actor domain.User, botID str
 	includeEnv := opt.IncludeEnv
 	if opt.Consistent {
 		if _, err := s.Bots.Authorize(ctx, actor, botID, domain.PermPower); err != nil {
-			return domain.Backup{}, domain.Invalid("stopping the bot for the backup needs the start and stop permission")
+			return domain.Backup{}, domain.Invalid("stopping the app for the backup needs the start and stop permission")
 		}
 		if s.Bots.Notifier == nil {
 			return domain.Backup{}, domain.ErrRunnerUnavailable
@@ -374,7 +374,7 @@ func (s *BackupService) create(ctx context.Context, actor domain.User, botID str
 		if opt.Consistent {
 			resume, err := s.stopForBackup(cctx, botID, op)
 			if err != nil {
-				msg := "the bot could not be stopped for the backup"
+				msg := "the app could not be stopped for the backup"
 				fctx, cancel := bg(cctx)
 				s.store().FinishBackup(fctx, row.ID, "failed", 0, nil, &msg)
 				cancel()
@@ -617,9 +617,9 @@ func (s *BackupService) Restore(ctx context.Context, actor domain.User, botID, i
 	defer func() {
 		switch {
 		case err == nil:
-			s.Ops.Finish(ctx, op, domain.OpSucceeded, "", "Backup restored. Start the bot to use it.", map[string]any{"backup_id": id, "environment": opt.RestoreEnv})
+			s.Ops.Finish(ctx, op, domain.OpSucceeded, "", "Backup restored. Start the app to use it.", map[string]any{"backup_id": id, "environment": opt.RestoreEnv})
 		case errors.Is(err, domain.ErrNotStopped):
-			s.Ops.Finish(ctx, op, domain.OpFailed, "not_stopped", "the bot must be stopped", nil)
+			s.Ops.Finish(ctx, op, domain.OpFailed, "not_stopped", "the app must be stopped", nil)
 		default:
 			msg := "the restore failed; nothing was changed unless a later step says so"
 			var ve *domain.ValidationError
@@ -758,7 +758,7 @@ func (s *BackupService) Restore(ctx context.Context, actor domain.User, botID, i
 func (s *BackupService) parseEnv(botID string, raw []byte) ([]domain.EnvVar, error) {
 	var snap envSnapshot
 	if err := json.Unmarshal(raw, &snap); err != nil || snap.Version != 1 || snap.BotID != botID {
-		return nil, domain.Invalid("the backup's environment data does not belong to this bot")
+		return nil, domain.Invalid("the backup's environment data does not belong to this app")
 	}
 	if len(snap.Vars) > maxEnvVars {
 		return nil, domain.Invalid("the backup's environment data is invalid")
@@ -817,7 +817,7 @@ func (s *BackupService) stopForBackup(ctx context.Context, botID, op string) (fu
 	if b.DesiredState != domain.DesiredRunning {
 		return func() {}, nil
 	}
-	s.Ops.Stage(ctx, op, "Stopping the bot")
+	s.Ops.Stage(ctx, op, "Stopping the app")
 	nb, changed, err := s.store().SetDesired(ctx, botID, domain.DesiredStopped, false, s.now().UnixMilli())
 	if err != nil {
 		return nil, err
@@ -841,7 +841,7 @@ func (s *BackupService) stopForBackup(ctx context.Context, botID, op string) (fu
 			break
 		}
 		if time.Now().After(deadline) {
-			return nil, errors.New("the bot did not stop in time")
+			return nil, errors.New("the app did not stop in time")
 		}
 		select {
 		case <-ctx.Done():

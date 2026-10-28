@@ -50,14 +50,14 @@
 <svelte:head><title>Workspaces · Administration · RivetPanel</title></svelte:head>
 
 <h2 class="text-section">Workspaces</h2>
-<p class="mt-1 max-w-prose text-muted">Every account's personal workspace and every team, with what runs in it. Open one to see its members, bots, sites and recent deployments.</p>
+<p class="mt-1 max-w-prose text-muted">Every account's personal workspace and every team, with what runs in it. Open one to see its members, apps, sites and recent deployments.</p>
 
 {#if error}<Notice tone="fail" class="mt-4">{error}</Notice>{/if}
 {#if list === null && !error}
 	<div class="mt-4"><Skeleton rows={4} /></div>
 {:else if list}
 	<dl class="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4">
-		{#each [['Workspaces', `${list.length}`, `${totals.teams} team${totals.teams === 1 ? '' : 's'}`], ['Bots', `${totals.running}/${totals.bots}`, 'running / total'], ['Memory', fmtBytes(totals.memory), 'assigned to running bots'], ['Sites', `${totals.sites}`, 'hosted']] as [k, v, h] (k)}
+		{#each [['Workspaces', `${list.length}`, `${totals.teams} team${totals.teams === 1 ? '' : 's'}`], ['Apps', `${totals.running}/${totals.bots}`, 'running / total'], ['Memory', fmtBytes(totals.memory), 'assigned to running apps'], ['Sites', `${totals.sites}`, 'hosted']] as [k, v, h] (k)}
 			<div class="card px-4 py-3"><dt class="eyebrow">{k}</dt><dd class="mt-1 font-mono text-title font-semibold">{v}</dd><dd class="text-small text-muted">{h}</dd></div>
 		{/each}
 	</dl>
@@ -69,14 +69,14 @@
 			<input class="field pl-8" type="search" placeholder="Search by name or owner" bind:value={q} />
 		</label>
 		<select class="field w-auto" bind:value={kind} aria-label="Kind"><option value="all">All kinds</option><option value="team">Teams</option><option value="personal">Personal</option></select>
-		<select class="field w-auto" bind:value={sort} aria-label="Sort"><option value="activity">Recently active</option><option value="bots">Most bots</option><option value="memory">Most memory</option><option value="name">Name</option></select>
+		<select class="field w-auto" bind:value={sort} aria-label="Sort"><option value="activity">Recently active</option><option value="bots">Most apps</option><option value="memory">Most memory</option><option value="name">Name</option></select>
 	</div>
 
 	<div class="card mt-3 overflow-x-auto">
 		<table class="w-full min-w-[44rem] text-left">
 			<thead class="border-b border-rule-soft">
 				<tr class="[&>th]:px-4 [&>th]:py-2.5 [&>th]:font-normal">
-					<th class="eyebrow">Workspace</th><th class="eyebrow">Owner</th><th class="eyebrow text-right">Members</th><th class="eyebrow text-right">Bots</th><th class="eyebrow text-right">Sites</th><th class="eyebrow text-right">Memory</th><th class="eyebrow text-right">Active</th>
+					<th class="eyebrow">Workspace</th><th class="eyebrow">Owner</th><th class="eyebrow text-right">Members</th><th class="eyebrow text-right">Apps</th><th class="eyebrow text-right">Sites</th><th class="eyebrow text-right">Memory</th><th class="eyebrow text-right">Active</th>
 				</tr>
 			</thead>
 			<tbody class="divide-y divide-rule-soft">

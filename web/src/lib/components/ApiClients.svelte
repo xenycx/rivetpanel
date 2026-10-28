@@ -103,7 +103,7 @@
 	}
 	const origin = typeof location === 'undefined' ? '' : location.origin;
 	const groups = [
-		{ id: 'resources', title: 'Bots, servers and sites' },
+		{ id: 'resources', title: 'Apps and sites' },
 		{ id: 'administration', title: 'Administration' }
 	] as const;
 </script>
@@ -165,7 +165,7 @@
 			<fieldset>
 				<legend class="label">Reach</legend>
 				<label class="flex items-center gap-2.5"><input type="radio" name="reach" value={false} bind:group={limited} />Everything your account can reach</label>
-				<label class="mt-1 flex items-center gap-2.5"><input type="radio" name="reach" value={true} bind:group={limited} />Only these bots and workspaces</label>
+				<label class="mt-1 flex items-center gap-2.5"><input type="radio" name="reach" value={true} bind:group={limited} />Only these apps and workspaces</label>
 				{#if limited}
 					<p class="help">A limited client is refused (403) everywhere else, including the administration area and sites.</p>
 					<div class="mt-2 grid gap-3 sm:grid-cols-2">
@@ -174,7 +174,7 @@
 							{#each bots as b (b.id)}<label class="flex items-center gap-2"><input type="checkbox" value={b.id} bind:group={chosenBots} />{b.name}</label>{:else}<p class="text-muted">No bots.</p>{/each}
 						</div>
 						<div class="grid max-h-44 content-start gap-1 overflow-y-auto rounded-control border border-rule-soft p-2">
-							<p class="eyebrow">Workspaces (every bot in them)</p>
+							<p class="eyebrow">Workspaces (every app in them)</p>
 							{#each workspaces as w (w.id)}<label class="flex items-center gap-2"><input type="checkbox" value={w.id} bind:group={chosenWs} />{w.name}</label>{:else}<p class="text-muted">No workspaces.</p>{/each}
 						</div>
 					</div>

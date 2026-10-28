@@ -13,7 +13,7 @@ export function helpFor(b: Bot, opts: { siteAdmin: boolean; buildMemory?: number
 	const settings = { label: 'Open settings', href: `/bots/${b.id}?tab=settings` };
 	if (e.includes('workspace ownership could not be prepared'))
 		return {
-			title: 'The panel cannot hand the files to the bot',
+			title: 'The panel cannot hand the files to the app',
 			body: opts.siteAdmin
 				? 'The container runs as an unprivileged user that must own the workspace. On a rootful Docker host the panel needs root (the provided systemd unit runs it so) or CAP_CHOWN. For local testing, set RIVET_CONTAINER_USER to the panel’s own uid:gid.'
 				: 'This is a host configuration problem. Ask the panel administrator to check the workspace ownership settings.',
@@ -28,7 +28,7 @@ export function helpFor(b: Bot, opts: { siteAdmin: boolean; buildMemory?: number
 	if (e.includes('signal: 9') || e.includes('sigkill') || (e.includes('build failed') && e.includes('exit code 137')))
 		return {
 			title: 'The build ran out of memory',
-			body: `The compiler was killed because the build container hit its memory limit${opts.buildMemory ? ` of ${fmtBytes(opts.buildMemory)}` : ''}. The host needs that much free memory while building; the running bot needs far less.`
+			body: `The compiler was killed because the build container hit its memory limit${opts.buildMemory ? ` of ${fmtBytes(opts.buildMemory)}` : ''}. The host needs that much free memory while building; the running app needs far less.`
 		};
 	if (e.includes('build timed out'))
 		return { title: 'The build took too long', body: 'The build step has a time limit (RIVET_BUILD_TIMEOUT, 10 minutes by default). Large dependency trees on a slow host can exceed it.' };
@@ -42,7 +42,7 @@ export function helpFor(b: Bot, opts: { siteAdmin: boolean; buildMemory?: number
 				: 'The panel is missing an encryption key. Ask the administrator.'
 		};
 	if (e.includes('killed: out of memory'))
-		return { title: 'The bot used more memory than its limit', body: `It is limited to ${fmtBytes(b.memory_bytes)}. Raise the limit in Settings, or reduce what the bot keeps in memory.`, action: settings };
+		return { title: 'The app used more memory than its limit', body: `It is limited to ${fmtBytes(b.memory_bytes)}. Raise the limit in Settings, or reduce what the app keeps in memory.`, action: settings };
 	if (e.includes('container failed to start') || e.includes('container could not be created'))
 		return { title: 'Docker could not start the container', body: 'Check the start command under Startup. If it looks right, the host may be out of resources.', action: { label: 'Open startup', href: `/bots/${b.id}?tab=startup` } };
 	if (e.includes('runtime is not available'))
@@ -50,6 +50,6 @@ export function helpFor(b: Bot, opts: { siteAdmin: boolean; buildMemory?: number
 	if (b.phase === 'failed' && b.state_reason === 'gave_up')
 		return { title: 'It keeps crashing', body: 'Open the console to see the last output before each crash, fix the cause, then start it again. The restart budget is set under Startup.', action: { label: 'Open console', href: `/bots/${b.id}?tab=manage` } };
 	if ((b.phase === 'retrying' || b.phase === 'failed') && /exited with code [1-9]/.test(e))
-		return { title: 'The process crashed', body: 'The console shows what it printed before exiting. A wrong or missing token is the most common cause for a new Discord bot.', action: { label: 'Open console', href: `/bots/${b.id}?tab=manage` } };
+		return { title: 'The process crashed', body: `The console shows what it printed before exiting.${b.kind === 'game' || b.kind === 'web' ? '' : ' A wrong or missing token is the most common cause for a new Discord bot.'}`, action: { label: 'Open console', href: `/bots/${b.id}?tab=manage` } };
 	return null;
 }

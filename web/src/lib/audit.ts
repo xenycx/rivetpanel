@@ -12,9 +12,9 @@ export type AuditPage = { events: AuditEvent[]; next_before?: number };
 
 /** Plain past-tense wording for recorded actions. */
 export const actionText: Record<string, string> = {
-	'bot.create': 'created the bot',
+	'bot.create': 'created the app',
 	'bot.update': 'changed its settings',
-	'bot.delete': 'deleted the bot',
+	'bot.delete': 'deleted the app',
 	'bot.start': 'started it',
 	'bot.stop': 'stopped it',
 	'bot.restart': 'restarted it',
@@ -37,7 +37,7 @@ export const actionText: Record<string, string> = {
 	'backup.restore': 'restored a backup',
 	'backup.delete': 'deleted a backup',
 	'backup.label': 'relabeled a backup',
-	'access.grant': 'shared the bot',
+	'access.grant': 'shared the app',
 	'access.revoke': 'removed someone’s access',
 	'telemetry.key': 'created a telemetry key',
 	'telemetry.revoke': 'revoked the telemetry key',
@@ -73,7 +73,7 @@ export const actionText: Record<string, string> = {
 	'admin.sites_domain_remove': 'removed a sites domain',
 	'admin.environment': 'changed panel environment settings',
 	'admin.restart': 'restarted the panel',
-	'bot.move': 'moved the bot to another workspace',
+	'bot.move': 'moved the app to another workspace',
 	'deploy.publish': 'published it to a new GitHub repository',
 	'deploy.push': 'pushed its files to GitHub',
 	'workspace.create': 'created a workspace',

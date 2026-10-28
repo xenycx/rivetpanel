@@ -61,9 +61,9 @@
 						<dd class="mt-1.5 text-small text-muted">{fmtBytes(last.disk_total_bytes - last.disk_used_bytes)} free</dd>
 					</div>
 					<div class="stat">
-						<dt class="eyebrow">Running bots</dt>
+						<dt class="eyebrow">Running apps</dt>
 						<dd class="mt-1 font-mono text-section font-semibold">{last.running_bots}</dd>
-						<dd class="mt-2"><Sparkline fluid height={32} max={Math.max(1, ...s.map((x) => x.running_bots))} values={s.map((x) => x.running_bots)} label="Running bots history" /></dd>
+						<dd class="mt-2"><Sparkline fluid height={32} max={Math.max(1, ...s.map((x) => x.running_bots))} values={s.map((x) => x.running_bots)} label="Running apps history" /></dd>
 					</div>
 				</dl>
 			{:else}

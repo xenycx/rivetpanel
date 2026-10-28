@@ -306,7 +306,7 @@ await step('Ask AI opens one chat that knows which bot and section is in view', 
 
 await step('the Changes view lists who changed what, without values', async () => {
 	await page.goto('/activity?view=changes');
-	await page.getByText('created the bot').first().waitFor();
+	await page.getByText('created the app').first().waitFor();
 	await page.getByText('revealed a variable').first().waitFor().catch(() => {});
 	expect(!(await page.content()).includes('placeholder-token-for-tests'), 'a secret value is on the page');
 });

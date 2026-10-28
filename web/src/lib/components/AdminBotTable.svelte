@@ -5,8 +5,8 @@
 	import { fmtAgo } from '$lib/args';
 	import { describe } from '$lib/status';
 
-	// Bots in administrator overviews: state, owner and footprint at a glance.
-	let { bots, showOwner = true, empty = 'No bots.' }: { bots: (Bot & { owner_email?: string })[]; showOwner?: boolean; empty?: string } = $props();
+	// Apps in administrator overviews: state, owner and footprint at a glance.
+	let { bots, showOwner = true, empty = 'No apps.' }: { bots: (Bot & { owner_email?: string })[]; showOwner?: boolean; empty?: string } = $props();
 </script>
 
 {#if bots.length}
@@ -14,7 +14,7 @@
 		<table class="w-full min-w-[36rem] text-left">
 			<thead class="border-b border-rule-soft">
 				<tr class="[&>th]:px-4 [&>th]:py-2.5 [&>th]:font-normal">
-					<th class="eyebrow">Bot</th>
+					<th class="eyebrow">App</th>
 					<th class="eyebrow">State</th>
 					{#if showOwner}<th class="eyebrow">Owner</th>{/if}
 					<th class="eyebrow text-right">Memory</th>

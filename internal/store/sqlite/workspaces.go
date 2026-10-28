@@ -175,7 +175,7 @@ func (db *DB) DeleteWorkspace(ctx context.Context, id string) error {
 		return domain.Invalid("a personal workspace cannot be deleted")
 	}
 	if bots > 0 || sites > 0 {
-		return domain.Invalid("move or delete this workspace's bots and sites first")
+		return domain.Invalid("move or delete this workspace's apps and sites first")
 	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM workspaces WHERE id = ?`, id); err != nil {
 		return mapErr(err)

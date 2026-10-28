@@ -49,7 +49,7 @@
 		if (!c.bot_ids && !c.workspace_ids) return 'Not limited';
 		const b = c.bot_ids?.length ?? 0;
 		const w = c.workspace_ids?.length ?? 0;
-		return `Limited to ${b} bot${b === 1 ? '' : 's'} and ${w} workspace${w === 1 ? '' : 's'}`;
+		return `Limited to ${b} app${b === 1 ? '' : 's'} and ${w} workspace${w === 1 ? '' : 's'}`;
 	}
 </script>
 

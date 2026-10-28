@@ -14,7 +14,7 @@
 		'separator',
 		...workspaces.list.map((w) => ({
 			label: `${workspaces.selected === w.id ? '✓ ' : ''}${w.personal ? 'Personal' : w.name}`,
-			hint: `${w.bots} bot${w.bots === 1 ? '' : 's'}${w.sites ? ` · ${w.sites} site${w.sites === 1 ? '' : 's'}` : ''} · ${w.role || 'administrator'}`,
+			hint: `${w.bots} app${w.bots === 1 ? '' : 's'}${w.sites ? ` · ${w.sites} site${w.sites === 1 ? '' : 's'}` : ''} · ${w.role || 'administrator'}`,
 			detail: true,
 			onselect: () => selectWorkspace(w.id)
 		})),

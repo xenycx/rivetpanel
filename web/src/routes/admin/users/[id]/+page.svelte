@@ -41,8 +41,8 @@
 	</header>
 
 	<dl class="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4">
-		<div class="card px-4 py-3"><dt class="eyebrow">Bots owned</dt><dd class="mt-1 font-mono text-title font-semibold">{running}/{v.bots.length}</dd><dd class="text-small text-muted">running / total</dd></div>
-		<div class="card px-4 py-3"><dt class="eyebrow">Memory</dt><dd class="mt-1 font-mono text-title font-semibold">{fmtBytes(memory)}</dd><dd class="text-small text-muted">assigned to running bots</dd></div>
+		<div class="card px-4 py-3"><dt class="eyebrow">Apps owned</dt><dd class="mt-1 font-mono text-title font-semibold">{running}/{v.bots.length}</dd><dd class="text-small text-muted">running / total</dd></div>
+		<div class="card px-4 py-3"><dt class="eyebrow">Memory</dt><dd class="mt-1 font-mono text-title font-semibold">{fmtBytes(memory)}</dd><dd class="text-small text-muted">assigned to running apps</dd></div>
 		<div class="card px-4 py-3"><dt class="eyebrow">Workspaces</dt><dd class="mt-1 font-mono text-title font-semibold">{v.workspaces.length}</dd><dd class="text-small text-muted">member of</dd></div>
 		<div class="card px-4 py-3"><dt class="eyebrow">Last operation</dt><dd class="mt-1 text-title font-semibold">{v.operations[0] ? fmtAgo(v.operations[0].created_at_ms) : '—'}</dd></div>
 	</dl>
@@ -58,7 +58,7 @@
 						<span class="grid size-9 shrink-0 place-items-center rounded-tile bg-action/12 font-mono text-[11px] font-semibold text-action" aria-hidden="true">{(w.personal ? 'P' : w.name.slice(0, 2)).toUpperCase()}</span>
 						<span class="min-w-0 flex-1">
 							<span class="block truncate font-medium">{w.personal ? 'Personal' : w.name}</span>
-							<span class="block text-small text-muted">{w.role ? roleText[w.role] : ''} · {w.running_bots}/{w.bots} bots · {w.sites} sites · {w.members} members</span>
+							<span class="block text-small text-muted">{w.role ? roleText[w.role] : ''} · {w.running_bots}/{w.bots} apps · {w.sites} sites · {w.members} members</span>
 						</span>
 						<Icon name="chevronRight" size={14} class="text-muted" />
 					</a>
@@ -68,8 +68,8 @@
 	</section>
 
 	<section class="mt-8" aria-labelledby="bots-h">
-		<h3 id="bots-h" class="mb-2 text-title font-semibold">Bots they own</h3>
-		<AdminBotTable bots={v.bots} showOwner={false} empty="This account owns no bots." />
+		<h3 id="bots-h" class="mb-2 text-title font-semibold">Apps they own</h3>
+		<AdminBotTable bots={v.bots} showOwner={false} empty="This account owns no apps." />
 	</section>
 
 	<section class="mt-8" aria-labelledby="ops-h">
@@ -79,7 +79,7 @@
 				{#each v.operations as op (op.id)}<OperationRow {op} showBot />{/each}
 			</ul>
 		{:else}
-			<p class="card px-4 py-4 text-small text-muted">No deployments, builds or backups on their bots yet.</p>
+			<p class="card px-4 py-4 text-small text-muted">No deployments, builds or backups on their apps yet.</p>
 		{/if}
 	</section>
 {/if}

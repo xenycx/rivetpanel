@@ -64,7 +64,7 @@ var Permissions = []PermissionInfo{
 	{PermBotsEnv, "resources", "Environment variables", "Read and change environment variables."},
 	{PermBotsBackups, "resources", "Backups", "Create, restore, verify and delete backups."},
 	{PermBotsDeploy, "resources", "Deployments", "Link GitHub repositories, deploy, publish and push."},
-	{PermBotsShare, "resources", "Sharing", "Share bots with other accounts, invitations and ownership transfer."},
+	{PermBotsShare, "resources", "Sharing", "Share apps with other accounts, invitations and ownership transfer."},
 	{PermSitesCreate, "resources", "Create sites", "Create static sites."},
 	{PermWorkspacesCreate, "resources", "Create workspaces", "Create team workspaces."},
 	{PermAPIKeys, "resources", "API keys and tokens", "Create SFTP API keys, automation tokens and API clients."},
@@ -74,7 +74,7 @@ var Permissions = []PermissionInfo{
 	{PermUsersView, "administration", "View accounts", "List accounts and open an account's details."},
 	{PermUsersManage, "administration", "Manage accounts", "Create, enable and disable accounts, assign roles they hold themselves, verify email addresses and send account invitations."},
 	{PermRolesManage, "administration", "Manage roles", "Create, change and delete custom roles (only with permissions they hold themselves)."},
-	{PermNodesManage, "administration", "Nodes", "Locations, node enrollment, certificates and node settings; placing bots on nodes."},
+	{PermNodesManage, "administration", "Nodes", "Locations, node enrollment, certificates and node settings; placing apps on nodes."},
 	{PermBlueprintsManage, "administration", "Server types", "Import, enable, disable and delete game server blueprints."},
 	{PermAllocations, "administration", "Allocations", "Create, change and delete port allocations."},
 	{PermSettingsManage, "administration", "Panel settings", "Panel address, sign-in providers, registration, email and the unverified-account policy."},
@@ -87,7 +87,7 @@ var Permissions = []PermissionInfo{
 	{PermTicketsManage, "administration", "Answer tickets", "Read and answer every support ticket, write internal notes, change status and priority, and assign tickets."},
 	{PermKBManage, "administration", "Knowledgebase", "Write, publish and delete help articles and categories, and choose whether the help center is public."},
 	{PermStatusManage, "administration", "Status page", "Configure the public status page, its components, incidents and scheduled maintenance."},
-	{PermAnalyticsView, "administration", "Usage analytics", "Panel-wide usage analytics: accounts, bots and servers, resource use, deployments, backups and top consumers (nodes only with Nodes, tickets only with ticket access)."},
+	{PermAnalyticsView, "administration", "Usage analytics", "Panel-wide usage analytics: accounts, apps, resource use, deployments, backups and top consumers (nodes only with Nodes, tickets only with ticket access)."},
 }
 
 // ValidPermission reports whether p is in the catalog.

@@ -187,7 +187,7 @@ func (s *TicketService) Create(ctx context.Context, actor domain.User, in Ticket
 		if err != nil {
 			var se *domain.ScopeError
 			if errors.Is(err, domain.ErrNotFound) || errors.Is(err, domain.ErrForbidden) || errors.As(err, &se) {
-				return domain.Ticket{}, domain.Invalid("choose a bot or server you can access")
+				return domain.Ticket{}, domain.Invalid("choose an app you can access")
 			}
 			return domain.Ticket{}, err
 		}

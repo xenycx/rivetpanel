@@ -95,8 +95,9 @@ export type GameStatus = {
 export type EggDraft = { yaml: string; warnings: string[]; error?: string; format: string; name: string };
 export type Version = { id: string; stable: boolean };
 
-/** Where a bot or game server lives in the interface. */
+/** Where an app lives in the interface. A web app opens its site, which picks its own tab. */
 export function resourceHref(b: Pick<Bot, 'id' | 'kind'>, tab?: string): string {
+	if (b.kind === 'web') return `/sites/app/${b.id}`;
 	const base = b.kind === 'game' ? `/servers/${b.id}` : `/bots/${b.id}`;
 	return tab ? `${base}?tab=${tab}` : base;
 }

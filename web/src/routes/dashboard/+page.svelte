@@ -114,11 +114,14 @@
 		const reservedCpu = list.filter((b) => b.desired_state === 'running').reduce((n, b) => n + b.nano_cpus, 0) / 1e9;
 		const limited = !!cap && !cap.exempt;
 		const memMax = limited && cap!.max_memory_bytes ? cap!.max_memory_bytes : 0;
-		const botMax = limited && cap!.max_bots ? cap!.max_bots : 0;
+		const appMax = limited && cap!.max_bots ? cap!.max_bots : 0;
+		// The apps limit counts the bots, game servers and web apps the account
+		// owns. /bots leaves web apps out, so the count comes from /me/capacity.
+		const apps = cap ? (cap.usage?.apps ?? cap.bots) : list.length;
 		return [
 			{ label: 'Memory reserved', value: fmtBytes(limited && memMax ? cap!.memory_bytes : reservedMem), of: memMax ? `of ${fmtBytes(memMax)}` : 'no limit', pct: memMax ? pct(cap!.memory_bytes, memMax) : undefined },
 			{ label: 'CPU reserved', value: `${reservedCpu.toFixed(2).replace(/\.?0+$/, '')}`, of: reservedCpu === 1 ? 'core' : 'cores' },
-			{ label: 'Bots and servers', value: String(list.length), of: botMax ? `of ${botMax}` : 'no limit', pct: botMax ? pct(list.length, botMax) : undefined },
+			{ label: 'Apps', value: String(apps), of: appMax ? `of ${appMax}` : 'no limit', pct: appMax ? pct(apps, appMax) : undefined },
 			runningKpi
 		];
 	});

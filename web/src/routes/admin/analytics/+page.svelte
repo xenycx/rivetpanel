@@ -56,7 +56,7 @@
 <div class="flex flex-wrap items-end justify-between gap-3">
 	<div>
 		<h2 class="text-section font-semibold">Analytics</h2>
-		<p class="text-small text-muted">Usage across the panel{#if data}, per {per}{/if}: accounts, bots and servers, resources, deployments and backups.</p>
+		<p class="text-small text-muted">Usage across the panel{#if data}, per {per}{/if}: accounts, apps, resources, deployments and backups.</p>
 	</div>
 	<div class="flex flex-wrap items-center gap-2">
 		<div class="inline-flex rounded-control border border-rule bg-raised p-0.5" role="group" aria-label="Time range">
@@ -70,7 +70,7 @@
 
 {#if error}<Notice tone="fail" class="mt-4">{error}</Notice>{/if}
 {#if data?.scope === 'delegated'}
-	<Notice class="mt-4">Figures cover the accounts your role can manage and their bots and servers; administrators and accounts with administration permissions you lack are left out.</Notice>
+	<Notice class="mt-4">Figures cover the accounts your role can manage and their apps; administrators and accounts with administration permissions you lack are left out.</Notice>
 {/if}
 
 {#if data && tot}
@@ -89,6 +89,11 @@
 			<dt class="eyebrow">Game servers</dt>
 			<dd class="mt-1 font-mono text-section font-semibold">{fmtCount(data.bots.game?.total ?? 0)}</dd>
 			<dd class="text-small text-muted">{fmtCount(data.bots.game?.running ?? 0)} running now</dd>
+		</div>
+		<div class="stat">
+			<dt class="eyebrow">Web apps</dt>
+			<dd class="mt-1 font-mono text-section font-semibold">{fmtCount(data.bots.web?.total ?? 0)}</dd>
+			<dd class="text-small text-muted">{fmtCount(data.bots.web?.running ?? 0)} running now</dd>
 		</div>
 		<div class="stat">
 			<dt class="eyebrow">Uptime</dt>
@@ -125,10 +130,10 @@
 	</dl>
 
 	<div class="mt-6 grid gap-3 lg:grid-cols-2">
-		<div class="stat"><p class="eyebrow mb-2">CPU in use (cores, all bots)</p>
+		<div class="stat"><p class="eyebrow mb-2">CPU in use (cores, all apps)</p>
 			<TimeChart label="CPU in use" {times} format={fmtCores} series={[{ label: 'CPU', values: pts.map((p) => p.cpu), area: true }]} />
 		</div>
-		<div class="stat"><p class="eyebrow mb-2">Memory in use (all bots)</p>
+		<div class="stat"><p class="eyebrow mb-2">Memory in use (all apps)</p>
 			<TimeChart label="Memory in use" {times} format={fmtBytes} series={[{ label: 'Memory', values: pts.map((p) => p.mem), area: true, color: 'run' }]} />
 		</div>
 		<div class="stat"><p class="eyebrow mb-2">Network per {per}</p>
@@ -150,7 +155,7 @@
 
 	<section class="mt-8" aria-labelledby="top-h">
 		<h3 id="top-h" class="text-title font-semibold">Top consumers</h3>
-		<p class="text-small text-muted">Averages over the range while the bot or server was measured.{#if data.top_cpu.length && !data.top_cpu[0].owner} Owners are shown to accounts that can view accounts.{/if}</p>
+		<p class="text-small text-muted">Averages over the range while the app was measured.{#if data.top_cpu.length && !data.top_cpu[0].owner} Owners are shown to accounts that can view accounts.{/if}</p>
 		<div class="mt-3 grid gap-3 xl:grid-cols-3">
 			{#each tables as t (t.id)}
 				<div class="card p-4">
@@ -159,7 +164,7 @@
 						<ol class="mt-2 grid gap-1.5">
 							{#each t.rows as c (c.bot_id)}
 								<li class="flex items-baseline justify-between gap-3">
-									<span class="min-w-0 truncate"><a class="link" href={href(c)}>{c.name}</a>{#if c.kind === 'game'}<span class="ml-1.5 text-small text-muted">server</span>{:else if c.kind === 'web'}<span class="ml-1.5 text-small text-muted">site</span>{/if}{#if c.owner}<span class="block truncate text-small text-muted">{c.owner}</span>{/if}</span>
+									<span class="min-w-0 truncate"><a class="link" href={href(c)}>{c.name}</a>{#if c.kind === 'game'}<span class="ml-1.5 text-small text-muted">server</span>{:else if c.kind === 'web'}<span class="ml-1.5 text-small text-muted">web app</span>{/if}{#if c.owner}<span class="block truncate text-small text-muted">{c.owner}</span>{/if}</span>
 									<span class="shrink-0 font-mono text-small">{t.value(c)}</span>
 								</li>
 							{/each}
