@@ -52,6 +52,18 @@ export function fmtAgo(ms: number, now = Date.now()): string {
 	return new Date(ms).toLocaleDateString();
 }
 
+/** The future counterpart of fmtAgo: "in 5 min", "in 3 h", "in 2 days", then a date; "expired" once past. */
+export function fmtUntil(ms: number, now = Date.now()): string {
+	const s = Math.round((ms - now) / 1000);
+	if (s <= 0) return 'expired';
+	if (s < 60) return 'in under a minute';
+	if (s < 3600) return `in ${Math.round(s / 60)} min`;
+	if (s < 86400) return `in ${Math.round(s / 3600)} h`;
+	const d = Math.round(s / 86400);
+	if (d < 45) return `in ${d} day${d === 1 ? '' : 's'}`;
+	return new Date(ms).toLocaleDateString();
+}
+
 /** Short date and time without seconds. */
 export function fmtWhen(ms: number): string {
 	return new Date(ms).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });

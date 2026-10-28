@@ -35,6 +35,12 @@ export function can(p: string): boolean {
 // analytics included, so those roles reach their sections too).
 export { adminPermissions };
 
+/** Whether the account may give a role to someone (an account or an invitation): only
+ * built-in administrators give the Administrator role; others only roles within their own permissions. */
+export function canGrantRole(r: { id: string; permissions: string[] }): boolean {
+	return session.user?.role === 'admin' || (r.id !== 'admin' && r.permissions.every((p) => can(p)));
+}
+
 /** Whether the account may open any part of the administration area. */
 export function canAdminister(): boolean {
 	return session.user?.role === 'admin' || adminPermissions.some((p) => session.permissions.includes(p));
