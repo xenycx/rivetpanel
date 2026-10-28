@@ -6,6 +6,8 @@ authoritative current version.
 
 ## Unreleased
 
+## 0.8.0 - 2026-10-28
+
 ### Changed
 
 - **Limits belong to workspaces, not accounts.** Every member's apps and

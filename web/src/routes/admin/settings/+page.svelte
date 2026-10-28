@@ -220,7 +220,7 @@
 				<span class="flex-1"></span>
 				{#if v.mail_enabled && !v.locked.mailgun_api_key}<button type="button" class="btn btn-sm btn-danger" onclick={disableMail}>Turn off</button>{/if}
 			</div>
-			<p class="mt-1 text-small text-muted">Sends password-reset links, invitations, bot alerts and security notices. It needs the key, the sending domain and a sender; nothing runs in the background while it is idle.</p>
+			<p class="mt-1 text-small text-muted">Sends password-reset links, invitations, app alerts and security notices. It needs the key, the sending domain and a sender; nothing runs in the background while it is idle.</p>
 			<div class="mt-4 grid gap-4 md:grid-cols-2">
 				<label class="block">
 					<span class="label">API key</span>

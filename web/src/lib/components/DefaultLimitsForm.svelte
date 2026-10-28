@@ -44,8 +44,7 @@
 	function fallback(k: Key, show: (n: number) => string = String): string {
 		if (!v) return '';
 		if (k === 'team_workspaces') return String(v.builtin_team_workspaces);
-		const n = envName[k];
-		if (v.source[k] === 'env' && v.limits[k] != null) return `${show(v.limits[k] as number)} (${n})`;
+		if (v.source[k] === 'env' && v.limits[k] != null) return `${show(v.limits[k] as number)} from environment`;
 		return 'No limit';
 	}
 	const num = (s: number | string | null | undefined) => (s == null || String(s).trim() === '' ? null : Number(s));
@@ -82,7 +81,7 @@
 		{#each counts as f (f.key)}
 			<label class="block">
 				<span class="label">{f.label}</span>
-				<input class="field font-mono" type="number" min="0" step="1" placeholder={fallback(f.key)} bind:value={form[f.key]} disabled={!editable || busy} />
+				<input class="field font-mono" type="number" min="0" step="1" placeholder={fallback(f.key)} title={envName[f.key] ? `Falls back to ${envName[f.key]}` : undefined} bind:value={form[f.key]} disabled={!editable || busy} />
 			</label>
 		{/each}
 		<label class="block">
