@@ -4,9 +4,11 @@
 	import type { Role, User } from '$lib/api/types';
 	import { fmtWhen } from '$lib/args';
 	import { adminPermissions } from '$lib/permissions';
-	import { can, session } from '$lib/session.svelte';
+	import { can, canGrantRole, session } from '$lib/session.svelte';
 	import { confirmDialog, confirmWithOption } from '$lib/ui/dialogs.svelte';
 	import { toast } from '$lib/ui/toast.svelte';
+	import InviteDialog from '$lib/components/InviteDialog.svelte';
+	import PendingInvites from '$lib/components/PendingInvites.svelte';
 	import Dialog from '$lib/components/ui/Dialog.svelte';
 	import Icon from '$lib/components/ui/Icon.svelte';
 	import Menu, { type MenuItem } from '$lib/components/ui/Menu.svelte';
@@ -19,9 +21,7 @@
 	let q = $state('');
 	let addOpen = $state(false);
 	let inviteOpen = $state(false);
-	let inviteForm = $state({ email: '', role: 'user', expires_in_days: 7, send_email: false });
-	let inviteLink = $state('');
-	let inviteMail = $state('');
+	let invitesKey = $state(0);
 	let form = $state({ email: '', password: '', role: 'user' });
 	let addError = $state('');
 	let busy = $state(false);
@@ -39,7 +39,7 @@
 	const roleOf = (u: User) => u.role_id || u.role;
 	const roleLabel = (u: User) => (u.role === 'admin' ? 'Administrator' : u.role_name || 'User');
 	/** Roles this account may hand out: only administrators make administrators; others only roles within their own permissions. */
-	const grantable = (r: Role) => isAdmin || (r.id !== 'admin' && r.permissions.every((p) => can(p)));
+	const grantable = (r: Role) => canGrantRole(r);
 	/** Delegated managers cannot change administrators or accounts holding administration permissions they lack (the server refuses too). */
 	const outranked = (u: User) =>
 		!isAdmin && (u.role === 'admin' || (roles.find((r) => r.id === u.role_id)?.permissions ?? []).some((p) => adminPermissions.includes(p) && !can(p)));
@@ -79,16 +79,6 @@
 			busy = false;
 		}
 	}
-	async function invite(e: SubmitEvent) {
-		e.preventDefault(); addError = ''; busy = true;
-		try {
-			const r = await api<{ path: string; emailed: boolean; email_error: string }>('POST', '/admin/account-invites', { ...inviteForm, send_email: inviteForm.send_email && !!inviteForm.email });
-			inviteLink = location.origin + r.path;
-			inviteMail = r.emailed ? `We emailed the link to ${inviteForm.email}. It is also here in case you need it.` : r.email_error ? `The email was not sent: ${r.email_error}.` : '';
-			toast(r.emailed ? 'Invitation created and emailed' : 'Invitation created', 'success');
-		} catch (err) { addError = msg(err); } finally { busy = false; }
-	}
-	async function copyInvite() { await navigator.clipboard.writeText(inviteLink); toast('Invitation link copied'); }
 	async function patch(u: AdminUser, body: Record<string, unknown>, done: string) {
 		try {
 			await api('PATCH', `/users/${u.id}`, body);
@@ -201,7 +191,7 @@
 		<h2 class="text-section">Users</h2>
 		<p class="mt-1 text-muted">{users?.length ?? '…'} account{users?.length === 1 ? '' : 's'}, {admins} administrator{admins === 1 ? '' : 's'}.</p>
 	</div>
-	{#if manage}<div class="flex gap-2"><button class="btn" onclick={() => { inviteOpen = true; inviteLink = ''; inviteMail = ''; addError = ''; }}><Icon name="link" />Invite user</button><button class="btn btn-primary" onclick={() => (addOpen = true)}><Icon name="plus" />Add user</button></div>{/if}
+	{#if manage}<div class="flex gap-2"><button class="btn" onclick={() => (inviteOpen = true)}><Icon name="link" />Invite user</button><button class="btn btn-primary" onclick={() => (addOpen = true)}><Icon name="plus" />Add user</button></div>{/if}
 </div>
 
 {#if (users?.length ?? 0) > 8}
@@ -235,6 +225,7 @@
 	{/if}
 </div>
 <p class="mt-3 max-w-prose text-small text-muted">A locked-out administrator can set a new password on the host with <code>rivetpanel reset-password EMAIL</code>.</p>
+{#if manage}<PendingInvites refreshKey={invitesKey} />{/if}
 
 <Dialog bind:open={addOpen} title="Add a user" size="sm">
 	<form id="user-add" class="grid gap-4" onsubmit={add}>
@@ -261,21 +252,7 @@
 	{/snippet}
 </Dialog>
 
-<Dialog bind:open={inviteOpen} title="Invite a user" size="sm">
-	{#if inviteLink}
-		<p class="text-muted">{inviteMail || 'This link is shown once. Send it to the person you want to invite.'}</p>
-		<div class="mt-3 flex gap-2"><input class="field font-mono text-small" readonly value={inviteLink} /><button class="btn" onclick={copyInvite}>Copy</button></div>
-	{:else}
-		<form id="user-invite" class="grid gap-4" onsubmit={invite}>
-			<label><span class="label">Email (optional)</span><input class="field" type="email" bind:value={inviteForm.email} placeholder="Locks the link to this address" /></label>
-			<label><span class="label">Role</span><select class="field" bind:value={inviteForm.role}><option value="user">User</option>{#if isAdmin}<option value="admin">Administrator</option>{/if}</select><span class="help">Invitations give a built-in role; assign a custom role once the account exists.</span></label>
-			<label><span class="label">Expires after</span><select class="field" bind:value={inviteForm.expires_in_days}><option value={1}>1 day</option><option value={3}>3 days</option><option value={7}>7 days</option><option value={14}>14 days</option></select></label>
-			{#if session.features.mail}<label class="flex items-start gap-2.5"><input type="checkbox" class="mt-0.5" bind:checked={inviteForm.send_email} disabled={!inviteForm.email} /><span>Email the link to this address<span class="help">{inviteForm.email ? 'The link is also shown here afterwards.' : 'Enter an email address above to send the link.'}</span></span></label>{/if}
-			{#if addError}<p class="text-small text-fail">{addError}</p>{/if}
-		</form>
-	{/if}
-	{#snippet footer()}<button class="btn" onclick={() => (inviteOpen = false)}>{inviteLink ? 'Done' : 'Cancel'}</button>{#if !inviteLink}<button class="btn btn-primary" type="submit" form="user-invite" disabled={busy}>Create invitation</button>{/if}{/snippet}
-</Dialog>
+<InviteDialog bind:open={inviteOpen} {roles} oncreated={() => invitesKey++} />
 
 <Dialog bind:open={roleOpen} title={roleFor ? `Role for ${roleFor.email}` : 'Role'} size="sm">
 	<form id="user-role" class="grid gap-2" onsubmit={saveRole}>

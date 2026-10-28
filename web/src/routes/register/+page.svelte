@@ -8,7 +8,7 @@
 	import type { User } from '$lib/api/types';
 	import Icon from '$lib/components/ui/Icon.svelte';
 
-	type Invite = { email: string; role: string; expires_at_ms: number };
+	type Invite = { email: string; role: string; role_name?: string; workspace_name?: string; expires_at_ms: number };
 	let token = $state(''); let invite = $state<Invite | null>(null); let enabled = $state(false); let providers = $state<string[]>([]);
 	let email = $state(''); let password = $state(''); let error = $state(''); let busy = $state(false);
 	const labels: Record<string,string> = { github:'GitHub', discord:'Discord' };
@@ -25,6 +25,8 @@
 	{#if !enabled}<Notice tone="warn" class="mt-4">Registration is closed. Ask an administrator to enable it.</Notice>
 	{:else if error && !invite}<Notice tone="fail" class="mt-4" live>{error}</Notice>
 	{:else if invite}
+		<p class="mt-1">You're invited as <strong class="font-semibold">{invite.role_name || (invite.role === 'admin' ? 'Administrator' : 'User')}</strong>.</p>
+		{#if invite.workspace_name}<p class="mt-1">You will join the workspace <strong class="font-semibold">{invite.workspace_name}</strong>.</p>{/if}
 		<p class="mt-1 text-muted">Your invitation expires {new Date(invite.expires_at_ms).toLocaleString()}.</p>
 		{#if providers.length}<div class="mt-6 grid gap-2">{#each providers as p}<a class="btn w-full" href={`/api/v1/auth/${p}/login`} data-sveltekit-reload><Icon name={p as 'github'} />Continue with {labels[p]}</a>{/each}</div><div class="my-5 flex items-center gap-3 text-small text-muted"><hr class="flex-1 border-rule" />or create a password<hr class="flex-1 border-rule" /></div>{/if}
 		{#if error}<Notice tone="fail" class="mb-4" live>{error}</Notice>{/if}
