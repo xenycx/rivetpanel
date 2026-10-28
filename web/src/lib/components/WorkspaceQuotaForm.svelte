@@ -1,7 +1,8 @@
 <script lang="ts">
-	import { api, ApiError, fmtBytes } from '$lib/api/client';
+	import { api, ApiError, fmtBytes, fmtCpu } from '$lib/api/client';
 	import type { WorkspaceQuota, WorkspaceQuotaView } from '$lib/api/types';
 	import WorkspaceUsage from '$lib/components/WorkspaceUsage.svelte';
+	import ResourcePicker from '$lib/components/ResourcePicker.svelte';
 	import Notice from '$lib/components/ui/Notice.svelte';
 	import { session } from '$lib/session.svelte';
 
@@ -19,6 +20,9 @@
 	let v = $state<WorkspaceQuotaView | null>(null);
 	// Number inputs bind numbers, or null when emptied.
 	let form = $state<Record<string, number | string | null>>({});
+	// Bytes and nano-CPUs; null means the default applies.
+	let memory = $state<number | null>(null);
+	let cpu = $state<number | null>(null);
 	let error = $state('');
 	let saved = $state('');
 	let busy = $state(false);
@@ -29,8 +33,8 @@
 		v = r;
 		const q = r.quota;
 		form = Object.fromEntries(fields.map((f) => [f.key, q[f.key] == null ? '' : String(q[f.key])]));
-		form.memory_mib = q.memory_bytes == null ? '' : String(Math.round(q.memory_bytes / 2 ** 20));
-		form.cpus = q.nano_cpus == null ? '' : String(q.nano_cpus / 1e9);
+		memory = q.memory_bytes ?? null;
+		cpu = q.nano_cpus ?? null;
 	}
 	const path = $derived(`/admin/workspaces/${workspaceId}/quota`);
 	$effect(() => {
@@ -61,14 +65,12 @@
 	function submit(e: SubmitEvent) {
 		e.preventDefault();
 		const body: Record<string, number | null> = Object.fromEntries(fields.map((f) => [f.key, num(form[f.key])]));
-		const mib = num(form.memory_mib);
-		const cpus = num(form.cpus);
-		if ([...Object.values(body), mib].some((n) => n != null && (!Number.isInteger(n) || n < 0)) || (cpus != null && !(cpus >= 0))) {
-			error = 'Limits must be whole numbers of 0 or more (CPU may have decimals); leave a field empty for the default.';
+		if (Object.values(body).some((n) => n != null && (!Number.isInteger(n) || n < 0))) {
+			error = 'Limits must be whole numbers of 0 or more; leave a field empty for the default.';
 			return;
 		}
-		body.memory_bytes = mib == null ? null : Math.round(mib * 2 ** 20);
-		body.nano_cpus = cpus == null ? null : Math.round(cpus * 1e9);
+		body.memory_bytes = memory;
+		body.nano_cpus = cpu;
 		save(body);
 	}
 	async function reset() {
@@ -104,18 +106,17 @@
 					<input class="field font-mono" type="number" min="0" step="1" placeholder={dflt(f.key)} bind:value={form[f.key]} disabled={!editable || busy} />
 				</label>
 			{/each}
-			<label class="block">
-				<span class="label">Memory (MiB)</span>
-				<input class="field font-mono" type="number" min="0" step="1" placeholder={dflt('memory_bytes', fmtBytes)} bind:value={form.memory_mib} disabled={!editable || busy} />
-			</label>
-			<label class="block">
-				<span class="label">CPU cores</span>
-				<input class="field font-mono" type="number" min="0" step="0.25" placeholder={dflt('nano_cpus', (n) => String(n / 1e9))} bind:value={form.cpus} disabled={!editable || busy} />
-			</label>
+			<div class="sm:col-span-2 lg:col-span-3">
+				<span class="label" id="quota-memory-l">Memory</span>
+				<ResourcePicker kind="memory" id="quota-memory" labelledby="quota-memory-l" allowEmpty emptyLabel={dflt('memory_bytes', fmtBytes)} value={memory} onchange={(x) => (memory = x)} disabled={!editable || busy} />
+			</div>
+			<div class="sm:col-span-2 lg:col-span-3">
+				<span class="label" id="quota-cpu-l">CPU</span>
+				<ResourcePicker kind="cpu" id="quota-cpu" labelledby="quota-cpu-l" allowEmpty emptyLabel={dflt('nano_cpus', fmtCpu)} value={cpu} onchange={(x) => (cpu = x)} disabled={!editable || busy} />
+			</div>
 			{#if editable}
 				<div class="flex flex-wrap items-center gap-2 sm:col-span-2 lg:col-span-3">
 					<button class="btn btn-primary" type="submit" disabled={busy}>Save limits</button>
-					<button class="btn" type="button" disabled={busy} onclick={() => save({ max_bots: 1, max_games: 0, max_web_apps: 0, max_sites: 0, max_apps: null, memory_bytes: null, nano_cpus: null })}>One bot only</button>
 					{#if v.updated_at_ms}<button class="btn" type="button" disabled={busy} onclick={reset}>Use default limits</button>{/if}
 				</div>
 			{:else}
