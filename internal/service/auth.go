@@ -30,10 +30,10 @@ type Session struct {
 	User        domain.User
 }
 
-// Placement answers the questions an invitation's setup asks of the app
+// InvitePlacement answers the questions an invitation's setup asks of the app
 // service: whether a node accepts new apps and whether the actor
 // administers a team workspace. BotService implements it.
-type Placement interface {
+type InvitePlacement interface {
 	NodePlaceable(ctx context.Context, nodeID string) error
 	WorkspaceAdmin(ctx context.Context, actor domain.User, workspaceID string) error
 }
@@ -46,7 +46,7 @@ type AuthService struct {
 	Now    func() time.Time
 	// Placement validates the node pin and workspace join of an invitation;
 	// without it those parts of an invitation are refused.
-	Placement Placement
+	Placement InvitePlacement
 
 	dummyOnce sync.Once
 	dummyHash string

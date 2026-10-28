@@ -9,7 +9,8 @@ import (
 // NodePlaceable reports whether new apps may be placed on a node, for an
 // invitation that pins the invitee's personal workspace to it.
 func (s *BotService) NodePlaceable(ctx context.Context, nodeID string) error {
-	return s.placeable(ctx, nodeID)
+	_, err := s.placeable(ctx, nodeID)
+	return err
 }
 
 // WorkspaceAdmin checks that a team workspace exists and that the actor
