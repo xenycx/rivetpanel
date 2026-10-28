@@ -2,14 +2,18 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
-	import { api, ApiError, fmtBytes, MiB } from '$lib/api/client';
-	import type { AddonKind, Analysis, Bot, Connection, GitHubRepo, Limits, NodeInfo, Plan, Recipe, RepoLookup, RuntimeInfo, Template, TemplateEnv } from '$lib/api/types';
+	import { api, ApiError, fmtBytes, fmtCpu } from '$lib/api/client';
+	import type { AddonKind, Analysis, Bot, Capacity, Connection, GitHubRepo, Limits, LocationInfo, NodeInfo, Placement, Plan, Recipe, RepoLookup, RuntimeInfo, Template, TemplateEnv } from '$lib/api/types';
 	import { joinArgs, splitArgs } from '$lib/args';
+	import { capLimits, clampMax, room, roomText } from '$lib/room';
 	import { toast } from '$lib/ui/toast.svelte';
-	import { session } from '$lib/session.svelte';
+	import { can, session } from '$lib/session.svelte';
 	import Icon from '$lib/components/ui/Icon.svelte';
 	import Notice from '$lib/components/ui/Notice.svelte';
 	import Skeleton from '$lib/components/ui/Skeleton.svelte';
+	import NodePickerCard from '$lib/components/NodePickerCard.svelte';
+	import PlacementNotice from '$lib/components/PlacementNotice.svelte';
+	import ResourcePicker from '$lib/components/ResourcePicker.svelte';
 	import { creatable, loadWorkspaces, workspaces, wsName } from '$lib/workspaces.svelte';
 
 	type Source = 'template' | 'github' | 'blank';
@@ -37,11 +41,18 @@
 	let env = $state<Record<string, string>>({});
 	let extra = $state<{ name: string; value: string }[]>([]);
 	let shown = $state<Record<string, boolean>>({});
-	let memoryMiB = $state<number | null>(null);
-	let cpus = $state<number | null>(null);
+	let memoryBytes = $state<number | null>(null);
+	let nanoCpus = $state<number | null>(null);
 	let startNow = $state(true);
+	// Placement: node managers pick a node from cards; everyone else sees where
+	// the workspace's apps go. Both start from what /placement resolves.
 	let nodes = $state<NodeInfo[]>([]);
+	let locations = $state<LocationInfo[]>([]);
 	let nodeId = $state('');
+	let nodeTouched = $state(false);
+	let placement = $state<Placement | null>(null);
+	let cap = $state<Capacity | null>(null);
+	const picksNode = $derived(can('nodes.manage') && session.features.agents);
 
 	// GitHub: paste any public repository, or pick one of your own.
 	let ghMode = $state<'url' | 'mine'>('url');
@@ -70,6 +81,28 @@
 		if (workspaceId && workspaces.list.find((w) => w.id === workspaceId)?.personal) workspaceId = '';
 	});
 	const targets = $derived(creatable());
+	// The workspace's placement and room, refreshed when another one is chosen.
+	$effect(() => {
+		const ws = workspaceId;
+		let live = true;
+		api<Placement>('GET', `/placement?workspace=${encodeURIComponent(ws)}`)
+			.then((p) => {
+				if (!live) return;
+				placement = p;
+				if (!nodeTouched) nodeId = p.node.id;
+			})
+			.catch(() => {});
+		api<Capacity>('GET', `/me/capacity?workspace=${encodeURIComponent(ws)}`)
+			.then((c) => {
+				if (live) cap = c;
+			})
+			.catch(() => {
+				if (live) cap = null;
+			});
+		return () => {
+			live = false;
+		};
+	});
 
 	let problems = $state<Record<string, string>>({});
 	let submitError = $state('');
@@ -101,11 +134,13 @@
 			gh = null;
 		}
 		if (source === 'github' && repoInput) lookUp();
-		if (session.user?.role === 'admin' && session.features.agents) {
-			api<{ nodes: NodeInfo[] }>('GET', '/nodes').then((r) => {
-				nodes = r.nodes.filter((n) => n.enabled && !n.draining);
-				nodeId = nodes.find((n) => n.transport === 'local')?.id ?? nodes[0]?.id ?? '';
-			}).catch(() => {});
+		if (picksNode) {
+			Promise.all([api<{ nodes: NodeInfo[] }>('GET', '/nodes'), api<{ locations: LocationInfo[] }>('GET', '/nodes/locations')])
+				.then(([n, l]) => {
+					nodes = n.nodes;
+					locations = l.locations;
+				})
+				.catch(() => {});
 		}
 	});
 
@@ -113,14 +148,35 @@
 	const rtId = $derived(source === 'template' ? (tpl?.runtime ?? '') : runtime);
 	const rt = $derived(runtimes.find((r) => r.id === rtId));
 	const required = $derived<TemplateEnv[]>(source === 'template' ? (tpl?.env ?? []) : planEnv);
-	const effMemory = $derived(memoryMiB && memoryMiB > 0 ? Math.round(memoryMiB * MiB) : (rt?.default_memory_bytes ?? 0));
-	const effCpu = $derived(cpus && cpus > 0 ? Math.round(cpus * 1e9) : (rt?.default_nano_cpus ?? 0));
+	const effMemory = $derived(memoryBytes && memoryBytes > 0 ? memoryBytes : (rt?.default_memory_bytes ?? 0));
+	const effCpu = $derived(nanoCpus && nanoCpus > 0 ? nanoCpus : (rt?.default_nano_cpus ?? 0));
 	const buildMemory = $derived(source === 'template' ? (tpl?.build_memory_bytes ?? 0) : rt?.has_build || buildCommand.trim() ? Math.max(rt?.build_memory_bytes ?? 0, effMemory) : 0);
 	const missingRequired = $derived(required.filter((v) => v.required && !(env[v.name] ?? '').trim()));
 	const chosenAddons = $derived(addonKinds.filter((k) => addonSel.includes(k.id)));
 	const addonMemory = $derived(chosenAddons.reduce((n, k) => n + k.default_memory_bytes, 0));
 	const addonVars = $derived(chosenAddons.flatMap((k) => k.variables));
 	const githubReady = $derived(source !== 'github' || (ghMode === 'url' ? !!lookup : !!repo.full_name));
+
+	// Bounds: the chosen node's own maximums (the panel's, capped by its
+	// hardware) and the room left under the workspace's limits, whichever is
+	// smaller. Add-on memory counts toward the workspace too.
+	const chosenNode = $derived(nodes.find((n) => n.id === nodeId));
+	const nodeLimits = $derived(picksNode ? chosenNode?.limits : placement?.node.limits);
+	const nodeMaxMem = $derived(nodeLimits?.max_memory_bytes ?? limits?.max_memory_bytes ?? 0);
+	const nodeMaxCpu = $derived(nodeLimits?.max_nano_cpus ?? limits?.max_nano_cpus ?? 0);
+	const rm = $derived(room(cap));
+	const roomMem = $derived(rm.memory == null ? null : Math.max(0, rm.memory - addonMemory));
+	const maxMem = $derived(nodeMaxMem ? clampMax(nodeMaxMem, roomMem) : roomMem);
+	const maxCpu = $derived(nodeMaxCpu ? clampMax(nodeMaxCpu, rm.cpu) : rm.cpu);
+	const minMem = $derived(Math.max(limits?.min_memory_bytes ?? 0, rt?.min_memory_bytes ?? 0));
+	const minCpu = $derived(limits?.min_nano_cpus ?? 0);
+	const wsLabel = $derived(cap?.workspace ? wsName(cap.workspace) : 'Personal');
+	const memRoomText = $derived(roomText('memory', roomMem, capLimits(cap).memory_bytes));
+	const cpuRoomText = $derived(roomText('cpu', rm.cpu, capLimits(cap).nano_cpus));
+	// No room for one more app: the form says so instead of letting the server refuse.
+	const noRoom = $derived(rm.apps === 0 || rm.bots === 0);
+	const nodeOffline = $derived(picksNode ? !!chosenNode && chosenNode.transport !== 'local' && !chosenNode.agent?.connected : placement ? !placement.node.online : false);
+	const nodeName = $derived(chosenNode?.name ?? placement?.node.name ?? 'This host');
 
 	async function loadRepos() {
 		if (repos || !gh?.linked) return;
@@ -208,8 +264,8 @@
 		addonSel = (p.addons ?? []).filter((a) => addonKinds.length === 0 || addonKinds.some((k) => k.id === a));
 		planEnv = (p.env ?? []).map((v) => ({ name: v.name, label: '', description: v.description, secret: v.secret, required: v.required, default: v.value }));
 		for (const v of p.env ?? []) if (v.value && !(env[v.name] ?? '').trim()) env[v.name] = v.value;
-		memoryMiB = p.memory_bytes ? Math.round(p.memory_bytes / MiB) : null;
-		cpus = p.nano_cpus ? p.nano_cpus / 1e9 : null;
+		memoryBytes = p.memory_bytes || null;
+		nanoCpus = p.nano_cpus || null;
 		showAdvanced = !!(buildCommand || command || addonSel.length);
 	}
 	function toggleAddon(id: string) {
@@ -219,13 +275,11 @@
 		templateId = t.id;
 		if (!nameTouched) name = t.name.replace(/ starter$/i, '').replace(/ \(.*\)$/, '') + ' bot';
 		for (const v of t.env) if (v.default && !(v.name in env)) env[v.name] = v.default;
-		memoryMiB = null;
+		memoryBytes = null;
 		problems = {};
 	}
 	function chooseSource(s: Source) {
 		source = s;
-		const chosen = nodes.find((n) => n.id === nodeId);
-		if (chosen?.transport === 'agent' && (s === 'template' || s === 'github') && !chosen.agent?.connected) nodeId = nodes.find((n) => n.transport === 'local')?.id ?? '';
 		problems = {};
 		if (s === 'github' && gh?.linked && ghMode === 'mine') loadRepos();
 	}
@@ -267,15 +321,16 @@
 				seen.add(x.name);
 			});
 		}
+		if (i === 1 && picksNode && chosenNode && nodeOffline) p.node = `${chosenNode.name} is offline. Choose a node that is online.`;
 		if (i === 3 && limits) {
-			// Maximums follow the chosen node's own memory and CPU count.
-			const nl = nodes.find((n) => n.id === nodeId)?.limits;
-			const maxMem = nl?.max_memory_bytes ?? limits.max_memory_bytes;
-			const maxCpu = nl?.max_nano_cpus ?? limits.max_nano_cpus;
-			if (effMemory < Math.max(limits.min_memory_bytes, rt?.min_memory_bytes ?? 0) || effMemory > maxMem)
-				p.memory = `Choose between ${fmtBytes(Math.max(limits.min_memory_bytes, rt?.min_memory_bytes ?? 0))} and ${fmtBytes(maxMem)} on this node.`;
-			if (effCpu < limits.min_nano_cpus || effCpu > maxCpu)
-				p.cpu = `Choose between ${limits.min_nano_cpus / 1e9} and ${maxCpu / 1e9} CPU on this node.`;
+			// Whichever bound is tighter is the one named: the workspace's room
+			// or the node's own maximum.
+			if (effMemory < minMem) p.memory = `Choose at least ${fmtBytes(minMem)}.`;
+			else if (maxMem != null && effMemory > maxMem)
+				p.memory = roomMem != null && roomMem < nodeMaxMem ? `The workspace ${wsLabel} has only ${fmtBytes(roomMem)} of memory left.` : `Choose up to ${fmtBytes(nodeMaxMem)} on this node.`;
+			if (effCpu < minCpu) p.cpu = `Choose at least ${fmtCpu(minCpu)}.`;
+			else if (maxCpu != null && effCpu > maxCpu)
+				p.cpu = rm.cpu != null && rm.cpu < nodeMaxCpu ? `The workspace ${wsLabel} has only ${fmtCpu(rm.cpu)} left.` : `Choose up to ${fmtCpu(nodeMaxCpu)} on this node.`;
 		}
 		problems = p;
 		return Object.keys(p).length === 0;
@@ -305,8 +360,8 @@
 		for (const [k, v] of Object.entries(env)) if (v.trim()) vars[k] = v;
 		for (const x of extra) if (x.name) vars[x.name] = x.value;
 		const body: Record<string, unknown> = { name: name.trim(), runtime: rtId };
-		if (memoryMiB && memoryMiB > 0) body.memory_bytes = effMemory;
-		if (cpus && cpus > 0) body.nano_cpus = effCpu;
+		if (memoryBytes && memoryBytes > 0) body.memory_bytes = effMemory;
+		if (nanoCpus && nanoCpus > 0) body.nano_cpus = effCpu;
 		if (Object.keys(vars).length) body.env = vars;
 		if (source === 'template') body.template_id = templateId;
 		if (source !== 'template') {
@@ -317,7 +372,8 @@
 		}
 		if (source === 'github') body.github = { ...repo, start_after_deploy: startNow && canStart };
 		if (workspaceId) body.workspace_id = workspaceId;
-		if (nodeId) body.node_id = nodeId;
+		// Only node managers may name a node; everyone else gets the workspace's placement.
+		if (picksNode && nodeId) body.node_id = nodeId;
 		try {
 			const b = await api<Bot>('POST', '/bots', body);
 			if (startNow && canStart && source !== 'github') {
@@ -371,6 +427,11 @@
 		</h2>
 
 		{#if loadError}<Notice tone="fail" class="mt-3">{loadError}</Notice>{/if}
+		{#if noRoom}
+			<Notice tone="warn" class="mt-3" title="No room for another bot">
+				The workspace {wsLabel} has reached its limit of {rm.bots === 0 ? `${capLimits(cap).bots} ${capLimits(cap).bots === 1 ? 'bot' : 'bots'}` : `${capLimits(cap).apps} ${capLimits(cap).apps === 1 ? 'app' : 'apps'}`}. Delete one, or ask an administrator to raise the limit.
+			</Notice>
+		{/if}
 
 		{#if step === 0}
 			<div class="mt-4 grid gap-3" role="radiogroup" aria-label="Source">
@@ -584,14 +645,18 @@
 					<span class="help">Members of the workspace get access according to their role.</span>
 				</label>
 			{/if}
-			{#if nodes.length > 1}
-				<label class="mt-4 block max-w-md">
-					<span class="label">Node</span>
-					<select class="field" bind:value={nodeId}>
-						{#each nodes as n (n.id)}<option value={n.id} disabled={n.transport === 'agent' && (source === 'template' || source === 'github') && !n.agent?.connected}>{n.name}{n.transport === 'agent' ? n.agent?.connected ? ' · connected' : ' · offline' : ' · local'}</option>{/each}
-					</select>
-					<span class="help">Template and GitHub bots need a connected node: template files are written to that node in one transaction, and GitHub repositories are downloaded by the panel and streamed to it. Empty bots can be created on any eligible node and filled through Files.</span>
-				</label>
+			{#if picksNode}
+				<fieldset class="mt-4">
+					<legend class="label">Node</legend>
+					{#if nodes.length}
+						<NodePickerCard {nodes} {locations} selected={nodeId} onselect={(id) => ((nodeId = id), (nodeTouched = true))} pinnedId={placement?.reason === 'workspace' ? placement.node.id : undefined} />
+					{:else}
+						<Skeleton rows={2} label="Loading nodes" />
+					{/if}
+					<span class="help {problems.node ? 'text-fail!' : ''}" data-problem={problems.node ? '' : undefined}>{problems.node || 'The machine that runs the bot and keeps its files. Memory and CPU limits follow its size. New bots need the node online.'}</span>
+				</fieldset>
+			{:else}
+				<div class="mt-4 max-w-md"><PlacementNotice {workspaceId} onloaded={(p) => (placement = p)} /></div>
 			{/if}
 		{:else if step === 2}
 			{#if tpl && source === 'template'}
@@ -658,7 +723,7 @@
 			<dl class="mt-4 grid grid-cols-[auto_minmax(0,1fr)] gap-x-6 gap-y-2 border-y border-rule-soft py-3">
 				<dt class="text-muted">Name</dt><dd class="font-medium">{name}</dd>
 				{#if targets.length > 1}{@const t = targets.find((w) => (w.personal ? '' : w.id) === workspaceId)}<dt class="text-muted">Workspace</dt><dd>{t ? wsName(t) : 'Personal'}</dd>{/if}
-				{#if nodes.length > 1}<dt class="text-muted">Node</dt><dd>{nodes.find((n) => n.id === nodeId)?.name ?? 'Local'}</dd>{/if}
+				<dt class="text-muted">Node</dt><dd>{nodeName}{#if nodeOffline}<span class="ml-1.5 text-warn">(offline)</span>{/if}</dd>
 				<dt class="text-muted">Source</dt><dd>{sourceLabel}{#if source === 'github'}: <code>{repo.full_name}</code> on <code>{repo.branch}</code>{#if repo.root_dir}, folder <code>{repo.root_dir}</code>{/if}{/if}</dd>
 				<dt class="text-muted">Language</dt><dd>{rt?.display_name ?? rtId}</dd>
 				{#if source !== 'template'}
@@ -669,17 +734,17 @@
 				<dt class="text-muted">Variables</dt>
 				<dd>{Object.keys(env).filter((k) => env[k]?.trim()).concat(extra.filter((x) => x.name).map((x) => x.name)).join(', ') || 'None yet'}</dd>
 			</dl>
-			<div class="mt-5 grid gap-4 sm:grid-cols-2">
-				<label class="block">
-					<span class="label">Memory limit</span>
-					<span class="flex items-center gap-2"><input class="field" type="number" step="any" min="0" bind:value={memoryMiB} placeholder={rt ? String(Math.round(rt.default_memory_bytes / MiB)) : ''} aria-invalid={problems.memory ? 'true' : undefined} /><span class="text-muted">MiB</span></span>
-					<span class="help {problems.memory ? 'text-fail!' : ''}">{problems.memory || `Default ${fmtBytes(rt?.default_memory_bytes ?? 0)}. The process is stopped if it uses more.`}</span>
-				</label>
-				<label class="block">
-					<span class="label">CPU limit</span>
-					<span class="flex items-center gap-2"><input class="field" type="number" step="any" min="0" bind:value={cpus} placeholder={rt ? String(rt.default_nano_cpus / 1e9) : ''} aria-invalid={problems.cpu ? 'true' : undefined} /><span class="text-muted">cores</span></span>
-					<span class="help {problems.cpu ? 'text-fail!' : ''}">{problems.cpu || `Default ${(rt?.default_nano_cpus ?? 0) / 1e9} cores.`}</span>
-				</label>
+			<div class="mt-5 grid gap-4">
+				<div>
+					<span class="label" id="memory-label">Memory limit</span>
+					<ResourcePicker kind="memory" id="memory" labelledby="memory-label" value={memoryBytes} onchange={(v) => (memoryBytes = v)} min={minMem} max={maxMem} allowEmpty emptyLabel={rt ? `Default (${fmtBytes(rt.default_memory_bytes)})` : 'Default'} invalid={!!problems.memory} />
+					<span class="help {problems.memory ? 'text-fail!' : ''}" data-problem={problems.memory ? '' : undefined}>{problems.memory || `The process is stopped if it uses more.${nodeMaxMem ? ` Up to ${fmtBytes(nodeMaxMem)} on ${nodeName}.` : ''}`}{#if memRoomText}<span class="block">Workspace room: {memRoomText}</span>{/if}</span>
+				</div>
+				<div>
+					<span class="label" id="cpu-label">CPU limit</span>
+					<ResourcePicker kind="cpu" id="cpu" labelledby="cpu-label" value={nanoCpus} onchange={(v) => (nanoCpus = v)} min={minCpu} max={maxCpu} allowEmpty emptyLabel={rt ? `Default (${fmtCpu(rt.default_nano_cpus)})` : 'Default'} invalid={!!problems.cpu} />
+					<span class="help {problems.cpu ? 'text-fail!' : ''}" data-problem={problems.cpu ? '' : undefined}>{problems.cpu || `A limit, not a reservation.${nodeMaxCpu ? ` Up to ${fmtCpu(nodeMaxCpu)} on ${nodeName}.` : ''}`}{#if cpuRoomText}<span class="block">Workspace room: {cpuRoomText}</span>{/if}</span>
+				</div>
 			</div>
 			{#if addonMemory > 0}
 				<p class="mt-3 text-small text-muted">Total reserved with databases: {fmtBytes(effMemory + addonMemory)}.</p>
@@ -706,7 +771,7 @@
 		{#if step < 3}
 			<button class="btn btn-primary wizard-next" onclick={() => go(step + 1)}>Continue<Icon name="chevronRight" size={14} /></button>
 		{:else}
-			<button class="btn btn-primary wizard-next" onclick={create} disabled={busy}>{busy ? 'Creating…' : startNow && canStart ? (source === 'github' ? 'Create, deploy and start' : 'Create and start') : 'Create bot'}</button>
+			<button class="btn btn-primary wizard-next" onclick={create} disabled={busy || noRoom}>{busy ? 'Creating…' : startNow && canStart ? (source === 'github' ? 'Create, deploy and start' : 'Create and start') : 'Create bot'}</button>
 		{/if}
 	</div>
 </div>

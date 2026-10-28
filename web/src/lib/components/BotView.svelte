@@ -2,7 +2,7 @@
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
 	import { api, ApiError, fmtBytes, fmtCpu } from '$lib/api/client';
-	import { can, Perm, type Bot, type NodeInfo } from '$lib/api/types';
+	import { can, Perm, type Bot } from '$lib/api/types';
 	import { power, type PowerAction } from '$lib/api/bots';
 	import { describe, isStopped, mayBeLive } from '$lib/status';
 	import { chat } from '$lib/ai/chat.svelte';
@@ -47,8 +47,6 @@
 	let loadError = $state('');
 	let now = $state(Date.now());
 	let acting = $state(false);
-	let nodeNames = $state<Record<string, string>>({});
-	let nodesOffline = $state<Record<string, boolean>>({});
 
 	type Section = { id: string; label: string; icon: IconName; perm: number };
 	// One row of tabs, in the order people reach for them. perm -1 = owner or
@@ -131,13 +129,6 @@
 	}
 	onMount(() => {
 		refresh();
-		if (session.user?.role === 'admin') api<{ nodes: NodeInfo[] }>('GET', '/nodes')
-				.then((r) => {
-					nodeNames = Object.fromEntries(r.nodes.map((n) => [n.id, n.name]));
-					// Status and stats shown below are the last ones the node reported.
-					nodesOffline = Object.fromEntries(r.nodes.map((n) => [n.id, n.transport === 'agent' && !n.agent?.connected]));
-				})
-				.catch(() => {});
 		const poll = setInterval(() => document.visibilityState === 'visible' && refresh(), 2000);
 		const tick = setInterval(() => (now = Date.now()), 1000);
 		return () => {
@@ -202,7 +193,7 @@
 					{#if d}<span class="pill shrink-0" data-tone={d.tone} title={d.detail || undefined}><span class="size-1.5 rounded-pill {dotTone} {d.busy ? 'animate-pulse' : ''}" aria-hidden="true"></span>{d.label}</span>{/if}
 				</div>
 				<p class="truncate text-small text-muted" title="{bot.runtime}, {fmtBytes(bot.memory_bytes)} memory, {fmtCpu(bot.nano_cpus)}">
-					{isGame ? (game?.blueprint.name ?? 'Game server') : bot.runtime}, {fmtBytes(bot.memory_bytes)}, {fmtCpu(bot.nano_cpus)}{#if nodeNames[bot.node_id]}, {nodeNames[bot.node_id]}{#if nodesOffline[bot.node_id]}<span class="ml-1 text-warn" title="The node's agent is not connected. Status and output are the last ones it reported.">(node offline)</span>{/if}{/if}{#if bot.source_type === 'github'}, deployed from GitHub{/if}{#if bot.shared}, shared with you{/if}
+					{isGame ? (game?.blueprint.name ?? 'Game server') : bot.runtime}, {fmtBytes(bot.memory_bytes)}, {fmtCpu(bot.nano_cpus)}{#if bot.node_name}, {bot.node_name}{#if bot.node_online === false}<span class="ml-1 text-warn" title="The node's agent is not connected. Status and output are the last ones it reported.">(node offline)</span>{/if}{/if}{#if bot.source_type === 'github'}, deployed from GitHub{/if}{#if bot.shared}, shared with you{/if}
 				</p>
 			</div>
 			{#if canPower}
