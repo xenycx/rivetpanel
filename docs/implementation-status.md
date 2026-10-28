@@ -986,7 +986,7 @@ items state exactly what remains.
   Docker-runtime-level.
 
 Migrations added since 0.2.0 (the schema-version assertion in
-`internal/store/sqlite/db_test.go` checks 57 applied migrations):
+`internal/store/sqlite/db_test.go` checks 60 applied migrations):
 
 | Migration | Purpose |
 | --- | --- |
@@ -1022,6 +1022,9 @@ Migrations added since 0.2.0 (the schema-version assertion in
 | `0053_game_jvm_args.sql` | Additive: `bots.jvm_args` (validated extra JVM options of a Java game server), `jvm_args_updated_at_ms` (0 = never set) and `jvm_args_generation` (generation when saved, for "Restart to apply") |
 | `0055_user_quotas.sql` | Additive: `user_quotas` (one row per account: `max_apps`, `max_bots`, `max_games`, `max_web_apps`, `max_sites`, `memory_bytes`, each NULL = panel default and 0 = none; `updated_by`, times). No rows means every account keeps the panel defaults. Replaced by `0056` |
 | `0056_workspace_quotas.sql` | `workspace_quotas` (one row per workspace, `ON DELETE CASCADE`: the `0055` columns plus `nano_cpus`); copies each `user_quotas` row onto that account's personal workspace, then drops `user_quotas`. Covered by `quotas_test.go` (populated-database upgrade with quota rows) |
+| `0057_user_role_permissions.sql` | Data only: writes the built-in User role's permission list (every resource permission, including the new `workspaces.rename`) into `roles.permissions_json` for `id = 'user'`, so the stored list becomes what such accounts get; appends `workspaces.rename` to every custom role that lacks it. Accounts keep exactly their previous abilities. The literal list is checked against `domain.DefaultUserPermissions()` by `internal/domain/migration_permissions_test.go` |
+| `0058_invite_setup.sql` | Additive: five nullable `account_invites` columns, `role_id` (`roles`, `ON DELETE SET NULL`), `quota_json` (JSON object, at most 1024 bytes), `node_id` (`nodes`, `ON DELETE SET NULL`), `workspace_id` (`workspaces`, `ON DELETE SET NULL`), `workspace_role` (`admin`, `developer` or `viewer`). The `role` CHECK is unchanged; existing invitation rows and links keep working |
+| `0059_workspace_node.sql` | Additive: nullable `workspaces.node_id` (`nodes`, `ON DELETE SET NULL`) with index `workspaces_node_idx`; NULL means the panel default node |
 | `0054_web_apps.sql` | Rebuilds `bots` (kind gains `web`, runtime gains `php`, new `release_command`) and `sites` (mode gains `app`; `app_id`, `framework`, `build_output_dir`, `app_port`, `health_path`, `max_body_bytes`) with explicit column lists and foreign keys off (checked with `PRAGMA foreign_key_check`; all indexes recreated); additive `site_releases.source_ref` and `bot_health_probes.target` (`host`/`app`). Covered by `apps_migration_test.go` |
 | `0030_ai_global_chat.sql` | Rebuilds `ai_conversations` so a chat may have no target; `ai_runs.bot_id`/`site_id`, `ai_messages.context_json` (the conversation subtree is stashed and restored, rows preserved) |
 
