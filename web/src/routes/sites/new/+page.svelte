@@ -6,7 +6,7 @@
 	import type { AddonKind, Connection, GitHubRepo, RepoLookup, Site, SitesInfo, WebAnalysis, WebKind, WebPlan } from '$lib/api/types';
 	import { joinArgs, splitArgs } from '$lib/args';
 	import { can } from '$lib/session.svelte';
-	import { creatable, loadWorkspaces, workspaces } from '$lib/workspaces.svelte';
+	import { creatable, loadWorkspaces, workspaces, wsName } from '$lib/workspaces.svelte';
 	import Icon from '$lib/components/ui/Icon.svelte';
 	import Notice from '$lib/components/ui/Notice.svelte';
 
@@ -318,7 +318,7 @@
 					</label>
 					{#if creatable().length > 1}
 						<label class="block"><span class="label">Workspace</span>
-							<select class="field" bind:value={workspaceId}>{#each creatable() as w (w.id)}<option value={w.personal ? '' : w.id}>{w.personal ? 'Personal' : w.name}</option>{/each}</select>
+							<select class="field" bind:value={workspaceId}>{#each creatable() as w (w.id)}<option value={w.personal ? '' : w.id}>{wsName(w)}</option>{/each}</select>
 						</label>
 					{/if}
 					<label class="flex items-start gap-2.5 self-end pb-2"><input type="checkbox" class="mt-0.5" bind:checked={repo.auto_deploy} /><span>Deploy on every push<span class="help mt-0">To <code>{repo.branch}</code>, through a GitHub webhook (or by checking the branch every few minutes).</span></span></label>

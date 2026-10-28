@@ -1,12 +1,18 @@
 <script lang="ts">
+	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { api, ApiError, fmtBytes } from '$lib/api/client';
 	import { roleText, type Bot, type Operation, type Site, type Workspace, type WorkspaceMember } from '$lib/api/types';
 	import { fmtWhen } from '$lib/args';
 	import { toast } from '$lib/ui/toast.svelte';
+	import { promptDialog } from '$lib/ui/dialogs.svelte';
+	import { can } from '$lib/session.svelte';
+	import { wsName } from '$lib/workspaces.svelte';
 	import AdminBotTable from '$lib/components/AdminBotTable.svelte';
 	import OperationRow from '$lib/components/OperationRow.svelte';
 	import WorkspaceQuotaForm from '$lib/components/WorkspaceQuotaForm.svelte';
+	import WorkspacePlacementForm from '$lib/components/WorkspacePlacementForm.svelte';
+	import Dialog from '$lib/components/ui/Dialog.svelte';
 	import Icon from '$lib/components/ui/Icon.svelte';
 	import Notice from '$lib/components/ui/Notice.svelte';
 	import Skeleton from '$lib/components/ui/Skeleton.svelte';
@@ -36,6 +42,55 @@
 			toast(e instanceof ApiError ? e.message : 'The site could not be changed.', 'fail');
 		}
 	}
+
+	async function rename() {
+		if (!v) return;
+		const current = v.workspace.name;
+		const name = await promptDialog({
+			title: 'Rename workspace',
+			body: 'Shown in the workspace switcher and to every member.',
+			label: 'Workspace name',
+			value: current,
+			confirmLabel: 'Rename',
+			validate: (x) => (!x.trim() ? 'Enter a name.' : x.trim().length > 64 ? 'Use 64 characters or fewer.' : null)
+		});
+		if (name === null || name.trim() === current) return;
+		try {
+			await api('PATCH', `/admin/workspaces/${id}`, { name: name.trim() });
+			toast(`Renamed to ${name.trim()}`, 'success');
+			await load();
+		} catch (e) {
+			toast(e instanceof ApiError ? e.message : 'The workspace could not be renamed.', 'fail');
+		}
+	}
+
+	// Deleting a team workspace with everything in it, after typing its name.
+	let delOpen = $state(false);
+	let delConfirm = $state('');
+	let delError = $state('');
+	let deleting = $state(false);
+	function openDelete() {
+		delConfirm = delError = '';
+		delOpen = true;
+	}
+	async function destroy(e: SubmitEvent) {
+		e.preventDefault();
+		if (!v || delConfirm !== v.workspace.name) return;
+		deleting = true;
+		delError = '';
+		try {
+			const name = v.workspace.name;
+			await api('POST', `/admin/workspaces/${id}/delete`, { confirm: delConfirm });
+			delOpen = false;
+			toast(`Deleted ${name}`, 'success');
+			goto('/admin/workspaces');
+		} catch (err) {
+			delError = err instanceof ApiError ? err.message : 'The workspace could not be deleted.';
+		} finally {
+			deleting = false;
+		}
+	}
+	const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 </script>
 
 <svelte:head><title>{v?.workspace.name ?? 'Workspace'} · Administration · RivetPanel</title></svelte:head>
@@ -47,9 +102,12 @@
 {:else if v}
 	{@const w = v.workspace}
 	<div class="flex flex-wrap items-center gap-3">
-		<h2 class="text-section">{w.personal ? `Personal workspace of ${w.owner_email}` : w.name}</h2>
+		<h2 class="text-section">{wsName(w)}</h2>
 		<span class="pill">{w.personal ? 'Personal' : 'Team'}</span>
-		<a class="btn btn-sm ml-auto" href="/settings/workspaces/{w.id}"><Icon name="users" size={14} />Manage members</a>
+		<div class="ml-auto flex flex-wrap gap-2">
+			{#if can('workspaces.manage')}<button class="btn btn-sm" onclick={rename}><Icon name="pencil" size={14} />Rename</button>{/if}
+			<a class="btn btn-sm" href="/settings/workspaces/{w.id}"><Icon name="users" size={14} />Manage members</a>
+		</div>
 	</div>
 	<p class="mt-1 text-small text-muted">Owned by <a class="link" href="/admin/users/{w.owner_id}">{w.owner_email}</a> · created {fmtWhen(w.created_at_ms)}</p>
 
@@ -61,6 +119,7 @@
 	</dl>
 
 	<WorkspaceQuotaForm workspaceId={id} />
+	<WorkspacePlacementForm workspaceId={id} nodeId={w.node_id ?? ''} />
 
 	<section class="mt-8" aria-labelledby="bots-h">
 		<h3 id="bots-h" class="mb-2 text-title font-semibold">Bots</h3>
@@ -110,4 +169,34 @@
 			<p class="card px-4 py-4 text-small text-muted">No deployments, builds or backups yet.</p>
 		{/if}
 	</section>
+
+	{#if !w.personal && can('workspaces.manage')}
+		<section class="mt-8" aria-labelledby="danger-h">
+			<h3 id="danger-h" class="mb-2 text-title font-semibold">Delete workspace</h3>
+			<div class="card flex flex-wrap items-center gap-4 border-fail/30 p-5">
+				<p class="min-w-0 flex-1 basis-60 text-small text-muted">Deletes the workspace with every app, site and membership in it. This cannot be undone.</p>
+				<button class="btn btn-danger" onclick={openDelete}>Delete workspace</button>
+			</div>
+		</section>
+
+		<Dialog bind:open={delOpen} title="Delete {w.name}?" dismissable={!deleting}>
+			<form id="ws-delete" class="grid gap-3" onsubmit={destroy}>
+				<p>This permanently removes:</p>
+				<ul class="list-disc pl-5 text-small">
+					<li>{plural(w.bots, 'app')} with their containers, files, backups and add-ons</li>
+					<li>{plural(w.sites, 'site')}</li>
+					<li>{plural(w.members, 'member')}</li>
+				</ul>
+				<label class="block">
+					<span class="label">Type <b>{w.name}</b> to confirm</span>
+					<input class="field" autocomplete="off" spellcheck="false" bind:value={delConfirm} disabled={deleting} />
+				</label>
+				{#if delError}<Notice tone="fail" live>{delError}</Notice>{/if}
+			</form>
+			{#snippet footer()}
+				<button class="btn" type="button" onclick={() => (delOpen = false)} disabled={deleting}>Cancel</button>
+				<button class="btn btn-danger" type="submit" form="ws-delete" disabled={deleting || delConfirm !== w.name}>{deleting ? 'Deleting…' : 'Delete workspace'}</button>
+			{/snippet}
+		</Dialog>
+	{/if}
 {/if}

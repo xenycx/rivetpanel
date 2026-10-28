@@ -12,7 +12,7 @@
 	import Icon from '$lib/components/ui/Icon.svelte';
 	import Notifications from '$lib/components/Notifications.svelte';
 	import { session } from '$lib/session.svelte';
-	import { creatable, loadWorkspaces, workspaceName } from '$lib/workspaces.svelte';
+	import { creatable, loadWorkspaces, workspaceName, wsName } from '$lib/workspaces.svelte';
 
 	let { bot, stopped, onSaved }: { bot: Bot; stopped: boolean; onSaved: (b: Bot) => void } = $props();
 	const isGame = $derived(bot.kind === 'game');
@@ -199,7 +199,7 @@
 	<SettingsSection title="Workspace" description="Everyone in the workspace can see this {noun} and act on it according to their role. Moving it changes who has access; per-{noun} sharing stays.">
 		<form class="flex flex-wrap items-end gap-2" onsubmit={moveWorkspace}>
 			<label class="block min-w-0 flex-1 basis-64"><span class="sr-only">Workspace</span>
-				<select class="field" bind:value={workspaceId}>{#each creatable() as w (w.id)}<option value={w.id}>{w.personal ? 'Personal' : w.name}</option>{/each}</select>
+				<select class="field" bind:value={workspaceId}>{#each creatable() as w (w.id)}<option value={w.id}>{wsName(w)}</option>{/each}</select>
 			</label>
 			<button class="btn" disabled={workspaceId === bot.workspace_id}>Move {noun}</button>
 		</form>

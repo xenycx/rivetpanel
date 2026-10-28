@@ -4,10 +4,10 @@
 	import { api, ApiError } from '$lib/api/client';
 	import { roleHelp, roleRank, roleText, type Workspace, type WorkspaceMember, type WorkspaceRole } from '$lib/api/types';
 	import { fmtWhen } from '$lib/args';
-	import { session } from '$lib/session.svelte';
+	import { can, session } from '$lib/session.svelte';
 	import { confirmDialog } from '$lib/ui/dialogs.svelte';
 	import { toast } from '$lib/ui/toast.svelte';
-	import { loadWorkspaces, selectWorkspace } from '$lib/workspaces.svelte';
+	import { loadWorkspaces, selectWorkspace, wsName } from '$lib/workspaces.svelte';
 	import Icon from '$lib/components/ui/Icon.svelte';
 	import Notice from '$lib/components/ui/Notice.svelte';
 	import Skeleton from '$lib/components/ui/Skeleton.svelte';
@@ -120,7 +120,8 @@
 			toast(msg(err), 'fail');
 		}
 	}
-	const title = $derived(ws ? (ws.personal ? 'Personal workspace' : ws.name) : 'Workspace');
+	const title = $derived(ws ? wsName(ws) : 'Workspace');
+	const canRename = $derived(manage && (can('workspaces.rename') || can('workspaces.manage')));
 </script>
 
 <svelte:head><title>{title} · RivetPanel</title></svelte:head>
@@ -132,11 +133,12 @@
 {:else if ws}
 	<div class="mb-2 flex flex-wrap items-center gap-3">
 		<h2 class="text-section">{title}</h2>
+		{#if ws.personal}<span class="pill">Personal</span>{/if}
 		{#if ws.role}<span class="pill">{roleText[ws.role]}</span>{/if}
 		<button class="btn btn-sm ml-auto" onclick={() => { selectWorkspace(ws!.id); goto('/dashboard'); }}><Icon name="home" size={14} />Open overview</button>
 	</div>
 
-	{#if manage && !ws.personal}
+	{#if canRename}
 		<SettingsSection title="Name" description="Shown in the workspace switcher and to every member.">
 			<form class="card flex flex-wrap items-end gap-3 p-5" onsubmit={rename}>
 				<label class="block min-w-0 flex-1 basis-60"><span class="label">Workspace name</span><input class="field" required maxlength="64" bind:value={name} /></label>
@@ -195,7 +197,7 @@
 	</SettingsSection>
 
 	{#if !ws.personal && myRank >= roleRank.owner}
-		<SettingsSection title="Delete workspace" description="Only an empty workspace can be deleted. Personal workspaces cannot be deleted.">
+		<SettingsSection title="Delete workspace" description="Only an empty workspace can be deleted here. Administrators can delete a workspace with everything in it from Administration → Workspaces.">
 			<div class="card flex flex-wrap items-center gap-4 border-fail/30 p-5">
 				<p class="min-w-0 flex-1 basis-60 text-small text-muted">{ws.bots} bot{ws.bots === 1 ? '' : 's'} and {ws.sites} site{ws.sites === 1 ? '' : 's'} are in this workspace.</p>
 				<button class="btn btn-danger" onclick={destroy} disabled={ws.bots > 0 || ws.sites > 0}>Delete workspace</button>

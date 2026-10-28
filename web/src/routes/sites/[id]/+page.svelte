@@ -8,7 +8,7 @@
 	import { session } from '$lib/session.svelte';
 	import { confirmDialog } from '$lib/ui/dialogs.svelte';
 	import { toast } from '$lib/ui/toast.svelte';
-	import { creatable, loadWorkspaces } from '$lib/workspaces.svelte';
+	import { creatable, loadWorkspaces, wsName } from '$lib/workspaces.svelte';
 	import Icon from '$lib/components/ui/Icon.svelte';
 	import Notice from '$lib/components/ui/Notice.svelte';
 	import Skeleton from '$lib/components/ui/Skeleton.svelte';
@@ -263,7 +263,7 @@
 				<span class="pill" data-tone={d.site.disabled ? 'fail' : live ? 'run' : undefined}>{d.site.disabled ? 'Suspended' : live ? 'Live' : isApp ? 'Not running' : 'Nothing published'}</span>
 			</div>
 			<a href={d.site.url} target="_blank" rel="noopener" class="mt-0.5 inline-flex max-w-full items-center gap-1.5 font-mono text-small text-action hover:underline"><span class="truncate">{d.site.url}</span><Icon name="external" size={12} /></a>
-			<p class="text-small text-muted">{d.site.workspace_name === 'Personal' ? 'Personal workspace' : d.site.workspace_name} · created by {d.site.owner_email}</p>
+			<p class="text-small text-muted">{d.site.workspace_name} · created by {d.site.owner_email}</p>
 		</div>
 		<a href={d.site.url} target="_blank" rel="noopener" class="btn"><Icon name="external" size={14} />Visit</a>
 	</header>
@@ -433,7 +433,7 @@
 						{/if}
 						{#if canAdmin && creatable().length > 1}
 							<label class="block"><span class="label">Workspace</span>
-								<select class="field" bind:value={settings.workspace_id}>{#each creatable() as w (w.id)}<option value={w.id}>{w.personal ? 'Personal' : w.name}</option>{/each}</select>
+								<select class="field" bind:value={settings.workspace_id}>{#each creatable() as w (w.id)}<option value={w.id}>{wsName(w)}</option>{/each}</select>
 							</label>
 						{/if}
 						<div><button class="btn btn-primary">Save settings</button></div>

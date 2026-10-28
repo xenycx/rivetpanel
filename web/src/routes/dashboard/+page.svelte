@@ -9,7 +9,7 @@
 	import Notice from '$lib/components/ui/Notice.svelte';
 	import NewMenu from '$lib/components/NewMenu.svelte';
 	import ResourceTable from '$lib/components/ResourceTable.svelte';
-	import { currentWorkspace, workspaceName, workspaces } from '$lib/workspaces.svelte';
+	import { currentWorkspace, workspaceName, workspaces, wsName } from '$lib/workspaces.svelte';
 	import type { Blueprint, GameStatus } from '$lib/api/games';
 
 	// The overview: four numbers about capacity, then the game servers and
@@ -132,7 +132,7 @@
 
 <header class="page-head">
 	<h1 class="font-semibold">Overview</h1>
-	{#if scope}<p class="text-small text-muted">{scope.personal ? 'Personal workspace' : scope.name}</p>{/if}
+	{#if scope}<p class="text-small text-muted">{wsName(scope)}</p>{/if}
 	<div class="ml-auto"><NewMenu primary /></div>
 </header>
 

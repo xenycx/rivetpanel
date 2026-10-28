@@ -7,7 +7,7 @@
 	import type { Blueprint, BlueprintVariable, Version } from '$lib/api/games';
 	import { checkVariable } from '$lib/api/games';
 	import { gameBlurb } from '$lib/gameIcons';
-	import { creatable, loadWorkspaces, workspaces } from '$lib/workspaces.svelte';
+	import { creatable, loadWorkspaces, workspaces, wsName } from '$lib/workspaces.svelte';
 	import { can, session } from '$lib/session.svelte';
 	import { toast } from '$lib/ui/toast.svelte';
 	import Icon from '$lib/components/ui/Icon.svelte';
@@ -487,7 +487,7 @@
 						<label class="block max-w-md">
 							<span class="label">Workspace</span>
 							<select class="field" bind:value={workspaceID}>
-								{#each creatable() as w (w.id)}<option value={w.personal ? '' : w.id}>{w.personal ? 'Personal workspace' : w.name}</option>{/each}
+								{#each creatable() as w (w.id)}<option value={w.personal ? '' : w.id}>{wsName(w)}</option>{/each}
 							</select>
 							<span class="help">Members of the workspace get access according to their role.</span>
 						</label>
@@ -516,7 +516,7 @@
 					<dt class="text-muted">Memory</dt><dd class="font-mono">{fmtBytes(memoryMiB * 1048576)}</dd>
 					<dt class="text-muted">CPU</dt><dd class="font-mono">{cpus} {cpus === 1 ? 'core' : 'cores'}</dd>
 					{#if image}<dt class="text-muted">{isJava ? 'Java' : 'Image'}</dt><dd>{image}</dd>{/if}
-					{#if creatable().length > 1}<dt class="text-muted">Workspace</dt><dd>{creatable().find((w) => (w.personal ? '' : w.id) === workspaceID)?.name ?? 'Personal'}</dd>{/if}
+					{#if creatable().length > 1}{@const t = creatable().find((w) => (w.personal ? '' : w.id) === workspaceID)}<dt class="text-muted">Workspace</dt><dd>{t ? wsName(t) : 'Personal'}</dd>{/if}
 					{#if nodes.length > 1}<dt class="text-muted">Node</dt><dd>{nodes.find((n) => n.id === nodeID)?.name ?? 'This host'}</dd>{/if}
 					<dt class="text-muted">Install</dt><dd>{isSteam ? 'Downloaded from Steam with SteamCMD on the first start (several GB for some games).' : isJava ? 'Server software and the right Java are downloaded on the first start.' : 'Prepared on the first start.'}</dd>
 				</dl>
