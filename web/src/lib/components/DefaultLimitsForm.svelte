@@ -1,7 +1,8 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { api, ApiError, fmtBytes } from '$lib/api/client';
+	import { api, ApiError, fmtBytes, fmtCpu } from '$lib/api/client';
 	import type { LimitDefaults } from '$lib/api/types';
+	import ResourcePicker from '$lib/components/ResourcePicker.svelte';
 	import Notice from '$lib/components/ui/Notice.svelte';
 	import { session } from '$lib/session.svelte';
 
@@ -19,6 +20,9 @@
 
 	let v = $state<View | null>(null);
 	let form = $state<Record<string, number | string | null>>({});
+	// Bytes and nano-CPUs; null falls back to the environment.
+	let memory = $state<number | null>(null);
+	let cpu = $state<number | null>(null);
 	let error = $state('');
 	let saved = $state('');
 	let busy = $state(false);
@@ -30,8 +34,8 @@
 		const own = (k: Key) => r.source[k] === 'panel';
 		const val = (k: Key) => (own(k) && r.limits[k] != null ? r.limits[k] : null);
 		form = Object.fromEntries(counts.map((f) => [f.key, val(f.key) == null ? '' : String(val(f.key))]));
-		form.memory_mib = val('memory_bytes') == null ? '' : String(Math.round((val('memory_bytes') as number) / 2 ** 20));
-		form.cpus = val('nano_cpus') == null ? '' : String((val('nano_cpus') as number) / 1e9);
+		memory = val('memory_bytes');
+		cpu = val('nano_cpus');
 		form.team_workspaces = own('team_workspaces') ? String(r.limits.team_workspaces) : '';
 	}
 	onMount(() => {
@@ -52,15 +56,13 @@
 	async function submit(e: SubmitEvent) {
 		e.preventDefault();
 		const body: Record<string, number | null> = Object.fromEntries(counts.map((f) => [f.key, num(form[f.key])]));
-		const mib = num(form.memory_mib);
-		const cpus = num(form.cpus);
 		body.team_workspaces = num(form.team_workspaces);
-		if ([...Object.values(body), mib].some((n) => n != null && (!Number.isInteger(n) || n < 0)) || (cpus != null && !(cpus >= 0))) {
-			error = 'Limits must be whole numbers of 0 or more (CPU may have decimals); leave a field empty to fall back.';
+		if (Object.values(body).some((n) => n != null && (!Number.isInteger(n) || n < 0))) {
+			error = 'Limits must be whole numbers of 0 or more; leave a field empty to fall back.';
 			return;
 		}
-		body.memory_bytes = mib == null ? null : Math.round(mib * 2 ** 20);
-		body.nano_cpus = cpus == null ? null : Math.round(cpus * 1e9);
+		body.memory_bytes = memory;
+		body.nano_cpus = cpu;
 		busy = true;
 		error = saved = '';
 		try {
@@ -84,14 +86,14 @@
 				<input class="field font-mono" type="number" min="0" step="1" placeholder={fallback(f.key)} title={envName[f.key] ? `Falls back to ${envName[f.key]}` : undefined} bind:value={form[f.key]} disabled={!editable || busy} />
 			</label>
 		{/each}
-		<label class="block">
-			<span class="label">Memory (MiB)</span>
-			<input class="field font-mono" type="number" min="0" step="1" placeholder={fallback('memory_bytes', fmtBytes)} bind:value={form.memory_mib} disabled={!editable || busy} />
-		</label>
-		<label class="block">
-			<span class="label">CPU cores</span>
-			<input class="field font-mono" type="number" min="0" step="0.25" placeholder={fallback('nano_cpus')} bind:value={form.cpus} disabled={!editable || busy} />
-		</label>
+		<div class="sm:col-span-2 lg:col-span-3">
+			<span class="label" id="default-memory-l">Memory</span>
+			<ResourcePicker kind="memory" id="default-memory" labelledby="default-memory-l" allowEmpty emptyLabel={fallback('memory_bytes', fmtBytes)} value={memory} onchange={(x) => (memory = x)} disabled={!editable || busy} />
+		</div>
+		<div class="sm:col-span-2 lg:col-span-3">
+			<span class="label" id="default-cpu-l">CPU</span>
+			<ResourcePicker kind="cpu" id="default-cpu" labelledby="default-cpu-l" allowEmpty emptyLabel={fallback('nano_cpus', fmtCpu)} value={cpu} onchange={(x) => (cpu = x)} disabled={!editable || busy} />
+		</div>
 		<label class="block">
 			<span class="label">Team workspaces per account</span>
 			<input class="field font-mono" type="number" min="0" max="1000" step="1" placeholder={fallback('team_workspaces')} bind:value={form.team_workspaces} disabled={!editable || busy} />

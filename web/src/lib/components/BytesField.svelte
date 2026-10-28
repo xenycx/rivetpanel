@@ -1,7 +1,7 @@
 <script lang="ts">
 	// A byte count typed as a number and a unit. The value stays a plain integer
 	// string of bytes (what the environment variable holds); blank means unset.
-	let { value, onchange, id, placeholder = '', disabled = false }: { value: string; onchange: (v: string) => void; id?: string; placeholder?: string; disabled?: boolean } = $props();
+	let { value, onchange, id, placeholder = '', disabled = false, invalid = false }: { value: string; onchange: (v: string) => void; id?: string; placeholder?: string; disabled?: boolean; invalid?: boolean } = $props();
 
 	const units = [
 		{ label: 'KiB', mult: 1024 },
@@ -40,7 +40,7 @@
 </script>
 
 <div class="flex gap-2">
-	<input {id} class="field min-w-0 flex-1 font-mono" type="number" min="0" step="any" {placeholder} {disabled} bind:value={text} oninput={emit} />
+	<input {id} class="field min-w-0 flex-1 font-mono" type="number" min="0" step="any" {placeholder} {disabled} aria-invalid={invalid ? 'true' : undefined} bind:value={text} oninput={emit} />
 	<select class="field w-24 shrink-0" aria-label="Unit" {disabled} bind:value={unit} onchange={emit}>
 		{#each units as u, i (u.label)}<option value={i}>{u.label}</option>{/each}
 	</select>
