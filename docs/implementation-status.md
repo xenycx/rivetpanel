@@ -1,6 +1,6 @@
 # Platform overhaul implementation status
 
-Updated 2026-10-29 for RivetPanel 0.8.0 plus the Unreleased changes (see `CHANGELOG.md`). This is the durable checklist for the requested platform
+Updated 2026-10-29 for RivetPanel 0.9.0 (see `CHANGELOG.md`). This is the durable checklist for the requested platform
 overhaul. A checked item is implemented in the current working tree; partial
 items state exactly what remains.
 

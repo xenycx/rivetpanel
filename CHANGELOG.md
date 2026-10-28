@@ -6,6 +6,8 @@ authoritative current version.
 
 ## Unreleased
 
+## 0.9.0 - 2026-10-29
+
 ### Added
 
 - **The built-in User role is editable.** Administration → Roles opens it for
