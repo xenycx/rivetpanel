@@ -9,7 +9,7 @@ const groups: { label: string; sections: Section[] }[] = [
 		label: 'People',
 		sections: [
 			{ href: '/admin/users', label: 'Users', icon: 'users', match: '/admin/users/', perms: ['users.view'] },
-			{ href: '/admin/workspaces', label: 'Workspaces', icon: 'building', match: '/admin/workspaces/', perms: ['workspaces.view'] },
+			{ href: '/admin/workspaces', label: 'Workspaces', icon: 'building', match: '/admin/workspaces/', perms: ['workspaces.view', 'workspaces.manage'] },
 			{ href: '/admin/roles', label: 'Roles', icon: 'key', perms: ['roles.manage', 'users.manage'] },
 			{ href: '/admin/sign-in', label: 'Single sign-on', icon: 'lock', perms: ['settings.manage'] },
 			{ href: '/admin/api-clients', label: 'API clients', icon: 'link', perms: ['users.view'] }

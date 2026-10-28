@@ -157,6 +157,84 @@ func TestWorkspaceMembershipGrantsVisibility(t *testing.T) {
 	}
 }
 
+// An administrator's cascade removes a team workspace, its members and its
+// limits only once its apps and sites are gone; rows still being purged
+// (a bot marked deleted included) keep it, and personal workspaces are
+// never deleted this way.
+func TestDeleteWorkspaceCascadeRefusesLingeringRows(t *testing.T) {
+	db := open(t)
+	ctx := context.Background()
+	seed(t, db)
+	team := domain.Workspace{ID: "22222222-2222-4222-8222-222222222222", Name: "Team", OwnerID: "u1", CreatedAtMS: 1, UpdatedAtMS: 1}
+	if err := db.CreateWorkspace(ctx, team); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.SetBotWorkspace(ctx, "b1", team.ID, 2); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.SetWorkspaceMember(ctx, domain.WorkspaceMember{WorkspaceID: team.ID, UserID: "u3", Role: domain.WorkspaceViewer, CreatedAtMS: 3, UpdatedAtMS: 3}); err != nil {
+		t.Fatal(err)
+	}
+	one := int64(1)
+	if err := db.SetWorkspaceQuota(ctx, domain.WorkspaceQuota{WorkspaceID: team.ID, MaxBots: &one, CreatedAtMS: 1, UpdatedAtMS: 1}); err != nil {
+		t.Fatal(err)
+	}
+	const site = "a0000000-0000-4000-8000-000000000009"
+	if err := db.CreateSite(ctx, domain.Site{ID: site, WorkspaceID: team.ID, OwnerID: "u1", Name: "s", Slug: "site-x", CreatedAtMS: 1, UpdatedAtMS: 1}); err != nil {
+		t.Fatal(err)
+	}
+	bots, sites, members, err := db.WorkspaceHoldings(ctx, team.ID)
+	if err != nil || len(bots) != 1 || bots[0].ID != "b1" || len(sites) != 1 || sites[0] != site || members != 2 {
+		t.Fatalf("holdings = %d bots, %v sites, %d members, err %v", len(bots), sites, members, err)
+	}
+	refused := func(id, msg string) {
+		t.Helper()
+		if err := db.DeleteWorkspaceCascade(ctx, id); err == nil || !strings.Contains(err.Error(), msg) {
+			t.Fatalf("cascade: %v (want %q)", err, msg)
+		}
+		if _, err := db.GetWorkspace(ctx, id); err != nil {
+			t.Fatalf("workspace gone after a refusal: %v", err)
+		}
+	}
+	refused(team.ID, "1 apps are still being removed")
+	// A bot marked deleted but not yet purged is no longer a holding, yet
+	// still keeps the workspace.
+	if err := db.MarkBotDeleted(ctx, "b1", 4); err != nil {
+		t.Fatal(err)
+	}
+	if bots, _, _, _ = db.WorkspaceHoldings(ctx, team.ID); len(bots) != 0 {
+		t.Fatalf("deleted bot still a holding: %+v", bots)
+	}
+	refused(team.ID, "1 apps are still being removed")
+	if err := db.DeleteBotRow(ctx, "b1"); err != nil {
+		t.Fatal(err)
+	}
+	refused(team.ID, "1 sites are still being removed")
+	if err := db.DeleteSite(ctx, site); err != nil {
+		t.Fatal(err)
+	}
+	personal, _ := db.PersonalWorkspace(ctx, "u1")
+	refused(personal.ID, "delete the account instead")
+
+	if err := db.DeleteWorkspaceCascade(ctx, team.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.GetWorkspace(ctx, team.ID); err != domain.ErrNotFound {
+		t.Fatalf("workspace after cascade: %v", err)
+	}
+	var n int
+	db.QueryRowContext(ctx, `SELECT (SELECT count(*) FROM workspace_members WHERE workspace_id = ?1) + (SELECT count(*) FROM workspace_quotas WHERE workspace_id = ?1)`, team.ID).Scan(&n)
+	if n != 0 {
+		t.Fatalf("%d member/quota rows linger", n)
+	}
+	if err := db.DeleteWorkspaceCascade(ctx, team.ID); err != domain.ErrNotFound {
+		t.Fatalf("second cascade: %v", err)
+	}
+	if _, err := db.GetWorkspace(ctx, personal.ID); err != nil {
+		t.Fatal("personal workspace lost")
+	}
+}
+
 func TestSiteDomainsClaims(t *testing.T) {
 	db := open(t)
 	ctx := context.Background()

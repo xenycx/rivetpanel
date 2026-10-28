@@ -330,7 +330,7 @@ func (s *BotService) quotaView(ctx context.Context, w domain.Workspace) (QuotaVi
 // WorkspaceQuota returns a workspace's limits and usage to administrators
 // (workspaces.view).
 func (s *BotService) WorkspaceQuota(ctx context.Context, actor domain.User, workspaceID string) (QuotaView, error) {
-	if !actor.Can(domain.PermWorkspacesView) {
+	if !viewsWorkspaces(actor) {
 		return QuotaView{}, domain.ErrForbidden
 	}
 	w, err := s.Store.GetWorkspace(ctx, workspaceID)
@@ -355,7 +355,7 @@ func (s *BotService) WorkspaceLimitsFor(ctx context.Context, actor domain.User, 
 
 // ListWorkspaceQuotas returns every workspace's own limits (workspaces.view).
 func (s *BotService) ListWorkspaceQuotas(ctx context.Context, actor domain.User) (map[string]domain.WorkspaceQuota, error) {
-	if !actor.Can(domain.PermWorkspacesView) {
+	if !viewsWorkspaces(actor) {
 		return nil, domain.ErrForbidden
 	}
 	return s.Store.ListWorkspaceQuotas(ctx)

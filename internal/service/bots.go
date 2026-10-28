@@ -728,6 +728,14 @@ func (s *BotService) delete(ctx context.Context, actor domain.User, id string, w
 	if err != nil {
 		return err
 	}
+	return s.deleteLoaded(ctx, b, web)
+}
+
+// deleteLoaded tears down a bot the caller has already authorized (delete
+// does that for one actor; an administrator's workspace deletion does it for
+// the whole workspace).
+func (s *BotService) deleteLoaded(ctx context.Context, b domain.Bot, web bool) error {
+	id := b.ID
 	if b.IsWeb() && !web {
 		return errWebUnit
 	}
@@ -737,7 +745,7 @@ func (s *BotService) delete(ctx context.Context, actor domain.User, id string, w
 	// Deletion wins over a running deployment/restore/backup: cancel it and
 	// wait for it to let go of the workspace before tearing it down.
 	pctx, cancel := context.WithTimeout(ctx, 30*time.Second)
-	err = s.Coord.Preempt(pctx, id)
+	err := s.Coord.Preempt(pctx, id)
 	cancel()
 	if err != nil {
 		return domain.Invalid("another operation is still finishing on this bot; try deleting again in a moment")

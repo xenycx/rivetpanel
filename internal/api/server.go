@@ -551,12 +551,18 @@ func (s *panel) routes(v1 fiber.Router) {
 	authed.Patch("/workspaces/:wid/members/:uid", s.patchWorkspaceMember)
 	authed.Delete("/workspaces/:wid/members/:uid", s.removeWorkspaceMember)
 	authed.Put("/bots/:id/workspace", s.moveBot)
-	authed.Get("/admin/workspaces", s.requirePerm(domain.PermWorkspacesView), s.adminListWorkspaces)
-	authed.Get("/admin/workspaces/:wid", s.requirePerm(domain.PermWorkspacesView), s.adminGetWorkspace)
+	// Administration → Workspaces: workspaces.view reads, workspaces.manage
+	// also renames and deletes; limits stay with built-in administrators
+	// (checked in the service).
+	viewWorkspaces := s.requireAnyPerm(domain.PermWorkspacesView, domain.PermWorkspacesManage)
+	authed.Get("/admin/workspaces", viewWorkspaces, s.adminListWorkspaces)
+	authed.Get("/admin/workspaces/:wid", viewWorkspaces, s.adminGetWorkspace)
+	authed.Patch("/admin/workspaces/:wid", s.requirePerm(domain.PermWorkspacesManage), s.adminRenameWorkspace)
+	authed.Post("/admin/workspaces/:wid/delete", s.requirePerm(domain.PermWorkspacesManage), s.adminDeleteWorkspace)
 	authed.Get("/admin/users/:id", s.requirePerm(domain.PermUsersView), s.adminGetUser)
-	authed.Get("/admin/workspaces/:wid/quota", s.requirePerm(domain.PermWorkspacesView), s.adminGetWorkspaceQuota)
-	authed.Put("/admin/workspaces/:wid/quota", s.requirePerm(domain.PermWorkspacesView), s.adminPutWorkspaceQuota)
-	authed.Delete("/admin/workspaces/:wid/quota", s.requirePerm(domain.PermWorkspacesView), s.adminDeleteWorkspaceQuota)
+	authed.Get("/admin/workspaces/:wid/quota", viewWorkspaces, s.adminGetWorkspaceQuota)
+	authed.Put("/admin/workspaces/:wid/quota", viewWorkspaces, s.adminPutWorkspaceQuota)
+	authed.Delete("/admin/workspaces/:wid/quota", viewWorkspaces, s.adminDeleteWorkspaceQuota)
 	authed.Get("/workspaces/:wid/limits", s.workspaceLimits)
 	authed.Get("/admin/limits", s.requirePerm(domain.PermSettingsManage), s.getLimitDefaults)
 	authed.Put("/admin/limits", s.requirePerm(domain.PermSettingsManage), s.putLimitDefaults)

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/gofiber/fiber/v3"
@@ -256,6 +257,45 @@ func (s *panel) adminGetWorkspace(c fiber.Ctx) error {
 	out["bots"], out["operations"] = botRows, ops
 	out["sites"] = s.sitesIn(c, id)
 	return c.JSON(out)
+}
+
+// adminRenameWorkspace renames any workspace, personal ones included
+// (workspaces.manage).
+func (s *panel) adminRenameWorkspace(c fiber.Ctx) error {
+	var in struct {
+		Name string `json:"name"`
+	}
+	if err := decode(c, &in); err != nil {
+		return err
+	}
+	id := strings.Clone(c.Params("wid"))
+	if err := s.bots.RenameWorkspace(c.Context(), currentUser(c), id, in.Name); err != nil {
+		return err
+	}
+	return s.adminGetWorkspace(c)
+}
+
+// adminDeleteWorkspace deletes a team workspace with everything in it once
+// the caller has typed its name (workspaces.manage). The audit record names
+// the workspace and what went with it.
+func (s *panel) adminDeleteWorkspace(c fiber.Ctx) error {
+	var in struct {
+		Confirm string `json:"confirm"`
+	}
+	if err := decode(c, &in); err != nil {
+		return err
+	}
+	var sites *service.SiteService
+	if s.sites.Enabled() {
+		sites = s.sites
+	}
+	id := strings.Clone(c.Params("wid"))
+	w, sum, err := s.bots.DeleteWorkspaceCascade(c.Context(), currentUser(c), id, in.Confirm, sites)
+	if err != nil {
+		return err
+	}
+	c.Locals(keyAuditTarget, fmt.Sprintf("%s %q apps=%d sites=%d members=%d", id, w.Name, sum.Apps, sum.Sites, sum.Members))
+	return c.SendStatus(fiber.StatusNoContent)
 }
 
 // adminGetUser is the administrator's view of one account: its workspaces,

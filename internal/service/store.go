@@ -125,6 +125,8 @@ type Store interface {
 	CountOwnedWorkspaces(ctx context.Context, userID string) (int, error)
 	RenameWorkspace(ctx context.Context, id, name string, nowMS int64) error
 	DeleteWorkspace(ctx context.Context, id string) error
+	WorkspaceHoldings(ctx context.Context, id string) (bots []domain.Bot, siteIDs []string, members int, err error)
+	DeleteWorkspaceCascade(ctx context.Context, id string) error
 	WorkspaceRole(ctx context.Context, workspaceID, userID string) (string, error)
 	BotWorkspaceRole(ctx context.Context, botID, userID string) (string, error)
 	ListWorkspaceMembers(ctx context.Context, workspaceID string) ([]domain.WorkspaceMember, error)
