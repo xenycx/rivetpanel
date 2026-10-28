@@ -56,7 +56,6 @@
 	onMount(() => {
 		refresh().then(loadPlayers);
 		api<{ runtimes: RuntimeInfo[] }>('GET', '/runtimes').then((r) => (runtimes = r.runtimes)).catch(() => {});
-		api<Capacity>('GET', '/me/capacity').then((r) => (cap = r)).catch(() => {});
 		if (session.features.games)
 			api<{ blueprints: Blueprint[] }>('GET', '/blueprints')
 				.then((r) => (blueprints = Object.fromEntries(r.blueprints.map((b) => [b.id, b]))))
@@ -77,6 +76,19 @@
 	});
 
 	const isAdmin = $derived(session.user?.role === 'admin');
+	// The limits of the workspace in view (the personal one when all are shown).
+	$effect(() => {
+		const ws = workspaces.selected === 'all' ? '' : workspaces.selected;
+		let live = true;
+		api<Capacity>('GET', `/me/capacity?workspace=${encodeURIComponent(ws)}`)
+			.then((r) => {
+				if (live) cap = r;
+			})
+			.catch(() => {});
+		return () => {
+			live = false;
+		};
+	});
 	const scope = $derived(currentWorkspace());
 	const multi = $derived(workspaces.list.length > 1 && workspaces.selected === 'all');
 	const scoped = $derived((all ?? []).filter((b) => workspaces.selected === 'all' || b.workspace_id === workspaces.selected));

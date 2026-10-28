@@ -1,8 +1,9 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
-	import { api, ApiError, fmtBytes, MiB } from '$lib/api/client';
-	import type { Bot, Limits, RuntimeInfo } from '$lib/api/types';
+	import { api, ApiError, fmtBytes, fmtCpu } from '$lib/api/client';
+	import type { Bot, Capacity, Limits, RuntimeInfo } from '$lib/api/types';
+	import { capLimits, clampMax, room, roomText } from '$lib/room';
 	import { confirmDialog } from '$lib/ui/dialogs.svelte';
 	import { registerDirty } from '$lib/ui/guard.svelte';
 	import { toast } from '$lib/ui/toast.svelte';
@@ -11,6 +12,7 @@
 	import LogoEditor from '$lib/components/LogoEditor.svelte';
 	import Icon from '$lib/components/ui/Icon.svelte';
 	import Notifications from '$lib/components/Notifications.svelte';
+	import ResourcePicker from '$lib/components/ResourcePicker.svelte';
 	import { session } from '$lib/session.svelte';
 	import { creatable, loadWorkspaces, workspaceName, wsName } from '$lib/workspaces.svelte';
 
@@ -19,11 +21,32 @@
 	const noun = $derived(isGame ? 'server' : 'bot');
 
 	// Form state starts from the bot once; saving replaces the bot and resets it.
-	const initial = () => ({ name: bot.name, memoryMiB: Math.round(bot.memory_bytes / MiB), cpus: bot.nano_cpus / 1e9, pids: bot.pids_limit });
+	const initial = () => ({ name: bot.name, memory: bot.memory_bytes as number | null, cpu: bot.nano_cpus as number | null, pids: bot.pids_limit });
 	let form = $state(initial());
 	let base = $state(initial());
 	let limits = $state<Limits | null>(null);
 	let rt = $state<RuntimeInfo | null>(null);
+	// Room under the workspace's limits; what this app holds now stays available to it.
+	let cap = $state<Capacity | null>(null);
+	const rm = $derived(room(cap, { memory: bot.memory_bytes, cpu: bot.nano_cpus }));
+	const maxMem = $derived(limits ? clampMax(limits.max_memory_bytes, rm.memory) : rm.memory);
+	const maxCpu = $derived(limits ? clampMax(limits.max_nano_cpus, rm.cpu) : rm.cpu);
+	const memRoomText = $derived(roomText('memory', rm.memory, capLimits(cap).memory_bytes));
+	const cpuRoomText = $derived(roomText('cpu', rm.cpu, capLimits(cap).nano_cpus));
+	$effect(() => {
+		const ws = bot.workspace_id;
+		let live = true;
+		api<Capacity>('GET', `/me/capacity?workspace=${encodeURIComponent(ws)}`)
+			.then((c) => {
+				if (live) cap = c;
+			})
+			.catch(() => {
+				if (live) cap = null;
+			});
+		return () => {
+			live = false;
+		};
+	});
 	let error = $state('');
 	let saving = $state(false);
 	// svelte-ignore state_referenced_locally
@@ -88,6 +111,8 @@
 
 	const dirty = $derived(JSON.stringify(form) !== JSON.stringify(base));
 	const minMem = $derived(Math.max(limits?.min_memory_bytes ?? 0, rt?.min_memory_bytes ?? 0));
+	const minCpu = $derived(limits?.min_nano_cpus ?? 0);
+	const complete = $derived(form.memory != null && form.memory > 0 && form.cpu != null && form.cpu > 0);
 
 	async function save(e?: SubmitEvent): Promise<boolean> {
 		e?.preventDefault();
@@ -96,8 +121,8 @@
 		try {
 			const b = await api<Bot>('PATCH', `/bots/${bot.id}`, {
 				name: form.name,
-				memory_bytes: Math.round(form.memoryMiB * MiB),
-				nano_cpus: Math.round(form.cpus * 1e9),
+				memory_bytes: Math.round(form.memory ?? 0),
+				nano_cpus: Math.round(form.cpu ?? 0),
 				pids_limit: form.pids
 			});
 			onSaved(b);
@@ -140,28 +165,28 @@
 				<span class="label">Name</span>
 				<input class="field" required maxlength="64" bind:value={form.name} />
 			</label>
-			<div class="grid gap-4 sm:grid-cols-3">
-				<label class="block">
-					<span class="label">Memory</span>
-					<span class="flex items-center gap-2"><input class="field" type="number" step="any" min="1" bind:value={form.memoryMiB} /><span class="text-muted">MiB</span></span>
-					{#if limits}<span class="help">{fmtBytes(minMem)} to {fmtBytes(limits.max_memory_bytes)}</span>{/if}
-				</label>
-				<label class="block">
-					<span class="label">CPU</span>
-					<span class="flex items-center gap-2"><input class="field" type="number" step="any" min="0.01" bind:value={form.cpus} /><span class="text-muted">cores</span></span>
-					{#if limits}<span class="help">{limits.min_nano_cpus / 1e9} to {limits.max_nano_cpus / 1e9} cores</span>{/if}
-				</label>
-				<label class="block">
+			<div class="grid gap-4">
+				<div>
+					<span class="label" id="settings-memory-label">Memory</span>
+					<ResourcePicker kind="memory" id="settings-memory" labelledby="settings-memory-label" value={form.memory} onchange={(v) => (form.memory = v)} min={minMem} max={maxMem} disabled={!stopped} />
+					<span class="help">{#if limits}{fmtBytes(minMem)} to {fmtBytes(maxMem ?? limits.max_memory_bytes)}{#if maxMem != null && maxMem < limits.max_memory_bytes} in this workspace{:else} on this node{/if}.{/if}{#if memRoomText} Workspace room: {memRoomText}.{/if}</span>
+				</div>
+				<div>
+					<span class="label" id="settings-cpu-label">CPU</span>
+					<ResourcePicker kind="cpu" id="settings-cpu" labelledby="settings-cpu-label" value={form.cpu} onchange={(v) => (form.cpu = v)} min={minCpu} max={maxCpu} disabled={!stopped} />
+					<span class="help">{#if limits}{fmtCpu(minCpu)} to {fmtCpu(maxCpu ?? limits.max_nano_cpus)}{#if maxCpu != null && maxCpu < limits.max_nano_cpus} in this workspace{:else} on this node{/if}.{/if}{#if cpuRoomText} Workspace room: {cpuRoomText}.{/if}</span>
+				</div>
+				<label class="block max-w-xs">
 					<span class="label">Processes</span>
 					<input class="field" type="number" step="1" min="1" max="4096" bind:value={form.pids} />
 					<span class="help">1 to 4096 at once</span>
 				</label>
 			</div>
-			{#if rt?.has_build && !isGame}<p class="text-small text-muted">Builds run separately with up to {fmtBytes(Math.max(rt.build_memory_bytes, form.memoryMiB * MiB))}.</p>{/if}
+			{#if rt?.has_build && !isGame}<p class="text-small text-muted">Builds run separately with up to {fmtBytes(Math.max(rt.build_memory_bytes, form.memory ?? 0))}.</p>{/if}
 		</fieldset>
 		{#if error}<Notice tone="fail" class="mt-4" live>{error}</Notice>{/if}
 		<div class="mt-5 flex flex-wrap items-center gap-3">
-			<button class="btn btn-primary" disabled={!stopped || !dirty || saving}>Save settings</button>
+			<button class="btn btn-primary" disabled={!stopped || !dirty || !complete || saving}>Save settings</button>
 			{#if dirty}<button type="button" class="btn btn-quiet" onclick={() => (form = { ...base })}>Discard changes</button><span class="text-small text-warn">Unsaved changes</span>{/if}
 		</div>
 	</form>

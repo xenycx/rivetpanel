@@ -1,7 +1,8 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { api, ApiError } from '$lib/api/client';
-	import type { Site, SitesInfo, SiteTemplate } from '$lib/api/types';
+	import type { Capacity, Site, SitesInfo, SiteTemplate } from '$lib/api/types';
+	import { capLimits, room } from '$lib/room';
 	import { creatable, workspaces, wsName } from '$lib/workspaces.svelte';
 	import Dialog from '$lib/components/ui/Dialog.svelte';
 	import Notice from '$lib/components/ui/Notice.svelte';
@@ -26,6 +27,27 @@
 	const exampleURL = $derived(bases.find((b) => b.id === form.domain_id)?.example_url ?? info.example_url ?? '');
 	const preview = $derived(exampleURL.replace('://example.', `://${(slugTouched ? form.slug : suggest(form.name)) || 'your-site'}.`));
 	const chosen = $derived(templates.find((t) => t.id === form.template_id));
+
+	// Room under the chosen workspace's sites limit.
+	let cap = $state<Capacity | null>(null);
+	const rm = $derived(room(cap));
+	const noRoom = $derived(rm.sites === 0);
+	const sitesLeft = $derived(rm.sites == null ? '' : `${rm.sites} of ${capLimits(cap).sites} ${capLimits(cap).sites === 1 ? 'site' : 'sites'} left in this workspace`);
+	$effect(() => {
+		if (!open) return;
+		const ws = form.workspace_id;
+		let live = true;
+		api<Capacity>('GET', `/me/capacity?workspace=${encodeURIComponent(ws)}`)
+			.then((c) => {
+				if (live) cap = c;
+			})
+			.catch(() => {
+				if (live) cap = null;
+			});
+		return () => {
+			live = false;
+		};
+	});
 
 	// Reset the form each time the dialog opens.
 	let wasOpen = false;
@@ -87,7 +109,13 @@
 		{#if creatable().length > 1}
 			<label class="block"><span class="label">Workspace</span>
 				<select class="field" bind:value={form.workspace_id}>{#each creatable() as w (w.id)}<option value={w.personal ? '' : w.id}>{wsName(w)}</option>{/each}</select>
+				{#if sitesLeft}<span class="help">{sitesLeft}.</span>{/if}
 			</label>
+		{:else if sitesLeft}
+			<p class="text-small text-muted">{sitesLeft}.</p>
+		{/if}
+		{#if noRoom}
+			<Notice tone="warn" title="No room for another site">The workspace {cap?.workspace ? wsName(cap.workspace) : 'Personal'} has reached its limit of {capLimits(cap).sites} {capLimits(cap).sites === 1 ? 'site' : 'sites'}. Delete one, or ask an administrator to raise the limit.</Notice>
 		{/if}
 		{#if info.builds_enabled && !form.template_id}<p class="text-small text-muted">Building with npm, or running Node.js, PHP, Python, Go or Rust? <a class="link" href="/sites/new" onclick={() => (open = false)}>Deploy from a GitHub repository</a> instead.</p>{/if}
 		<label class="flex items-start gap-2.5"><input type="checkbox" class="mt-0.5" bind:checked={form.spa} /><span>Single-page application<span class="help mt-0">Unknown paths serve <code>index.html</code>, for React, Vue or Svelte apps with client-side routing.</span></span></label>
@@ -95,6 +123,6 @@
 	</form>
 	{#snippet footer()}
 		<button class="btn" onclick={() => (open = false)}>Cancel</button>
-		<button class="btn btn-primary" type="submit" form="new-site-form" disabled={busy || !form.name.trim()}>{busy ? 'Creating…' : 'Create site'}</button>
+		<button class="btn btn-primary" type="submit" form="new-site-form" disabled={busy || noRoom || !form.name.trim()}>{busy ? 'Creating…' : 'Create site'}</button>
 	{/snippet}
 </Dialog>

@@ -3,8 +3,9 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { api, ApiError, MiB } from '$lib/api/client';
-	import type { AddonKind, Connection, GitHubRepo, RepoLookup, Site, SitesInfo, WebAnalysis, WebKind, WebPlan } from '$lib/api/types';
+	import type { AddonKind, Capacity, Connection, GitHubRepo, RepoLookup, Site, SitesInfo, WebAnalysis, WebKind, WebPlan } from '$lib/api/types';
 	import { joinArgs, splitArgs } from '$lib/args';
+	import { capLimits, room } from '$lib/room';
 	import { can } from '$lib/session.svelte';
 	import { creatable, loadWorkspaces, workspaces, wsName } from '$lib/workspaces.svelte';
 	import Icon from '$lib/components/ui/Icon.svelte';
@@ -51,6 +52,26 @@
 	let domainId = $state('');
 	let workspaceId = $state(workspaces.selected !== 'all' ? workspaces.selected : '');
 	let submitError = $state('');
+	// Room under the workspace's limits: sites, and apps for a site that runs one.
+	let cap = $state<Capacity | null>(null);
+	const rm = $derived(room(cap));
+	const wsLabel = $derived(cap?.workspace ? wsName(cap.workspace) : 'Personal');
+	const noRoom = $derived(rm.sites === 0 || (kind === 'app' && (rm.apps === 0 || rm.web_apps === 0)));
+	const sitesLeft = $derived(rm.sites == null ? '' : `${rm.sites} of ${capLimits(cap).sites} ${capLimits(cap).sites === 1 ? 'site' : 'sites'} left in this workspace`);
+	$effect(() => {
+		const ws = workspaceId;
+		let live = true;
+		api<Capacity>('GET', `/me/capacity?workspace=${encodeURIComponent(ws)}`)
+			.then((c) => {
+				if (live) cap = c;
+			})
+			.catch(() => {
+				if (live) cap = null;
+			});
+		return () => {
+			live = false;
+		};
+	});
 
 	const msg = (e: unknown, fallback = 'The request failed.') => (e instanceof ApiError ? e.message : fallback);
 	const suggest = (n: string) => n.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 30);
@@ -63,7 +84,7 @@
 	];
 	const forKind = $derived(presets.filter((p) => p.kind === kind));
 	const appsOff = $derived(kind === 'app' && info && !info.apps_enabled);
-	const ready = $derived(!!repo.full_name && !!repo.branch && !!name.trim() && !appsOff && (kind !== 'app' || splitArgs(command).length > 0) && (kind !== 'static_build' || !!buildCommand.trim()));
+	const ready = $derived(!!repo.full_name && !!repo.branch && !!name.trim() && !appsOff && !noRoom && (kind !== 'app' || splitArgs(command).length > 0) && (kind !== 'static_build' || !!buildCommand.trim()));
 
 	$effect(() => {
 		loadWorkspaces();
@@ -319,12 +340,20 @@
 					{#if creatable().length > 1}
 						<label class="block"><span class="label">Workspace</span>
 							<select class="field" bind:value={workspaceId}>{#each creatable() as w (w.id)}<option value={w.personal ? '' : w.id}>{wsName(w)}</option>{/each}</select>
+							{#if sitesLeft}<span class="help">{sitesLeft}.</span>{/if}
 						</label>
+					{:else if sitesLeft}
+						<p class="text-small text-muted sm:col-span-2">{sitesLeft}.</p>
 					{/if}
 					<label class="flex items-start gap-2.5 self-end pb-2"><input type="checkbox" class="mt-0.5" bind:checked={repo.auto_deploy} /><span>Deploy on every push<span class="help mt-0">To <code>{repo.branch}</code>, through a GitHub webhook (or by checking the branch every few minutes).</span></span></label>
 				</div>
 			</section>
 
+			{#if noRoom}
+				<Notice tone="warn" title={rm.sites === 0 ? 'No room for another site' : 'No room for another app'}>
+					The workspace {wsLabel} has reached its limit of {rm.sites === 0 ? `${capLimits(cap).sites} ${capLimits(cap).sites === 1 ? 'site' : 'sites'}` : rm.web_apps === 0 ? `${capLimits(cap).web_apps} web ${capLimits(cap).web_apps === 1 ? 'app' : 'apps'}` : `${capLimits(cap).apps} ${capLimits(cap).apps === 1 ? 'app' : 'apps'}`}. Delete one, or ask an administrator to raise the limit.
+				</Notice>
+			{/if}
 			{#if submitError}<Notice tone="fail" live>{submitError}</Notice>{/if}
 			<div class="flex flex-wrap gap-2">
 				<button class="btn btn-primary" disabled={!ready || !!busy}><Icon name="rocket" size={14} />{busy === 'create' ? 'Creating…' : 'Create and deploy'}</button>
