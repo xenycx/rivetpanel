@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 
 	"github.com/google/uuid"
 
@@ -176,6 +177,59 @@ func (db *DB) DeleteWorkspace(ctx context.Context, id string) error {
 	}
 	if bots > 0 || sites > 0 {
 		return domain.Invalid("move or delete this workspace's apps and sites first")
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM workspaces WHERE id = ?`, id); err != nil {
+		return mapErr(err)
+	}
+	return tx.Commit()
+}
+
+// WorkspaceHoldings returns what a workspace still holds: its live bots, its
+// site ids and its member count (the owner included).
+func (db *DB) WorkspaceHoldings(ctx context.Context, id string) (bots []domain.Bot, siteIDs []string, members int, err error) {
+	if _, err = db.GetWorkspace(ctx, id); err != nil {
+		return
+	}
+	if bots, err = db.ListWorkspaceBots(ctx, id); err != nil {
+		return
+	}
+	if siteIDs, err = db.strings(ctx, `SELECT id FROM sites WHERE workspace_id = ? ORDER BY created_at_ms`, id); err != nil {
+		return
+	}
+	err = db.QueryRowContext(ctx, `SELECT count(*) FROM workspace_members WHERE workspace_id = ?`, id).Scan(&members)
+	return
+}
+
+// DeleteWorkspaceCascade removes a team workspace whose apps and sites are
+// already gone: members and the workspace's own limits go with it, and
+// pending invitations into it are unlinked (account_invites.workspace_id is
+// ON DELETE SET NULL). A bot row still being purged (a remote node may be
+// offline) or a remaining site keeps the workspace, so the deletion can be
+// repeated once they are gone. Personal workspaces are never deleted here:
+// they go with their account. API clients scoped to the workspace keep its
+// id in api_clients.workspace_ids_json; a stale id there matches nothing
+// and is harmless.
+func (db *DB) DeleteWorkspaceCascade(ctx context.Context, id string) error {
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	var personal, bots, sites int
+	if err := tx.QueryRowContext(ctx, `SELECT personal,
+		(SELECT count(*) FROM bots WHERE workspace_id = ?1),
+		(SELECT count(*) FROM sites WHERE workspace_id = ?1)
+		FROM workspaces WHERE id = ?1`, id).Scan(&personal, &bots, &sites); err != nil {
+		return mapErr(err)
+	}
+	if personal == 1 {
+		return domain.Invalid("a personal workspace cannot be deleted; delete the account instead")
+	}
+	if bots > 0 {
+		return domain.Invalid(fmt.Sprintf("%d apps are still being removed (a remote node may be offline); try again in a moment", bots))
+	}
+	if sites > 0 {
+		return domain.Invalid(fmt.Sprintf("%d sites are still being removed (a remote node may be offline); try again in a moment", sites))
 	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM workspaces WHERE id = ?`, id); err != nil {
 		return mapErr(err)

@@ -20,9 +20,9 @@ type WorkspaceDetail struct {
 	Members []domain.WorkspaceMember
 }
 
-// workspaceRole returns the actor's effective role. Panel administrators act
-// as owners of every workspace; non-members get ErrNotFound so workspace ids
-// cannot be probed.
+// workspaceRole returns the actor's effective role. Panel administrators and
+// accounts with workspaces.manage act as owners of every workspace;
+// non-members get ErrNotFound so workspace ids cannot be probed.
 func (s *BotService) workspaceRole(ctx context.Context, actor domain.User, id string) (string, error) {
 	if _, err := uuid.Parse(id); err != nil {
 		return "", domain.ErrNotFound
@@ -33,7 +33,7 @@ func (s *BotService) workspaceRole(ctx context.Context, actor domain.User, id st
 	if !actor.Client.AllowsWorkspace(id) {
 		return "", &domain.ScopeError{What: "workspace"}
 	}
-	if actor.IsAdmin() {
+	if managesWorkspaces(actor) {
 		return domain.WorkspaceOwner, nil
 	}
 	role, err := s.Store.WorkspaceRole(ctx, id, actor.ID)
@@ -48,6 +48,18 @@ func (s *BotService) workspaceRole(ctx context.Context, actor domain.User, id st
 		return "", domain.ErrNotFound
 	}
 	return role, nil
+}
+
+// managesWorkspaces reports whether the actor administers every workspace:
+// built-in administrators and delegated workspaces.manage.
+func managesWorkspaces(actor domain.User) bool {
+	return actor.IsAdmin() || actor.Can(domain.PermWorkspacesManage)
+}
+
+// viewsWorkspaces reports whether the actor may read every workspace from
+// Administration (workspaces.view, or workspaces.manage which implies it).
+func viewsWorkspaces(actor domain.User) bool {
+	return actor.Can(domain.PermWorkspacesView) || managesWorkspaces(actor)
 }
 
 // requireWorkspaceRole is workspaceRole plus a minimum role (ErrForbidden below it).
@@ -101,9 +113,9 @@ func (s *BotService) ListWorkspaces(ctx context.Context, actor domain.User) ([]d
 	return out, nil
 }
 
-// ListAllWorkspaces returns every workspace (administrators only).
+// ListAllWorkspaces returns every workspace (workspaces.view or .manage).
 func (s *BotService) ListAllWorkspaces(ctx context.Context, actor domain.User) ([]domain.WorkspaceSummary, error) {
-	if !actor.Can(domain.PermWorkspacesView) {
+	if !viewsWorkspaces(actor) {
 		return nil, domain.ErrForbidden
 	}
 	return s.Store.ListAllWorkspaces(ctx, actor.ID)
@@ -158,10 +170,15 @@ func (s *BotService) CreateWorkspace(ctx context.Context, actor domain.User, nam
 	return w, s.Store.CreateWorkspace(ctx, w)
 }
 
-// RenameWorkspace needs the admin role.
+// RenameWorkspace needs the workspace admin role and the workspaces.rename
+// permission; built-in administrators and workspaces.manage rename any
+// workspace. Personal workspaces are renamed like team ones (1-64 characters).
 func (s *BotService) RenameWorkspace(ctx context.Context, actor domain.User, id, name string) error {
 	if _, err := s.requireWorkspaceRole(ctx, actor, id, domain.WorkspaceAdmin); err != nil {
 		return err
+	}
+	if !managesWorkspaces(actor) && !actor.Can(domain.PermWorkspacesRename) {
+		return domain.Denied(actor, domain.PermWorkspacesRename)
 	}
 	name, err := validateName(name)
 	if err != nil {

@@ -1092,10 +1092,21 @@ func (s *SiteService) Delete(ctx context.Context, actor domain.User, id string) 
 	if err != nil {
 		return err
 	}
+	return s.deleteSite(ctx, st)
+}
+
+// deleteSite removes a site the caller has already authorized, with the
+// app unit of a built site.
+func (s *SiteService) deleteSite(ctx context.Context, st domain.Site) error {
+	id := st.ID
 	if st.AppID != nil {
 		// The app (container, checkout, add-ons, webhook) goes first: a
 		// failure leaves the site in place to try again.
-		if err := s.Bots.delete(ctx, actor, *st.AppID, true); err != nil && !errors.Is(err, domain.ErrNotFound) {
+		b, err := s.Bots.Store.GetBot(ctx, *st.AppID)
+		if err == nil {
+			err = s.Bots.deleteLoaded(ctx, b, true)
+		}
+		if err != nil && !errors.Is(err, domain.ErrNotFound) {
 			return err
 		}
 	}
