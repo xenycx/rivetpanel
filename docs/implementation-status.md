@@ -863,6 +863,21 @@ items state exactly what remains.
   only after verification (application level). TLS is **not** terminated by
   RivetPanel: certificates are issued by the reverse proxy; RivetPanel only answers
   its on-demand permission check.
+- [x] Per-account quotas (migration `0055`, schema assertion 56, tables
+  assertion 48): an administrator sets an account's limits for bots, game
+  servers, web apps, all apps, sites and memory under Administration → Users
+  (`/api/v1/admin/users/{id}/quota`; changes need the built-in administrator
+  role and are audited as `admin.user_quota_set`/`admin.user_quota_clear`).
+  A set field replaces the panel default (`RIVET_MAX_BOTS_PER_USER`,
+  `RIVET_MAX_SITES_PER_USER`, `RIVET_USER_MEMORY_BYTES`) for that account.
+  Enforcement: application level. Creating a bot, game server, web app or
+  site checks the owner's usage inside the insert's transaction (write
+  transactions take the lock up front), so concurrent creations cannot both
+  pass; memory increases (resize, add-ons) and transfers to a quota-limited
+  account are checked just before they are stored, not in the same
+  transaction. Stopped apps count. Lowering a quota stops nothing. Not
+  implemented: workspace quotas, per-account CPU and disk totals, per-app
+  maximums per account.
 - [x] Sites from GitHub, built or run (migration `0054`, schema assertion
   55, tables assertion unchanged): `POST /api/v1/sites/from-repo` creates a
   static, static-build or app site whose **app unit** is a `bots` row of the
@@ -987,6 +1002,7 @@ Migrations added since 0.2.0 (the schema-version assertion in
 | `0051_status_page.sql` | Additive: `status_components` (panel/node/bot source, public name and description), `status_incidents` (incident or maintenance, impact, status, window), `status_incident_components`, `status_incident_updates` (timeline), `status_samples` (per component and UTC day counts) |
 | `0052_usage_analytics.sql` | Additive: `bot_usage` (per bot, 5-minute/hourly/daily buckets of sample counts, CPU/memory sums and peaks, network bytes, workspace size, crashes, starts, deployment and backup counts), `node_usage` (hourly/daily rollups of `node_telemetry`), `usage_marks` (rollup watermarks). Retention is applied by the application |
 | `0053_game_jvm_args.sql` | Additive: `bots.jvm_args` (validated extra JVM options of a Java game server), `jvm_args_updated_at_ms` (0 = never set) and `jvm_args_generation` (generation when saved, for "Restart to apply") |
+| `0055_user_quotas.sql` | Additive: `user_quotas` (one row per account: `max_apps`, `max_bots`, `max_games`, `max_web_apps`, `max_sites`, `memory_bytes`, each NULL = panel default and 0 = none; `updated_by`, times). No rows means every account keeps the panel defaults. Covered by `quotas_test.go` (populated-database upgrade) |
 | `0054_web_apps.sql` | Rebuilds `bots` (kind gains `web`, runtime gains `php`, new `release_command`) and `sites` (mode gains `app`; `app_id`, `framework`, `build_output_dir`, `app_port`, `health_path`, `max_body_bytes`) with explicit column lists and foreign keys off (checked with `PRAGMA foreign_key_check`; all indexes recreated); additive `site_releases.source_ref` and `bot_health_probes.target` (`host`/`app`). Covered by `apps_migration_test.go` |
 | `0030_ai_global_chat.sql` | Rebuilds `ai_conversations` so a chat may have no target; `ai_runs.bot_id`/`site_id`, `ai_messages.context_json` (the conversation subtree is stashed and restored, rows preserved) |
 
@@ -1005,7 +1021,8 @@ Known gaps in this work:
   app; visitors see "Deploying…"), no remote-node placement, no Dockerfile
   builds, no isolation between apps on the shared apps network, and `/data`
   counts against `RIVET_BACKUP_MAX_BYTES` like any workspace file.
-- [ ] Workspace-level quotas (limits still apply per bot owner) and ownership
+- [ ] Workspace-level quotas (limits apply per bot owner: panel defaults or
+  the owner's per-account quota) and ownership
   transfer of a workspace. Account invitations can now be emailed (Mailgun);
   workspace and bot-share invitations are still links only.
 - [ ] GitHub publishing does not support Git LFS, submodules, or pushing to

@@ -423,7 +423,7 @@ func (s *BotService) Create(ctx context.Context, actor domain.User, in CreateBot
 	if err != nil {
 		return domain.Bot{}, err
 	}
-	if err := s.checkUserBudget(ctx, actor, 1, mem+addonMem); err != nil {
+	if err := s.checkAccount(ctx, actor, newApp(in.Kind, mem+addonMem)); err != nil {
 		return domain.Bot{}, err
 	}
 	wsID, err := s.creatableWorkspace(ctx, actor, in.WorkspaceID)
@@ -481,7 +481,7 @@ func (s *BotService) Create(ctx context.Context, actor domain.User, in CreateBot
 	if err := s.createWorkspace(nodeID, b.ID); err != nil {
 		return domain.Bot{}, fmt.Errorf("create workspace: %w", err)
 	}
-	if err := s.Store.CreateBot(ctx, b); err != nil {
+	if err := s.createBot(ctx, actor, b, addonMem); err != nil {
 		s.removeWorkspace(nodeID, b.ID)
 		return domain.Bot{}, err
 	}
@@ -646,7 +646,7 @@ func (s *BotService) Update(ctx context.Context, actor domain.User, id string, i
 		if err != nil {
 			return domain.Bot{}, err
 		}
-		if err := s.checkUserBudget(ctx, owner, 0, b.MemoryBytes-old.MemoryBytes); err != nil {
+		if err := s.checkAccount(ctx, owner, domain.OwnerUsage{Memory: b.MemoryBytes - old.MemoryBytes}); err != nil {
 			return domain.Bot{}, err
 		}
 	}
@@ -1129,42 +1129,35 @@ func (s *BotService) StopOwnedBy(ctx context.Context, actor domain.User, ownerID
 	return n, nil
 }
 
-// checkUserBudget refuses adding bots or memory beyond a user's budget.
-// Administrators are exempt: they operate the host.
-func (s *BotService) checkUserBudget(ctx context.Context, owner domain.User, addBots int, addMemory int64) error {
-	if owner.IsAdmin() || (s.Limits.MaxBotsPerUser == 0 && s.Limits.UserMemoryBytes == 0) {
-		return nil
-	}
-	n, mem, err := s.Store.OwnerUsage(ctx, owner.ID)
-	if err != nil {
-		return err
-	}
-	if s.Limits.MaxBotsPerUser > 0 && addBots > 0 && n+addBots > s.Limits.MaxBotsPerUser {
-		return domain.Invalid(fmt.Sprintf("your account can have at most %d bots; delete one first", s.Limits.MaxBotsPerUser))
-	}
-	if s.Limits.UserMemoryBytes > 0 && addMemory > 0 && mem+addMemory > s.Limits.UserMemoryBytes {
-		return domain.Invalid(fmt.Sprintf("your bots may use at most %d MiB of memory in total; %d MiB is already assigned",
-			s.Limits.UserMemoryBytes>>20, mem>>20))
-	}
-	return nil
-}
-
-// Capacity is a user's usage against the configured budgets.
+// Capacity is a user's usage against the limits that apply to them.
 type Capacity struct {
 	Bots, MaxBots            int
 	Memory, MaxMemory        int64
 	NodeRunning              int   // admins only
 	NodeReserved, NodeBudget int64 // admins only
 	Exempt                   bool  // administrators are not limited per user
+	// Usage by kind and the resolved limits (Max < 0 = unlimited). MaxBots
+	// and MaxMemory above are the same limits with 0 for unlimited.
+	Usage  domain.OwnerUsage
+	Limits AccountLimits
 }
 
 // Capacity reports the actor's usage and, for administrators, the node's.
-func (s *BotService) Capacity(ctx context.Context, actor domain.User) (Capacity, error) {
-	n, mem, err := s.Store.OwnerUsage(ctx, actor.ID)
+// siteDefault is the panel's per-account site limit.
+func (s *BotService) Capacity(ctx context.Context, actor domain.User, siteDefault int) (Capacity, error) {
+	u, err := s.Store.AccountUsage(ctx, actor.ID)
 	if err != nil {
 		return Capacity{}, err
 	}
-	c := Capacity{Bots: n, MaxBots: s.Limits.MaxBotsPerUser, Memory: mem, MaxMemory: s.Limits.UserMemoryBytes, Exempt: actor.IsAdmin()}
+	lim, err := s.accountLimits(ctx, actor, siteDefault)
+	if err != nil {
+		return Capacity{}, err
+	}
+	c := Capacity{Bots: int(u.Apps), MaxBots: s.Limits.MaxBotsPerUser, Memory: u.Memory, MaxMemory: s.Limits.UserMemoryBytes,
+		Exempt: actor.IsAdmin(), Usage: u, Limits: lim}
+	if !c.Exempt {
+		c.MaxBots, c.MaxMemory = int(max(lim.Apps.Max, 0)), max(lim.Memory.Max, 0)
+	}
 	if actor.IsAdmin() {
 		c.NodeRunning, c.NodeReserved, err = s.Store.NodeReserved(ctx, s.LocalNode)
 		c.NodeBudget = s.Limits.NodeMemoryBytes

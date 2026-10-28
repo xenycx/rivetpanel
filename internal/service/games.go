@@ -476,7 +476,7 @@ func (g *GameService) CreateServer(ctx context.Context, actor domain.User, in Ga
 	if cpu < lim.MinNanoCPUs || cpu > lim.MaxNanoCPUs {
 		return domain.Bot{}, domain.Invalid(fmt.Sprintf("CPU must be between %.2f and %.2f cores on this node", float64(lim.MinNanoCPUs)/1e9, float64(lim.MaxNanoCPUs)/1e9))
 	}
-	if err := s.checkUserBudget(ctx, actor, 1, mem); err != nil {
+	if err := s.checkAccount(ctx, actor, newApp(domain.KindGame, mem)); err != nil {
 		return domain.Bot{}, err
 	}
 	wsID, err := s.creatableWorkspace(ctx, actor, in.WorkspaceID)
@@ -500,7 +500,7 @@ func (g *GameService) CreateServer(ctx context.Context, actor domain.User, in Ga
 	if err := s.createWorkspace(nodeID, b.ID); err != nil {
 		return domain.Bot{}, fmt.Errorf("create workspace: %w", err)
 	}
-	if err := s.Store.CreateBot(ctx, b); err != nil {
+	if err := s.createBot(ctx, actor, b, 0); err != nil {
 		s.removeWorkspace(nodeID, b.ID)
 		return domain.Bot{}, err
 	}

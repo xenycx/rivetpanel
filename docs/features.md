@@ -662,8 +662,8 @@ page (0 = unlimited):
 | --- | --- |
 | `RIVET_MAX_BOT_MEMORY_BYTES`, `RIVET_MAX_BOT_NANO_CPUS` | largest memory / CPU limit of one bot or game server; always capped by the node's own memory and CPU count, which alone apply when unset |
 | `RIVET_NODE_MEMORY_BYTES` | sum of memory limits of bots wanted running; a start that would exceed it is refused (409) with the numbers |
-| `RIVET_USER_MEMORY_BYTES` | sum of a user's bot memory limits |
-| `RIVET_MAX_BOTS_PER_USER` | bots per user |
+| `RIVET_USER_MEMORY_BYTES` | sum of a user's bot memory limits (add-ons included) |
+| `RIVET_MAX_BOTS_PER_USER` | apps per user: bots, game servers and web app units together |
 | `RIVET_MAX_BUILDS` | concurrent build containers (default 1); waiting builds say so |
 | `RIVET_MIN_FREE_DISK_BYTES` | free space backups, restores and deployments need (default 1 GiB) |
 
@@ -671,6 +671,37 @@ The node check and the start are one database transaction, so simultaneous
 starts cannot overcommit. Per-user budgets do not apply to administrators.
 These are admission rules, not kernel limits: containers still have their own
 hard memory limits, and there are no disk quotas.
+
+### Per-account quotas
+
+An administrator can give one account its own limits under Administration →
+Users → the account → Limits (`GET`/`PUT`/`DELETE
+/api/v1/admin/users/{id}/quota`; reading needs View accounts, changing needs
+the built-in administrator role). Each field replaces the panel default for
+that account only; an empty field keeps the default, and 0 allows none:
+
+| Field | Default it replaces |
+| --- | --- |
+| Bots, Game servers, Web apps | none (unlimited): a count of one kind of app |
+| Apps in total | `RIVET_MAX_BOTS_PER_USER` |
+| Sites | `RIVET_MAX_SITES_PER_USER` (bot public pages and sites from GitHub count) |
+| Memory | `RIVET_USER_MEMORY_BYTES` |
+
+Every limit that applies must pass. For example, Bots 1 with Game servers,
+Web apps and Sites 0 (the **One bot only** button) lets the account own a
+single bot and nothing else, while every other account keeps the panel
+defaults. Apps count until they are deleted, running or stopped, so starting
+an app never needs a check. Creating a bot, game server, web app or site and
+the quota check run in one database transaction, so simultaneous requests
+cannot both take the last place. Memory increases (resizing, add-ons) are
+checked against the same limit before they are stored. Receiving a bot by
+ownership transfer is refused when the recipient's quota has no room (panel
+defaults are not checked on transfer, as before). Lowering a quota below what
+an account holds never stops or deletes anything; it only refuses growth.
+Every change is in the activity log (`admin.user_quota_set`,
+`admin.user_quota_clear`). Administrators are exempt. Enforcement is in the
+application; there are no workspace quotas yet, and CPU and disk are not
+counted per account.
 
 ## Accounts and sign-in
 

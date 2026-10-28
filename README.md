@@ -216,6 +216,11 @@ not enforced (Docker has no native cap).
   per-run limits, all audited), encrypted OpenAI-compatible providers
   configurable in `/setup` or Administration, cited web research, and staged
   diffs with undo.
+* Per-account quotas: an administrator can give one account its own limits
+  for bots, game servers, web apps, all apps together, sites and memory (for
+  example one bot and nothing else), in place of the panel-wide defaults;
+  checked in the same transaction that creates the app or site
+  (`docs/features.md`).
 * Administrator tools: a Host page with live and historical CPU, memory, load,
   disk and network charts, per-bot resource use, storage, Docker and process
   details and the panel's own log; daily log files of the panel and every

@@ -51,6 +51,34 @@ func (db *DB) listSites(ctx context.Context, where string, args ...any) ([]domai
 // CreateSite inserts a site; a slug taken under the same base domain returns
 // domain.ErrConflict.
 func (db *DB) CreateSite(ctx context.Context, s domain.Site) error {
+	return insertSite(ctx, db, s)
+}
+
+// CreateSiteChecked inserts s and, in the same transaction, passes its
+// owner's usage including the new site to check; an error from check undoes
+// the insert.
+func (db *DB) CreateSiteChecked(ctx context.Context, s domain.Site, check func(domain.OwnerUsage) error) error {
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if err := insertSite(ctx, tx, s); err != nil {
+		return err
+	}
+	if check != nil {
+		u, err := ownerUsage(ctx, tx, s.OwnerID)
+		if err != nil {
+			return err
+		}
+		if err := check(u); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+func insertSite(ctx context.Context, db execer, s domain.Site) error {
 	if s.Mode == "" {
 		s.Mode = "files"
 	}

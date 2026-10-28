@@ -92,12 +92,12 @@ func (s *panel) putHealthProbe(c fiber.Ctx) error {
 
 func (s *panel) capacity(c fiber.Ctx) error {
 	u := currentUser(c)
-	cp, err := s.bots.Capacity(c.Context(), u)
+	cp, err := s.bots.Capacity(c.Context(), u, s.siteDefault())
 	if err != nil {
 		return err
 	}
 	out := fiber.Map{"bots": cp.Bots, "max_bots": cp.MaxBots, "memory_bytes": cp.Memory, "max_memory_bytes": cp.MaxMemory,
-		"exempt": cp.Exempt, "build_memory_bytes": s.buildMemory}
+		"exempt": cp.Exempt, "build_memory_bytes": s.buildMemory, "usage": toUsage(cp.Usage), "limits": capacityLimits(cp.Limits)}
 	if u.IsAdmin() {
 		out["node"] = fiber.Map{"running": cp.NodeRunning, "reserved_bytes": cp.NodeReserved, "budget_bytes": cp.NodeBudget}
 	}

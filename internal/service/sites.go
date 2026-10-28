@@ -37,6 +37,7 @@ type SiteStore interface {
 	SetSiteLogo(ctx context.Context, siteID string, l *domain.Logo, nowMS int64) error
 	GetSiteLogo(ctx context.Context, siteID string) (domain.Logo, error)
 	CreateSite(ctx context.Context, s domain.Site) error
+	CreateSiteChecked(ctx context.Context, s domain.Site, check func(domain.OwnerUsage) error) error
 	GetSite(ctx context.Context, id string) (domain.Site, error)
 	GetSiteForBot(ctx context.Context, botID string) (domain.Site, error)
 	GetSiteForApp(ctx context.Context, appID string) (domain.Site, error)
@@ -669,14 +670,20 @@ func (s *SiteService) Create(ctx context.Context, actor domain.User, in CreateSi
 	} else if wsID, err = s.Bots.creatableWorkspace(ctx, actor, in.WorkspaceID); err != nil {
 		return domain.Site{}, err
 	}
-	if s.MaxPerUser > 0 && !actor.IsAdmin() {
-		n, err := s.Store.CountOwnedSites(ctx, actor.ID)
-		if err != nil {
+	// The site limit is checked here and again inside the insert's
+	// transaction (CreateSiteChecked), so concurrent creations cannot both
+	// take the last site of a quota.
+	lim, err := s.Bots.accountLimits(ctx, actor, s.MaxPerUser)
+	if err != nil {
+		return domain.Site{}, err
+	}
+	var check func(domain.OwnerUsage) error
+	if !lim.unlimited() {
+		oneSite := domain.OwnerUsage{Sites: 1}
+		if err := s.Bots.checkWithin(ctx, actor.ID, lim, oneSite); err != nil {
 			return domain.Site{}, err
 		}
-		if n >= s.MaxPerUser {
-			return domain.Site{}, domain.Invalid(fmt.Sprintf("your account can have at most %d sites; delete one first", s.MaxPerUser))
-		}
+		check = func(u domain.OwnerUsage) error { return lim.allows(u, oneSite) }
 	}
 	slug, auto := strings.ToLower(strings.TrimSpace(in.Slug)), false
 	if slug == "" {
@@ -718,7 +725,7 @@ func (s *SiteService) Create(ctx context.Context, actor domain.User, in CreateSi
 		Mode: mode, PageTitle: name, PageDescription: "A Discord community powered by " + name + ".", PageTheme: "midnight", PageAccent: "#5865f2",
 		CreatedAtMS: now, UpdatedAtMS: now}
 	for attempt := 0; ; attempt++ {
-		err = s.Store.CreateSite(ctx, st)
+		err = s.Store.CreateSiteChecked(ctx, st, check)
 		if !errors.Is(err, domain.ErrConflict) {
 			break
 		}

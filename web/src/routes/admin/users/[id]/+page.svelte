@@ -5,6 +5,7 @@
 	import { fmtAgo, fmtWhen } from '$lib/args';
 	import AdminBotTable from '$lib/components/AdminBotTable.svelte';
 	import OperationRow from '$lib/components/OperationRow.svelte';
+	import UserQuotaForm from '$lib/components/UserQuotaForm.svelte';
 	import Icon from '$lib/components/ui/Icon.svelte';
 	import Notice from '$lib/components/ui/Notice.svelte';
 	import Skeleton from '$lib/components/ui/Skeleton.svelte';
@@ -45,6 +46,8 @@
 		<div class="card px-4 py-3"><dt class="eyebrow">Workspaces</dt><dd class="mt-1 font-mono text-title font-semibold">{v.workspaces.length}</dd><dd class="text-small text-muted">member of</dd></div>
 		<div class="card px-4 py-3"><dt class="eyebrow">Last operation</dt><dd class="mt-1 text-title font-semibold">{v.operations[0] ? fmtAgo(v.operations[0].created_at_ms) : '—'}</dd></div>
 	</dl>
+
+	<UserQuotaForm userId={id} />
 
 	<section class="mt-8" aria-labelledby="ws-h">
 		<h3 id="ws-h" class="mb-2 text-title font-semibold">Workspaces</h3>

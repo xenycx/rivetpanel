@@ -82,6 +82,35 @@ func defaultInt(v, d int64) int64 {
 }
 
 func (db *DB) CreateBot(ctx context.Context, b domain.Bot) error {
+	return insertBot(ctx, db, b)
+}
+
+// CreateBotChecked inserts b and, in the same transaction, passes its owner's
+// usage including the new bot to check; an error from check undoes the
+// insert. Write transactions take the lock up front, so two creations cannot
+// both pass a check on the last of a quota.
+func (db *DB) CreateBotChecked(ctx context.Context, b domain.Bot, check func(domain.OwnerUsage) error) error {
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if err := insertBot(ctx, tx, b); err != nil {
+		return err
+	}
+	if check != nil {
+		u, err := ownerUsage(ctx, tx, b.OwnerID)
+		if err != nil {
+			return err
+		}
+		if err := check(u); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+func insertBot(ctx context.Context, db execer, b domain.Bot) error {
 	argv, err := json.Marshal(b.Argv)
 	if err != nil {
 		return err

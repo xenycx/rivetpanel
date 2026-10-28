@@ -380,6 +380,21 @@ export type Capacity = {
 	exempt: boolean;
 	build_memory_bytes: number;
 	node?: { running: number; reserved_bytes: number; budget_bytes: number };
+	usage?: QuotaUsage;
+	/** Limits that apply to the account; null is unlimited. */
+	limits?: { apps: number | null; bots: number | null; games: number | null; web_apps: number | null; sites: number | null; memory_bytes: number | null };
+};
+
+export type QuotaUsage = { apps: number; bots: number; games: number; web_apps: number; sites: number; memory_bytes: number };
+/** An account's quota: null fields use the panel default. */
+export type UserQuota = { max_apps: number | null; max_bots: number | null; max_games: number | null; max_web_apps: number | null; max_sites: number | null; memory_bytes: number | null };
+export type UserQuotaView = {
+	quota: UserQuota;
+	usage: QuotaUsage;
+	/** Panel defaults; 0 is unlimited. */
+	defaults: { max_apps: number; max_sites: number; memory_bytes: number };
+	exempt: boolean;
+	updated_at_ms?: number;
 };
 
 export type WorkspaceRole = 'owner' | 'admin' | 'developer' | 'viewer';

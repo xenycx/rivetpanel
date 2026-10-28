@@ -190,7 +190,7 @@ func (s *BotService) addAddon(ctx context.Context, b domain.Bot, in AddonInput, 
 		if err != nil {
 			return domain.BotAddon{}, addons.Kind{}, err
 		}
-		if err := s.checkUserBudget(ctx, owner, 0, mem); err != nil {
+		if err := s.checkAccount(ctx, owner, domain.OwnerUsage{Memory: mem}); err != nil {
 			return domain.BotAddon{}, addons.Kind{}, err
 		}
 	}
@@ -247,7 +247,7 @@ func (s *BotService) SetAddonMemory(ctx context.Context, actor domain.User, botI
 			if err != nil {
 				return err
 			}
-			if err := s.checkUserBudget(ctx, owner, 0, memory-a.MemoryBytes); err != nil {
+			if err := s.checkAccount(ctx, owner, domain.OwnerUsage{Memory: memory - a.MemoryBytes}); err != nil {
 				return err
 			}
 		}

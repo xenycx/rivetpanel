@@ -6,6 +6,28 @@ authoritative current version.
 
 ## Unreleased
 
+### Added
+
+- **Per-account quotas.** Administrators can give one account its own limits
+  under Administration → Users → the account → Limits: bots, game servers and
+  web apps (each counted on its own), apps in total, sites and memory. A set
+  field replaces the panel-wide default (`RIVET_MAX_BOTS_PER_USER`,
+  `RIVET_MAX_SITES_PER_USER`, `RIVET_USER_MEMORY_BYTES`) for that account
+  only; an empty field keeps the default and 0 allows none. **One bot only**
+  limits an account to a single bot and nothing else. Stopped apps count
+  until deleted. Lowering a quota never stops or deletes anything; it only
+  refuses new apps, sites and memory. A bot cannot be transferred to an
+  account whose quota has no room for it. Quota changes are recorded in the
+  activity log, and `GET /api/v1/me/capacity` now also reports usage by kind
+  and the limits that apply. Database migration `0055` adds the
+  `user_quotas` table; with no quota rows every account behaves as before.
+
+### Fixed
+
+- Two bot, game server or site creations sent at the same moment could both
+  pass the per-account limit. The check now runs in the same database
+  transaction as the creation.
+
 ## 0.6.1 - 2026-10-14
 
 ### Fixed

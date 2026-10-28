@@ -233,6 +233,9 @@ func (s *BotService) TransferBot(ctx context.Context, actor domain.User, botID, 
 	if err != nil {
 		return false, err
 	}
+	if err := s.checkTransfer(ctx, target, b); err != nil {
+		return false, err
+	}
 	pctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	_ = s.Coord.Preempt(pctx, b.ID)
 	cancel()

@@ -118,6 +118,8 @@ var auditRoutes = map[string]auditRoute{
 	"PATCH /api/v1/admin/roles/:rid":                          {"admin.role_update", param("rid")},
 	"DELETE /api/v1/admin/roles/:rid":                         {"admin.role_delete", param("rid")},
 	"PATCH /api/v1/users/:id":                                 {"admin.user_update", param("id")},
+	"PUT /api/v1/admin/users/:id/quota":                       {"admin.user_quota_set", nil},
+	"DELETE /api/v1/admin/users/:id/quota":                    {"admin.user_quota_clear", nil},
 	"PUT /api/v1/admin/settings":                              {"admin.settings", nil},
 	"POST /api/v1/admin/settings/mail/test":                   {"admin.mail_test", nil},
 	"PUT /api/v1/admin/log-archive":                           {"admin.log_archive_settings", nil},
@@ -333,7 +335,7 @@ func (s *panel) auditMW(c fiber.Ctx) error {
 		if json.Unmarshal(c.Response().Body(), &created) == nil && created.ID != "" {
 			ev.BotID, ev.BotName = &created.ID, &created.Name
 		}
-	case strings.HasPrefix(c.Route().Path, "/api/v1/users/:id"):
+	case strings.HasPrefix(c.Route().Path, "/api/v1/users/:id"), strings.HasPrefix(c.Route().Path, "/api/v1/admin/users/:id"):
 		ev.SubjectUserID = &botID // the :id here is a user id
 	default:
 		ev.SubjectUserID = strPtr(u.ID)
