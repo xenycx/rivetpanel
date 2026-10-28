@@ -44,6 +44,11 @@ authoritative current version.
   Values saved for them earlier on the Environment page keep working as the
   fallback. Environment help text says "app" where any app is meant.
 
+- Container images publish sooner after a push: the image builds while the
+  tests run and is pushed from the build cache once both pass. Nothing is
+  published unless its tests pass. A newer push to a branch cancels the run
+  still in progress; release tags always finish.
+
 ### Added
 
 - **Default limits** under Panel settings: apps, bots, game servers, web
