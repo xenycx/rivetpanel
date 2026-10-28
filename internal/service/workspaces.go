@@ -3,13 +3,15 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/google/uuid"
 
 	"github.com/xenycx/rivetpanel/internal/domain"
 )
 
-// MaxOwnedWorkspaces bounds the team workspaces one account may own.
+// MaxOwnedWorkspaces bounds the team workspaces one account may own unless
+// Panel settings → Default limits sets another number.
 const MaxOwnedWorkspaces = 20
 
 // WorkspaceDetail is a workspace with its members, as seen by one caller.
@@ -133,13 +135,22 @@ func (s *BotService) CreateWorkspace(ctx context.Context, actor domain.User, nam
 	if err != nil {
 		return domain.Workspace{}, err
 	}
+	// Each workspace gets the default limits, so this cap also bounds how
+	// far an account can multiply them (Panel settings → Default limits).
 	if !actor.IsAdmin() {
+		d, err := s.LimitDefaults(ctx)
+		if err != nil {
+			return domain.Workspace{}, err
+		}
 		n, err := s.Store.CountOwnedWorkspaces(ctx, actor.ID)
 		if err != nil {
 			return domain.Workspace{}, err
 		}
-		if n >= MaxOwnedWorkspaces {
-			return domain.Workspace{}, domain.Invalid("you can own at most 20 team workspaces; delete one first")
+		if d.TeamWorkspaces == 0 {
+			return domain.Workspace{}, domain.Invalid("this panel does not allow creating team workspaces; ask an administrator")
+		}
+		if int64(n) >= d.TeamWorkspaces {
+			return domain.Workspace{}, domain.Invalid(fmt.Sprintf("you can own at most %d team workspaces; delete one first", d.TeamWorkspaces))
 		}
 	}
 	now := s.now()
@@ -274,6 +285,9 @@ func (s *BotService) moveBot(ctx context.Context, actor domain.User, botID, work
 		return b, nil
 	}
 	if _, err := s.creatableWorkspace(ctx, actor, workspaceID); err != nil {
+		return domain.Bot{}, err
+	}
+	if err := s.checkMove(ctx, b, workspaceID); err != nil {
 		return domain.Bot{}, err
 	}
 	if err := s.Store.SetBotWorkspace(ctx, botID, workspaceID, s.now()); err != nil {

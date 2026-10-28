@@ -186,11 +186,7 @@ func (s *BotService) addAddon(ctx context.Context, b domain.Bot, in AddonInput, 
 		return domain.BotAddon{}, addons.Kind{}, domain.Invalid(err.Error())
 	}
 	if budget {
-		owner, err := s.Store.GetUserByID(ctx, b.OwnerID)
-		if err != nil {
-			return domain.BotAddon{}, addons.Kind{}, err
-		}
-		if err := s.checkAccount(ctx, owner, domain.OwnerUsage{Memory: mem}); err != nil {
+		if err := s.checkWorkspace(ctx, b.WorkspaceID, domain.WorkspaceUsage{Memory: mem}); err != nil {
 			return domain.BotAddon{}, addons.Kind{}, err
 		}
 	}
@@ -243,11 +239,7 @@ func (s *BotService) SetAddonMemory(ctx context.Context, actor domain.User, botI
 	}
 	for _, a := range b.Addons {
 		if a.Kind == kind && memory > a.MemoryBytes {
-			owner, err := s.Store.GetUserByID(ctx, b.OwnerID)
-			if err != nil {
-				return err
-			}
-			if err := s.checkAccount(ctx, owner, domain.OwnerUsage{Memory: memory - a.MemoryBytes}); err != nil {
+			if err := s.checkWorkspace(ctx, b.WorkspaceID, domain.WorkspaceUsage{Memory: memory - a.MemoryBytes}); err != nil {
 				return err
 			}
 		}

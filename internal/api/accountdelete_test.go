@@ -97,8 +97,8 @@ func TestDeleteAccountRefusals(t *testing.T) {
 	if err != nil || u.Disabled {
 		t.Fatalf("refused deletion changed the account: %+v %v", u.Disabled, err)
 	}
-	if use, _ := e.db.AccountUsage(ctx, id); use.Bots != 1 {
-		t.Fatalf("refused deletion removed bots: %+v", use)
+	if n, _, _ := e.db.OwnerUsage(ctx, id); n != 1 {
+		t.Fatalf("refused deletion removed bots: %d", n)
 	}
 	expect400(t, admin, "DELETE", "/api/v1/users/"+e.userID("admin2@x.io"), nil, "change this account's role")
 

@@ -535,7 +535,7 @@ func serve(log *slog.Logger, logs *logbuf.Buffer) error {
 		Limits: service.Limits{MinMemoryBytes: config.MinBotMemory, MaxMemoryBytes: cfg.MaxBotMemory,
 			MinNanoCPUs: config.MinBotCPUs, MaxNanoCPUs: cfg.MaxBotCPUs,
 			PortMin: cfg.PortMin, PortMax: cfg.PortMax, PortPublicBind: cfg.PortPublicBind,
-			MaxBotsPerUser: cfg.MaxBotsPerUser, UserMemoryBytes: cfg.UserMemoryBytes, NodeMemoryBytes: cfg.NodeMemoryBytes},
+			MaxBotsPerUser: cfg.MaxBotsPerUser, MaxSitesPerUser: cfg.MaxSitesPerUser, UserMemoryBytes: cfg.UserMemoryBytes, NodeMemoryBytes: cfg.NodeMemoryBytes},
 	}
 	// OAuth always exists: providers come from the environment or from the
 	// settings page, and can change while the panel runs.
@@ -762,7 +762,7 @@ func serve(log *slog.Logger, logs *logbuf.Buffer) error {
 		}
 		sitesSvc = &service.SiteService{Store: db, Bots: botSvc, OAuth: oauthSvc, GH: &github.Client{}, Dir: cfg.SitesDir,
 			BaseURL: cfg.SitesBaseURL, ExtraDomains: cfg.SitesDomains, DNSTarget: cfg.SitesDNSTarget, PanelHost: panelHost, PanelURL: cfg.PublicURL, MaxBytes: cfg.SiteMaxBytes,
-			MaxPerUser: cfg.MaxSitesPerUser, Log: log, Deploys: deploySvc, Health: health}
+			Log: log, Deploys: deploySvc, Health: health}
 		if rn != nil {
 			// Sites are built and run by the panel's own runner.
 			sitesSvc.Builder = rn

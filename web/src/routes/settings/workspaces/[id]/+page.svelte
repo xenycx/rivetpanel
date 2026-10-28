@@ -12,9 +12,12 @@
 	import Notice from '$lib/components/ui/Notice.svelte';
 	import Skeleton from '$lib/components/ui/Skeleton.svelte';
 	import SettingsSection from '$lib/components/ui/SettingsSection.svelte';
+	import WorkspaceUsage from '$lib/components/WorkspaceUsage.svelte';
+	import type { WorkspaceQuotaView } from '$lib/api/types';
 
 	const id = $derived(page.params.id ?? '');
 	let ws = $state<Workspace | null>(null);
+	let limits = $state<WorkspaceQuotaView | null>(null);
 	let members = $state<WorkspaceMember[]>([]);
 	let error = $state('');
 	let name = $state('');
@@ -30,6 +33,7 @@
 			members = r.members;
 			name = r.workspace.name;
 			error = '';
+			limits = await api<WorkspaceQuotaView>('GET', `/workspaces/${id}/limits`).catch(() => null);
 		} catch (e) {
 			error = msg(e);
 		}
@@ -101,7 +105,7 @@
 	async function destroy() {
 		const ok = await confirmDialog({
 			title: `Delete ${ws?.name}?`,
-			body: 'Members lose access immediately. The workspace must be empty: move or delete its bots and sites first.',
+			body: 'Members lose access immediately. The workspace must be empty: move or delete its apps and sites first.',
 			confirmLabel: 'Delete workspace',
 			tone: 'danger'
 		});
@@ -138,6 +142,12 @@
 				<label class="block min-w-0 flex-1 basis-60"><span class="label">Workspace name</span><input class="field" required maxlength="64" bind:value={name} /></label>
 				<button class="btn" disabled={name.trim() === ws.name || !name.trim()}>Rename</button>
 			</form>
+		</SettingsSection>
+	{/if}
+
+	{#if limits}
+		<SettingsSection title="Usage and limits" description="Every member's apps and sites here count together. Stopped apps count until they are deleted. Only panel administrators change limits.">
+			<WorkspaceUsage usage={limits.usage} limits={limits.limits} exempt={limits.exempt} />
 		</SettingsSection>
 	{/if}
 

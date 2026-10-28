@@ -381,18 +381,27 @@ export type Capacity = {
 	build_memory_bytes: number;
 	node?: { running: number; reserved_bytes: number; budget_bytes: number };
 	usage?: QuotaUsage;
-	/** Limits that apply to the account; null is unlimited. */
-	limits?: { apps: number | null; bots: number | null; games: number | null; web_apps: number | null; sites: number | null; memory_bytes: number | null };
+	/** Limits that apply to the workspace; null is unlimited. */
+	limits?: QuotaLimits;
+	/** The workspace reported (the caller's personal one unless ?workspace= names another). */
+	workspace?: { id: string; name: string; personal: boolean };
 };
 
-export type QuotaUsage = { apps: number; bots: number; games: number; web_apps: number; sites: number; memory_bytes: number };
-/** An account's quota: null fields use the panel default. */
-export type UserQuota = { max_apps: number | null; max_bots: number | null; max_games: number | null; max_web_apps: number | null; max_sites: number | null; memory_bytes: number | null };
-export type UserQuotaView = {
-	quota: UserQuota;
+export type QuotaUsage = { apps: number; bots: number; games: number; web_apps: number; sites: number; memory_bytes: number; nano_cpus: number };
+/** Resolved limits; null is unlimited and 0 allows none. */
+export type QuotaLimits = { apps: number | null; bots: number | null; games: number | null; web_apps: number | null; sites: number | null; memory_bytes: number | null; nano_cpus: number | null };
+/** A workspace's own limits: null fields use the panel default. */
+export type WorkspaceQuota = { max_apps: number | null; max_bots: number | null; max_games: number | null; max_web_apps: number | null; max_sites: number | null; memory_bytes: number | null; nano_cpus: number | null };
+/** The panel's default limits for every workspace; null is unlimited. */
+export type LimitDefaults = WorkspaceQuota & { team_workspaces: number };
+export type WorkspaceQuotaView = {
+	workspace: { id: string; name: string; personal: boolean };
+	quota: WorkspaceQuota;
 	usage: QuotaUsage;
-	/** Panel defaults; 0 is unlimited. */
-	defaults: { max_apps: number; max_sites: number; memory_bytes: number };
+	limits: QuotaLimits;
+	/** Administrator view only. */
+	defaults?: LimitDefaults;
+	/** Owned by an administrator: no limits apply. */
 	exempt: boolean;
 	updated_at_ms?: number;
 };
@@ -412,6 +421,8 @@ export type Workspace = {
 	sites: number;
 	last_active_at_ms: number;
 	created_at_ms: number;
+	/** The workspace's own limits (administrator list only; absent = panel defaults). */
+	quota?: WorkspaceQuota;
 };
 export type WorkspaceMember = { user_id: string; email: string; display_name: string; role: WorkspaceRole; created_at_ms: number };
 export const roleRank: Record<WorkspaceRole | '', number> = { '': 0, viewer: 1, developer: 2, admin: 3, owner: 4 };

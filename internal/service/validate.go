@@ -35,10 +35,14 @@ type Limits struct {
 	PortMin, PortMax int
 	PortPublicBind   bool
 
-	// Capacity budgets; 0 means unlimited. Per-user budgets do not apply to
-	// administrators. NodeMemory caps the memory limits of all bots wanted
-	// running on a node (admission, not a kernel limit).
+	// Capacity budgets; 0 means unlimited. MaxBotsPerUser, MaxSitesPerUser
+	// and UserMemoryBytes are the environment's default limits for each
+	// workspace, used where Panel settings set none (see LimitDefaults); they
+	// do not apply to workspaces owned by administrators. NodeMemory caps the
+	// memory limits of all apps wanted running on a node (admission, not a
+	// kernel limit).
 	MaxBotsPerUser  int
+	MaxSitesPerUser int
 	UserMemoryBytes int64
 	NodeMemoryBytes int64
 }

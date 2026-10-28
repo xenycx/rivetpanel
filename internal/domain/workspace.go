@@ -26,7 +26,7 @@ type WorkspaceSummary struct {
 	Members      int
 	Bots         int
 	RunningBots  int
-	MemoryBytes  int64 // assigned to running bots
+	MemoryBytes  int64 // assigned to its apps, add-ons included (the figure its limits count)
 	Sites        int
 	LastActiveMS int64 // newest bot update in the workspace; 0 = none
 }

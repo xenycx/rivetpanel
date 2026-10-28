@@ -89,7 +89,7 @@ const summaryCols = workspaceCols + `, u.email, COALESCE(m.role, ''),
 	(SELECT count(*) FROM workspace_members x WHERE x.workspace_id = w.id),
 	(SELECT count(*) FROM bots b WHERE b.workspace_id = w.id AND b.desired_state != 'deleted'),
 	(SELECT count(*) FROM bots b WHERE b.workspace_id = w.id AND b.desired_state = 'running'),
-	(SELECT COALESCE(sum(b.memory_bytes), 0) FROM bots b WHERE b.workspace_id = w.id AND b.desired_state = 'running'),
+	(SELECT COALESCE(sum(` + botMemory + `), 0) FROM bots WHERE bots.workspace_id = w.id AND bots.desired_state != 'deleted'),
 	(SELECT count(*) FROM sites s WHERE s.workspace_id = w.id),
 	(SELECT COALESCE(max(b.updated_at_ms), 0) FROM bots b WHERE b.workspace_id = w.id AND b.desired_state != 'deleted')
 	FROM workspaces w JOIN users u ON u.id = w.owner_id

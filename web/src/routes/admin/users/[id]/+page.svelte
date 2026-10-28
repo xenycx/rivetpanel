@@ -5,7 +5,6 @@
 	import { fmtAgo, fmtWhen } from '$lib/args';
 	import AdminBotTable from '$lib/components/AdminBotTable.svelte';
 	import OperationRow from '$lib/components/OperationRow.svelte';
-	import UserQuotaForm from '$lib/components/UserQuotaForm.svelte';
 	import Icon from '$lib/components/ui/Icon.svelte';
 	import Notice from '$lib/components/ui/Notice.svelte';
 	import Skeleton from '$lib/components/ui/Skeleton.svelte';
@@ -21,6 +20,7 @@
 			.catch((e) => (error = e instanceof ApiError ? e.message : 'The account could not be loaded.'));
 	});
 	const running = $derived(v?.bots.filter((b) => b.desired_state === 'running').length ?? 0);
+	const personal = $derived(v?.workspaces.find((w) => w.personal && w.owner_id === v?.user.id));
 	const memory = $derived(v?.bots.filter((b) => b.desired_state === 'running').reduce((n, b) => n + b.memory_bytes, 0) ?? 0);
 </script>
 
@@ -47,7 +47,13 @@
 		<div class="card px-4 py-3"><dt class="eyebrow">Last operation</dt><dd class="mt-1 text-title font-semibold">{v.operations[0] ? fmtAgo(v.operations[0].created_at_ms) : '—'}</dd></div>
 	</dl>
 
-	<UserQuotaForm userId={id} />
+	<section class="mt-8" aria-labelledby="limits-h">
+		<h3 id="limits-h" class="mb-1 text-title font-semibold">Limits</h3>
+		<p class="max-w-3xl text-small text-muted">
+			Limits belong to workspaces: every member's apps and sites in a workspace count together.
+			{#if personal}Set this account's own limits on <a class="link" href="/admin/workspaces/{personal.id}#quota-h">its personal workspace</a>; team workspaces have their own.{/if}
+		</p>
+	</section>
 
 	<section class="mt-8" aria-labelledby="ws-h">
 		<h3 id="ws-h" class="mb-2 text-title font-semibold">Workspaces</h3>

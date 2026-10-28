@@ -85,11 +85,11 @@ func (db *DB) CreateBot(ctx context.Context, b domain.Bot) error {
 	return insertBot(ctx, db, b)
 }
 
-// CreateBotChecked inserts b and, in the same transaction, passes its owner's
-// usage including the new bot to check; an error from check undoes the
-// insert. Write transactions take the lock up front, so two creations cannot
-// both pass a check on the last of a quota.
-func (db *DB) CreateBotChecked(ctx context.Context, b domain.Bot, check func(domain.OwnerUsage) error) error {
+// CreateBotChecked inserts b and, in the same transaction, passes its
+// workspace's usage including the new bot to check; an error from check
+// undoes the insert. Write transactions take the lock up front, so two
+// creations cannot both pass a check on the last of a limit.
+func (db *DB) CreateBotChecked(ctx context.Context, b domain.Bot, check func(domain.WorkspaceUsage) error) error {
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -99,7 +99,11 @@ func (db *DB) CreateBotChecked(ctx context.Context, b domain.Bot, check func(dom
 		return err
 	}
 	if check != nil {
-		u, err := ownerUsage(ctx, tx, b.OwnerID)
+		var ws string
+		if err := tx.QueryRowContext(ctx, `SELECT workspace_id FROM bots WHERE id = ?`, b.ID).Scan(&ws); err != nil {
+			return err
+		}
+		u, err := workspaceUsage(ctx, tx, ws)
 		if err != nil {
 			return err
 		}

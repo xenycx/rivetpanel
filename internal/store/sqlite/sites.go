@@ -55,9 +55,9 @@ func (db *DB) CreateSite(ctx context.Context, s domain.Site) error {
 }
 
 // CreateSiteChecked inserts s and, in the same transaction, passes its
-// owner's usage including the new site to check; an error from check undoes
-// the insert.
-func (db *DB) CreateSiteChecked(ctx context.Context, s domain.Site, check func(domain.OwnerUsage) error) error {
+// workspace's usage including the new site to check; an error from check
+// undoes the insert.
+func (db *DB) CreateSiteChecked(ctx context.Context, s domain.Site, check func(domain.WorkspaceUsage) error) error {
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -67,7 +67,7 @@ func (db *DB) CreateSiteChecked(ctx context.Context, s domain.Site, check func(d
 		return err
 	}
 	if check != nil {
-		u, err := ownerUsage(ctx, tx, s.OwnerID)
+		u, err := workspaceUsage(ctx, tx, s.WorkspaceID)
 		if err != nil {
 			return err
 		}

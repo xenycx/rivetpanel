@@ -554,9 +554,12 @@ func (s *panel) routes(v1 fiber.Router) {
 	authed.Get("/admin/workspaces", s.requirePerm(domain.PermWorkspacesView), s.adminListWorkspaces)
 	authed.Get("/admin/workspaces/:wid", s.requirePerm(domain.PermWorkspacesView), s.adminGetWorkspace)
 	authed.Get("/admin/users/:id", s.requirePerm(domain.PermUsersView), s.adminGetUser)
-	authed.Get("/admin/users/:id/quota", s.requirePerm(domain.PermUsersView), s.adminGetUserQuota)
-	authed.Put("/admin/users/:id/quota", s.requirePerm(domain.PermUsersManage), s.adminPutUserQuota)
-	authed.Delete("/admin/users/:id/quota", s.requirePerm(domain.PermUsersManage), s.adminDeleteUserQuota)
+	authed.Get("/admin/workspaces/:wid/quota", s.requirePerm(domain.PermWorkspacesView), s.adminGetWorkspaceQuota)
+	authed.Put("/admin/workspaces/:wid/quota", s.requirePerm(domain.PermWorkspacesView), s.adminPutWorkspaceQuota)
+	authed.Delete("/admin/workspaces/:wid/quota", s.requirePerm(domain.PermWorkspacesView), s.adminDeleteWorkspaceQuota)
+	authed.Get("/workspaces/:wid/limits", s.workspaceLimits)
+	authed.Get("/admin/limits", s.requirePerm(domain.PermSettingsManage), s.getLimitDefaults)
+	authed.Put("/admin/limits", s.requirePerm(domain.PermSettingsManage), s.putLimitDefaults)
 
 	authed.Get("/sites-info", s.sitesInfo)
 	if s.sites.Enabled() {

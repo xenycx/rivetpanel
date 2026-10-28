@@ -50,9 +50,10 @@ type siteRig struct {
 
 func newSiteRig(t *testing.T) *siteRig {
 	e := newEnv(t)
+	e.bots.Limits.MaxSitesPerUser = 3
 	dns := &fakeTXT{recs: map[string][]string{}}
 	svc := &service.SiteService{Store: e.db, Bots: e.bots, Dir: filepath.Join(t.TempDir(), "sites"), BaseURL: "http://sites.test:8081",
-		PanelHost: "panel.example.com", MaxBytes: 8 << 20, MaxPerUser: 3, Resolver: dns}
+		PanelHost: "panel.example.com", MaxBytes: 8 << 20, Resolver: dns}
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(func() { cancel(); svc.Wait() })
 	if err := svc.Start(ctx); err != nil {

@@ -1,13 +1,25 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { api, ApiError, fmtBytes } from '$lib/api/client';
-	import type { Workspace } from '$lib/api/types';
+	import type { Workspace, WorkspaceQuota } from '$lib/api/types';
 	import { fmtAgo } from '$lib/args';
 	import Icon from '$lib/components/ui/Icon.svelte';
 	import Notice from '$lib/components/ui/Notice.svelte';
 	import Skeleton from '$lib/components/ui/Skeleton.svelte';
 
 	let list = $state<Workspace[] | null>(null);
+	// A workspace's own limits in a few words ("Custom" when they only set kinds).
+	function limitText(q: WorkspaceQuota): string {
+		const parts: string[] = [];
+		if (q.max_apps != null) parts.push(`${q.max_apps} app${q.max_apps === 1 ? '' : 's'}`);
+		if (q.max_bots != null) parts.push(`${q.max_bots} bot${q.max_bots === 1 ? '' : 's'}`);
+		if (q.max_games != null) parts.push(`${q.max_games} server${q.max_games === 1 ? '' : 's'}`);
+		if (q.max_web_apps != null) parts.push(`${q.max_web_apps} web`);
+		if (q.max_sites != null) parts.push(`${q.max_sites} site${q.max_sites === 1 ? '' : 's'}`);
+		if (q.memory_bytes != null) parts.push(fmtBytes(q.memory_bytes));
+		if (q.nano_cpus != null) parts.push(`${q.nano_cpus / 1e9} CPU`);
+		return parts.join(' · ') || 'Custom';
+	}
 	let error = $state('');
 	let q = $state('');
 	let kind = $state<'all' | 'team' | 'personal'>('all');
@@ -57,7 +69,7 @@
 	<div class="mt-4"><Skeleton rows={4} /></div>
 {:else if list}
 	<dl class="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4">
-		{#each [['Workspaces', `${list.length}`, `${totals.teams} team${totals.teams === 1 ? '' : 's'}`], ['Apps', `${totals.running}/${totals.bots}`, 'running / total'], ['Memory', fmtBytes(totals.memory), 'assigned to running apps'], ['Sites', `${totals.sites}`, 'hosted']] as [k, v, h] (k)}
+		{#each [['Workspaces', `${list.length}`, `${totals.teams} team${totals.teams === 1 ? '' : 's'}`], ['Apps', `${totals.running}/${totals.bots}`, 'running / total'], ['Memory', fmtBytes(totals.memory), 'assigned to apps'], ['Sites', `${totals.sites}`, 'hosted']] as [k, v, h] (k)}
 			<div class="card px-4 py-3"><dt class="eyebrow">{k}</dt><dd class="mt-1 font-mono text-title font-semibold">{v}</dd><dd class="text-small text-muted">{h}</dd></div>
 		{/each}
 	</dl>
@@ -76,7 +88,7 @@
 		<table class="w-full min-w-[44rem] text-left">
 			<thead class="border-b border-rule-soft">
 				<tr class="[&>th]:px-4 [&>th]:py-2.5 [&>th]:font-normal">
-					<th class="eyebrow">Workspace</th><th class="eyebrow">Owner</th><th class="eyebrow text-right">Members</th><th class="eyebrow text-right">Apps</th><th class="eyebrow text-right">Sites</th><th class="eyebrow text-right">Memory</th><th class="eyebrow text-right">Active</th>
+					<th class="eyebrow">Workspace</th><th class="eyebrow">Owner</th><th class="eyebrow text-right">Members</th><th class="eyebrow text-right">Apps</th><th class="eyebrow text-right">Sites</th><th class="eyebrow text-right">Memory</th><th class="eyebrow">Limits</th><th class="eyebrow text-right">Active</th>
 				</tr>
 			</thead>
 			<tbody class="divide-y divide-rule-soft">
@@ -93,10 +105,11 @@
 						<td class="text-right font-mono text-small"><span class={w.running_bots ? 'text-run' : ''}>{w.running_bots}</span>/{w.bots}</td>
 						<td class="text-right font-mono text-small">{w.sites}</td>
 						<td class="text-right font-mono text-small">{fmtBytes(w.memory_bytes)}</td>
+						<td class="text-small">{#if w.quota}<span class="pill" title="This workspace has its own limits">{limitText(w.quota)}</span>{:else}<span class="text-muted">Default</span>{/if}</td>
 						<td class="text-right text-small text-muted">{w.last_active_at_ms ? fmtAgo(w.last_active_at_ms) : '—'}</td>
 					</tr>
 				{:else}
-					<tr><td colspan="7" class="px-4 py-4 text-small text-muted">No workspaces match.</td></tr>
+					<tr><td colspan="8" class="px-4 py-4 text-small text-muted">No workspaces match.</td></tr>
 				{/each}
 			</tbody>
 		</table>

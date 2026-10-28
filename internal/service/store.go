@@ -103,11 +103,14 @@ type Store interface {
 	UpdateBotConfig(ctx context.Context, b domain.Bot, nowMS int64) error
 	SetDesired(ctx context.Context, id, desired string, force bool, nowMS int64) (domain.Bot, bool, error)
 	SetDesiredWithin(ctx context.Context, id, desired string, force bool, nowMS, nodeMemory int64) (domain.Bot, bool, error)
-	AccountUsage(ctx context.Context, ownerID string) (domain.OwnerUsage, error)
-	CreateBotChecked(ctx context.Context, b domain.Bot, check func(domain.OwnerUsage) error) error
-	GetUserQuota(ctx context.Context, userID string) (domain.UserQuota, error)
-	SetUserQuota(ctx context.Context, q domain.UserQuota) error
-	DeleteUserQuota(ctx context.Context, userID string) error
+	WorkspaceUsage(ctx context.Context, workspaceID string) (domain.WorkspaceUsage, error)
+	CreateBotChecked(ctx context.Context, b domain.Bot, check func(domain.WorkspaceUsage) error) error
+	GetWorkspaceQuota(ctx context.Context, workspaceID string) (domain.WorkspaceQuota, error)
+	ListWorkspaceQuotas(ctx context.Context) (map[string]domain.WorkspaceQuota, error)
+	SetWorkspaceQuota(ctx context.Context, q domain.WorkspaceQuota) error
+	DeleteWorkspaceQuota(ctx context.Context, workspaceID string) error
+	Settings(ctx context.Context) (map[string]domain.Setting, error)
+	PutSettings(ctx context.Context, set []domain.Setting, nowMS int64) error
 	NodeReserved(ctx context.Context, nodeID string) (int, int64, error)
 	RestartIfRunning(ctx context.Context, id string, nowMS int64) (domain.Bot, bool, error)
 	MarkBotDeleted(ctx context.Context, id string, nowMS int64) error

@@ -6,6 +6,7 @@
 	import { toast } from '$lib/ui/toast.svelte';
 	import AdminBotTable from '$lib/components/AdminBotTable.svelte';
 	import OperationRow from '$lib/components/OperationRow.svelte';
+	import WorkspaceQuotaForm from '$lib/components/WorkspaceQuotaForm.svelte';
 	import Icon from '$lib/components/ui/Icon.svelte';
 	import Notice from '$lib/components/ui/Notice.svelte';
 	import Skeleton from '$lib/components/ui/Skeleton.svelte';
@@ -59,9 +60,11 @@
 		<div class="card px-4 py-3"><dt class="eyebrow">Sites</dt><dd class="mt-1 font-mono text-title font-semibold">{w.sites}</dd></div>
 	</dl>
 
+	<WorkspaceQuotaForm workspaceId={id} />
+
 	<section class="mt-8" aria-labelledby="bots-h">
 		<h3 id="bots-h" class="mb-2 text-title font-semibold">Bots</h3>
-		<AdminBotTable bots={v.bots} empty="No bots in this workspace." />
+		<AdminBotTable bots={v.bots} empty="No apps in this workspace." />
 	</section>
 
 	<div class="mt-8 grid gap-8 xl:grid-cols-2">

@@ -873,21 +873,26 @@ items state exactly what remains.
   accounts' bots or sites. Enforcement: application level. Not done: no
   self-service deletion; GitHub webhooks of removed links are left on GitHub;
   servers on an offline remote node block the final step until purged.
-- [x] Per-account quotas (migration `0055`, schema assertion 56, tables
-  assertion 48): an administrator sets an account's limits for bots, game
-  servers, web apps, all apps, sites and memory under Administration → Users
-  (`/api/v1/admin/users/{id}/quota`; changes need the built-in administrator
-  role and are audited as `admin.user_quota_set`/`admin.user_quota_clear`).
-  A set field replaces the panel default (`RIVET_MAX_BOTS_PER_USER`,
-  `RIVET_MAX_SITES_PER_USER`, `RIVET_USER_MEMORY_BYTES`) for that account.
-  Enforcement: application level. Creating a bot, game server, web app or
-  site checks the owner's usage inside the insert's transaction (write
-  transactions take the lock up front), so concurrent creations cannot both
-  pass; memory increases (resize, add-ons) and transfers to a quota-limited
-  account are checked just before they are stored, not in the same
-  transaction. Stopped apps count. Lowering a quota stops nothing. Not
-  implemented: workspace quotas, per-account CPU and disk totals, per-app
-  maximums per account.
+- [x] Workspace limits (migration `0056`, schema assertion 57, tables
+  assertion 48; replaces the per-account quotas of `0055`): every member's
+  apps and sites in a workspace count together. Default limits for every
+  workspace are Panel settings (`/api/v1/admin/limits`, audited as
+  `admin.limits`, applied without a restart) with `RIVET_MAX_BOTS_PER_USER`,
+  `RIVET_MAX_SITES_PER_USER` and `RIVET_USER_MEMORY_BYTES` as the fallback.
+  An administrator sets a workspace's own limits for bots, game servers, web
+  apps, all apps, sites, memory and CPU under Administration → Workspaces
+  (`/api/v1/admin/workspaces/{id}/quota`; changes need the built-in
+  administrator role and are audited as `admin.workspace_quota_set`/
+  `admin.workspace_quota_clear`). Enforcement: application level. Creating
+  a bot, game server, web app or site checks the workspace's usage inside
+  the insert's transaction (write transactions take the lock up front), so
+  concurrent creations cannot both pass; memory and CPU increases (resize,
+  add-ons), moves of apps and sites between workspaces and transfers (into
+  the recipient's personal workspace) are checked just before they are
+  stored, not in the same transaction. Stopped apps count. Lowering a limit
+  stops nothing. Workspaces owned by administrators are exempt. A
+  configurable cap on team workspaces per account (default 20) bounds how
+  many sets of defaults one account can hold. Not implemented: disk totals.
 - [x] Sites from GitHub, built or run (migration `0054`, schema assertion
   55, tables assertion unchanged): `POST /api/v1/sites/from-repo` creates a
   static, static-build or app site whose **app unit** is a `bots` row of the
@@ -978,7 +983,7 @@ items state exactly what remains.
   Docker-runtime-level.
 
 Migrations added since 0.2.0 (the schema-version assertion in
-`internal/store/sqlite/db_test.go` checks 55 applied migrations):
+`internal/store/sqlite/db_test.go` checks 57 applied migrations):
 
 | Migration | Purpose |
 | --- | --- |
@@ -1012,7 +1017,8 @@ Migrations added since 0.2.0 (the schema-version assertion in
 | `0051_status_page.sql` | Additive: `status_components` (panel/node/bot source, public name and description), `status_incidents` (incident or maintenance, impact, status, window), `status_incident_components`, `status_incident_updates` (timeline), `status_samples` (per component and UTC day counts) |
 | `0052_usage_analytics.sql` | Additive: `bot_usage` (per bot, 5-minute/hourly/daily buckets of sample counts, CPU/memory sums and peaks, network bytes, workspace size, crashes, starts, deployment and backup counts), `node_usage` (hourly/daily rollups of `node_telemetry`), `usage_marks` (rollup watermarks). Retention is applied by the application |
 | `0053_game_jvm_args.sql` | Additive: `bots.jvm_args` (validated extra JVM options of a Java game server), `jvm_args_updated_at_ms` (0 = never set) and `jvm_args_generation` (generation when saved, for "Restart to apply") |
-| `0055_user_quotas.sql` | Additive: `user_quotas` (one row per account: `max_apps`, `max_bots`, `max_games`, `max_web_apps`, `max_sites`, `memory_bytes`, each NULL = panel default and 0 = none; `updated_by`, times). No rows means every account keeps the panel defaults. Covered by `quotas_test.go` (populated-database upgrade) |
+| `0055_user_quotas.sql` | Additive: `user_quotas` (one row per account: `max_apps`, `max_bots`, `max_games`, `max_web_apps`, `max_sites`, `memory_bytes`, each NULL = panel default and 0 = none; `updated_by`, times). No rows means every account keeps the panel defaults. Replaced by `0056` |
+| `0056_workspace_quotas.sql` | `workspace_quotas` (one row per workspace, `ON DELETE CASCADE`: the `0055` columns plus `nano_cpus`); copies each `user_quotas` row onto that account's personal workspace, then drops `user_quotas`. Covered by `quotas_test.go` (populated-database upgrade with quota rows) |
 | `0054_web_apps.sql` | Rebuilds `bots` (kind gains `web`, runtime gains `php`, new `release_command`) and `sites` (mode gains `app`; `app_id`, `framework`, `build_output_dir`, `app_port`, `health_path`, `max_body_bytes`) with explicit column lists and foreign keys off (checked with `PRAGMA foreign_key_check`; all indexes recreated); additive `site_releases.source_ref` and `bot_health_probes.target` (`host`/`app`). Covered by `apps_migration_test.go` |
 | `0030_ai_global_chat.sql` | Rebuilds `ai_conversations` so a chat may have no target; `ai_runs.bot_id`/`site_id`, `ai_messages.context_json` (the conversation subtree is stashed and restored, rows preserved) |
 

@@ -23,11 +23,14 @@ type workspaceDTO struct {
 	Sites        int    `json:"sites"`
 	LastActiveMS int64  `json:"last_active_at_ms"`
 	CreatedAtMS  int64  `json:"created_at_ms"`
+	// Quota is the workspace's own limits (administrator list only; absent
+	// when the panel defaults apply).
+	Quota *quotaDTO `json:"quota,omitempty"`
 }
 
 func toWorkspace(w domain.WorkspaceSummary) workspaceDTO {
 	return workspaceDTO{w.ID, w.Name, w.OwnerID, w.OwnerEmail, w.Personal, w.Role, w.Members, w.Bots, w.RunningBots,
-		w.MemoryBytes, w.Sites, w.LastActiveMS, w.CreatedAtMS}
+		w.MemoryBytes, w.Sites, w.LastActiveMS, w.CreatedAtMS, nil}
 }
 
 type memberDTO struct {
@@ -214,7 +217,18 @@ func (s *panel) adminListWorkspaces(c fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	return c.JSON(fiber.Map{"workspaces": toWorkspaceList(ws)})
+	quotas, err := s.bots.ListWorkspaceQuotas(c.Context(), actor)
+	if err != nil {
+		return err
+	}
+	out := toWorkspaceList(ws)
+	for i := range out {
+		if q, ok := quotas[out[i].ID]; ok {
+			dto := toQuota(q)
+			out[i].Quota = &dto
+		}
+	}
+	return c.JSON(fiber.Map{"workspaces": out})
 }
 
 // adminGetWorkspace is the administrator's view of one workspace: members,

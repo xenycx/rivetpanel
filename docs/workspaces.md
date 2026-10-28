@@ -3,8 +3,9 @@
 A workspace groups bots (and [hosted sites](sites.md)) for a person or a team.
 Every account has exactly one **Personal** workspace, created with the account;
 anything created without choosing a workspace goes there. Team workspaces are
-created under **Settings → Workspaces** (at most 20 owned per account;
-administrators are exempt).
+created under **Settings → Workspaces** (at most 20 owned per account unless
+Panel settings → Default limits sets another number; administrators are
+exempt).
 
 The sidebar's workspace switcher scopes the overview, the Sites page and the
 default target of **New** to one workspace, or shows **All workspaces**. The
@@ -42,10 +43,11 @@ API's "all your bots" tokens and the activity feed follow the same rules.
 * **Transfer ownership** of a bot moves it into the new owner's personal
   workspace, so the previous owner does not keep access through their
   workspace (unless "keep access" is chosen, which adds a direct grant).
-* Quotas (`RIVET_MAX_BOTS_PER_USER`, `RIVET_USER_MEMORY_BYTES`, and an
-  account's own quota set by an administrator, see "Per-account quotas" in
-  `features.md`) count the bot's **owner** (its creator or transfer
-  recipient), not the workspace. Workspaces have no quota of their own yet.
+* Limits belong to the workspace: every member's apps and sites in it count
+  together against the default limits or the workspace's own (see
+  "Workspace limits" in `features.md`). Moving an app or site into a
+  workspace with no room for it is refused. Members see the usage and limits
+  on the workspace's settings page.
 
 A workspace can be deleted only when it has no bots (including bots still being
 deleted) and no sites. Personal workspaces cannot be deleted.

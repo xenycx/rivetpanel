@@ -37,7 +37,7 @@ type SiteStore interface {
 	SetSiteLogo(ctx context.Context, siteID string, l *domain.Logo, nowMS int64) error
 	GetSiteLogo(ctx context.Context, siteID string) (domain.Logo, error)
 	CreateSite(ctx context.Context, s domain.Site) error
-	CreateSiteChecked(ctx context.Context, s domain.Site, check func(domain.OwnerUsage) error) error
+	CreateSiteChecked(ctx context.Context, s domain.Site, check func(domain.WorkspaceUsage) error) error
 	GetSite(ctx context.Context, id string) (domain.Site, error)
 	GetSiteForBot(ctx context.Context, botID string) (domain.Site, error)
 	GetSiteForApp(ctx context.Context, appID string) (domain.Site, error)
@@ -104,7 +104,6 @@ type SiteService struct {
 	PanelHost    string         // the panel's own host name, never assignable to a site
 	PanelURL     string         // the panel's public URL, for site templates that link to its status page
 	MaxBytes     int64          // largest release
-	MaxPerUser   int            // sites an account may create; 0 = unlimited
 	Resolver     TXTResolver    // nil: net.DefaultResolver
 	// Building and running sites (all nil: only uploaded static sites).
 	Deploys *DeployService
@@ -670,20 +669,12 @@ func (s *SiteService) Create(ctx context.Context, actor domain.User, in CreateSi
 	} else if wsID, err = s.Bots.creatableWorkspace(ctx, actor, in.WorkspaceID); err != nil {
 		return domain.Site{}, err
 	}
-	// The site limit is checked here and again inside the insert's
-	// transaction (CreateSiteChecked), so concurrent creations cannot both
-	// take the last site of a quota.
-	lim, err := s.Bots.accountLimits(ctx, actor, s.MaxPerUser)
+	// The workspace's site limit is checked here and again inside the
+	// insert's transaction (CreateSiteChecked), so concurrent creations
+	// cannot both take the last site of a limit.
+	check, err := s.Bots.siteCheck(ctx, wsID)
 	if err != nil {
 		return domain.Site{}, err
-	}
-	var check func(domain.OwnerUsage) error
-	if !lim.unlimited() {
-		oneSite := domain.OwnerUsage{Sites: 1}
-		if err := s.Bots.checkWithin(ctx, actor.ID, lim, oneSite); err != nil {
-			return domain.Site{}, err
-		}
-		check = func(u domain.OwnerUsage) error { return lim.allows(u, oneSite) }
 	}
 	slug, auto := strings.ToLower(strings.TrimSpace(in.Slug)), false
 	if slug == "" {
@@ -997,6 +988,16 @@ func (s *SiteService) Update(ctx context.Context, actor domain.User, id string, 
 			return domain.Site{}, domain.ErrForbidden
 		}
 		if st.WorkspaceID, err = s.Bots.creatableWorkspace(ctx, actor, *in.WorkspaceID); err != nil {
+			return domain.Site{}, err
+		}
+		// The site and its app unit move together: check room for both.
+		grow := domain.WorkspaceUsage{Sites: 1}
+		if st.AppID != nil {
+			if b, err := s.Bots.Store.GetBot(ctx, *st.AppID); err == nil && b.WorkspaceID != st.WorkspaceID {
+				grow = plusUsage(grow, appUsage(b))
+			}
+		}
+		if err := s.Bots.checkWorkspace(ctx, st.WorkspaceID, grow); err != nil {
 			return domain.Site{}, err
 		}
 	}

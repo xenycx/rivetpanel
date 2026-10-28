@@ -30,18 +30,19 @@ type rowQuerier interface {
 	QueryRowContext(ctx context.Context, q string, args ...any) *sql.Row
 }
 
-// AccountUsage is what an account holds against its quota: bots not deleted
-// by kind (stopped ones count, so stopped apps cannot later all be started
-// past a limit), their memory limits with add-ons, and its sites.
-func (db *DB) AccountUsage(ctx context.Context, ownerID string) (domain.OwnerUsage, error) {
-	return ownerUsage(ctx, db, ownerID)
+// WorkspaceUsage is what a workspace holds against its limits: apps not
+// deleted by kind (stopped ones count, so stopped apps cannot later all be
+// started past a limit), their memory limits with add-ons, their CPU limits,
+// and its sites.
+func (db *DB) WorkspaceUsage(ctx context.Context, workspaceID string) (domain.WorkspaceUsage, error) {
+	return workspaceUsage(ctx, db, workspaceID)
 }
 
-func ownerUsage(ctx context.Context, db rowQuerier, ownerID string) (u domain.OwnerUsage, err error) {
+func workspaceUsage(ctx context.Context, db rowQuerier, workspaceID string) (u domain.WorkspaceUsage, err error) {
 	err = db.QueryRowContext(ctx, `SELECT count(*),
 		COALESCE(SUM(kind = 'bot'), 0), COALESCE(SUM(kind = 'game'), 0), COALESCE(SUM(kind = 'web'), 0),
-		COALESCE(SUM(`+botMemory+`), 0), (SELECT count(*) FROM sites WHERE owner_id = ?1)
-		FROM bots WHERE owner_id = ?1 AND desired_state != 'deleted'`, ownerID).
-		Scan(&u.Apps, &u.Bots, &u.Games, &u.Web, &u.Memory, &u.Sites)
+		COALESCE(SUM(`+botMemory+`), 0), COALESCE(SUM(nano_cpus), 0), (SELECT count(*) FROM sites WHERE workspace_id = ?1)
+		FROM bots WHERE workspace_id = ?1 AND desired_state != 'deleted'`, workspaceID).
+		Scan(&u.Apps, &u.Bots, &u.Games, &u.Web, &u.Memory, &u.CPU, &u.Sites)
 	return
 }

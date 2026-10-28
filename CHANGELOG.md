@@ -6,6 +6,63 @@ authoritative current version.
 
 ## Unreleased
 
+### Changed
+
+- **Limits belong to workspaces, not accounts.** Every member's apps and
+  sites in a workspace now count together. Administration → Workspaces → a
+  workspace → Limits sets its own limits for bots, game servers, web apps,
+  apps in total, sites, memory and, new, CPU cores; a usage bar shows each
+  limit. The admin workspace list has a Limits column, and members see their
+  workspace's usage and limits under Settings → Workspaces. The panel-wide
+  defaults (`RIVET_MAX_BOTS_PER_USER`, `RIVET_MAX_SITES_PER_USER`,
+  `RIVET_USER_MEMORY_BYTES`) now apply to each workspace. Refusals name the
+  workspace. `GET /api/v1/me/capacity` takes `?workspace=` and reports that
+  workspace (the personal one by default). Workspaces owned by administrators
+  are exempt.
+
+  Upgrading: database migration `0056` copies each account's limits onto its
+  personal workspace and removes the per-account limits table. Those limits
+  now cover the personal workspace only; apps the account creates in team
+  workspaces count against those workspaces. The defaults also apply per
+  workspace, so an account that owns team workspaces can hold more in total
+  than before. Lower **Team workspaces per account** under Panel settings →
+  Default limits, or set limits on those team workspaces, if that matters on
+  your panel.
+- Text that covers bots, game servers and web apps now says "app": the admin
+  Host, Analytics, Users, Workspaces, Nodes, Logs, Status and Roles pages, the
+  dashboard, settings, activity, notification categories and backup
+  messages.
+
+### Added
+
+- Moving an app or a site into another workspace, and transferring an app
+  (it lands in the recipient's personal workspace), are refused when that
+  workspace has no room. Raising an app's CPU is checked like memory.
+- Default limits can be set in the panel (`GET`/`PUT /api/v1/admin/limits`,
+  audited as `admin.limits`). They apply at once; the environment variables
+  remain the fallback. **Team workspaces per account** (20 when unset, 0 to
+  stop users creating team workspaces) bounds how many sets of defaults one
+  account can hold.
+
+### Removed
+
+- Per-account limits: Administration → Users → Limits and
+  `/api/v1/admin/users/{id}/quota`. The account page links to its personal
+  workspace's limits instead.
+
+### Fixed
+
+- The workspace memory figure counted running bots only, without add-ons,
+  and disagreed with the limits. It now counts every app's memory with its
+  add-ons, the same figure the limits use.
+- On the admin Host page, game servers and web apps link to their own pages
+  instead of the bot page.
+- The dashboard counts web apps against the apps limit.
+- Admin Analytics shows a Web apps count and labels web apps as "web app"
+  instead of "site".
+- Status messages no longer say "The bot crashed" for game servers and web
+  apps.
+
 ## 0.7.0 - 2026-10-28
 
 ### Added

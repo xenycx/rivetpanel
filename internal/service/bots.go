@@ -423,11 +423,11 @@ func (s *BotService) Create(ctx context.Context, actor domain.User, in CreateBot
 	if err != nil {
 		return domain.Bot{}, err
 	}
-	if err := s.checkAccount(ctx, actor, newApp(in.Kind, mem+addonMem)); err != nil {
-		return domain.Bot{}, err
-	}
 	wsID, err := s.creatableWorkspace(ctx, actor, in.WorkspaceID)
 	if err != nil {
+		return domain.Bot{}, err
+	}
+	if err := s.checkWorkspace(ctx, wsID, newApp(in.Kind, mem+addonMem, cpu)); err != nil {
 		return domain.Bot{}, err
 	}
 	nodeID, err := s.chooseNode(ctx, actor, in.NodeID)
@@ -481,7 +481,7 @@ func (s *BotService) Create(ctx context.Context, actor domain.User, in CreateBot
 	if err := s.createWorkspace(nodeID, b.ID); err != nil {
 		return domain.Bot{}, fmt.Errorf("create workspace: %w", err)
 	}
-	if err := s.createBot(ctx, actor, b, addonMem); err != nil {
+	if err := s.createBot(ctx, b, addonMem); err != nil {
 		s.removeWorkspace(nodeID, b.ID)
 		return domain.Bot{}, err
 	}
@@ -641,12 +641,9 @@ func (s *BotService) Update(ctx context.Context, actor domain.User, id string, i
 	if err := s.LimitsFor(ctx, b.NodeID).validateResources(rt, b.MemoryBytes, b.NanoCPUs, b.PidsLimit); err != nil {
 		return domain.Bot{}, err
 	}
-	if in.MemoryBytes != nil {
-		owner, err := s.Store.GetUserByID(ctx, b.OwnerID)
-		if err != nil {
-			return domain.Bot{}, err
-		}
-		if err := s.checkAccount(ctx, owner, domain.OwnerUsage{Memory: b.MemoryBytes - old.MemoryBytes}); err != nil {
+	if in.MemoryBytes != nil || in.NanoCPUs != nil {
+		grow := domain.WorkspaceUsage{Memory: b.MemoryBytes - old.MemoryBytes, CPU: b.NanoCPUs - old.NanoCPUs}
+		if err := s.checkWorkspace(ctx, b.WorkspaceID, grow); err != nil {
 			return domain.Bot{}, err
 		}
 	}
@@ -1129,35 +1126,43 @@ func (s *BotService) StopOwnedBy(ctx context.Context, actor domain.User, ownerID
 	return n, nil
 }
 
-// Capacity is a user's usage against the limits that apply to them.
+// Capacity is a workspace's usage against the limits that apply to it.
 type Capacity struct {
+	Workspace                domain.Workspace
 	Bots, MaxBots            int
 	Memory, MaxMemory        int64
 	NodeRunning              int   // admins only
 	NodeReserved, NodeBudget int64 // admins only
-	Exempt                   bool  // administrators are not limited per user
+	Exempt                   bool  // workspaces owned by administrators have no limits
 	// Usage by kind and the resolved limits (Max < 0 = unlimited). MaxBots
 	// and MaxMemory above are the same limits with 0 for unlimited.
-	Usage  domain.OwnerUsage
-	Limits AccountLimits
+	Usage  domain.WorkspaceUsage
+	Limits WorkspaceLimits
 }
 
-// Capacity reports the actor's usage and, for administrators, the node's.
-// siteDefault is the panel's per-account site limit.
-func (s *BotService) Capacity(ctx context.Context, actor domain.User, siteDefault int) (Capacity, error) {
-	u, err := s.Store.AccountUsage(ctx, actor.ID)
+// Capacity reports a workspace's usage and limits (the actor's personal
+// workspace when workspaceID is empty) and, for administrators, the node's.
+func (s *BotService) Capacity(ctx context.Context, actor domain.User, workspaceID string) (Capacity, error) {
+	var w domain.Workspace
+	var err error
+	if workspaceID == "" {
+		w, err = s.Store.PersonalWorkspace(ctx, actor.ID)
+	} else if _, err = s.workspaceRole(ctx, actor, workspaceID); err == nil {
+		w, err = s.Store.GetWorkspace(ctx, workspaceID)
+	}
 	if err != nil {
 		return Capacity{}, err
 	}
-	lim, err := s.accountLimits(ctx, actor, siteDefault)
+	u, err := s.Store.WorkspaceUsage(ctx, w.ID)
 	if err != nil {
 		return Capacity{}, err
 	}
-	c := Capacity{Bots: int(u.Apps), MaxBots: s.Limits.MaxBotsPerUser, Memory: u.Memory, MaxMemory: s.Limits.UserMemoryBytes,
-		Exempt: actor.IsAdmin(), Usage: u, Limits: lim}
-	if !c.Exempt {
-		c.MaxBots, c.MaxMemory = int(max(lim.Apps.Max, 0)), max(lim.Memory.Max, 0)
+	lim, err := s.workspaceLimits(ctx, w)
+	if err != nil {
+		return Capacity{}, err
 	}
+	c := Capacity{Workspace: w, Bots: int(u.Apps), Memory: u.Memory, Exempt: lim.Exempt, Usage: u, Limits: lim,
+		MaxBots: int(max(lim.Apps.Max, 0)), MaxMemory: max(lim.Memory.Max, 0)}
 	if actor.IsAdmin() {
 		c.NodeRunning, c.NodeReserved, err = s.Store.NodeReserved(ctx, s.LocalNode)
 		c.NodeBudget = s.Limits.NodeMemoryBytes
