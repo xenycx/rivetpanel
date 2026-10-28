@@ -4,8 +4,10 @@ A workspace groups bots (and [hosted sites](sites.md)) for a person or a team.
 Every account has exactly one **Personal** workspace, created with the account;
 anything created without choosing a workspace goes there. Team workspaces are
 created under **Settings → Workspaces** (at most 20 owned per account unless
-Panel settings → Default limits sets another number; administrators are
-exempt).
+Panel settings → Default limits sets another number; built-in administrators
+are exempt). Every workspace has a name that can be changed, the personal one
+included; the stored name shows everywhere (switcher, lists, create forms),
+and the personal workspace carries a **Personal** badge.
 
 The sidebar's workspace switcher scopes the overview, the Sites page and the
 default target of **New** to one workspace, or shows **All workspaces**. The
@@ -18,10 +20,15 @@ to the per-bot permission bits described in [features.md](features.md#sharing-an
 
 | Role | Bots | Sites | Workspace |
 | --- | --- | --- | --- |
-| Owner | everything, as the bot's owner | everything | rename, members, delete (when empty) |
-| Admin | everything, as the bot's owner (settings, delete, sharing, transfer) | everything, including delete and move | rename, add/remove members (never the owner) |
+| Owner | everything, as the bot's owner | everything | rename\*, members, delete (when empty) |
+| Admin | everything, as the bot's owner (settings, delete, sharing, transfer) | everything, including delete and move | rename\*, add/remove members (never the owner) |
 | Developer | view console, start/stop/kill, files, packages, deployments, backups, environment variables; create bots | create, publish, deploy, roll back, domains, settings | — |
 | Viewer | view console output, status and history | view | — |
+
+\* Renaming also needs the account's role to hold `workspaces.rename`
+(`docs/permissions.md`); the built-in User role does by default, and so did
+every custom role when the permission was introduced. Accounts with
+`workspaces.manage` rename any workspace from Administration.
 
 A developer cannot change resources or startup, delete a bot, share it,
 transfer it or publish host ports: those need *Full admin* on the bot.
@@ -47,10 +54,14 @@ API's "all your bots" tokens and the activity feed follow the same rules.
   together against the default limits or the workspace's own (see
   "Workspace limits" in `features.md`). Moving an app or site into a
   workspace with no room for it is refused. Members see the usage and limits
-  on the workspace's settings page.
+  on the workspace's settings page. Only built-in administrators are exempt,
+  whoever owns the workspace.
+* A workspace can be **pinned to a node** so its new apps are created there
+  (see "Node placement" in `features.md`). Existing apps stay where they are.
 
-A workspace can be deleted only when it has no bots (including bots still being
-deleted) and no sites. Personal workspaces cannot be deleted.
+A member can delete a workspace only when it has no bots (including bots still
+being deleted) and no sites. Personal workspaces cannot be deleted; they go
+with their account.
 
 ## Administrator oversight
 
@@ -59,6 +70,23 @@ its owner, members, running/total bots, memory assigned to running bots, sites
 and last activity. Opening one shows its members, every bot with its owner and
 state, its sites (with suspend/restore) and the latest 40 operations
 (deployments, builds, backups, restores and GitHub pushes).
+
+### Renaming and deleting from Administration
+
+Accounts with `workspaces.manage` (built-in administrators included) can
+rename any workspace, personal ones too, and manage its members. They can also
+**delete a workspace with everything in it**: Administration → Workspaces → the
+workspace → Delete workspace asks for its name and then deletes its sites, its
+apps (containers, files, backups and add-ons) and its memberships, followed by
+the workspace itself. It is refused for personal workspaces (delete the
+account instead) and while any app of the workspace runs on a remote node that
+is offline (the message names the node; nothing is changed). If removals are
+still finishing, for example on a node that went away mid-way, the request
+fails with a message to try again, and repeating it completes the deletion.
+Renames and deletions are audited (`admin.workspace_rename`,
+`admin.workspace_delete` with the numbers of apps, sites and members). Limits
+stay with built-in administrators and node pins with `nodes.manage`.
+Enforcement: application level.
 
 **Administration → Users → (account)** shows the workspaces an account belongs
 to, the bots it owns and recent operations on them. Administrators can open any
@@ -74,7 +102,7 @@ the rest of the panel API.
 | `GET /workspaces` | the caller's workspaces with their role and usage |
 | `POST /workspaces` `{name}` | create a team workspace |
 | `GET /workspaces/{id}` | workspace and members (any member) |
-| `PATCH /workspaces/{id}` `{name}` | rename (admin) |
+| `PATCH /workspaces/{id}` `{name}` | rename (workspace owner or admin holding `workspaces.rename`) |
 | `DELETE /workspaces/{id}` | delete an empty team workspace (owner) |
 | `PUT /workspaces/{id}/members` `{email, role}` | add a member or change a role (admin) |
 | `PATCH /workspaces/{id}/members/{user}` `{role}` | change a role (admin) |
@@ -83,6 +111,10 @@ the rest of the panel API.
 | `PUT /bots/{id}/workspace` `{workspace_id}` | move a bot |
 | `GET /admin/workspaces[?user=ID]` | all workspaces, or one account's (administrators) |
 | `GET /admin/workspaces/{id}` | members, bots with owners, sites, recent operations |
+| `PATCH /admin/workspaces/{id}` `{name}` | rename any workspace (`workspaces.manage`; audited `admin.workspace_rename`) |
+| `POST /admin/workspaces/{id}/delete` `{confirm}` | delete a team workspace and everything in it; `confirm` is its exact name (`workspaces.manage`; audited `admin.workspace_delete`) |
+| `PUT /admin/workspaces/{id}/node` `{node_id}` | pin new apps to a node, `""` clears (`nodes.manage`; audited `admin.workspace_node`) |
+| `GET /placement[?workspace=ID]` | the node new apps in a workspace go to, and why (any member) |
 | `GET /admin/users/{id}` | an account's workspaces, owned bots and recent operations |
 
 Bot objects include `workspace_id`. Migration `0024_workspaces.sql` creates a

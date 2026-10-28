@@ -54,8 +54,8 @@ Two-step sign-in still applies: an account with TOTP enabled enters its code
 
 **Delegated administrators** with `settings.manage` but not built-in
 administration can only choose a role whose permissions they hold (for the
-User role, every resource permission), cannot edit a provider that already
-hands out more, and a role named by a provider cannot be deleted.
+User role, the permissions currently stored for it), cannot edit a provider
+that already hands out more, and a role named by a provider cannot be deleted.
 
 Removing a provider removes every link through it. Accounts whose only sign-in
 method it was keep existing; an account manager can send a password reset.
