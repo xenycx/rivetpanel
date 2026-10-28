@@ -153,16 +153,17 @@ func (s *BotService) AddAddon(ctx context.Context, actor domain.User, botID stri
 	if err := s.Coord.Blocked(b.ID); err != nil {
 		return AddonView{}, err
 	}
-	a, k, err := s.addAddon(ctx, b, in, true, false)
+	a, k, err := s.addAddon(ctx, actor, b, in, true, false)
 	if err != nil {
 		return AddonView{}, err
 	}
 	return addonView(a, k), nil
 }
 
-// addAddon attaches an add-on. fresh is a server created in this request:
-// no data of an earlier add-on can exist for it.
-func (s *BotService) addAddon(ctx context.Context, b domain.Bot, in AddonInput, budget, fresh bool) (domain.BotAddon, addons.Kind, error) {
+// addAddon attaches an add-on for actor (the installing account, whose
+// limits apply when budget is set). fresh is a server created in this
+// request: no data of an earlier add-on can exist for it.
+func (s *BotService) addAddon(ctx context.Context, actor domain.User, b domain.Bot, in AddonInput, budget, fresh bool) (domain.BotAddon, addons.Kind, error) {
 	if err := s.addonsAvailable(b.NodeID); err != nil {
 		return domain.BotAddon{}, addons.Kind{}, err
 	}
@@ -186,7 +187,7 @@ func (s *BotService) addAddon(ctx context.Context, b domain.Bot, in AddonInput, 
 		return domain.BotAddon{}, addons.Kind{}, domain.Invalid(err.Error())
 	}
 	if budget {
-		if err := s.checkWorkspace(ctx, b.WorkspaceID, domain.WorkspaceUsage{Memory: mem}); err != nil {
+		if err := s.checkWorkspace(ctx, actor, b.WorkspaceID, domain.WorkspaceUsage{Memory: mem}); err != nil {
 			return domain.BotAddon{}, addons.Kind{}, err
 		}
 	}
@@ -239,7 +240,7 @@ func (s *BotService) SetAddonMemory(ctx context.Context, actor domain.User, botI
 	}
 	for _, a := range b.Addons {
 		if a.Kind == kind && memory > a.MemoryBytes {
-			if err := s.checkWorkspace(ctx, b.WorkspaceID, domain.WorkspaceUsage{Memory: memory - a.MemoryBytes}); err != nil {
+			if err := s.checkWorkspace(ctx, actor, b.WorkspaceID, domain.WorkspaceUsage{Memory: memory - a.MemoryBytes}); err != nil {
 				return err
 			}
 		}

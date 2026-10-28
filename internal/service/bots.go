@@ -427,7 +427,7 @@ func (s *BotService) Create(ctx context.Context, actor domain.User, in CreateBot
 	if err != nil {
 		return domain.Bot{}, err
 	}
-	if err := s.checkWorkspace(ctx, wsID, newApp(in.Kind, mem+addonMem, cpu)); err != nil {
+	if err := s.checkWorkspace(ctx, actor, wsID, newApp(in.Kind, mem+addonMem, cpu)); err != nil {
 		return domain.Bot{}, err
 	}
 	nodeID, err := s.chooseNode(ctx, actor, in.NodeID)
@@ -481,7 +481,7 @@ func (s *BotService) Create(ctx context.Context, actor domain.User, in CreateBot
 	if err := s.createWorkspace(nodeID, b.ID); err != nil {
 		return domain.Bot{}, fmt.Errorf("create workspace: %w", err)
 	}
-	if err := s.createBot(ctx, b, addonMem); err != nil {
+	if err := s.createBot(ctx, actor, b, addonMem); err != nil {
 		s.removeWorkspace(nodeID, b.ID)
 		return domain.Bot{}, err
 	}
@@ -506,7 +506,7 @@ func (s *BotService) Create(ctx context.Context, actor domain.User, in CreateBot
 	for _, a := range in.Addons {
 		cur, err := s.Store.GetBot(ctx, b.ID)
 		if err == nil {
-			_, _, err = s.addAddon(ctx, cur, a, false, true) // budget checked above
+			_, _, err = s.addAddon(ctx, actor, cur, a, false, true) // budget checked above
 		}
 		if err != nil {
 			s.discardNew(ctx, b)
@@ -643,7 +643,7 @@ func (s *BotService) Update(ctx context.Context, actor domain.User, id string, i
 	}
 	if in.MemoryBytes != nil || in.NanoCPUs != nil {
 		grow := domain.WorkspaceUsage{Memory: b.MemoryBytes - old.MemoryBytes, CPU: b.NanoCPUs - old.NanoCPUs}
-		if err := s.checkWorkspace(ctx, b.WorkspaceID, grow); err != nil {
+		if err := s.checkWorkspace(ctx, actor, b.WorkspaceID, grow); err != nil {
 			return domain.Bot{}, err
 		}
 	}
@@ -1133,15 +1133,17 @@ type Capacity struct {
 	Memory, MaxMemory        int64
 	NodeRunning              int   // admins only
 	NodeReserved, NodeBudget int64 // admins only
-	Exempt                   bool  // workspaces owned by administrators have no limits
+	Exempt                   bool  // the actor is a built-in administrator; nothing refuses them
 	// Usage by kind and the resolved limits (Max < 0 = unlimited). MaxBots
 	// and MaxMemory above are the same limits with 0 for unlimited.
 	Usage  domain.WorkspaceUsage
 	Limits WorkspaceLimits
 }
 
-// Capacity reports a workspace's usage and limits (the actor's personal
-// workspace when workspaceID is empty) and, for administrators, the node's.
+// Capacity reports a workspace's usage and the limits that apply to the
+// actor there (the actor's personal workspace when workspaceID is empty)
+// and, for administrators, the node's. A built-in administrator is exempt
+// wherever they act, so their forms are never clamped.
 func (s *BotService) Capacity(ctx context.Context, actor domain.User, workspaceID string) (Capacity, error) {
 	var w domain.Workspace
 	var err error
@@ -1157,7 +1159,7 @@ func (s *BotService) Capacity(ctx context.Context, actor domain.User, workspaceI
 	if err != nil {
 		return Capacity{}, err
 	}
-	lim, err := s.workspaceLimits(ctx, w)
+	lim, err := s.limitsFor(ctx, actor, w)
 	if err != nil {
 		return Capacity{}, err
 	}
