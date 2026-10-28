@@ -125,11 +125,16 @@ func (s *AuthService) CreateAccountInvite(ctx context.Context, actor domain.User
 	if role != domain.RoleAdmin && role != domain.RoleUser {
 		return domain.AccountInvite{}, "", domain.Invalid("role must be admin or user")
 	}
-	// The built-in user role grants every resource permission; a delegated
-	// account manager may only hand it out when it holds them all (as for
-	// AssignRole).
-	if err := grantable(actor, domain.DefaultUserPermissions()); role == domain.RoleUser && err != nil {
-		return domain.AccountInvite{}, "", err
+	// A delegated account manager may only hand out the built-in user role
+	// when it holds everything the role currently grants (as for AssignRole).
+	if role == domain.RoleUser {
+		perms, err := userRolePermissions(ctx, s.Store)
+		if err != nil {
+			return domain.AccountInvite{}, "", err
+		}
+		if err := grantable(actor, perms); err != nil {
+			return domain.AccountInvite{}, "", err
+		}
 	}
 	if days < 1 || days > 14 {
 		return domain.AccountInvite{}, "", domain.Invalid("invitation expiry must be between 1 and 14 days")

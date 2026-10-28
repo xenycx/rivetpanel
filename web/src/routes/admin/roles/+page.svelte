@@ -13,7 +13,8 @@
 	import Skeleton from '$lib/components/ui/Skeleton.svelte';
 
 	// Roles are enforced by the server on every request; this page only edits
-	// them. The two built-in roles are fixed.
+	// them. The administrator role is fixed; the built-in User role can be
+	// changed by built-in administrators only.
 	let roles = $state<Role[] | null>(null);
 	let catalog = $state<PermissionInfo[]>([]);
 	let error = $state('');
@@ -32,6 +33,9 @@
 		{ id: 'administration', title: 'Administration', help: 'Parts of the administration area this role opens.' }
 	] as const;
 	const label = (p: string) => catalog.find((x) => x.name === p)?.label ?? p;
+	// Whether this account may change a role here (the server decides too).
+	const canEdit = (r: Role) => manage && r.editable && (!r.system || isAdmin);
+	const defaults = () => catalog.filter((p) => p.group === 'resources').map((p) => p.name);
 
 	async function load() {
 		try {
@@ -142,13 +146,13 @@
 							{r.id === 'admin' ? 'Every permission' : `${r.permissions.length} permission${r.permissions.length === 1 ? '' : 's'}`} · {r.users} account{r.users === 1 ? '' : 's'}{r.system ? '' : ` · changed ${fmtWhen(r.updated_at_ms)}`}
 						</p>
 					</div>
-					<button class="btn btn-sm" onclick={() => openRole(r, r.system || !manage)}>{r.system || !manage ? 'View' : 'Permissions'}</button>
+					<button class="btn btn-sm" onclick={() => openRole(r, !canEdit(r))}>{canEdit(r) ? 'Permissions' : 'View'}</button>
 					{#if manage && !r.system}<Menu label="Actions for {r.name}" items={menu(r)} />{/if}
 				</li>
 			{/each}
 		</ul>
 		<p class="mt-3 max-w-prose text-small text-muted">
-			Built-in roles cannot be changed: administrators hold every permission, including the environment editor and making other administrators; users hold every permission for their own apps and sites and nothing in the administration. Assign roles on the Users page.
+			The administrator role holds every permission and cannot be changed. Administrators can change what the User role allows; by default it holds every permission for the account's own apps and sites and nothing in the administration. Assign roles on the Users page.
 			{#if !isAdmin}You can only grant permissions you hold yourself.{/if}
 		</p>
 	{/if}
@@ -157,11 +161,12 @@
 <Dialog bind:open title={viewing ? (editing?.name ?? 'Role') : editing ? `Edit ${editing.name}` : 'New role'} size="lg">
 	<form id="role-form" class="grid gap-4" onsubmit={save}>
 		{#if !viewing}
-			<label class="block"><span class="label">Name</span><input class="field" required maxlength="64" bind:value={form.name} placeholder="Support, Developers…" /></label>
-			<label class="block"><span class="label">Description (optional)</span><input class="field" maxlength="280" bind:value={form.description} /></label>
+			<label class="block"><span class="label">Name</span><input class="field" required maxlength="64" bind:value={form.name} placeholder="Support, Developers…" disabled={editing?.system} /></label>
+			<label class="block"><span class="label">Description (optional)</span><input class="field" maxlength="280" bind:value={form.description} disabled={editing?.system} /></label>
 		{:else if editing?.description}
 			<p class="text-muted">{editing.description}</p>
 		{/if}
+		{#if editing?.id === 'user'}<Notice tone="info">Every account with the built-in User role, and every future invitee given it, gets exactly these permissions. Administrators are never affected.</Notice>{/if}
 		{#each groups as g (g.id)}
 			<fieldset class="grid gap-2">
 				<legend class="label">{g.title}</legend>
@@ -188,6 +193,7 @@
 		{#if formError}<p class="text-small text-fail" role="alert">{formError}</p>{/if}
 	</form>
 	{#snippet footer()}
+		{#if !viewing && editing?.id === 'user'}<button class="btn mr-auto" type="button" onclick={() => (form.permissions = defaults())}>Restore defaults</button>{/if}
 		<button class="btn" onclick={() => (open = false)}>{viewing ? 'Close' : 'Cancel'}</button>
 		{#if !viewing}<button class="btn btn-primary" type="submit" form="role-form" disabled={busy}>{editing ? 'Save role' : 'Create role'}</button>{/if}
 	{/snippet}

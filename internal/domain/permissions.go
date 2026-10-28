@@ -130,13 +130,18 @@ func AllPermissions() []string {
 }
 
 // Role is a named set of permissions. System roles ("admin" and "user") are
-// seeded, map to users.role and cannot be changed or deleted.
+// seeded, map to users.role and cannot be deleted or renamed. The
+// administrator role holds every permission and cannot be changed; the
+// permissions of the built-in User role and of custom roles are stored and
+// editable.
 type Role struct {
 	ID          string
 	Name        string
 	Description string
 	Permissions []string
 	System      bool
+	// Editable is false only for the administrator role.
+	Editable    bool
 	Users       int // accounts holding it (listing only)
 	CreatedAtMS int64
 	UpdatedAtMS int64
@@ -212,12 +217,15 @@ func (u User) Can(p string) bool {
 }
 
 // RolePermissions is what the account's role grants, before the
-// unverified-email policy.
+// unverified-email policy: everything for administrators, otherwise the
+// stored list of the account's role (custom or the built-in User role). A
+// User built in memory, whose role was never read from the store, gets the
+// factory defaults of the built-in User role.
 func (u User) RolePermissions() []string {
 	if u.Role == RoleAdmin {
 		return AllPermissions()
 	}
-	if u.RoleID == "" {
+	if u.RoleID == "" && !u.PermissionsLoaded {
 		return DefaultUserPermissions()
 	}
 	return u.CustomPermissions
