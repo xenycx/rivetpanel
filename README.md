@@ -31,10 +31,12 @@ convert databases created by the predecessor product. Start with a new
   route lifecycle, console, stats, files, SFTP, packages, AI file tools and
   diagnostics, add-ons, backups, GitHub deployments (pushes during an outage
   run on reconnect), GitHub publish/push and Minecraft queries over outbound
-  mTLS, with node telemetry and a free-disk check before staging; choose a
-  node during creation, and drain, disable, revoke or delete nodes from
+  mTLS, with node telemetry and a free-disk check before staging; node
+  managers choose a node during creation, and every workspace's new apps can
+  be pinned to a node or follow a panel default node (a fixed order, not
+  capacity-based scheduling); drain, disable, revoke or delete nodes from
   Administration; panel and agents must be upgraded together (agent protocol
-  7, `docs/agents.md`)
+  8, `docs/agents.md`)
 * Bot lifecycle (start / stop / restart / delete) driven by persisted desired
   state and a reconciler, safe across crashes and lost Docker responses
 * Resource-capped, hardened containers (memory, CPU, PIDs, read-only root,
@@ -222,8 +224,15 @@ not enforced (Docker has no native cap).
 * Workspace limits: default limits for every workspace in Panel settings, and
   a workspace's own limits for bots, game servers, web apps, all apps
   together, sites, memory and CPU (for example one bot and nothing else).
-  Every member's apps count together; checked in the same transaction that
-  creates the app or site (`docs/features.md`).
+  Every member's apps count together, and only built-in administrators are
+  exempt; checked in the same transaction that creates the app or site, with
+  the create forms showing the room left (`docs/features.md`).
+* Roles and invitations: built-in administrators edit the built-in User role,
+  `workspaces.rename` and `workspaces.manage` split workspace renaming and
+  administration from the Administrator role (an administrator can delete a
+  workspace with everything in it), and an invitation carries the role,
+  limits, node and team workspace the new account starts with
+  (`docs/permissions.md`, `docs/workspaces.md`).
 * Administrator tools: a Host page with live and historical CPU, memory, load,
   disk and network charts, per-bot resource use, storage, Docker and process
   details and the panel's own log; daily log files of the panel and every

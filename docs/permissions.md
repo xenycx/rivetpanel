@@ -8,28 +8,44 @@ it is never the enforcement point.
 
 ## Built-in roles
 
-Two roles are seeded by migration `0044` and cannot be changed or deleted:
+Two roles are seeded by migration `0044` and cannot be deleted:
 
 | Role | Holds | Notes |
 | --- | --- | --- |
-| Administrator (`admin`) | Every permission | Also the only role that opens Administration → Environment and Modules and that can make, change or remove administrators. Never restricted by the unverified-email policy. |
-| User (`user`) | Every resource permission, no administration permission | Exactly the behaviour regular accounts had before roles existed. |
+| Administrator (`admin`) | Every permission | Fixed: it is computed by the application and cannot be changed. Also the only role that opens Administration → Environment and Modules and that can make, change or remove administrators. Never restricted by the unverified-email policy. |
+| User (`user`) | The permissions stored in its role row; by default every resource permission and no administration permission | Built-in administrators can change the list under Administration → Roles (see below). Exactly the behaviour regular accounts had before roles existed until someone changes it. |
 
-Existing accounts keep their built-in role. Permissions added in later
-versions apply to the built-in roles automatically (they are computed by the
-application, not stored).
+Existing accounts keep their built-in role. The Administrator role always
+holds every permission, including ones added in later versions. The User
+role's list is stored (migration `0057` wrote it, with `workspaces.rename`),
+so a permission added in a later version reaches it only when that version's
+migration adds it or an administrator switches it on.
+
+### Editing the User role
+
+Administration → Roles opens the User role for built-in administrators.
+Switch resource permissions off or on; the list applies to every account that
+holds the role, on its next request, and to every invitee given it later.
+**Restore defaults** puts back every resource permission. Its name and
+description are fixed, and it cannot be deleted. Only built-in administrators
+edit it: a delegated role manager (`roles.manage`) is refused, as is anyone
+trying to change the Administrator role. Invitations and single sign-on
+default roles check the stored list, so a delegated account manager can
+invite as User only while it holds everything the role currently grants.
+Enforcement: the panel application, like every role check.
 
 ## Custom roles
 
 Administration → Roles creates, edits and deletes custom roles (permission
 `roles.manage`). Assign a role under Administration → Users → ⋯ → Change role
-(permission `users.manage`), or pick it when adding a user. Account
-invitations still grant a built-in role; assign a custom role after the
-account exists.
+(permission `users.manage`), or pick it when adding a user or inviting one;
+an invitation can give User, a custom role, or Administrator (built-in
+administrators only), see `docs/features.md#invitations`.
 
 * A change to a role applies on the account's next request; sessions are not
   signed out.
-* A role that any account holds cannot be deleted.
+* A role that any account holds cannot be deleted. Custom roles created
+  before `workspaces.rename` existed gained it in migration `0057`.
 * Creating, changing and deleting roles and assigning them are recorded in the
   activity log (`admin.role_create`, `admin.role_update`,
   `admin.role_delete`, `admin.user_role`), with the role name and permission
@@ -51,8 +67,8 @@ hand out more than they hold:
   itself, cannot edit the role it holds, and cannot edit or delete a role that
   holds permissions it lacks.
 * An account manager can only assign (or invite with) a role whose
-  permissions it holds; the built-in User role counts as every resource
-  permission. It cannot change its own role.
+  permissions it holds; the built-in User role counts as the permissions
+  currently stored for it. It cannot change its own role.
 * The last active administrator cannot be given another role.
 
 ## Permission catalog
@@ -73,6 +89,7 @@ shared with it and in workspaces it belongs to):
 | `bots.share` | Share bots, bot invitations and ownership transfer |
 | `sites.create` | Create static sites |
 | `workspaces.create` | Create team workspaces |
+| `workspaces.rename` | Rename workspaces where the account is the workspace owner or admin, the personal workspace included |
 | `api_keys.manage` | Create SFTP API keys, automation tokens and API clients |
 | `ai.use` | Use the AI assistant |
 | `tickets.create` | Open support tickets and reply to your own |
@@ -82,16 +99,17 @@ Administration permissions:
 | Permission | Opens |
 | --- | --- |
 | `users.view` | Account list and account details |
-| `users.manage` | Create, enable/disable accounts, assign roles, change addresses, mark addresses verified, account invitations |
+| `users.manage` | Create, enable/disable accounts, assign roles, change addresses, mark addresses verified, create, list and revoke account invitations |
 | `roles.manage` | Create, change and delete custom roles |
-| `nodes.manage` | Locations, node enrollment, certificates and settings; placing servers on nodes |
+| `nodes.manage` | Locations, node enrollment, certificates and settings; placing servers on nodes, the panel's default node, a workspace's node pin and a node on an invitation |
 | `blueprints.manage` | Game server types (import, enable, disable, delete) |
 | `allocations.manage` | Port allocations |
 | `settings.manage` | Panel address, sign-in providers, registration, email, unverified-account policy |
 | `mail.announce` | Email announcements |
 | `ai.manage` | AI provider profiles and web search |
 | `sites.manage` | Every site, sites domains |
-| `workspaces.view` | Every workspace |
+| `workspaces.view` | Every workspace (read only) |
+| `workspaces.manage` | List, rename and delete any workspace (delete removes its apps, sites and members after typing its name) and manage its members from Administration → Workspaces. Limits stay with built-in administrators and node pins with `nodes.manage` |
 | `system.view` | Host monitoring, panel logs, diagnostics |
 | `tickets.view_all` | Read every support ticket, internal notes included |
 | `tickets.manage` | Answer every support ticket, internal notes, status, priority, assignment |

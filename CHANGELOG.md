@@ -6,6 +6,80 @@ authoritative current version.
 
 ## Unreleased
 
+### Added
+
+- **The built-in User role is editable.** Administration → Roles opens it for
+  built-in administrators: switch resource permissions off or on for every
+  account that holds it, and for every invitee given it later, or press
+  **Restore defaults**. Changes apply on each account's next request. The
+  Administrator role stays fixed and holds every permission; the User role
+  cannot be deleted, renamed or edited by a delegated role manager. Accounts
+  created by an invitation or by single sign-on get the stored User role's
+  permissions. Enforced by the panel application, like every role.
+- **Rename workspaces with a permission.** New resource permission
+  `workspaces.rename` lets a workspace owner or admin rename the workspace,
+  the personal one included. Personal workspaces can now be renamed; the
+  stored name shows everywhere (the switcher, lists, create forms) with a
+  Personal badge.
+- **Manage every workspace without being an administrator.** New
+  administration permission `workspaces.manage`: list, rename and delete any
+  workspace and manage its members from Administration → Workspaces
+  (`workspaces.view` still only reads). A workspace's limits stay with
+  built-in administrators and its node pin with `nodes.manage`.
+- **Delete a workspace with everything in it.** Administration → Workspaces
+  → a workspace → Delete workspace removes its sites, apps (containers,
+  files, backups and add-ons) and memberships after you type the workspace's
+  name (`POST /api/v1/admin/workspaces/{id}/delete` with `{"confirm": name}`,
+  audited as `admin.workspace_delete` with the counts). Personal workspaces
+  are refused (delete the account instead), as is a workspace with an app on
+  an offline remote node (the message names it, and nothing is changed).
+  While removals are still finishing, the request fails with a message to try
+  again. Renaming any workspace from Administration is
+  `PATCH /api/v1/admin/workspaces/{id}`, audited as `admin.workspace_rename`.
+  Members still delete only empty team workspaces.
+- **Invitations carry the account's setup.** Besides the address, an
+  invitation can set the role (User, a custom role, or Administrator for
+  built-in administrators), limits for the invitee's personal workspace
+  (built-in administrators only), the node that workspace's new apps go to
+  (`nodes.manage`), and a team workspace to join as admin, developer or
+  viewer (the inviter must administer it). Expiry is 1 to 30 days (it was 14).
+  The setup is applied in the same transaction that creates the account;
+  a role, node or workspace deleted in the meantime is skipped. Administration
+  → Users lists pending invitations with their setup and who created them, and
+  an invitation can be revoked. The register page names the role and the
+  workspace being joined, and the invitation email says so too. Creating and
+  revoking invitations and registering from one are in the activity log
+  (`admin.invite_create`, `admin.invite_revoke`, `account.register`).
+  `POST /api/v1/admin/account-invites` takes `quota`, `node_id`,
+  `workspace_id` and `workspace_role`; the list returns the setup;
+  `POST /registration/preview` returns only `role_name` and
+  `workspace_name` beside the address, never limits or nodes.
+- **Choose where apps run.** A workspace can be pinned to a node
+  (Administration → Workspaces → a workspace → Limits & placement,
+  `PUT /api/v1/admin/workspaces/{id}/node`, `nodes.manage`, audited as
+  `admin.workspace_node`), and the panel has a default node (Administration →
+  Nodes → **Use for new apps**, `PUT /api/v1/nodes/default`, audited as
+  `admin.node_default`; `GET /nodes` items carry `default`). A new app goes to
+  the node chosen in the form (only `nodes.manage` holders choose), else the
+  workspace's pin, else the panel default, else this host. Existing apps stay
+  where they are. Creating an app on an offline node is refused with a message
+  that names the node. This is a fixed rule, not capacity-based scheduling.
+  Web app units stay on this host.
+- **Create forms show where the app will run.** With the agents module on,
+  accounts that manage nodes see node cards in the bot and game server forms
+  (location, local or remote, online state, hostname, memory use, CPU, running
+  apps, per-app maximum, Default and Pinned badges), whether or not they are
+  administrators. Everyone else sees "Your apps run on …".
+  `GET /api/v1/placement?workspace=` answers that for any member without
+  telemetry, and the app header shows the node's name to everyone with access.
+- **Room in the create forms.** The bot, game server, site and new-site forms
+  and an app's resource settings show how much of the workspace's limits is
+  left and cap memory and CPU at the smaller of the node's maximum and that
+  room. Creating is disabled when nothing is left.
+- **Memory and CPU come from presets.** The limits forms pick memory (256 MiB,
+  512 MiB, 1 to 32 GiB) and CPU (0.5 to 8 cores) from presets, or a custom
+  value with a unit, instead of raw numbers.
+
 ### Changed
 
 - **Limit exemption follows the acting administrator, not the workspace
@@ -17,6 +91,37 @@ authoritative current version.
   (`GET /workspaces/:id/limits`, the admin quota view) never report an
   exemption. After upgrading, members of administrator-owned workspaces are
   bounded by the panel defaults until that workspace gets its own limits.
+- Custom roles gain `workspaces.rename` on upgrade, so nobody loses the
+  ability to rename workspaces they administer. Invitations and single
+  sign-on check the stored User role when deciding what a delegated account
+  manager may hand out.
+- Creating an app on a node that is offline is refused with a message that
+  names the node.
+
+### Fixed
+
+- The dashboard's capacity follows the selected workspace instead of always
+  showing the personal one.
+- Accounts that hold `nodes.manage` without the Administrator role never saw
+  the node choice in the create forms, and it appeared only when more than one
+  node existed.
+- The in-product documentation named an old version.
+
+### Removed
+
+- The **One bot only** button on the limits forms. Set Bots to 1 and Game
+  servers, Web apps and Sites to 0 to get the same result.
+
+Upgrading: database migrations `0057` to `0059` are additive. `0057` writes
+the User role's permission list into its role row (every resource permission
+plus `workspaces.rename`) and adds `workspaces.rename` to custom roles, so
+every account keeps exactly the abilities it had. `0058` adds nullable setup
+columns to invitations and `0059` a nullable node pin to workspaces; invitation
+links created before the upgrade keep working and carry no setup. Apps are not
+moved, and no workspace is pinned or has a default node until an administrator
+chooses one. Members of workspaces owned by administrators are now bounded by
+the panel's default limits (see Changed); check Panel settings → Default
+limits if that matters on your panel.
 
 ## 0.8.0 - 2026-10-28
 

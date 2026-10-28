@@ -1,6 +1,6 @@
 # Platform overhaul implementation status
 
-Updated 2026-10-05 for RivetPanel 0.5.0 (see `CHANGELOG.md`). This is the durable checklist for the requested platform
+Updated 2026-10-29 for RivetPanel 0.8.0 plus the Unreleased changes (see `CHANGELOG.md`). This is the durable checklist for the requested platform
 overhaul. A checked item is implemented in the current working tree; partial
 items state exactly what remains.
 
@@ -427,7 +427,7 @@ items state exactly what remains.
     touch administrators, change their own role, act on (role, address,
     verified flag, enabled state) an account holding administration
     permissions they lack, or invite with the built-in User role unless they
-    hold every resource permission. Environment editor,
+    hold every permission the role currently stores. Environment editor,
     modules page and administrator management stay built-in-admin only. Role
     create/update/delete and assignment are audited. Not enforced at the
     container, kernel or network layer; roles do not change isolation.
@@ -455,9 +455,9 @@ items state exactly what remains.
     account disabled in the menu and refused (403) by the server, address
     change and mark-verified on a plain user, and the audit records. Role
     deletion and Mailgun delivery were covered by tests only.
-  - Not done: account invitations can only carry a built-in role (the
-    `account_invites.role` CHECK constraint); verification links need Mailgun
-    and a panel address; the CLI `create-admin` account starts unverified
+  - Not done: verification links need Mailgun
+    and a panel address (invitations carry custom roles since migration
+    `0058`, see the invitation setup item below); the CLI `create-admin` account starts unverified
     (administrators are never restricted). OIDC, passkeys and scoped API
     clients followed in identity batch 2 (below).
 - [x] Identity batch 2: API clients, OpenID Connect sign-in and passkeys
@@ -893,9 +893,66 @@ items state exactly what remains.
   add-ons), moves of apps and sites between workspaces and transfers (into
   the recipient's personal workspace) are checked just before they are
   stored, not in the same transaction. Stopped apps count. Lowering a limit
-  stops nothing. Workspaces owned by administrators are exempt. A
-  configurable cap on team workspaces per account (default 20) bounds how
-  many sets of defaults one account can hold. Not implemented: disk totals.
+  stops nothing. A configurable cap on team workspaces per account (default
+  20) bounds how many sets of defaults one account can hold. Exemption
+  follows the acting account: a built-in administrator is never refused,
+  wherever they create, resize, move or transfer (application level); every
+  other member is bounded, including in workspaces administrators own. The
+  limits views never report an exemption, `GET /me/capacity` reports it for
+  the caller. The create forms and the app resource settings read the
+  workspace's remaining room and cap memory and CPU at the smaller of the node
+  maximum and that room; this is advisory in the interface, the server check
+  stays the only enforcement. Memory and CPU in the limits forms come from
+  presets or a custom value; the "One bot only" button was removed. Not
+  implemented: disk totals.
+- [x] Editable built-in User role (migration `0057`, data only): the `user`
+  role row's permission list is stored (every resource permission plus
+  `workspaces.rename`) and is what accounts with that role, invitees and
+  single sign-on default roles get. Built-in administrators edit it in
+  Administration → Roles and can restore the defaults; the Administrator role
+  stays computed and fixed; the User role cannot be deleted or renamed, and a
+  delegated role manager cannot edit it. Custom roles gained
+  `workspaces.rename`, so upgraded accounts keep exactly their abilities.
+  Enforcement: application level (the same permission checks as every role).
+  Permissions added in later versions reach the User role only through a
+  migration or an administrator's change.
+- [x] Workspace administration permissions: `workspaces.rename` (resource:
+  rename workspaces the account owns or administers, the personal one
+  included) and `workspaces.manage` (administration: list, rename, delete any
+  workspace and manage its members; limits stay with built-in administrators,
+  node pins with `nodes.manage`). Administrators delete a team workspace with
+  everything in it (`POST /api/v1/admin/workspaces/{id}/delete`, typed-name
+  confirmation, audited `admin.workspace_delete`; sites, apps with containers,
+  files, backups and add-ons, and members); personal workspaces and
+  workspaces with an app on an offline remote node are refused, and removals
+  still finishing return a retryable error. `PATCH
+  /api/v1/admin/workspaces/{id}` renames (audited `admin.workspace_rename`).
+  Enforcement: application level. Not done: no soft delete or undo, and
+  deleting does not move apps elsewhere first.
+- [x] Placement of new apps (migration `0059`: nullable `workspaces.node_id`;
+  panel default node is the setting `placement_default_node`): a node chosen
+  by an account with `nodes.manage`, else the workspace's pin
+  (`PUT /api/v1/admin/workspaces/{id}/node`, audited `admin.workspace_node`),
+  else the panel default (`PUT /api/v1/nodes/default`, audited
+  `admin.node_default`), else this host. Creation on an offline node is
+  refused naming it; a pin or default whose node is disabled or draining is
+  skipped. `GET /api/v1/placement` tells members where their apps run without
+  telemetry. Enforcement: application level, at creation. Not done: this is
+  a fixed order, **not** capacity-based scheduling; existing apps are never
+  moved; web app units stay on this host.
+- [x] Invitation setup (migration `0058`): an invitation carries a role (User,
+  a custom role, or Administrator from built-in administrators), limits for
+  the invitee's personal workspace (built-in administrators only), a node pin
+  (`nodes.manage`) and optionally a team workspace to join as admin,
+  developer or viewer (the inviter must administer it); expiry 1 to 30 days.
+  The store applies it in the transaction that creates the account; a deleted
+  role, node or workspace is skipped. Pending invitations are listed with
+  their setup and can be revoked; create, revoke and register are audited
+  (`admin.invite_create`, `admin.invite_revoke`, `account.register`); the
+  register preview exposes only the role and workspace names and the
+  invitation email names them. Enforcement: application level for what an
+  inviter may hand out and for applying it; the Users page list and the
+  register page are interface over the same API. Old links keep working.
 - [x] Sites from GitHub, built or run (migration `0054`, schema assertion
   55, tables assertion unchanged): `POST /api/v1/sites/from-repo` creates a
   static, static-build or app site whose **app unit** is a `bots` row of the
@@ -1043,10 +1100,9 @@ Known gaps in this work:
   app; visitors see "Deploying…"), no remote-node placement, no Dockerfile
   builds, no isolation between apps on the shared apps network, and `/data`
   counts against `RIVET_BACKUP_MAX_BYTES` like any workspace file.
-- [ ] Workspace-level quotas (limits apply per bot owner: panel defaults or
-  the owner's per-account quota) and ownership
-  transfer of a workspace. Account invitations can now be emailed (Mailgun);
-  workspace and bot-share invitations are still links only.
+- [ ] Ownership transfer of a workspace. Account invitations can be emailed
+  (Mailgun); workspace and bot-share invitations are still links only
+  (account invitations can add the new account to a team workspace).
 - [ ] GitHub publishing does not support Git LFS, submodules, or pushing to
   a repository that has no commits yet.
 

@@ -10,7 +10,7 @@ invitation link, `rivetpanel reset-password EMAIL`, Discord alerts).
 | Email | When | Can the user turn it off? |
 | --- | --- | --- |
 | Password reset link | Someone asks on the sign-in page ("Forgot your password?") | n/a: only on request |
-| Account invitation | An administrator ticks "Email the link to this address" when inviting | n/a: only when ticked |
+| Account invitation | An administrator ticks "Email the link to this address" when inviting. It names the role and, when the invitation adds the account to a team workspace, that workspace, and says how many days the link lasts | n/a: only when ticked |
 | Bot alerts | A bot crashes or stops reporting, or a deployment or backup fails (exactly the events that already post to Discord; the per-bot crash, deploy and backup switches apply, and "stopped reporting" follows the bot's heartbeat settings) | Yes: Settings → Profile → Email |
 | Security notices | Password changed (also by reset link), two-step sign-in turned on or off, email address change requested or completed (sent to the old address) | No: a person must be able to learn their account changed |
 | Email verification link | A new account registers from an invitation, someone presses "Send verification link" in Settings → Profile, or asks to change their address (sent to the new address) | n/a: only on request; at most one a minute and five an hour per account |
@@ -145,7 +145,8 @@ configured is in `footprint.md`.
 - Announcements are sent in one pass while you wait, so a very large batch or a
   slow Mailgun makes the request take a while; failures are counted and the first
   error is shown. Mailgun accepting a batch does not mean delivery.
-- Invitation emails go only to the address typed on the invitation.
+- Invitation emails go only to the address typed on the invitation. They
+  never state limits or node placement; those stay private to the panel.
 - There is one sender and one language; messages are plain text with a simple
   HTML alternative. Mailgun templates, attachments, inbound mail and
   per-workspace senders are not supported.

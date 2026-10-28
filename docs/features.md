@@ -722,8 +722,10 @@ that workspace only; an empty field keeps the default, and 0 allows none:
 | CPU cores | CPU limits of all apps |
 
 Every limit that applies must pass. For example, Bots 1 with Game servers,
-Web apps and Sites 0 (the **One bot only** button) lets a workspace hold a
-single bot and nothing else. Apps count until they are deleted, running or
+Web apps and Sites 0 lets a workspace hold a single bot and nothing else. The
+limits forms pick memory (256 MiB, 512 MiB, 1 to 32 GiB) and CPU (0.5 to 8
+cores) from presets, or take a custom value with a unit. Apps count until
+they are deleted, running or
 stopped, so starting an app never needs a check. Creating a bot, game server,
 web app or site and the limit check run in one database transaction, so
 simultaneous requests cannot both take the last place. Memory and CPU
@@ -733,7 +735,19 @@ recipient's personal workspace) are checked just before they are stored.
 A refusal names the workspace. Lowering a limit below what a workspace holds
 never stops or deletes anything; it only refuses growth. Every change is in
 the activity log (`admin.workspace_quota_set`, `admin.workspace_quota_clear`).
-Workspaces owned by administrators are exempt.
+
+**Who is exempt.** The exemption belongs to the account acting, not to the
+workspace: a built-in administrator is never refused by a limit, wherever
+they create, resize, move or transfer. Every other member is bounded, even in
+a workspace an administrator owns. `GET /api/v1/me/capacity` reports `exempt`
+for the calling account; the limits views never do.
+
+**Room in the forms.** The bot, game server, site and new-site forms and an
+app's resource settings show what is left of the selected workspace's limits
+(the dashboard's capacity follows the selected workspace too). Memory and CPU
+pickers stop at the smaller of the node's per-app maximum and that room, and
+creating is disabled when no room is left. The forms only make the limits
+visible beforehand; the server decides.
 
 Since every workspace gets the defaults, an account that owns several team
 workspaces can hold more than one workspace's worth. **Team workspaces per
@@ -744,6 +758,37 @@ Members see their workspace's usage and limits under Settings → Workspaces →
 the workspace, and `GET /api/v1/me/capacity?workspace={id}` reports them
 (the caller's personal workspace without `workspace`). Enforcement is in the
 application; disk is not counted.
+
+### Node placement
+
+With remote nodes enabled (`docs/agents.md`), a new bot or game server goes to
+the first of these that applies:
+
+1. the node chosen in the create form, which only accounts with `nodes.manage`
+   may choose (anyone may name this host);
+2. the node its workspace is **pinned** to (Administration → Workspaces → a
+   workspace → Limits & placement; `PUT /api/v1/admin/workspaces/{id}/node`
+   with `{"node_id": ""}` to clear; needs `nodes.manage`; audited as
+   `admin.workspace_node`);
+3. the panel's **default node** (Administration → Nodes → Use for new apps;
+   `PUT /api/v1/nodes/default`; needs `nodes.manage`; audited as
+   `admin.node_default`; `GET /api/v1/nodes` items carry `default`);
+4. this host.
+
+A pin or default only applies while its node still accepts new apps (enabled,
+not draining); otherwise the next rule decides. Creating an app on a node
+whose agent is offline is refused with a message naming the node. Existing
+apps stay where they are, and web app units for sites always run on this host.
+The rules are a fixed order, not capacity-based scheduling: nothing picks a
+node by free memory or load.
+
+Accounts that manage nodes see node cards in the bot and game server forms
+(location, local or remote, online state, hostname, memory use, CPU, running
+apps, the per-app maximum, Default and Pinned badges). Everyone else sees
+"Your apps run on …", from `GET /api/v1/placement?workspace=ID`, which any
+member of the workspace may call and which carries no telemetry or
+hostnames. An app's header shows the name of its node to everyone with access
+to it. Enforcement is in the application when an app is created.
 
 ## Accounts and sign-in
 
@@ -757,6 +802,38 @@ invitations, bot owners can receive alerts by email (switch in Profile), and
 every password or two-step change sends a security notice. Administrators can
 email HTML news and policy updates to accounts (Administration →
 Announcements; `email.md`).
+
+### Invitations
+
+Administration → Users → Invite user (`users.manage`) creates a one-use link
+that registers one account, optionally locked to an email address. Besides
+the address, an invitation sets up the account:
+
+| Setting | Needs | Notes |
+| --- | --- | --- |
+| Role | `users.manage` | User, a custom role, or Administrator (built-in administrators only). A delegated manager can only hand out roles whose permissions it holds. |
+| Limits | built-in administrator | Limits for the invitee's personal workspace, like Administration → Workspaces → Limits |
+| Node | `nodes.manage` | Pins the personal workspace's new apps to a node that accepts apps |
+| Team workspace and role | administering that workspace | The invitee joins it as admin, developer or viewer |
+| Expiry | `users.manage` | 1 to 30 days (the form offers a few) |
+
+The setup is applied in the same database transaction that creates the
+account, so a half-set-up account never exists. A role, node or workspace
+deleted between the invitation and its use is skipped; the account is still
+created. Links made before the setup existed keep working and carry none.
+
+Pending invitations are listed on the Users page with their setup and
+creator and can be revoked. The register page shows the role and the
+workspace being joined before the invitee chooses a password
+(`POST /api/v1/registration/preview` returns only `role_name` and
+`workspace_name` next to the address, never limits or nodes), and the
+invitation email says the same. Creating and revoking invitations and
+registering from one are in the activity log (`admin.invite_create`,
+`admin.invite_revoke`, `account.register`). API: `GET`/`POST
+/api/v1/admin/account-invites` (`POST` takes `email`, `role`,
+`expires_in_days`, `send_email`, `quota`, `node_id`, `workspace_id`,
+`workspace_role`), `DELETE /api/v1/admin/account-invites/{id}`. Enforcement is
+in the application.
 
 **Email verification**: new accounts confirm their address with a one-use
 link (24 hours, only the SHA-256 is stored, resends rate limited) from

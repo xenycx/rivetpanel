@@ -100,9 +100,15 @@ again.
 
 ## Placement and operation
 
-Administrators choose a node while creating an empty bot, a bot from a
-template or from GitHub (both need the node to be connected) or a game server;
-other users' servers are placed on the panel's own node. A remote server
+Accounts with `nodes.manage` (built-in administrators included) choose a node
+while creating an empty bot, a bot from a template or from GitHub (all need the
+node to be connected) or a game server. Everyone else's new apps follow a
+fixed order: the node their workspace is pinned to, else the panel's default
+node (Administration → Nodes → Use for new apps), else the panel's own host.
+Creating an app on a node whose agent is offline is refused with a message
+that names the node. The forms show node managers a card per node and
+everyone else where their apps run (`GET /api/v1/placement`); see "Node
+placement" in `features.md`. A remote server
 keeps its files under `RIVET_AGENT_DATA` (default
 `/var/lib/rivet-agent/servers`) and its containers in that node's Docker.
 
@@ -290,7 +296,9 @@ Enforced now:
 
 Not implemented or still local-only:
 
-- workload migration, automatic scheduling/capacity placement, HA, remote
+- workload migration, automatic scheduling/capacity placement (workspace pins
+  and the default node are fixed rules chosen by an administrator, not
+  placement by free memory or load), HA, remote
   upgrades and certificate re-enrollment in place;
 - disk quotas, IO throttling, bandwidth enforcement, egress allowlists,
   malware scanning, user namespaces and stronger sandbox runtimes.
