@@ -1,7 +1,9 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { api, ApiError, fmtBytes } from '$lib/api/client';
-	import type { Workspace, WorkspaceQuota } from '$lib/api/types';
+	import type { NodeInfo, Workspace, WorkspaceQuota } from '$lib/api/types';
+	import { can } from '$lib/session.svelte';
+	import { wsName } from '$lib/workspaces.svelte';
 	import { fmtAgo } from '$lib/args';
 	import Icon from '$lib/components/ui/Icon.svelte';
 	import Notice from '$lib/components/ui/Notice.svelte';
@@ -25,7 +27,15 @@
 	let kind = $state<'all' | 'team' | 'personal'>('all');
 	let sort = $state<'activity' | 'bots' | 'memory' | 'name'>('activity');
 
+	// Node names for pinned workspaces (GET /nodes needs nodes.manage).
+	let nodeNames = $state<Record<string, string>>({});
+	const nodeText = (w: Workspace) => (!w.node_id ? 'Default' : can('nodes.manage') ? (nodeNames[w.node_id] ?? 'Pinned') : 'Pinned');
+
 	onMount(async () => {
+		if (can('nodes.manage'))
+			api<{ nodes: NodeInfo[] }>('GET', '/nodes')
+				.then((r) => (nodeNames = Object.fromEntries(r.nodes.map((n) => [n.id, n.name]))))
+				.catch(() => {});
 		try {
 			list = (await api<{ workspaces: Workspace[] }>('GET', '/admin/workspaces')).workspaces;
 		} catch (e) {
@@ -36,15 +46,15 @@
 	const shown = $derived.by(() => {
 		const needle = q.trim().toLowerCase();
 		const out = (list ?? []).filter(
-			(w) => (kind === 'all' || (kind === 'team') !== w.personal) && (!needle || `${w.name} ${w.owner_email}`.toLowerCase().includes(needle))
+			(w) => (kind === 'all' || (kind === 'team') !== w.personal) && (!needle || `${wsName(w)} ${w.owner_email}`.toLowerCase().includes(needle))
 		);
 		const by: Record<typeof sort, (a: Workspace, b: Workspace) => number> = {
 			activity: (a, b) => b.last_active_at_ms - a.last_active_at_ms,
 			bots: (a, b) => b.bots - a.bots,
 			memory: (a, b) => b.memory_bytes - a.memory_bytes,
-			name: (a, b) => a.name.localeCompare(b.name)
+			name: (a, b) => wsName(a).localeCompare(wsName(b))
 		};
-		return out.sort((a, b) => by[sort](a, b) || a.name.localeCompare(b.name));
+		return out.sort((a, b) => by[sort](a, b) || wsName(a).localeCompare(wsName(b)));
 	});
 	const totals = $derived.by(() => {
 		const t = { teams: 0, bots: 0, running: 0, sites: 0, memory: 0 };
@@ -85,10 +95,10 @@
 	</div>
 
 	<div class="card mt-3 overflow-x-auto">
-		<table class="w-full min-w-[44rem] text-left">
+		<table class="w-full min-w-[50rem] text-left">
 			<thead class="border-b border-rule-soft">
 				<tr class="[&>th]:px-4 [&>th]:py-2.5 [&>th]:font-normal">
-					<th class="eyebrow">Workspace</th><th class="eyebrow">Owner</th><th class="eyebrow text-right">Members</th><th class="eyebrow text-right">Apps</th><th class="eyebrow text-right">Sites</th><th class="eyebrow text-right">Memory</th><th class="eyebrow">Limits</th><th class="eyebrow text-right">Active</th>
+					<th class="eyebrow">Workspace</th><th class="eyebrow">Owner</th><th class="eyebrow text-right">Members</th><th class="eyebrow text-right">Apps</th><th class="eyebrow text-right">Sites</th><th class="eyebrow text-right">Memory</th><th class="eyebrow">Limits</th><th class="eyebrow">Node</th><th class="eyebrow text-right">Active</th>
 				</tr>
 			</thead>
 			<tbody class="divide-y divide-rule-soft">
@@ -96,8 +106,9 @@
 					<tr class="[&>td]:px-4 [&>td]:py-2.5 hover:bg-paper/40">
 						<td class="max-w-64">
 							<a class="flex items-center gap-2 font-medium hover:underline" href="/admin/workspaces/{w.id}">
-								<span class="grid size-7 shrink-0 place-items-center rounded-control bg-paper-2 font-mono text-[11px] text-action" aria-hidden="true">{(w.personal ? 'P' : w.name.slice(0, 2)).toUpperCase()}</span>
-								<span class="truncate">{w.personal ? 'Personal' : w.name}</span>
+								<span class="grid size-7 shrink-0 place-items-center rounded-control bg-paper-2 font-mono text-[11px] text-action" aria-hidden="true">{wsName(w).slice(0, 2).toUpperCase()}</span>
+								<span class="truncate">{wsName(w)}</span>
+								{#if w.personal}<span class="pill shrink-0">Personal</span>{/if}
 							</a>
 						</td>
 						<td class="max-w-56 truncate text-small"><a class="hover:underline" href="/admin/users/{w.owner_id}">{w.owner_email}</a></td>
@@ -106,10 +117,11 @@
 						<td class="text-right font-mono text-small">{w.sites}</td>
 						<td class="text-right font-mono text-small">{fmtBytes(w.memory_bytes)}</td>
 						<td class="text-small">{#if w.quota}<span class="pill" title="This workspace has its own limits">{limitText(w.quota)}</span>{:else}<span class="text-muted">Default</span>{/if}</td>
+						<td class="max-w-40 truncate text-small">{#if w.node_id}<span title={can('nodes.manage') ? 'New apps in this workspace go to this node' : 'New apps in this workspace go to a pinned node'}>{nodeText(w)}</span>{:else}<span class="text-muted">Default</span>{/if}</td>
 						<td class="text-right text-small text-muted">{w.last_active_at_ms ? fmtAgo(w.last_active_at_ms) : '—'}</td>
 					</tr>
 				{:else}
-					<tr><td colspan="8" class="px-4 py-4 text-small text-muted">No workspaces match.</td></tr>
+					<tr><td colspan="9" class="px-4 py-4 text-small text-muted">No workspaces match.</td></tr>
 				{/each}
 			</tbody>
 		</table>

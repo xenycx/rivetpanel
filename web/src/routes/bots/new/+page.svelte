@@ -10,7 +10,7 @@
 	import Icon from '$lib/components/ui/Icon.svelte';
 	import Notice from '$lib/components/ui/Notice.svelte';
 	import Skeleton from '$lib/components/ui/Skeleton.svelte';
-	import { creatable, loadWorkspaces, workspaces } from '$lib/workspaces.svelte';
+	import { creatable, loadWorkspaces, workspaces, wsName } from '$lib/workspaces.svelte';
 
 	type Source = 'template' | 'github' | 'blank';
 	const steps = ['Source', 'Details', 'Setup values', 'Review'];
@@ -579,7 +579,7 @@
 				<label class="mt-4 block max-w-md">
 					<span class="label">Workspace</span>
 					<select class="field" bind:value={workspaceId}>
-						{#each targets as w (w.id)}<option value={w.personal ? '' : w.id}>{w.personal ? 'Personal' : w.name}</option>{/each}
+						{#each targets as w (w.id)}<option value={w.personal ? '' : w.id}>{wsName(w)}</option>{/each}
 					</select>
 					<span class="help">Members of the workspace get access according to their role.</span>
 				</label>
@@ -657,7 +657,7 @@
 		{:else}
 			<dl class="mt-4 grid grid-cols-[auto_minmax(0,1fr)] gap-x-6 gap-y-2 border-y border-rule-soft py-3">
 				<dt class="text-muted">Name</dt><dd class="font-medium">{name}</dd>
-				{#if targets.length > 1}<dt class="text-muted">Workspace</dt><dd>{targets.find((w) => (w.personal ? '' : w.id) === workspaceId)?.name ?? 'Personal'}</dd>{/if}
+				{#if targets.length > 1}{@const t = targets.find((w) => (w.personal ? '' : w.id) === workspaceId)}<dt class="text-muted">Workspace</dt><dd>{t ? wsName(t) : 'Personal'}</dd>{/if}
 				{#if nodes.length > 1}<dt class="text-muted">Node</dt><dd>{nodes.find((n) => n.id === nodeId)?.name ?? 'Local'}</dd>{/if}
 				<dt class="text-muted">Source</dt><dd>{sourceLabel}{#if source === 'github'}: <code>{repo.full_name}</code> on <code>{repo.branch}</code>{#if repo.root_dir}, folder <code>{repo.root_dir}</code>{/if}{/if}</dd>
 				<dt class="text-muted">Language</dt><dd>{rt?.display_name ?? rtId}</dd>

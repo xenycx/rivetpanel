@@ -298,7 +298,7 @@
 	<section class="mt-10 scroll-mt-24 border-t border-rule-soft pt-8" id="limits" aria-labelledby="limits-h">
 		<p class="eyebrow">Limits</p>
 		<h2 id="limits-h" class="mt-1 text-section">Default limits</h2>
-		<p class="mt-1 max-w-3xl text-muted">What every workspace may hold unless it has its own limits (Administration → Workspaces). Every member's apps and sites in a workspace count together; stopped apps count until deleted; workspaces owned by administrators are exempt. An empty field falls back to the environment file, else no limit; 0 allows none. Changes apply to the next app or site created and never stop anything.</p>
+		<p class="mt-1 max-w-3xl text-muted">What every workspace may hold unless it has its own limits (Administration → Workspaces). Every member's apps and sites in a workspace count together; stopped apps count until deleted. Administrators are never refused by a limit; everyone else in a workspace is bounded by it. An empty field falls back to the environment file, else no limit; 0 allows none. Changes apply to the next app or site created and never stop anything.</p>
 		<div class="card mt-4 p-5 sm:p-6"><DefaultLimitsForm /></div>
 	</section>
 {/if}

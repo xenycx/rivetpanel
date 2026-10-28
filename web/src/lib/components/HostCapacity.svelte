@@ -50,7 +50,7 @@
 {/if}
 
 <h3 class="mt-8 text-title font-semibold">Budgets and limits</h3>
-<p class="mt-1 max-w-3xl text-small text-muted">0 means unlimited. Host and app budgets are changed on the Environment page and apply after a restart. The workspace values are only the fallback for <a class="link" href="/admin/settings#limits">Panel settings → Default limits</a>, which apply at once; workspaces owned by administrators are exempt.</p>
+<p class="mt-1 max-w-3xl text-small text-muted">0 means unlimited. Host and app budgets are changed on the Environment page and apply after a restart. The workspace values are only the fallback for <a class="link" href="/admin/settings#limits">Panel settings → Default limits</a>, which apply at once. Administrators are never refused by a limit; everyone else in a workspace is bounded by it.</p>
 <div class="card mt-3 overflow-x-auto">
 	<table class="w-full min-w-[40rem] text-left">
 		<thead class="border-b border-rule-soft"><tr class="[&>th]:px-4 [&>th]:py-2.5 [&>th]:font-normal"><th class="eyebrow">Setting</th><th class="eyebrow">Limits</th><th class="eyebrow">Scope</th><th class="eyebrow text-right">Now</th><th class="eyebrow text-right">From</th></tr></thead>

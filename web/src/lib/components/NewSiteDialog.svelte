@@ -2,7 +2,7 @@
 	import { goto } from '$app/navigation';
 	import { api, ApiError } from '$lib/api/client';
 	import type { Site, SitesInfo, SiteTemplate } from '$lib/api/types';
-	import { creatable, workspaces } from '$lib/workspaces.svelte';
+	import { creatable, workspaces, wsName } from '$lib/workspaces.svelte';
 	import Dialog from '$lib/components/ui/Dialog.svelte';
 	import Notice from '$lib/components/ui/Notice.svelte';
 
@@ -86,7 +86,7 @@
 		{/if}
 		{#if creatable().length > 1}
 			<label class="block"><span class="label">Workspace</span>
-				<select class="field" bind:value={form.workspace_id}>{#each creatable() as w (w.id)}<option value={w.personal ? '' : w.id}>{w.personal ? 'Personal' : w.name}</option>{/each}</select>
+				<select class="field" bind:value={form.workspace_id}>{#each creatable() as w (w.id)}<option value={w.personal ? '' : w.id}>{wsName(w)}</option>{/each}</select>
 			</label>
 		{/if}
 		{#if info.builds_enabled && !form.template_id}<p class="text-small text-muted">Building with npm, or running Node.js, PHP, Python, Go or Rust? <a class="link" href="/sites/new" onclick={() => (open = false)}>Deploy from a GitHub repository</a> instead.</p>{/if}

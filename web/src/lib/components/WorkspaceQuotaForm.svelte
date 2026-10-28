@@ -89,7 +89,7 @@
 </script>
 
 <section class="mt-8" aria-labelledby="quota-h">
-	<h3 id="quota-h" class="mb-1 text-title font-semibold">Limits</h3>
+	<h3 id="quota-h" class="mb-1 text-title font-semibold">Limits &amp; placement</h3>
 	<p class="mb-3 max-w-3xl text-small text-muted">
 		Every member's apps and sites in this workspace count together. Leave a field empty to use the <a class="link" href="/admin/settings#limits">default limits</a>; 0 allows none. Stopped apps count until they are deleted. Lowering a limit never stops or removes anything; it only blocks new apps, sites, memory and CPU.
 	</p>

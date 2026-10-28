@@ -44,9 +44,13 @@ export function selectWorkspace(id: string) {
 
 export const currentWorkspace = () => workspaces.list.find((w) => w.id === workspaces.selected) ?? null;
 export const personalWorkspace = () => workspaces.list.find((w) => w.personal) ?? null;
+/** A workspace's display name: its stored name ("Personal" when a personal one has none). */
+export function wsName(w: { name: string; personal: boolean }): string {
+	return w.name || 'Personal';
+}
 export const workspaceName = (id: string) => {
 	const w = workspaces.list.find((x) => x.id === id);
-	return w ? (w.personal ? 'Personal' : w.name) : '';
+	return w ? wsName(w) : '';
 };
 /** Workspaces where the caller may create bots and sites. */
 export const creatable = () => workspaces.list.filter((w) => w.role === 'owner' || w.role === 'admin' || w.role === 'developer');

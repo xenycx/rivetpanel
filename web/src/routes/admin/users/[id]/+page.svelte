@@ -8,6 +8,7 @@
 	import Icon from '$lib/components/ui/Icon.svelte';
 	import Notice from '$lib/components/ui/Notice.svelte';
 	import Skeleton from '$lib/components/ui/Skeleton.svelte';
+	import { wsName } from '$lib/workspaces.svelte';
 
 	type View = { user: User; has_password: boolean; workspaces: Workspace[]; bots: (Bot & { owner_email: string })[]; operations: Operation[] };
 	const id = $derived(page.params.id ?? '');
@@ -61,9 +62,9 @@
 			{#each v.workspaces as w (w.id)}
 				<li>
 					<a href="/admin/workspaces/{w.id}" class="card flex items-center gap-3 p-4 transition-colors hover:border-rule">
-						<span class="grid size-9 shrink-0 place-items-center rounded-tile bg-action/12 font-mono text-[11px] font-semibold text-action" aria-hidden="true">{(w.personal ? 'P' : w.name.slice(0, 2)).toUpperCase()}</span>
+						<span class="grid size-9 shrink-0 place-items-center rounded-tile bg-action/12 font-mono text-[11px] font-semibold text-action" aria-hidden="true">{wsName(w).slice(0, 2).toUpperCase()}</span>
 						<span class="min-w-0 flex-1">
-							<span class="block truncate font-medium">{w.personal ? 'Personal' : w.name}</span>
+							<span class="flex items-center gap-2"><span class="truncate font-medium">{wsName(w)}</span>{#if w.personal}<span class="pill">Personal</span>{/if}</span>
 							<span class="block text-small text-muted">{w.role ? roleText[w.role] : ''} · {w.running_bots}/{w.bots} apps · {w.sites} sites · {w.members} members</span>
 						</span>
 						<Icon name="chevronRight" size={14} class="text-muted" />

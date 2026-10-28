@@ -93,6 +93,14 @@
 		try { await api('DELETE', `/nodes/locations/${l.id}`); await load(); }
 		catch (e) { toast(message(e), 'fail'); }
 	}
+	// The node new apps go to when their workspace pins none ("" = this host).
+	async function setDefault(n: NodeInfo | null) {
+		try {
+			await api('PUT', '/nodes/default', { node_id: n && n.transport !== 'local' ? n.id : '' });
+			toast(n && n.transport !== 'local' ? `New apps go to ${n.name}` : 'New apps go to this host', 'success');
+			await load();
+		} catch (e) { toast(message(e), 'fail'); }
+	}
 	function openAdd() { created = null; add = { name: '', location_id: locations?.[0]?.id ?? '', ttl_minutes: 15 }; addOpen = true; }
 	function copy(v: string) { navigator.clipboard?.writeText(v).then(() => toast('Copied', 'success')); }
 </script>
@@ -114,8 +122,12 @@
 			{@const d = drafts[n.id]}
 			<section class="card p-4 sm:p-5">
 				<div class="flex flex-wrap items-start justify-between gap-3">
-					<div><div class="flex items-center gap-2"><h3 class="text-title font-semibold">{n.name}</h3><span class="pill" data-tone={tone(n)}>{nodeStatus(n)}</span></div><p class="mt-1 text-small text-muted">{n.transport === 'local' ? 'Control-plane host' : n.agent?.hostname || 'Remote agent'} · {n.server_count} {n.server_count === 1 ? 'server' : 'servers'}</p></div>
-					{#if n.transport === 'agent'}<div class="flex gap-2">{#if n.agent?.certificate_serial}<button class="btn btn-sm" onclick={() => revoke(n)}>Revoke certificate</button>{:else}<button class="btn btn-sm" onclick={() => reenroll(n)}>Create enrollment</button>{/if}<button class="btn btn-sm btn-danger" onclick={() => remove(n)} disabled={n.server_count > 0}>Delete</button></div>{/if}
+					<div><div class="flex flex-wrap items-center gap-2"><h3 class="text-title font-semibold">{n.name}</h3><span class="pill" data-tone={tone(n)}>{nodeStatus(n)}</span>{#if n.default}<span class="pill" data-tone="run">Default for new apps</span>{/if}</div><p class="mt-1 text-small text-muted">{n.transport === 'local' ? 'Control-plane host' : n.agent?.hostname || 'Remote agent'} · {n.server_count} {n.server_count === 1 ? 'server' : 'servers'}</p></div>
+					<div class="flex flex-wrap gap-2">
+						{#if !n.default && n.enabled && !n.draining}<button class="btn btn-sm" onclick={() => setDefault(n)}>Use for new apps</button>{/if}
+						{#if n.default && n.transport !== 'local'}<button class="btn btn-sm" onclick={() => setDefault(null)}>Use this host</button>{/if}
+					{#if n.transport === 'agent'}{#if n.agent?.certificate_serial}<button class="btn btn-sm" onclick={() => revoke(n)}>Revoke certificate</button>{:else}<button class="btn btn-sm" onclick={() => reenroll(n)}>Create enrollment</button>{/if}<button class="btn btn-sm btn-danger" onclick={() => remove(n)} disabled={n.server_count > 0}>Delete</button>{/if}
+					</div>
 				</div>
 				<div class="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
 					<label><span class="label">Name</span><input class="field" bind:value={d.name} maxlength="64" /></label>

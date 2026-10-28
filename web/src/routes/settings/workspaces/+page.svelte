@@ -5,7 +5,7 @@
 	import { fmtAgo } from '$lib/args';
 	import { toast } from '$lib/ui/toast.svelte';
 	import { session } from '$lib/session.svelte';
-	import { loadWorkspaces, selectWorkspace, workspaces } from '$lib/workspaces.svelte';
+	import { loadWorkspaces, selectWorkspace, workspaces, wsName } from '$lib/workspaces.svelte';
 	import Icon from '$lib/components/ui/Icon.svelte';
 	import Notice from '$lib/components/ui/Notice.svelte';
 	import Skeleton from '$lib/components/ui/Skeleton.svelte';
@@ -58,11 +58,12 @@
 			{#each workspaces.list as w (w.id)}
 				<li class="card flex flex-col p-4">
 					<div class="flex items-start gap-3">
-						<span class="grid size-10 shrink-0 place-items-center rounded-tile bg-action/12 font-mono text-small font-semibold text-action" aria-hidden="true">{(w.personal ? 'Personal' : w.name).slice(0, 2).toUpperCase()}</span>
+						<span class="grid size-10 shrink-0 place-items-center rounded-tile bg-action/12 font-mono text-small font-semibold text-action" aria-hidden="true">{wsName(w).slice(0, 2).toUpperCase()}</span>
 						<div class="min-w-0 flex-1">
-							<a href="/settings/workspaces/{w.id}" class="block truncate font-semibold hover:underline">{w.personal ? 'Personal' : w.name}</a>
+							<a href="/settings/workspaces/{w.id}" class="block truncate font-semibold hover:underline">{wsName(w)}</a>
 							<p class="text-small text-muted">{w.role ? roleText[w.role] : 'Administrator view'}{w.personal ? '' : ` · owned by ${w.owner_id === session.user?.id ? 'you' : w.owner_email}`}</p>
 						</div>
+						{#if w.personal}<span class="pill">Personal</span>{/if}
 						{#if workspaces.selected === w.id}<span class="pill" data-tone="run">Selected</span>{/if}
 					</div>
 					<dl class="mt-4 grid grid-cols-4 gap-2 border-t border-rule-soft pt-3 text-small">
