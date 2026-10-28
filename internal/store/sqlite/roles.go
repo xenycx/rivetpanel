@@ -20,12 +20,13 @@ func scanRole(row interface{ Scan(...any) error }) (domain.Role, error) {
 		return r, mapErr(err)
 	}
 	r.System = sys == 1
-	switch {
-	case r.System && r.ID == domain.SystemRoleAdmin:
+	// The administrator role is computed (its stored '["*"]' is never read);
+	// every other role, the built-in User role included, grants exactly its
+	// stored list (migration 0057 seeded the User row).
+	r.Editable = r.ID != domain.SystemRoleAdmin
+	if r.ID == domain.SystemRoleAdmin {
 		r.Permissions = domain.AllPermissions()
-	case r.System:
-		r.Permissions = domain.DefaultUserPermissions()
-	default:
+	} else {
 		r.Permissions = decodePermissions(perms)
 	}
 	return r, nil
@@ -69,10 +70,12 @@ func (db *DB) CreateRole(ctx context.Context, r domain.Role) error {
 	return mapErr(err)
 }
 
-// UpdateRole changes a custom role (system roles are never changed).
+// UpdateRole changes a custom role or the built-in User role (the
+// administrator role is never changed). The service keeps a system role's
+// name and description.
 func (db *DB) UpdateRole(ctx context.Context, r domain.Role) error {
 	res, err := db.ExecContext(ctx, `UPDATE roles SET name = ?, description = ?, permissions_json = ?, updated_at_ms = ?
-		WHERE id = ? AND system = 0`, r.Name, r.Description, encodePermissions(r.Permissions), r.UpdatedAtMS, r.ID)
+		WHERE id = ? AND id != 'admin'`, r.Name, r.Description, encodePermissions(r.Permissions), r.UpdatedAtMS, r.ID)
 	if err != nil {
 		return mapErr(err)
 	}

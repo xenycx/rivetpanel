@@ -111,9 +111,10 @@ func (s *AuthService) CreateRole(ctx context.Context, actor domain.User, in Role
 	return s.Store.GetRole(ctx, r.ID)
 }
 
-// editableRole loads a custom role the actor may change: never a system
-// role, and for delegated administrators never their own role or a role
-// holding permissions they lack.
+// editableRole loads a role the actor may change: never the administrator
+// role, the built-in User role only for built-in administrators, and for
+// delegated administrators never their own role or a role holding
+// permissions they lack.
 func (s *AuthService) editableRole(ctx context.Context, actor domain.User, id string) (domain.Role, error) {
 	if !actor.Can(domain.PermRolesManage) {
 		return domain.Role{}, domain.ErrForbidden
@@ -122,8 +123,11 @@ func (s *AuthService) editableRole(ctx context.Context, actor domain.User, id st
 	if err != nil {
 		return domain.Role{}, err
 	}
-	if cur.System {
-		return domain.Role{}, domain.Invalid("built-in roles cannot be changed; create a custom role instead")
+	if cur.ID == domain.SystemRoleAdmin {
+		return domain.Role{}, domain.Invalid("the administrator role holds every permission and cannot be changed")
+	}
+	if cur.System && !actor.IsAdmin() {
+		return domain.Role{}, domain.Invalid("only administrators can change the built-in user role")
 	}
 	if !actor.IsAdmin() {
 		if actor.RoleID == cur.ID {
@@ -136,12 +140,16 @@ func (s *AuthService) editableRole(ctx context.Context, actor domain.User, id st
 	return cur, nil
 }
 
-// UpdateRole changes a custom role; accounts holding it are affected on
-// their next request.
+// UpdateRole changes a custom role or the permissions of the built-in User
+// role (whose name and description are kept); accounts holding the role are
+// affected on their next request.
 func (s *AuthService) UpdateRole(ctx context.Context, actor domain.User, id string, in RoleInput) (domain.Role, error) {
 	cur, err := s.editableRole(ctx, actor, id)
 	if err != nil {
 		return domain.Role{}, err
+	}
+	if cur.System {
+		in.Name, in.Description = cur.Name, cur.Description
 	}
 	r, err := validateRole(in)
 	if err != nil {
@@ -160,8 +168,33 @@ func (s *AuthService) UpdateRole(ctx context.Context, actor domain.User, id stri
 	return s.Store.GetRole(ctx, id)
 }
 
-// DeleteRole removes a custom role that no account holds.
+// roleReader loads one role (the AuthService and OIDCService stores both do).
+type roleReader interface {
+	GetRole(ctx context.Context, id string) (domain.Role, error)
+}
+
+// userRolePermissions is what the built-in User role currently grants: its
+// stored list, or the factory defaults when the row is missing.
+func userRolePermissions(ctx context.Context, store roleReader) ([]string, error) {
+	r, err := store.GetRole(ctx, domain.SystemRoleUser)
+	if errors.Is(err, domain.ErrNotFound) {
+		return domain.DefaultUserPermissions(), nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return r.Permissions, nil
+}
+
+// DeleteRole removes a custom role that no account holds; the built-in
+// roles are never deleted.
 func (s *AuthService) DeleteRole(ctx context.Context, actor domain.User, id string) (domain.Role, error) {
+	if !actor.Can(domain.PermRolesManage) {
+		return domain.Role{}, domain.ErrForbidden
+	}
+	if id == domain.SystemRoleAdmin || id == domain.SystemRoleUser {
+		return domain.Role{}, domain.Invalid("built-in roles cannot be deleted")
+	}
 	cur, err := s.editableRole(ctx, actor, id)
 	if err != nil {
 		return domain.Role{}, err

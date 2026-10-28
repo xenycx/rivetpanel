@@ -210,7 +210,11 @@ func (s *OIDCService) checkDefaultRole(ctx context.Context, actor domain.User, r
 		return domain.Invalid("new accounts cannot be made administrators")
 	case "", domain.RoleUser:
 		if signup {
-			return grantable(actor, domain.DefaultUserPermissions())
+			perms, err := userRolePermissions(ctx, s.Store)
+			if err != nil {
+				return err
+			}
+			return grantable(actor, perms)
 		}
 		return nil
 	}

@@ -17,14 +17,15 @@ const userCols = `id, email, display_name, avatar_jpeg, password_hash, role, dis
 // withheld from accounts whose email address is not verified ("" = off).
 const UnverifiedPolicyKey = "unverified_restrict"
 
-// userSelect is the column list read for an account, with its custom role
-// and the unverified-email policy, for a users table aliased as a.
+// userSelect is the column list read for an account, with its custom role,
+// the stored permissions of its role (custom or the built-in User role) and
+// the unverified-email policy, for a users table aliased as a.
 func userSelect(a string) string {
 	p := a + "."
 	return p + `id, ` + p + `email, ` + p + `display_name, ` + p + `avatar_jpeg, ` + p + `password_hash, ` + p + `role, ` + p + `disabled, ` +
 		p + `created_at_ms, ` + p + `updated_at_ms, ` + p + `email_verified, ` + p + `email_verified_at_ms, ` + p + `role_id,
 		(SELECT r.name FROM roles r WHERE r.id = ` + p + `role_id),
-		(SELECT r.permissions_json FROM roles r WHERE r.id = ` + p + `role_id),
+		(SELECT r.permissions_json FROM roles r WHERE r.id = COALESCE(` + p + `role_id, ` + p + `role)),
 		(SELECT ps.value FROM panel_settings ps WHERE ps.key = '` + UnverifiedPolicyKey + `')`
 }
 
@@ -38,9 +39,14 @@ func userScanDest(u *domain.User) ([]any, func()) {
 	return dest, func() {
 		u.Disabled = dis == 1
 		u.EmailVerified = verified == 1
-		if roleID.Valid && roleName.Valid && u.Role != domain.RoleAdmin {
-			u.RoleID, u.RoleName = roleID.String, roleName.String
+		if u.Role != domain.RoleAdmin {
+			// Every non-administrator gets the stored list of its role: the
+			// custom role, or the built-in User role (migration 0057).
+			if roleID.Valid && roleName.Valid {
+				u.RoleID, u.RoleName = roleID.String, roleName.String
+			}
 			u.CustomPermissions = decodePermissions(perms.String)
+			u.PermissionsLoaded = true
 		}
 		if !u.EmailVerified && u.Role != domain.RoleAdmin && policy.String != "" {
 			// Only what the role actually grants is withheld (and shown).

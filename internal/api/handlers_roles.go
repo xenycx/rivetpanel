@@ -15,6 +15,7 @@ type roleDTO struct {
 	Description string   `json:"description"`
 	Permissions []string `json:"permissions"`
 	System      bool     `json:"system"`
+	Editable    bool     `json:"editable"`
 	Users       int      `json:"users"`
 	CreatedAtMS int64    `json:"created_at_ms"`
 	UpdatedAtMS int64    `json:"updated_at_ms"`
@@ -25,7 +26,7 @@ func toRole(r domain.Role) roleDTO {
 	if p == nil {
 		p = []string{}
 	}
-	return roleDTO{r.ID, r.Name, r.Description, p, r.System, r.Users, r.CreatedAtMS, r.UpdatedAtMS}
+	return roleDTO{r.ID, r.Name, r.Description, p, r.System, r.Editable, r.Users, r.CreatedAtMS, r.UpdatedAtMS}
 }
 
 func (s *panel) roleRoutes(authed fiber.Router) {

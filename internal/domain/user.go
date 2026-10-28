@@ -22,6 +22,10 @@ type User struct {
 	RoleID            string
 	RoleName          string
 	CustomPermissions []string
+	// PermissionsLoaded is set by the store when CustomPermissions holds the
+	// stored list of the account's role, custom or the built-in User role.
+	// A User built in memory (tests, fixtures) keeps the factory defaults.
+	PermissionsLoaded bool
 	// EmailVerified is false until the address is confirmed through a link
 	// (accounts created before verification existed count as verified).
 	EmailVerified     bool

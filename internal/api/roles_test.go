@@ -112,7 +112,8 @@ func TestCustomRoleEnforcedOnServer(t *testing.T) {
 	op.mustStatus(201, "POST", "/api/v1/bots", map[string]any{"name": "again", "runtime": "nodejs"})
 }
 
-// Built-in roles keep their behaviour and are listed as system roles.
+// Built-in roles keep their behaviour and are listed as system roles: the
+// administrator role is fixed, the User role is editable but never deleted.
 func TestBuiltInRolesUnchanged(t *testing.T) {
 	e := newEnv(t)
 	admin := e.user("admin@x.io", domain.RoleAdmin)
@@ -126,11 +127,22 @@ func TestBuiltInRolesUnchanged(t *testing.T) {
 	var roles struct{ Roles []roleDTO }
 	json.Unmarshal(admin.mustStatus(200, "GET", "/api/v1/admin/roles", nil), &roles)
 	if len(roles.Roles) != 2 || !roles.Roles[0].System || roles.Roles[0].ID != "admin" || roles.Roles[1].ID != "user" ||
-		roles.Roles[0].Users != 1 || roles.Roles[1].Users != 1 {
+		roles.Roles[0].Users != 1 || roles.Roles[1].Users != 1 || roles.Roles[0].Editable || !roles.Roles[1].Editable ||
+		!slices.Equal(roles.Roles[1].Permissions, domain.DefaultUserPermissions()) {
 		t.Fatalf("system roles: %+v", roles.Roles)
 	}
 	admin.mustStatus(400, "PATCH", "/api/v1/admin/roles/admin", map[string]any{"name": "x", "permissions": []string{}})
 	admin.mustStatus(400, "DELETE", "/api/v1/admin/roles/user", nil)
+	admin.mustStatus(400, "DELETE", "/api/v1/admin/roles/admin", nil)
+	// The User role's permissions can be changed; its name stays.
+	var user roleDTO
+	json.Unmarshal(admin.mustStatus(200, "PATCH", "/api/v1/admin/roles/user", map[string]any{"name": "Renamed", "description": "x", "permissions": domain.DefaultUserPermissions()}), &user)
+	if user.Name != "User" || user.Description == "x" || user.Description == "" || !user.System || !user.Editable || !slices.Equal(user.Permissions, domain.DefaultUserPermissions()) {
+		t.Fatalf("user role after restore: %+v", user)
+	}
+	if got := u.me().Permissions; !slices.Equal(got, domain.DefaultUserPermissions()) {
+		t.Fatalf("user permissions after restore: %v", got)
+	}
 	admin.mustStatus(400, "POST", "/api/v1/admin/roles", map[string]any{"name": "bad", "permissions": []string{"nope"}})
 	admin.mustStatus(400, "POST", "/api/v1/admin/roles", map[string]any{"name": "user", "permissions": []string{}}) // duplicate (case-insensitive)
 
@@ -302,4 +314,80 @@ func TestDelegatedManagerCannotTakeOverBroaderAccounts(t *testing.T) {
 	// An account with the same administration permissions is within reach.
 	sup.mustStatus(204, "PATCH", "/api/v1/users/"+peerID, map[string]any{"disabled": true})
 	admin.mustStatus(204, "PATCH", "/api/v1/users/"+opsID, map[string]any{"email": "ops2@x.io"})
+}
+
+// The built-in User role is configurable by built-in administrators: the
+// stored list is what every account with the role, and every invitee given
+// it, gets; administrators are never affected.
+func TestUserRoleEditable(t *testing.T) {
+	e, _, _ := setupEnv(t, service.EnvSettings{AllowSignup: true, AllowSignupSet: true})
+	admin := e.user("admin@x.io", domain.RoleAdmin)
+	u := e.user("u@x.io", domain.RoleUser)
+	rm := e.user("roles@x.io", domain.RoleUser)
+	mgr := e.user("manager@x.io", domain.RoleUser)
+	reduced := slices.DeleteFunc(domain.DefaultUserPermissions(), func(p string) bool { return p == domain.PermBotsCreate })
+	roleMgr := admin.createRole("Role managers", domain.PermRolesManage)
+	accountMgr := admin.createRole("Account managers", append([]string{domain.PermUsersManage}, reduced...)...)
+	admin.mustStatus(204, "PATCH", "/api/v1/users/"+e.userID("roles@x.io"), map[string]any{"role": roleMgr})
+	admin.mustStatus(204, "PATCH", "/api/v1/users/"+e.userID("manager@x.io"), map[string]any{"role": accountMgr})
+
+	u.createBot("before")
+	// Only built-in administrators change the User role.
+	resp, body := rm.do("PATCH", "/api/v1/admin/roles/user", map[string]any{"name": "User", "permissions": reduced})
+	if resp.StatusCode != 400 || !strings.Contains(string(body), "only administrators") {
+		t.Fatalf("delegated edit: %d %s", resp.StatusCode, body)
+	}
+	// The manager cannot hand out the User role while it grants more than it holds.
+	mgr.mustStatus(400, "POST", "/api/v1/admin/account-invites", map[string]any{"role": "user", "expires_in_days": 3})
+
+	var r roleDTO
+	json.Unmarshal(admin.mustStatus(200, "PATCH", "/api/v1/admin/roles/user", map[string]any{"name": "User", "permissions": reduced}), &r)
+	if !slices.Equal(r.Permissions, reduced) || !r.System || !r.Editable {
+		t.Fatalf("reduced role: %+v", r)
+	}
+	// Existing accounts with the role follow the change; administrators do not.
+	resp, body = u.do("POST", "/api/v1/bots", map[string]any{"name": "after", "runtime": "nodejs"})
+	if resp.StatusCode != 403 || !strings.Contains(string(body), domain.PermBotsCreate) {
+		t.Fatalf("create after removal: %d %s", resp.StatusCode, body)
+	}
+	if got := u.me().Permissions; !slices.Equal(got, reduced) {
+		t.Fatalf("user permissions: %v", got)
+	}
+	if got := admin.me().Permissions; !slices.Equal(got, domain.AllPermissions()) {
+		t.Fatalf("admin permissions: %v", got)
+	}
+	u.mustStatus(200, "GET", "/api/v1/bots", nil)
+
+	// Invitees given the role get the reduced set, and a manager holding that
+	// set can now invite.
+	var created struct{ Token string }
+	json.Unmarshal(mgr.mustStatus(201, "POST", "/api/v1/admin/account-invites", map[string]any{"role": "user", "expires_in_days": 3}), &created)
+	anon := &client{e: e}
+	resp, body = anon.do("POST", "/api/v1/registration", map[string]string{"token": created.Token, "email": "new@x.io", "password": pw})
+	if resp.StatusCode != 201 {
+		t.Fatalf("register: %d %s", resp.StatusCode, body)
+	}
+	invitee := &client{e: e}
+	for _, ck := range resp.Cookies() {
+		if ck.Name == sessionCookie {
+			invitee.cookie = ck.Value
+		}
+	}
+	var reg struct {
+		CSRF string `json:"csrf_token"`
+	}
+	json.Unmarshal(body, &reg)
+	invitee.csrf = reg.CSRF
+	if got := invitee.me().Permissions; !slices.Equal(got, reduced) {
+		t.Fatalf("invitee permissions: %v", got)
+	}
+	invitee.mustStatus(403, "POST", "/api/v1/bots", map[string]any{"name": "x", "runtime": "nodejs"})
+
+	// Restore defaults: everything as before.
+	admin.mustStatus(200, "PATCH", "/api/v1/admin/roles/user", map[string]any{"name": "User", "permissions": domain.DefaultUserPermissions()})
+	u.createBot("restored")
+	if got := invitee.me().Permissions; !slices.Equal(got, domain.DefaultUserPermissions()) {
+		t.Fatalf("invitee permissions after restore: %v", got)
+	}
+	mgr.mustStatus(400, "POST", "/api/v1/admin/account-invites", map[string]any{"role": "user", "expires_in_days": 3})
 }

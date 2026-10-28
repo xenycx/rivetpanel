@@ -33,3 +33,22 @@ func TestMaskBotPermsAndCan(t *testing.T) {
 		t.Fatal("effective list")
 	}
 }
+
+// A User built in memory (never read from the store) keeps the factory
+// defaults of the built-in User role; one read from the store gets exactly
+// the stored list, even an empty one.
+func TestRolePermissionsInMemoryDefaults(t *testing.T) {
+	if got := (User{Role: RoleUser}).RolePermissions(); !slices.Equal(got, DefaultUserPermissions()) {
+		t.Fatalf("in-memory user: %v", got)
+	}
+	loaded := User{Role: RoleUser, PermissionsLoaded: true, CustomPermissions: []string{PermBotsConsole}}
+	if !loaded.Can(PermBotsConsole) || loaded.Can(PermBotsFiles) || loaded.Can(PermBotsCreate) {
+		t.Fatalf("loaded user: %v", loaded.EffectivePermissions())
+	}
+	if empty := (User{Role: RoleUser, PermissionsLoaded: true}); len(empty.EffectivePermissions()) != 0 {
+		t.Fatalf("empty stored list: %v", empty.EffectivePermissions())
+	}
+	if got := (User{Role: RoleAdmin, PermissionsLoaded: true, CustomPermissions: []string{}}).RolePermissions(); !slices.Equal(got, AllPermissions()) {
+		t.Fatalf("administrator: %v", got)
+	}
+}

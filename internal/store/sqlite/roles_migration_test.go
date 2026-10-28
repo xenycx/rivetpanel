@@ -4,6 +4,7 @@ import (
 	"context"
 	"io/fs"
 	"path/filepath"
+	"slices"
 	"testing"
 	"testing/fstest"
 
@@ -82,5 +83,86 @@ func TestRolesMigrationKeepsAccounts(t *testing.T) {
 	}
 	if err := db.DeleteRole(ctx, "r"); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// 0057 writes the factory list into the User role (which the store reads
+// from then on) and adds workspaces.rename to custom roles exactly once.
+func TestMigration0057SeedsUserRole(t *testing.T) {
+	ctx := context.Background()
+	db, err := Open(ctx, filepath.Join(t.TempDir(), "t.db"), 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { db.Close() })
+	if err := db.Migrate(ctx, upTo(t, 56)); err != nil {
+		t.Fatal(err)
+	}
+	for _, q := range []string{
+		`INSERT INTO roles (id, name, description, permissions_json, system, created_at_ms, updated_at_ms)
+			VALUES ('ops', 'Ops', '', '["bots.console"]', 0, 1, 1)`,
+		`INSERT INTO roles (id, name, description, permissions_json, system, created_at_ms, updated_at_ms)
+			VALUES ('ren', 'Renamers', '', '["workspaces.rename"]', 0, 1, 1)`,
+		`INSERT INTO users (id,email,password_hash,role,created_at_ms,updated_at_ms) VALUES ('u','u@x.io','h','user',1,1)`,
+		`INSERT INTO users (id,email,password_hash,role,role_id,created_at_ms,updated_at_ms) VALUES ('o','o@x.io','h','user','ops',1,1)`,
+		`INSERT INTO users (id,email,password_hash,role,created_at_ms,updated_at_ms) VALUES ('a','a@x.io','h','admin',1,1)`,
+	} {
+		if _, err := db.ExecContext(ctx, q); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := db.Migrate(ctx, migrations.FS); err != nil {
+		t.Fatal(err)
+	}
+	user, err := db.GetRole(ctx, domain.SystemRoleUser)
+	if err != nil || !user.System || !user.Editable || !slices.Equal(user.Permissions, domain.DefaultUserPermissions()) {
+		t.Fatalf("user role: %+v %v", user, err)
+	}
+	adm, err := db.GetRole(ctx, domain.SystemRoleAdmin)
+	if err != nil || adm.Editable || !slices.Equal(adm.Permissions, domain.AllPermissions()) {
+		t.Fatalf("admin role: %+v %v", adm, err)
+	}
+	ops, _ := db.GetRole(ctx, "ops")
+	if !slices.Equal(ops.Permissions, []string{domain.PermBotsConsole, domain.PermWorkspacesRename}) {
+		t.Fatalf("custom role: %v", ops.Permissions)
+	}
+	var raw string
+	db.QueryRowContext(ctx, `SELECT permissions_json FROM roles WHERE id = 'ren'`).Scan(&raw)
+	if raw != `["workspaces.rename"]` {
+		t.Fatalf("rename inserted twice: %s", raw)
+	}
+
+	// Accounts read the stored list of their role; administrators are computed.
+	u, err := db.GetUserByID(ctx, "u")
+	if err != nil || u.RoleID != "" || !u.PermissionsLoaded || !slices.Equal(u.RolePermissions(), domain.DefaultUserPermissions()) {
+		t.Fatalf("user account: %+v %v", u, err)
+	}
+	o, _ := db.GetUserByID(ctx, "o")
+	if o.RoleID != "ops" || o.RoleName != "Ops" || !slices.Equal(o.RolePermissions(), ops.Permissions) {
+		t.Fatalf("custom account: %+v", o)
+	}
+	a, _ := db.GetUserByID(ctx, "a")
+	if !slices.Equal(a.RolePermissions(), domain.AllPermissions()) {
+		t.Fatalf("admin account: %+v", a)
+	}
+
+	// Changing the User role changes what its accounts get; the
+	// administrator role is never changed and neither system role deleted.
+	if err := db.UpdateRole(ctx, domain.Role{ID: domain.SystemRoleUser, Name: "User", Permissions: []string{domain.PermBotsConsole}, UpdatedAtMS: 2}); err != nil {
+		t.Fatal(err)
+	}
+	if u, _ = db.GetUserByID(ctx, "u"); !u.Can(domain.PermBotsConsole) || u.Can(domain.PermBotsCreate) {
+		t.Fatalf("after change: %+v", u)
+	}
+	if err := db.UpdateRole(ctx, domain.Role{ID: domain.SystemRoleAdmin, Name: "Administrator", Permissions: nil, UpdatedAtMS: 2}); err != domain.ErrNotFound {
+		t.Fatalf("admin update: %v", err)
+	}
+	if a, _ = db.GetUserByID(ctx, "a"); !a.Can(domain.PermBotsCreate) {
+		t.Fatal("administrator changed")
+	}
+	for _, id := range []string{domain.SystemRoleUser, domain.SystemRoleAdmin} {
+		if err := db.DeleteRole(ctx, id); err != domain.ErrNotFound {
+			t.Fatalf("delete %s: %v", id, err)
+		}
 	}
 }
