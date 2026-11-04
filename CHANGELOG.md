@@ -6,6 +6,8 @@ authoritative current version.
 
 ## Unreleased
 
+## 0.9.1 - 2026-11-05
+
 ### Changed
 
 - The web interface downloads about a third of what it did. The build now
