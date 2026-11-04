@@ -168,7 +168,7 @@
 					>
 						<span class="truncate">{it.label}</span>
 						{#if short}<span class="menu-hint">{it.hint}</span>
-						{:else if below}<span class="text-[11px] leading-4 whitespace-normal text-muted">{it.hint}</span>
+						{:else if below}<span class="text-label leading-4 whitespace-normal text-muted">{it.hint}</span>
 						{:else if it.hint}<span class="sr-only">: {it.hint}</span>{/if}
 					</button>
 				{/if}

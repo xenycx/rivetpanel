@@ -6,6 +6,17 @@ authoritative current version.
 
 ## Unreleased
 
+### Changed
+
+- The smallest reading text is 12px. Section labels, table headers, status
+  pills, tags, setting keys and similar small print grew from 11px; only
+  decorative initials, keyboard hints and count badges stay smaller.
+- The sidebar collapses and expands at once instead of animating its width,
+  which reflowed the whole page on every frame.
+- With "reduce motion" turned on in the operating system, menus and dialogs
+  fade in instead of appearing abruptly, nothing slides or scales, and the
+  pulsing live indicators hold still.
+
 ### Fixed
 
 - Light-theme state colors meet WCAG AA contrast. The running, warning and
@@ -14,6 +25,23 @@ authoritative current version.
   "Attention" and "Failed" labels read at 4.5:1 or better on the page canvas
   and in tables. The Teal accent uses the same deeper green. Dark theme is
   unchanged.
+- Text on consoles, logs, code samples and the AI change preview is readable
+  in the light theme. These surfaces are dark in both themes but used the
+  light theme's grey, green, amber and red, which measured about 3:1; they
+  now use their own palette at 6:1 or better.
+- The phone menu works from the keyboard and with screen readers. Opening it
+  moves focus inside, Tab stays within it, Escape or a tap beside it closes
+  it, focus returns to the menu button, and the page behind is inert while
+  it is open.
+- Placeholder text in fields meets 4.5:1 in both themes, including the
+  documentation search and the console input.
+- The documentation fits phone screens: long variable names wrap, and the
+  telemetry and CSS code samples scroll inside their box instead of being cut
+  off on the right.
+- Top-bar buttons on touch screens accept taps across a 44px-tall area.
+- Empty-state headings follow the section they sit in, so screen-reader
+  heading navigation no longer jumps a level (for example under Pending
+  invitations, Knowledgebase articles and the new server wizard).
 
 ## 0.9.0 - 2026-10-29
 

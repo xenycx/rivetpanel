@@ -85,7 +85,7 @@
 							<div class="mt-2 flex h-7 gap-px" role="img" aria-label="{c.name}: {c.uptime === null ? 'no history yet' : `${c.uptime}% uptime`} over {data.retention_days} days">
 								{#each c.days as d (d.date)}<span class="min-w-0 flex-1 rounded-[1px] {stateTone[d.state]?.bg ?? 'bg-rule-soft'}" title={dayTitle(d)}></span>{/each}
 							</div>
-							<div class="mt-1 flex text-[11px] text-muted"><span>{data.retention_days} days ago</span><span class="mx-auto">{c.uptime === null ? 'No history yet' : `${c.uptime}% uptime`}</span><span>Today</span></div>
+							<div class="mt-1 flex text-label text-muted"><span>{data.retention_days} days ago</span><span class="mx-auto">{c.uptime === null ? 'No history yet' : `${c.uptime}% uptime`}</span><span>Today</span></div>
 						</li>
 					{/each}
 				</ul>

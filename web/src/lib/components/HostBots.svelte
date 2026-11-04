@@ -96,9 +96,9 @@
 					<tr class="[&>td]:px-4 [&>td]:py-2.5 hover:bg-paper/40">
 						<td class="max-w-60">
 							<a href={resourceHref(b)} class="block truncate font-medium hover:underline">{b.name}</a>
-							<span class="block truncate font-mono text-[11px] text-muted">{kindLabel(b)}{b.runtime}{b.owner ? ` · ${b.owner}` : ''}</span>
+							<span class="block truncate font-mono text-label text-muted">{kindLabel(b)}{b.runtime}{b.owner ? ` · ${b.owner}` : ''}</span>
 						</td>
-						<td><span class="pill" data-tone={tone(b)}>{b.running ? 'Running' : b.state}</span>{#if b.running && b.started_at_ms}<span class="block text-[11px] text-muted">since {fmtAgo(b.started_at_ms)}</span>{/if}</td>
+						<td><span class="pill" data-tone={tone(b)}>{b.running ? 'Running' : b.state}</span>{#if b.running && b.started_at_ms}<span class="block text-label text-muted">since {fmtAgo(b.started_at_ms)}</span>{/if}</td>
 						<td class="min-w-28">
 							{#if b.measured}
 								<span class="font-mono">{b.cpu_cores.toFixed(2)}</span><span class="text-muted"> / {b.cpu_limit_cores ? b.cpu_limit_cores.toFixed(2) : '∞'}</span>

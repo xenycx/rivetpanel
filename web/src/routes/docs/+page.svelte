@@ -48,8 +48,8 @@
 			</div>
 			<div class="rounded-tile border border-white/12 bg-white/6 p-4 backdrop-blur">
 				<p class="text-small text-white/50">Find a guide</p>
-				<label class="relative mt-2 block"><span class="sr-only">Search documentation</span><Icon name="search" size={15} class="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-white/45" /><input class="field border-white/15 bg-black/20 pl-9 text-white placeholder:text-white/35" type="search" placeholder="Sites, widgets, restore…" bind:value={query} /></label>
-				<div class="mt-4 grid grid-cols-3 gap-px overflow-hidden rounded-control bg-white/10 text-center"><div class="bg-term/80 p-2"><strong class="block text-lg">6</strong><span class="text-[11px] text-white/45">runtimes</span></div><div class="bg-term/80 p-2"><strong class="block text-lg">18</strong><span class="text-[11px] text-white/45">widgets</span></div><div class="bg-term/80 p-2"><strong class="block text-lg">2</strong><span class="text-[11px] text-white/45">site modes</span></div></div>
+				<label class="relative mt-2 block"><span class="sr-only">Search documentation</span><Icon name="search" size={15} class="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-white/45" /><input class="field border-white/15 bg-black/20 pl-9 text-white placeholder:text-white/60" type="search" placeholder="Sites, widgets, restore…" bind:value={query} /></label>
+				<div class="mt-4 grid grid-cols-3 gap-px overflow-hidden rounded-control bg-white/10 text-center"><div class="bg-term/80 p-2"><strong class="block text-lg">6</strong><span class="text-label text-white/55">runtimes</span></div><div class="bg-term/80 p-2"><strong class="block text-lg">18</strong><span class="text-label text-white/55">widgets</span></div><div class="bg-term/80 p-2"><strong class="block text-lg">2</strong><span class="text-label text-white/55">site modes</span></div></div>
 			</div>
 		</div>
 	</header>
@@ -77,7 +77,7 @@
 								{#each section.body as p, i}<li class="bg-raised p-4"><span class="grid size-7 place-items-center rounded-pill bg-action text-small font-semibold text-action-ink">{i + 1}</span><p class="mt-3 leading-6">{p}</p></li>{/each}
 							</ol>
 						{:else}
-							<div class="max-w-[78ch] space-y-3 text-[15px] leading-7">{#each section.body as p}<p>{p}</p>{/each}</div>
+							<div class="max-w-[78ch] space-y-3 text-[15px] leading-7 break-words">{#each section.body as p}<p>{p}</p>{/each}</div>
 						{/if}
 
 						{#if section.id === 'sites'}
@@ -95,7 +95,7 @@
 								<div class="rounded-tile border border-rule-soft bg-raised p-4"><p class="text-small text-muted">Discord gateway</p><p class="mt-3 flex items-center gap-2 font-semibold"><span class="size-2 rounded-pill bg-run"></span>Connected</p><p class="mt-5 text-small text-muted">Updated 8 seconds ago</p></div>
 								<div class="rounded-tile border border-rule-soft bg-raised p-4"><p class="text-small text-muted">Queue</p><p class="mt-2 text-3xl font-semibold">68%</p><div class="mt-3 h-2 overflow-hidden rounded-pill bg-paper-2"><div class="h-full w-[68%] bg-action"></div></div></div>
 							</div>
-							<div class="mt-4 grid gap-3 lg:grid-cols-2"><div><p class="mb-1 text-small font-medium">Telemetry payload</p><pre class="max-h-72 overflow-auto rounded-tile bg-term p-4 font-mono text-[12px] leading-5 text-term-ink">{'{"widgets":[{"key":"latency","kind":"line","title":"Gateway latency","group":"Operations","span":2,"ttl_seconds":120,"data":{"unit":"ms","points":[{"label":"now","value":42}]}}]}'}</pre></div><div><p class="mb-1 text-small font-medium">Public-page CSS hook</p><pre class="max-h-72 overflow-auto rounded-tile bg-term p-4 font-mono text-[12px] leading-5 text-term-ink">{'[data-widget="latency"] {\n  grid-column: span 2;\n  border-color: var(--accent);\n}\n\n.kind-metric .metric {\n  font-variant-numeric: tabular-nums;\n}'}</pre></div></div>
+							<div class="mt-4 grid grid-cols-[minmax(0,1fr)] gap-3 lg:grid-cols-2"><div><p class="mb-1 text-small font-medium">Telemetry payload</p><pre class="max-h-72 overflow-auto rounded-tile bg-term p-4 font-mono text-[12px] leading-5 text-term-ink">{'{"widgets":[{"key":"latency","kind":"line","title":"Gateway latency","group":"Operations","span":2,"ttl_seconds":120,"data":{"unit":"ms","points":[{"label":"now","value":42}]}}]}'}</pre></div><div><p class="mb-1 text-small font-medium">Public-page CSS hook</p><pre class="max-h-72 overflow-auto rounded-tile bg-term p-4 font-mono text-[12px] leading-5 text-term-ink">{'[data-widget="latency"] {\n  grid-column: span 2;\n  border-color: var(--accent);\n}\n\n.kind-metric .metric {\n  font-variant-numeric: tabular-nums;\n}'}</pre></div></div>
 						{:else if section.id === 'security'}
 							<div class="mt-5 grid gap-3 sm:grid-cols-2"><div class="rounded-tile border border-run/30 bg-run/8 p-4"><strong class="flex items-center gap-2 text-run"><Icon name="shield" size={15} />Enforced now</strong><p class="mt-2 text-small leading-6">App authorization, separate Sites origin, non-root containers, read-only runtime, capability drops and resource limits.</p></div><div class="rounded-tile border border-warn/30 bg-warn/8 p-4"><strong class="flex items-center gap-2 text-warn"><Icon name="alert" size={15} />Host controls still required</strong><p class="mt-2 text-small leading-6">Egress policy, disk quotas, IO and bandwidth need kernel, filesystem or network enforcement outside stored configuration.</p></div></div>
 						{/if}

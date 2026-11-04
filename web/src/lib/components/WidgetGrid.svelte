@@ -31,7 +31,7 @@
 		<div class="mt-3 grid auto-rows-min gap-3 sm:grid-cols-2 xl:grid-cols-3">
 			{#each visible as w (w.key)}
 				<article class="min-w-0 rounded-tile border border-rule-soft bg-panel p-4 {spanClass(w)}" style:min-height={w.min_height ? `${w.min_height}px` : undefined}>
-					<div class="flex items-center justify-between gap-2"><h3 class="truncate text-small font-medium text-muted">{w.title}</h3><span class="flex items-center gap-2">{#if w.stale}<span class="rounded-pill bg-warn/15 px-2 py-0.5 text-[11px] text-warn" title="This widget has not been refreshed for five minutes">Stale</span>{/if}{#if canAdmin && botId}<button class="text-[11px] text-muted hover:text-fail" onclick={() => remove(w)}>Remove</button>{/if}</span></div>
+					<div class="flex items-center justify-between gap-2"><h3 class="truncate text-small font-medium text-muted">{w.title}</h3><span class="flex items-center gap-2">{#if w.stale}<span class="rounded-pill bg-warn/15 px-2 py-0.5 text-label text-warn" title="This widget has not been refreshed for five minutes">Stale</span>{/if}{#if canAdmin && botId}<button class="text-label text-muted hover:text-fail" onclick={() => remove(w)}>Remove</button>{/if}</span></div>
 					{#if w.kind === 'metric'}
 						<p class="mt-1 text-3xl font-semibold tabular-nums">{number(w.data.value).toLocaleString()} <span class="text-small font-normal text-muted">{text(w.data.unit)}</span></p>
 						{#if number(w.data.delta)!==0}<p class="mt-1 text-small {number(w.data.delta)>0?'text-ok':'text-fail'}">{number(w.data.delta)>0?'↑':'↓'} {Math.abs(number(w.data.delta)).toLocaleString()} {text(w.data.detail)}</p>{:else if text(w.data.detail)}<p class="mt-1 text-small text-muted">{text(w.data.detail)}</p>{/if}

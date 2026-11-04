@@ -118,7 +118,7 @@
 >
 	{#each entries as e, i (e.seq)}
 		{@const newDay = i === 0 || day(entries[i - 1].time_ms) !== day(e.time_ms)}
-		{#if newDay}<p class="py-1 text-center text-[11px] tracking-wide text-term-ink/50 uppercase">{day(e.time_ms)}</p>{/if}
+		{#if newDay}<p class="py-1 text-center text-label tracking-wide text-term-ink/50 uppercase">{day(e.time_ms)}</p>{/if}
 		<div class="group rounded-inner px-1.5 py-px hover:bg-white/5 {e.level === 'error' ? 'bg-fail/10' : ''}">
 			<button class="flex w-full items-start gap-2 text-left" onclick={() => (open[e.seq] = !open[e.seq])} aria-expanded={open[e.seq] ?? false} disabled={!e.attrs?.length}>
 				<span class="shrink-0 text-term-ink/50">{time(e.time_ms)}</span>

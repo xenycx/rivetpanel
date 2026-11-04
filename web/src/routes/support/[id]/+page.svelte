@@ -117,14 +117,14 @@
 		{#each view.messages as m (m.id)}
 			{#if m.kind === 'event'}
 				<li class="flex items-center gap-2 px-1 text-small text-muted">
-					<Icon name="history" size={13} />{m.body} · {m.author} · {fmtWhen(m.created_at_ms)}{#if m.internal}<span class="rounded-pill border border-warn/30 px-1.5 text-[11px] text-warn">staff only</span>{/if}
+					<Icon name="history" size={13} />{m.body} · {m.author} · {fmtWhen(m.created_at_ms)}{#if m.internal}<span class="rounded-pill border border-warn/30 px-1.5 text-label text-warn">staff only</span>{/if}
 				</li>
 			{:else}
 				<li class="rounded-card border p-4 {m.internal ? 'border-warn/40 bg-warn/6' : m.staff ? 'border-action/25 bg-action/4' : 'border-rule-soft bg-raised'}">
 					<div class="flex flex-wrap items-center gap-2 text-small">
 						<span class="font-medium">{m.mine ? 'You' : m.author}</span>
-						{#if m.staff && !m.internal}<span class="rounded-pill border border-action/30 px-1.5 text-[11px] text-action">support</span>{/if}
-						{#if m.internal}<span class="rounded-pill border border-warn/40 px-1.5 text-[11px] text-warn">internal note · staff only</span>{/if}
+						{#if m.staff && !m.internal}<span class="rounded-pill border border-action/30 px-1.5 text-label text-action">support</span>{/if}
+						{#if m.internal}<span class="rounded-pill border border-warn/40 px-1.5 text-label text-warn">internal note · staff only</span>{/if}
 						<span class="ml-auto text-muted">{fmtWhen(m.created_at_ms)}</span>
 					</div>
 					<p class="mt-2 break-words whitespace-pre-wrap">{m.body}</p>

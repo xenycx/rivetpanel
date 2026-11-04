@@ -65,7 +65,7 @@
 	{:else if invites === null}
 		<Skeleton rows={2} />
 	{:else if !invites.length}
-		<EmptyState title="No pending invitations" compact>Use Invite user to create a link for someone to make their own account.</EmptyState>
+		<EmptyState title="No pending invitations" compact level={4}>Use Invite user to create a link for someone to make their own account.</EmptyState>
 	{:else}
 		<!-- A table from 48rem of list width; stacked rows below it (phones, a narrow content column). -->
 		<div class="@container card overflow-hidden">

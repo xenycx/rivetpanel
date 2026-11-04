@@ -269,7 +269,7 @@
 			<form class="flex items-center gap-2 border-t border-white/8 bg-black/20 px-3.5 py-1.5" onsubmit={send}>
 				<label class="sr-only" for="stdin">{bot.kind === 'game' ? 'Send a console command' : 'Send a line to the bot'}</label>
 				<span class="font-mono text-term-ink/50 select-none" aria-hidden="true">›</span>
-				<input id="stdin" aria-describedby="stdin-help" class="min-h-9 min-w-0 flex-1 bg-transparent font-mono text-[.8125rem] text-term-ink outline-none placeholder:text-term-ink/40" placeholder={bot.kind === 'game' ? 'Type a command, for example: say Hello' : 'Send a line to the bot’s standard input'} autocomplete="off" spellcheck="false" bind:value={line} disabled={link !== 'live'} />
+				<input id="stdin" aria-describedby="stdin-help" class="min-h-9 min-w-0 flex-1 bg-transparent font-mono text-[.8125rem] text-term-ink outline-none placeholder:text-term-ink/60" placeholder={bot.kind === 'game' ? 'Type a command, for example: say Hello' : 'Send a line to the bot’s standard input'} autocomplete="off" spellcheck="false" bind:value={line} disabled={link !== 'live'} />
 				<button class="btn btn-quiet btn-icon btn-sm !text-term-ink/70 hover:!bg-white/10 hover:!text-term-ink" disabled={link !== 'live' || line === ''} aria-label="Send" title="Send"><Icon name="send" size={14} /></button>
 			</form>
 		{/if}

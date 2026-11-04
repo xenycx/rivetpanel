@@ -217,7 +217,7 @@
 				{#each detail.variables as v (v.env)}
 					{@const list = versions[v.env]}
 					<label class="block">
-						<span class="label">{v.name} <code class="ml-1 text-[11px] font-normal text-muted">{v.env}</code></span>
+						<span class="label">{v.name} <code class="ml-1 text-label font-normal text-muted">{v.env}</code></span>
 						{#if !v.editable}
 							<input class="field font-mono" value={v.value} readonly />
 						{:else if v.versions && Array.isArray(list)}
@@ -284,7 +284,7 @@
 						<Notice tone="info">{activePreset.name} needs Java {activePreset.min_java} or newer. The Java version is chosen at installation; choose a Java image below if you need to be sure.</Notice>
 					{/if}
 					<label class="block">
-						<span class="label">Options <code class="ml-1 text-[11px] font-normal text-muted">SERVER_JVM_ARGS</code></span>
+						<span class="label">Options <code class="ml-1 text-label font-normal text-muted">SERVER_JVM_ARGS</code></span>
 						<textarea
 							class="field min-h-24 font-mono text-small"
 							rows="4"

@@ -151,11 +151,11 @@
 							{#if f.type === 'bool'}
 								<label class="flex items-start gap-2.5 sm:col-span-2">
 									<input type="checkbox" class="mt-1" checked={boolOf(f.key)} onchange={(e) => (values[f.key] = (e.currentTarget as HTMLInputElement).checked ? 'true' : 'false')} />
-									<span>{f.label} <code class="text-[11px] text-muted">{f.key}</code>{#if f.help}<span class="help">{f.help}</span>{/if}</span>
+									<span>{f.label} <code class="text-label text-muted">{f.key}</code>{#if f.help}<span class="help">{f.help}</span>{/if}</span>
 								</label>
 							{:else}
 								<label class="block {f.key === 'motd' ? 'sm:col-span-2' : ''}">
-									<span class="label">{f.label} <code class="text-[11px] font-normal text-muted">{f.key}</code></span>
+									<span class="label">{f.label} <code class="text-label font-normal text-muted">{f.key}</code></span>
 									{#if f.type === 'select'}
 										<select class="field" bind:value={values[f.key]}>
 											{#if values[f.key] && !f.options?.includes(values[f.key])}<option value={values[f.key]}>{values[f.key]}</option>{/if}

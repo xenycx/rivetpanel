@@ -388,7 +388,7 @@
 					<div class="mt-4"><Skeleton rows={4} label="Loading games" /></div>
 				{:else if blueprints.length === 0 && !loadError}
 					<div class="mt-4">
-						<EmptyState title="No games are enabled yet">
+						<EmptyState title="No games are enabled yet" level={3}>
 							<p>{can('blueprints.manage') ? 'Turn on a built-in server type or import a Pterodactyl egg under Administration → Server types.' : 'An administrator has not enabled any server types yet.'}</p>
 							{#snippet actions()}{#if can('blueprints.manage')}<a class="btn btn-primary" href="/admin/blueprints">Open Server types</a>{/if}{/snippet}
 						</EmptyState>
@@ -410,7 +410,7 @@
 					</div>
 					{#if categories.length === 0}
 						<div class="mt-4">
-							<EmptyState title="No game matches “{q.trim()}”" compact>
+							<EmptyState title="No game matches “{q.trim()}”" compact level={3}>
 								{#snippet actions()}<button class="btn" onclick={() => { q = ''; family = ''; }}>Show every game</button>{/snippet}
 							</EmptyState>
 						</div>

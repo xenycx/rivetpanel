@@ -152,7 +152,7 @@
 					<p class="truncate text-small text-muted">{typeLine(b)}{note(b) ? `, ${note(b)}` : ''}</p>
 					{#if b.tags.length && onTag}
 						<p class="mt-0.5 flex flex-wrap gap-1">
-							{#each b.tags as t (t)}<button class="rounded-inner border border-rule-soft px-1.5 text-[11px] text-muted hover:border-rule hover:text-ink" onclick={() => onTag(t)} aria-label="Show items tagged {t}">{t}</button>{/each}
+							{#each b.tags as t (t)}<button class="rounded-inner border border-rule-soft px-1.5 text-label text-muted hover:border-rule hover:text-ink" onclick={() => onTag(t)} aria-label="Show items tagged {t}">{t}</button>{/each}
 						</p>
 					{/if}
 				</div>

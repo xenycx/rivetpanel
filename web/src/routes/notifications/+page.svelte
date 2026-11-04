@@ -89,7 +89,7 @@
 			{#each items as n (n.id)}
 				<li class="flex items-start gap-3 px-4 py-3 {n.read_at_ms ? '' : 'bg-action/5'}">
 					<button class="min-w-0 flex-1 text-left" onclick={() => open(n)}>
-						<span class="flex flex-wrap items-center gap-2 text-[11px] text-muted uppercase">
+						<span class="flex flex-wrap items-center gap-2 text-label text-muted uppercase">
 							{#if !n.read_at_ms}<span class="size-1.5 rounded-pill bg-action" aria-label="Unread"></span>{/if}
 							{categoryLabels[n.category] ?? n.category}
 							<span title={fmtWhen(n.created_at_ms)}>{fmtAgo(n.created_at_ms)}</span>

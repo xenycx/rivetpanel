@@ -127,7 +127,7 @@
 	<section class="mt-6">
 		<h3 class="text-title font-semibold">Articles</h3>
 		{#if !data.articles.length}
-			<div class="mt-2"><EmptyState title="No articles yet" compact>Write the first article with <strong>New article</strong>.</EmptyState></div>
+			<div class="mt-2"><EmptyState title="No articles yet" compact level={4}>Write the first article with <strong>New article</strong>.</EmptyState></div>
 		{:else}
 			<div class="card mt-2 overflow-x-auto">
 				<table class="w-full text-left text-small">

@@ -179,7 +179,7 @@
 			</svg>
 			{#if tip}
 				<div class="pointer-events-none absolute z-10 rounded-control border border-rule bg-raised px-2.5 py-1.5 text-small shadow-overlay" style="left: {tip.left}px; top: {tip.top}px; pointer-events: none" bind:clientWidth={tipW} bind:clientHeight={tipH} aria-hidden="true">
-					<p class="font-mono text-[11px] text-muted">{new Date(times[tip.i]).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}</p>
+					<p class="font-mono text-label text-muted">{new Date(times[tip.i]).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}</p>
 					{#each series as s (s.label)}
 						{#if s.values[tip.i] !== null && s.values[tip.i] !== undefined}
 							<p class="flex items-center justify-between gap-4 whitespace-nowrap"><span class="flex items-center gap-1.5 text-muted"><span class="inline-block size-2 rounded-pill bg-current {colorClass[s.color ?? 'action']}"></span>{s.label}</span><span class="font-mono font-medium">{format(s.values[tip.i]!)}</span></p>

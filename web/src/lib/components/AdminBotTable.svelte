@@ -30,7 +30,7 @@
 								{#if b.logo_url}<img src={b.logo_url} alt="" class="size-6 shrink-0 rounded-pill object-cover" referrerpolicy="no-referrer" />{/if}
 								<span class="truncate">{b.name}</span>
 							</a>
-							<span class="block truncate font-mono text-[11px] text-muted">{b.runtime} · {b.source_type}</span>
+							<span class="block truncate font-mono text-label text-muted">{b.runtime} · {b.source_type}</span>
 						</td>
 						<td><span class="pill" data-tone={d.tone} title={d.detail || undefined}>{d.label}</span></td>
 						{#if showOwner}<td class="max-w-56 truncate text-small">{b.owner_email ?? b.owner_id}</td>{/if}

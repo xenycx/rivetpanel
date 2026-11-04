@@ -188,7 +188,7 @@
 							<div class="flex items-center gap-3"><span class="eyebrow">CPU</span><div class="meter flex-1"><i style="width: 22%"></i></div></div>
 						</div>
 					</div>
-					<div class="console hidden rounded-tile border p-3 font-mono text-[12px] sm:block" aria-hidden="true">
+					<div class="console bg-term hidden rounded-tile border p-3 font-mono text-[12px] sm:block" aria-hidden="true">
 						<p class="text-muted">$ console · survival</p>
 						<p class="mt-1"><span class="text-run">✓</span> Done (3.2s)! For help, type "help"</p>
 						<p><span class="text-run">✓</span> Steve joined the game</p>
@@ -325,7 +325,7 @@
 			<a href="/help" class="hover:text-ink">Help center</a>
 			<a href={repo} class="hover:text-ink" target="_blank" rel="noopener">Source</a>
 		</div>
-		<p class="mx-auto max-w-6xl px-5 pb-8 text-[11px] text-muted">Game names and logos belong to their owners and identify the games only. Icons from Dashboard Icons (Apache-2.0).</p>
+		<p class="mx-auto max-w-6xl px-5 pb-8 text-label text-muted">Game names and logos belong to their owners and identify the games only. Icons from Dashboard Icons (Apache-2.0).</p>
 	</footer>
 </div>
 

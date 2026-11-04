@@ -28,6 +28,34 @@
 	let { children } = $props();
 	let drawer = $state(false);
 	let palette = $state(false);
+
+	// The narrow-screen menu is a modal <dialog>: the browser moves focus into
+	// it, keeps Tab inside, makes the page behind inert and closes it on Escape.
+	// Focus returns to whatever opened it.
+	let drawerEl: HTMLDialogElement | undefined = $state();
+	let drawerOpener: Element | null = null;
+	$effect(() => {
+		if (!drawerEl) return;
+		if (drawer && !drawerEl.open) {
+			drawerOpener = document.activeElement;
+			drawerEl.showModal();
+		} else if (!drawer && drawerEl.open) drawerEl.close();
+	});
+	function drawerClosed() {
+		drawer = false;
+		if (drawerOpener instanceof HTMLElement && drawerOpener.isConnected) drawerOpener.focus();
+		drawerOpener = null;
+	}
+	// Widening the window to the sidebar breakpoint closes the menu, so a modal
+	// that is no longer needed never leaves the page inert.
+	$effect(() => {
+		const wide = matchMedia('(min-width: 64rem)');
+		const onChange = () => {
+			if (wide.matches) drawer = false;
+		};
+		wide.addEventListener('change', onChange);
+		return () => wide.removeEventListener('change', onChange);
+	});
 	let setupNeeded = $state(false);
 	function readSidebarPreference() {
 		try {
@@ -231,14 +259,14 @@
 
 {#if session.user && !bare}
 	<a href="#main" class="sr-only z-50 bg-raised px-3 py-2 focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:rounded-control focus:shadow-overlay">Skip to content</a>
-	<div class="lg:grid {sidebarCollapsed ? 'lg:grid-cols-[68px_minmax(0,1fr)]' : 'lg:grid-cols-[15rem_minmax(0,1fr)]'} lg:transition-[grid-template-columns] lg:duration-200">
+	<div class="lg:grid {sidebarCollapsed ? 'lg:grid-cols-[68px_minmax(0,1fr)]' : 'lg:grid-cols-[15rem_minmax(0,1fr)]'}">
 		<aside class="sidebar sticky top-0 z-40 hidden h-dvh flex-col overflow-y-auto border-r border-rule-soft px-3 py-4 lg:flex" aria-label="Sidebar">
 			{@render sidebar(sidebarCollapsed, true)}
 		</aside>
 		<div class="min-w-0">
 			<header class="topbar sticky top-0 z-30 border-b border-rule-soft backdrop-blur-md">
 				<div class="flex h-14 items-center gap-2 px-4 sm:px-6 lg:px-8">
-					<button class="btn btn-quiet btn-icon lg:hidden" aria-label="Open menu" aria-expanded={drawer} onclick={() => (drawer = true)}><Icon name="menu" size={18} /></button>
+					<button class="btn btn-quiet btn-icon lg:hidden" aria-label="Open menu" aria-haspopup="dialog" aria-controls="nav-drawer" aria-expanded={drawer} onclick={() => (drawer = true)}><Icon name="menu" size={18} /></button>
 					<a href="/dashboard" class="flex items-center gap-2 lg:hidden" aria-label="RivetPanel overview"><img src="/favicon.svg" alt="" width="24" height="24" class="rounded-control" /></a>
 					<button class="hidden h-9 w-full max-w-xs items-center gap-2 rounded-control border border-rule-soft bg-panel px-2.5 text-left text-muted transition-colors hover:border-rule hover:text-ink sm:flex" onclick={() => (palette = true)} aria-label="Go to a bot, server or page (Ctrl+K)">
 						<Icon name="search" size={15} /><span class="flex-1 truncate text-small">Go to…</span><kbd class="rounded-inner border border-rule-soft px-1.5 text-[11px]">Ctrl K</kbd>
@@ -268,14 +296,21 @@
 		</div>
 	</div>
 
-	{#if drawer}
-		<div class="fixed inset-0 z-40 bg-black/50 lg:hidden" role="presentation" onclick={() => (drawer = false)}></div>
-		<aside class="sidebar pb-safe fixed inset-y-0 left-0 z-50 flex w-72 max-w-[85vw] animate-enter flex-col overflow-y-auto border-r border-rule-soft px-3 py-4 shadow-overlay lg:hidden" aria-label="Menu">
+	<!-- A click on the backdrop lands on the dialog itself; the panel inside fills the dialog box, so clicks within it never do. -->
+	<dialog
+		bind:this={drawerEl}
+		id="nav-drawer"
+		class="m-0 h-dvh max-h-none w-72 max-w-[85vw] border-0 bg-transparent p-0 text-ink open:animate-enter"
+		aria-label="Menu"
+		onclose={drawerClosed}
+		onclick={(e) => e.target === drawerEl && (drawer = false)}
+	>
+		<div class="sidebar pb-safe relative flex h-full flex-col overflow-y-auto border-r border-rule-soft px-3 py-4 shadow-overlay">
 			<button class="btn btn-quiet btn-icon absolute top-3 right-3" aria-label="Close menu" onclick={() => (drawer = false)}><Icon name="x" size={18} /></button>
 			{@render sidebar()}
 			<button class="side-link mt-0.5" onclick={logout}><Icon name="logout" class="side-icon" />Sign out</button>
-		</aside>
-	{/if}
+		</div>
+	</dialog>
 
 	<OperationShelf />
 	<CommandPalette bind:open={palette} />
