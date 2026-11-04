@@ -218,9 +218,9 @@
 			<div class="flex flex-wrap items-center justify-between gap-2">
 				<p class="max-w-2xl text-small text-muted">Each starter registers a <code>/ping</code> command and reads its token from the environment. Pick one, paste your token, start it.</p>
 				{#if langs.length > 1}
-					<div class="flex flex-wrap gap-1 rounded-control border border-rule bg-raised p-0.5" role="group" aria-label="Language">
+					<div class="seg" role="group" aria-label="Language">
 						{#each ['', ...langs] as l (l)}
-							<button class="rounded-inner px-2.5 py-1 text-small font-medium {lang === l ? 'bg-paper-2 text-ink' : 'text-muted hover:text-ink'}" aria-pressed={lang === l} onclick={() => (lang = l)}>{l || 'All'}</button>
+							<button class="seg-item" aria-pressed={lang === l} onclick={() => (lang = l)}>{l || 'All'}</button>
 						{/each}
 					</div>
 				{/if}
@@ -259,9 +259,9 @@
 		<div class="flex flex-wrap items-center gap-2">
 			<p class="mr-auto max-w-2xl text-small text-muted">Server types install the game and pick the right Java or SteamCMD image automatically.{manager ? '' : ' Administrators can add more by importing Pterodactyl eggs.'}</p>
 			{#if families.length > 2}
-				<div class="flex flex-wrap gap-1 rounded-control border border-rule bg-raised p-0.5" role="group" aria-label="Game family">
+				<div class="seg" role="group" aria-label="Game family">
 					{#each families as f (f.id)}
-						<button class="rounded-inner px-2.5 py-1 text-small font-medium {family === f.id ? 'bg-paper-2 text-ink' : 'text-muted hover:text-ink'}" aria-pressed={family === f.id} onclick={() => (family = f.id)}>{f.label}</button>
+						<button class="seg-item" aria-pressed={family === f.id} onclick={() => (family = f.id)}>{f.label}</button>
 					{/each}
 				</div>
 			{/if}
@@ -368,9 +368,9 @@
 <Dialog bind:open={previewOpen} title={previewing ? `${previewing.name} preview` : 'Preview'} size="lg">
 	{#if previewing}
 		{#if previewing.pages.length > 1}
-			<div class="mb-3 flex flex-wrap gap-1 rounded-control border border-rule bg-raised p-0.5" role="group" aria-label="Page">
+			<div class="seg mb-3" role="group" aria-label="Page">
 				{#each previewing.pages as p (p)}
-					<button class="rounded-inner px-2.5 py-1 font-mono text-small {previewPage === p ? 'bg-paper-2 text-ink' : 'text-muted hover:text-ink'}" aria-pressed={previewPage === p} onclick={() => (previewPage = p)}>{p}</button>
+					<button class="seg-item font-mono font-normal" aria-pressed={previewPage === p} onclick={() => (previewPage = p)}>{p}</button>
 				{/each}
 			</div>
 		{/if}

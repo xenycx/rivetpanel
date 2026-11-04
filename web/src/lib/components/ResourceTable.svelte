@@ -146,7 +146,7 @@
 				{/if}
 				<div class="min-w-0">
 					<p class="flex min-w-0 items-center gap-1.5">
-						<a {href} class="truncate font-medium hover:underline">{b.name}</a>
+						<a {href} class="truncate font-medium hover:underline" title={b.name}>{b.name}</a>
 						{#if b.favorite}<span class="shrink-0 text-small text-muted" title="Favorite" aria-label="Favorite">★</span>{/if}
 					</p>
 					<p class="truncate text-small text-muted">{typeLine(b)}{note(b) ? `, ${note(b)}` : ''}</p>

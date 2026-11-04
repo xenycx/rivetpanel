@@ -69,13 +69,13 @@
 <svelte:head><title>Notifications · RivetPanel</title></svelte:head>
 
 <header class="flex flex-wrap items-end gap-3 border-b border-rule-soft pb-5">
-	<div class="min-w-0 flex-1">
+	<div class="min-w-0 flex-[1_1_18rem]">
 		<h1 class="text-page">Notifications</h1>
 		<p class="mt-0.5 text-muted">{inbox.unread ? `${inbox.unread} unread` : 'All caught up.'} Kept for 90 days.</p>
 	</div>
 	<label class="flex items-center gap-2 text-small"><input type="checkbox" bind:checked={unreadOnly} onchange={() => load()} />Unread only</label>
 	<button class="btn btn-sm" onclick={readAll} disabled={!inbox.unread}>Mark all read</button>
-	<button class="btn btn-sm" onclick={clearRead}>Delete read</button>
+	<button class="btn btn-sm" onclick={clearRead} disabled={loaded && !unreadOnly && !more && !items.some((n) => n.read_at_ms)}>Delete read</button>
 	<a class="btn btn-sm btn-quiet" href="/settings/notifications"><Icon name="gear" size={14} />Preferences</a>
 </header>
 

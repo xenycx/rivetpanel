@@ -38,6 +38,8 @@ export const ticketCategories = [
 	{ value: 'abuse', label: 'Report abuse' }
 ];
 export const ticketPriorities = ['low', 'normal', 'high', 'urgent'];
+/** Priority as a menu label ("Normal"); sentences keep the lowercase value ("normal priority"). */
+export const priorityLabel = (p: string) => p.charAt(0).toUpperCase() + p.slice(1);
 export const ticketStatuses = ['open', 'pending', 'resolved', 'closed'];
 
 export const statusLabel: Record<string, string> = {

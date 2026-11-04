@@ -16,6 +16,14 @@ authoritative current version.
 - With "reduce motion" turned on in the operating system, menus and dialogs
   fade in instead of appearing abruptly, nothing slides or scales, and the
   pulsing live indicators hold still.
+- Every two-to-four-way toggle (activity views, support views, time ranges,
+  log levels, template filters, module states, editor and repository-source
+  tabs) uses one style: the chosen option is a recessed chip. Before, the same
+  control appeared in six different looks, including a solid black and a
+  solid accent version.
+- Text carets, native range and progress controls and scrollbars follow the
+  theme and accent instead of browser defaults.
+- Toast icons and links use the same state colors as consoles and logs.
 
 ### Fixed
 
@@ -42,6 +50,15 @@ authoritative current version.
 - Empty-state headings follow the section they sit in, so screen-reader
   heading navigation no longer jumps a level (for example under Pending
   invitations, Knowledgebase articles and the new server wizard).
+- Support and Notifications fit phone screens: the page description no
+  longer wraps one word per line beside the buttons, and ticket subjects are
+  no longer cut to a few letters.
+- "Delete read" on Notifications is disabled when there is nothing to delete,
+  matching "Mark all read".
+- Ticket priority menus read "Low", "Normal", "High" and "Urgent" instead of
+  lowercase values.
+- The workspace card's statistics no longer run together or split a value
+  over two lines; long bot names show in full on hover.
 
 ## 0.9.0 - 2026-10-29
 

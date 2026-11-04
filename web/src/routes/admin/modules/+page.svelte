@@ -123,13 +123,13 @@
 				{#if m.key === 'core'}
 					<span class="pill shrink-0" data-tone="run" title="Core hosting cannot be turned off">Always on</span>
 				{:else}
-					<div class="inline-flex shrink-0 rounded-control border border-rule bg-raised p-0.5" role="radiogroup" aria-label="{m.label} state">
+					<div class="seg shrink-0" role="radiogroup" aria-label="{m.label} state">
 						{#each ['off', 'preview', 'stable'] as const as st (st)}
 							<button
 								role="radio"
 								aria-checked={want === st}
 								disabled={saving || restarting}
-								class="rounded-inner px-2.5 py-1 text-small font-medium {want === st ? 'bg-paper-2 text-ink shadow-[inset_0_0_0_1px_var(--color-rule)]' : 'text-muted hover:text-ink'}"
+								class="seg-item"
 								onclick={() => choose(m, st)}>{#if want === st && tone(st)}<span class="mr-1.5 inline-block size-1.5 rounded-pill align-middle {st === 'stable' ? 'bg-run' : 'bg-warn'}"></span>{/if}{label[st]}</button
 							>
 						{/each}

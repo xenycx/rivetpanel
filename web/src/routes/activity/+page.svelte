@@ -98,9 +98,9 @@
 <p class="mt-0.5 max-w-prose text-muted">What happened on the apps you can see: long-running work, and who changed what.</p>
 
 <div class="mt-5 flex flex-wrap items-center gap-2">
-	<div class="inline-flex rounded-control border border-rule bg-raised p-0.5" role="group" aria-label="Show">
-		<button class="rounded-inner px-3 py-1 font-medium {view === 'work' ? 'bg-ink text-paper' : 'text-ink/75 hover:bg-paper'}" aria-pressed={view === 'work'} onclick={() => (view = 'work')}>Work</button>
-		<button class="rounded-inner px-3 py-1 font-medium {view === 'changes' ? 'bg-ink text-paper' : 'text-ink/75 hover:bg-paper'}" aria-pressed={view === 'changes'} onclick={() => (view = 'changes')}>Changes</button>
+	<div class="seg" role="group" aria-label="Show">
+		<button class="seg-item" aria-pressed={view === 'work'} onclick={() => (view = 'work')}>Work</button>
+		<button class="seg-item" aria-pressed={view === 'changes'} onclick={() => (view = 'changes')}>Changes</button>
 	</div>
 	<select class="field w-auto" bind:value={botF} aria-label="App">
 		<option value="">All apps</option>

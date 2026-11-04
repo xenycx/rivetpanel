@@ -10,7 +10,7 @@
 	import Notice from '$lib/components/ui/Notice.svelte';
 	import EmptyState from '$lib/components/ui/EmptyState.svelte';
 	import type { KBArticle } from '$lib/api/kb';
-	import { type Ticket, ticketCategories, ticketPriorities, ticketStatuses, statusLabel, staffStatusLabel, statusTone, categoryLabel } from '$lib/api/support';
+	import { type Ticket, ticketCategories, ticketPriorities, priorityLabel, ticketStatuses, statusLabel, staffStatusLabel, statusTone, categoryLabel } from '$lib/api/support';
 
 	const isStaff = $derived(can('tickets.view_all') || can('tickets.manage'));
 	const canOpen = $derived(can('tickets.create'));
@@ -98,14 +98,14 @@
 <svelte:head><title>Support · RivetPanel</title></svelte:head>
 
 <header class="flex flex-wrap items-end gap-3 border-b border-rule-soft pb-5">
-	<div class="min-w-0 flex-1">
+	<div class="min-w-0 flex-[1_1_18rem]">
 		<h1 class="text-page">{queue ? 'Support queue' : 'Support'}</h1>
 		<p class="mt-0.5 text-muted">{queue ? 'Every ticket you may answer or read.' : 'Ask the people who run this panel for help. Only you and the support team see your tickets.'}</p>
 	</div>
 	{#if isStaff}
-		<nav class="flex gap-1 rounded-control border border-rule-soft p-0.5 text-small" aria-label="Ticket views">
-			{#if canOpen}<a class="rounded-control px-3 py-1 {queue ? 'text-muted' : 'bg-raised font-medium'}" href="/support" aria-current={!queue ? 'page' : undefined}>My tickets</a>{/if}
-			<a class="rounded-control px-3 py-1 {queue ? 'bg-raised font-medium' : 'text-muted'}" href="/support?queue=all" aria-current={queue ? 'page' : undefined}>Queue</a>
+		<nav class="seg" aria-label="Ticket views">
+			{#if canOpen}<a class="seg-item" href="/support" aria-current={!queue ? 'page' : undefined}>My tickets</a>{/if}
+			<a class="seg-item" href="/support?queue=all" aria-current={queue ? 'page' : undefined}>Queue</a>
 		</nav>
 	{/if}
 	{#if canOpen && !queue}<button class="btn btn-primary" onclick={startNew}><Icon name="plus" />New ticket</button>{/if}
@@ -128,7 +128,7 @@
 				<select class="field" bind:value={form.category}>{#each ticketCategories as c (c.value)}<option value={c.value}>{c.label}</option>{/each}</select>
 			</label>
 			<label class="block"><span class="label">Priority</span>
-				<select class="field" bind:value={form.priority}>{#each ticketPriorities as p (p)}<option value={p}>{p}</option>{/each}</select>
+				<select class="field" bind:value={form.priority}>{#each ticketPriorities as p (p)}<option value={p}>{priorityLabel(p)}</option>{/each}</select>
 			</label>
 			<label class="block"><span class="label">About (optional)</span>
 				<select class="field" bind:value={form.bot_id}>
@@ -170,8 +170,8 @@
 				<li>
 					<a class="flex flex-wrap items-center gap-3 px-4 py-3 hover:bg-paper/60" href="/support/{t.id}">
 						<span class="w-14 shrink-0 font-mono text-small text-muted">#{t.number}</span>
-						<span class="min-w-0 flex-1">
-							<span class="block truncate font-medium">{t.subject}</span>
+						<span class="min-w-0 flex-[1_1_14rem]">
+							<span class="block truncate font-medium" title={t.subject}>{t.subject}</span>
 							<span class="block text-small text-muted">
 								{[categoryLabel(t.category), `${t.priority} priority`, t.bot_name, queue && t.requester_email, queue && t.assignee_email && `assigned to ${t.assignee_email}`].filter(Boolean).join(' · ')}
 							</span>

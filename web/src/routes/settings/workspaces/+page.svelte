@@ -66,7 +66,7 @@
 						{#if w.personal}<span class="pill">Personal</span>{/if}
 						{#if workspaces.selected === w.id}<span class="pill" data-tone="run">Selected</span>{/if}
 					</div>
-					<dl class="mt-4 grid grid-cols-4 gap-2 border-t border-rule-soft pt-3 text-small">
+					<dl class="mt-4 flex flex-wrap gap-x-5 gap-y-2 border-t border-rule-soft pt-3 text-small whitespace-nowrap">
 						<div><dt class="eyebrow">Apps</dt><dd class="font-mono font-medium">{w.running_bots}/{w.bots}</dd></div>
 						<div><dt class="eyebrow">Sites</dt><dd class="font-mono font-medium">{w.sites}</dd></div>
 						<div><dt class="eyebrow">Members</dt><dd class="font-mono font-medium">{w.members}</dd></div>

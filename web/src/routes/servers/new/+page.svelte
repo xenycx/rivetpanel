@@ -401,9 +401,9 @@
 							<input class="field pl-8" type="search" placeholder="Search games, e.g. Fabric or Valheim" bind:value={q} />
 						</label>
 						{#if families.length > 2}
-							<div class="flex flex-wrap gap-1 rounded-control border border-rule bg-raised p-0.5" role="group" aria-label="Game family">
+							<div class="seg" role="group" aria-label="Game family">
 								{#each families as f (f.id)}
-									<button class="rounded-inner px-2.5 py-1.5 text-small font-medium {family === f.id ? 'bg-paper-2 text-ink' : 'text-muted hover:text-ink'}" aria-pressed={family === f.id} onclick={() => (family = f.id)}>{f.label}</button>
+									<button class="seg-item" aria-pressed={family === f.id} onclick={() => (family = f.id)}>{f.label}</button>
 								{/each}
 							</div>
 						{/if}

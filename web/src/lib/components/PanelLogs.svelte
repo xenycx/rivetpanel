@@ -84,9 +84,9 @@
 </script>
 
 <div class="flex flex-wrap items-center gap-2">
-	<div class="inline-flex rounded-control border border-rule bg-raised p-0.5" role="group" aria-label="Level">
+	<div class="seg" role="group" aria-label="Level">
 		{#each [['all', 'Everything'], ['info', 'Info'], ['warn', 'Warnings'], ['error', 'Errors']] as [id, label] (id)}
-			<button class="rounded-inner px-2.5 py-1 text-small font-medium {level === id ? 'bg-paper-2 text-ink shadow-[inset_0_0_0_1px_var(--color-rule)]' : 'text-muted hover:text-ink'}" aria-pressed={level === id} onclick={() => { level = id as typeof level; void load(true); }}>{label}</button>
+			<button class="seg-item" aria-pressed={level === id} onclick={() => { level = id as typeof level; void load(true); }}>{label}</button>
 		{/each}
 	</div>
 	<label class="min-w-48 flex-1 sm:max-w-sm"><span class="sr-only">Search the log</span><input class="field" type="search" placeholder="Search messages and fields" bind:value={search} oninput={refilter} /></label>
@@ -118,7 +118,7 @@
 >
 	{#each entries as e, i (e.seq)}
 		{@const newDay = i === 0 || day(entries[i - 1].time_ms) !== day(e.time_ms)}
-		{#if newDay}<p class="py-1 text-center text-label tracking-wide text-term-ink/50 uppercase">{day(e.time_ms)}</p>{/if}
+		{#if newDay}<p class="py-1 text-center text-label tracking-wide text-term-ink/60 uppercase">{day(e.time_ms)}</p>{/if}
 		<div class="group rounded-inner px-1.5 py-px hover:bg-white/5 {e.level === 'error' ? 'bg-fail/10' : ''}">
 			<button class="flex w-full items-start gap-2 text-left" onclick={() => (open[e.seq] = !open[e.seq])} aria-expanded={open[e.seq] ?? false} disabled={!e.attrs?.length}>
 				<span class="shrink-0 text-term-ink/50">{time(e.time_ms)}</span>

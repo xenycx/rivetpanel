@@ -184,9 +184,9 @@
 			<h3 id="hist-h" class="text-title font-semibold">History</h3>
 			<p class="text-small text-muted">{hist ? `Averages over ${fmtBucket(hist.bucket_ms)} buckets` : 'Averages per time bucket'}; dashed lines show the highest reading in each bucket.</p>
 		</div>
-		<div class="inline-flex rounded-control border border-rule bg-raised p-0.5" role="group" aria-label="Time range">
+		<div class="seg" role="group" aria-label="Time range">
 			{#each ranges as r (r.id)}
-				<button class="rounded-inner px-2.5 py-1 text-small font-medium {range === r.id ? 'bg-paper-2 text-ink shadow-[inset_0_0_0_1px_var(--color-rule)]' : 'text-muted hover:text-ink'}" aria-pressed={range === r.id} onclick={() => (range = r.id)}>{r.label}</button>
+				<button class="seg-item" aria-pressed={range === r.id} onclick={() => (range = r.id)}>{r.label}</button>
 			{/each}
 		</div>
 	</div>

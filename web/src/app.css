@@ -193,6 +193,7 @@
 	--color-run: var(--color-term-run);
 	--color-warn: var(--color-term-warn);
 	--color-fail: var(--color-term-fail);
+	scrollbar-color: color-mix(in srgb, var(--color-term-muted) 45%, transparent) transparent;
 }
 
 @layer base {
@@ -205,6 +206,11 @@
 		font-variant-numeric: tabular-nums;
 		-webkit-text-size-adjust: 100%;
 		text-rendering: optimizeLegibility;
+		/* Browser-drawn parts follow the theme: the text caret and native
+		   range or progress controls take the accent, scrollbars a muted thumb. */
+		caret-color: var(--color-action);
+		accent-color: var(--color-action);
+		scrollbar-color: color-mix(in srgb, var(--color-muted) 45%, transparent) transparent;
 	}
 	body {
 		min-height: 100dvh;
@@ -399,6 +405,52 @@
 		}
 		.btn-icon {
 			width: 2.75rem;
+		}
+	}
+	/* Segmented control: one choice among a few views, ranges or modes. The
+	   chosen item is recessed with a hairline. State comes from the ARIA
+	   attribute each item already carries (pressed, current, selected or
+	   checked), so markup never repeats the styling. */
+	.seg {
+		display: inline-flex;
+		flex-wrap: wrap;
+		gap: 0.125rem;
+		border: 1px solid var(--color-rule);
+		border-radius: var(--radius-control);
+		background: var(--color-raised);
+		padding: 0.125rem;
+	}
+	.seg-item {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		gap: 0.375rem;
+		border-radius: var(--radius-inner);
+		padding: 0.25rem 0.625rem;
+		font-size: var(--text-small);
+		line-height: var(--text-small--line-height);
+		font-weight: 500;
+		white-space: nowrap;
+		color: var(--color-muted);
+		transition:
+			color 120ms,
+			background-color 120ms,
+			box-shadow 120ms;
+	}
+	.seg-item:hover:not(:disabled) {
+		color: var(--color-ink);
+	}
+	.seg-item:disabled {
+		opacity: 0.45;
+	}
+	.seg-item:is([aria-pressed='true'], [aria-current='page'], [aria-selected='true'], [aria-checked='true']) {
+		background: var(--color-paper-2);
+		color: var(--color-ink);
+		box-shadow: inset 0 0 0 1px var(--color-rule);
+	}
+	@media (pointer: coarse) {
+		.seg-item {
+			min-height: 2.25rem;
 		}
 	}
 	/* Dropdown and context menus (ui/Menu.svelte, the New menu): compact rows

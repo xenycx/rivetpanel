@@ -475,9 +475,9 @@
 					{#if problems.template}<p class="mt-2 text-small text-fail">{problems.template}</p>{/if}
 				{/if}
 			{:else if source === 'github'}
-				<div class="mt-4 inline-flex rounded-tile border border-rule-soft bg-panel p-0.5" role="tablist" aria-label="Repository source">
-					<button role="tab" aria-selected={ghMode === 'url'} class="rounded-tile px-3 py-1.5 text-small font-medium {ghMode === 'url' ? 'bg-action text-white' : 'text-muted hover:text-ink'}" onclick={() => chooseMode('url')}>Paste a link</button>
-					<button role="tab" aria-selected={ghMode === 'mine'} class="rounded-tile px-3 py-1.5 text-small font-medium {ghMode === 'mine' ? 'bg-action text-white' : 'text-muted hover:text-ink'}" onclick={() => chooseMode('mine')}>My repositories</button>
+				<div class="seg mt-4" role="tablist" aria-label="Repository source">
+					<button role="tab" aria-selected={ghMode === 'url'} class="seg-item" onclick={() => chooseMode('url')}>Paste a link</button>
+					<button role="tab" aria-selected={ghMode === 'mine'} class="seg-item" onclick={() => chooseMode('mine')}>My repositories</button>
 				</div>
 
 				{#if ghMode === 'url'}

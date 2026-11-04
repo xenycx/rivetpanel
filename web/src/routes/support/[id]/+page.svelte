@@ -7,7 +7,7 @@
 	import { toast } from '$lib/ui/toast.svelte';
 	import Icon from '$lib/components/ui/Icon.svelte';
 	import Notice from '$lib/components/ui/Notice.svelte';
-	import { type TicketView, ticketPriorities, ticketStatuses, statusLabel, staffStatusLabel, statusTone, categoryLabel } from '$lib/api/support';
+	import { type TicketView, ticketPriorities, priorityLabel, ticketStatuses, statusLabel, staffStatusLabel, statusTone, categoryLabel } from '$lib/api/support';
 
 	const id = $derived(page.params.id ?? '');
 	let view = $state<TicketView | null>(null);
@@ -97,7 +97,7 @@
 			</label>
 			<label class="block"><span class="label">Priority</span>
 				<select class="field" value={t.priority} onchange={(e) => change({ priority: e.currentTarget.value })}>
-					{#each ticketPriorities as p (p)}<option value={p}>{p}</option>{/each}
+					{#each ticketPriorities as p (p)}<option value={p}>{priorityLabel(p)}</option>{/each}
 				</select>
 			</label>
 			<label class="block"><span class="label">Assigned to</span>

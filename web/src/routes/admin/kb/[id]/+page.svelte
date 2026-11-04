@@ -109,9 +109,9 @@
 		<div>
 			<div class="flex items-center gap-2">
 				<span class="label mb-0">Body (Markdown)</span>
-				<div class="ml-auto flex gap-1 rounded-control border border-rule-soft p-0.5 text-small" role="tablist" aria-label="Editor view">
-					<button type="button" role="tab" aria-selected={!preview} class="rounded-control px-3 py-0.5 {preview ? 'text-muted' : 'bg-raised font-medium'}" onclick={() => (preview = false)}>Write</button>
-					<button type="button" role="tab" aria-selected={preview} class="rounded-control px-3 py-0.5 {preview ? 'bg-raised font-medium' : 'text-muted'}" onclick={() => (preview = true)}>Preview</button>
+				<div class="seg ml-auto" role="tablist" aria-label="Editor view">
+					<button type="button" role="tab" aria-selected={!preview} class="seg-item" onclick={() => (preview = false)}>Write</button>
+					<button type="button" role="tab" aria-selected={preview} class="seg-item" onclick={() => (preview = true)}>Preview</button>
 				</div>
 			</div>
 			{#if preview}
