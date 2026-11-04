@@ -17,7 +17,7 @@ export type Accent = (typeof accents)[number]['id'];
 export const accents = [
 	{ id: 'ember', name: 'Ember', light: '#b44718', dark: '#f47a3d' },
 	{ id: 'ocean', name: 'Ocean', light: '#2458d3', dark: '#6f9cff' },
-	{ id: 'teal', name: 'Teal', light: '#087f6c', dark: '#3ecf9e' },
+	{ id: 'teal', name: 'Teal', light: '#076c5c', dark: '#3ecf9e' },
 	{ id: 'violet', name: 'Violet', light: '#6945bd', dark: '#a98bff' },
 	{ id: 'orchid', name: 'Orchid', light: '#9a3f7c', dark: '#ed7bc4' },
 	{ id: 'rose', name: 'Rose', light: '#ad3b55', dark: '#ff758c' },

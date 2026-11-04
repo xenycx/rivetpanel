@@ -39,9 +39,9 @@
 	--color-action: var(--accent-light, #b44718);
 	--color-action-ink: var(--accent-light-ink, #ffffff);
 	--color-data: #4f6b86;
-	--color-run: #087f6c;
-	--color-warn: #a96500;
-	--color-fail: #bc3c2b;
+	--color-run: #076c5c;
+	--color-warn: #905600;
+	--color-fail: #b33929;
 	--color-term: #161517;
 	--color-term-ink: #e4e2e0;
 
@@ -93,6 +93,10 @@
 	}
 }
 
+/* Tinted state surfaces (pills, step numbers): how much of the state color
+   shows through. Pale surfaces take less so the text on them keeps 4.5:1. */
+:root { --tint-state: 10%; }
+
 /* Corner preference. "none" squares everything, including pills and avatars. */
 :root { --radius-scale: 1; }
 :root[data-radius='none'] { --radius-scale: 0; }
@@ -107,7 +111,7 @@
 /* Accent pairs are tuned separately for pale and dark surfaces. */
 :root[data-accent='ember'] { --accent-light: #b44718; --accent-dark: #f47a3d; --accent-dark-ink: #1b0b04; }
 :root[data-accent='ocean'] { --accent-light: #2458d3; --accent-dark: #6f9cff; --accent-dark-ink: #07132b; }
-:root[data-accent='teal'] { --accent-light: #087f6c; --accent-dark: #3ecf9e; --accent-dark-ink: #041b14; }
+:root[data-accent='teal'] { --accent-light: #076c5c; --accent-dark: #3ecf9e; --accent-dark-ink: #041b14; }
 :root[data-accent='violet'] { --accent-light: #6945bd; --accent-dark: #a98bff; --accent-dark-ink: #160d2b; }
 :root[data-accent='orchid'] { --accent-light: #9a3f7c; --accent-dark: #ed7bc4; --accent-dark-ink: #2a0b20; }
 :root[data-accent='rose'] { --accent-light: #ad3b55; --accent-dark: #ff758c; --accent-dark-ink: #300812; }
@@ -141,6 +145,7 @@
 	--color-term: #0b0b0c;
 	--color-term-ink: #e6e4e2;
 	--shadow-overlay: 0 18px 48px -12px rgb(0 0 0 / 0.7), 0 0 0 1px rgb(255 255 255 / 0.04);
+	--tint-state: 14%;
 	color-scheme: dark;
 }
 @media (prefers-color-scheme: dark) {
@@ -162,6 +167,7 @@
 		--color-term: #0b0b0c;
 		--color-term-ink: #e6e4e2;
 		--shadow-overlay: 0 18px 48px -12px rgb(0 0 0 / 0.7), 0 0 0 1px rgb(255 255 255 / 0.04);
+		--tint-state: 14%;
 		color-scheme: dark;
 	}
 }
@@ -723,7 +729,7 @@
 		font-family: var(--font-mono);
 		font-size: 0.6875rem;
 		font-weight: 500;
-		background: color-mix(in srgb, var(--color-action) 14%, transparent);
+		background: color-mix(in srgb, var(--color-action) var(--tint-state), transparent);
 		color: var(--color-action);
 	}
 	.copyable {
@@ -773,15 +779,15 @@
 		color: var(--color-muted);
 	}
 	.pill[data-tone='run'] {
-		background: color-mix(in srgb, var(--color-run) 14%, transparent);
+		background: color-mix(in srgb, var(--color-run) var(--tint-state), transparent);
 		color: var(--color-run);
 	}
 	.pill[data-tone='warn'] {
-		background: color-mix(in srgb, var(--color-warn) 14%, transparent);
+		background: color-mix(in srgb, var(--color-warn) var(--tint-state), transparent);
 		color: var(--color-warn);
 	}
 	.pill[data-tone='fail'] {
-		background: color-mix(in srgb, var(--color-fail) 14%, transparent);
+		background: color-mix(in srgb, var(--color-fail) var(--tint-state), transparent);
 		color: var(--color-fail);
 	}
 

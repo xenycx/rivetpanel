@@ -6,6 +6,15 @@ authoritative current version.
 
 ## Unreleased
 
+### Fixed
+
+- Light-theme state colors meet WCAG AA contrast. The running, warning and
+  failed colors are slightly deeper, and the tinted pills and step numbers
+  built from them use a paler tint on light surfaces, so "Running",
+  "Attention" and "Failed" labels read at 4.5:1 or better on the page canvas
+  and in tables. The Teal accent uses the same deeper green. Dark theme is
+  unchanged.
+
 ## 0.9.0 - 2026-10-29
 
 ### Added
