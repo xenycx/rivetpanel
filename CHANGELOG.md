@@ -8,6 +8,16 @@ authoritative current version.
 
 ### Changed
 
+- The web interface downloads about a third of what it did. The build now
+  writes brotli and gzip copies of every script, stylesheet and page, and
+  the panel sends the smallest one the browser accepts, so a typical page
+  moves about 120 KB instead of 375 KB. Proxies in front of the panel pass
+  the encoded files through unchanged. The binary is about 1.8 MB larger.
+- Bot and game server pages load only the code for the open tab. The other
+  tabs download when first opened, so these pages fetch about 125 KB of
+  script instead of 575 KB and show their first content about 350 ms sooner
+  on a phone connection. If a tab's code cannot be fetched, usually because
+  the panel was updated while the page was open, the tab offers a reload.
 - The smallest reading text is 12px. Section labels, table headers, status
   pills, tags, setting keys and similar small print grew from 11px; only
   decorative initials, keyboard hints and count badges stay smaller.
@@ -59,6 +69,10 @@ authoritative current version.
   lowercase values.
 - The workspace card's statistics no longer run together or split a value
   over two lines; long bot names show in full on hover.
+- Administration → Host no longer jumps while it loads. The usage tiles keep
+  their place until the first numbers arrive, instead of a "Collecting the
+  first samples" line that was shown during every load and then pushed the
+  history charts off screen.
 
 ## 0.9.0 - 2026-10-29
 

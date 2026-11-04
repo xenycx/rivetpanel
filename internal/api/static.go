@@ -8,6 +8,7 @@ import (
 	"mime"
 	"path"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -136,12 +137,66 @@ func staticHandler(fsys fs.FS) fiber.Handler {
 		if strings.HasSuffix(name, ".html") {
 			c.Set("Content-Security-Policy", policies.get(name))
 		}
+		// The build writes brotli and gzip copies of text assets
+		// (web/scripts/precompress.mjs). Send the smallest one the browser
+		// accepts; the content type stays that of the original file.
+		varies := false
+		for _, v := range precompressed {
+			f, n, found := openStatic(fsys, name+v.ext)
+			if !found {
+				continue
+			}
+			varies = true
+			if !acceptsEncoding(c.Get(fiber.HeaderAcceptEncoding), v.encoding) {
+				_ = f.Close()
+				continue
+			}
+			_ = file.Close()
+			file, size = f, n
+			c.Set(fiber.HeaderContentEncoding, v.encoding)
+			break
+		}
+		if varies {
+			c.Set(fiber.HeaderVary, fiber.HeaderAcceptEncoding)
+		}
 		if c.Method() == fiber.MethodHead {
 			_ = file.Close()
 			return nil
 		}
 		return c.SendStream(file, int(size)) // closed by the server once sent
 	}
+}
+
+// precompressed lists the encoded copies the build may write next to a file,
+// most preferred first.
+var precompressed = []struct{ encoding, ext string }{
+	{"br", ".br"},
+	{"gzip", ".gz"},
+}
+
+// acceptsEncoding reports whether an Accept-Encoding header allows enc. An
+// explicit entry wins over "*", and q=0 refuses the encoding.
+func acceptsEncoding(header, enc string) bool {
+	wildcard := false
+	for _, part := range strings.Split(header, ",") {
+		name, params, _ := strings.Cut(part, ";")
+		name = strings.TrimSpace(name)
+		ok := true
+		for _, p := range strings.Split(params, ";") {
+			if q, found := strings.CutPrefix(strings.TrimSpace(p), "q="); found {
+				if f, err := strconv.ParseFloat(q, 64); err == nil && f == 0 {
+					ok = false
+				}
+			}
+		}
+		if strings.EqualFold(name, enc) {
+			return ok
+		}
+		if name == "*" {
+			wildcard = ok
+		}
+	}
+	return wildcard
 }
 
 // openStatic opens a regular file of fsys.

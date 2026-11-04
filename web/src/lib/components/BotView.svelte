@@ -16,29 +16,10 @@
 	import Overview from '$lib/components/Overview.svelte';
 	import Console from '$lib/components/Console.svelte';
 	import LogDays from '$lib/components/LogDays.svelte';
-	import Files from '$lib/components/Files.svelte';
-	import Env from '$lib/components/Env.svelte';
-	import Startup from '$lib/components/Startup.svelte';
-	import Packages from '$lib/components/Packages.svelte';
-	import PageStudio from '$lib/components/PageStudio.svelte';
-	import Network from '$lib/components/Network.svelte';
-	import Addons from '$lib/components/Addons.svelte';
-	import Backups from '$lib/components/Backups.svelte';
-	import Deploy from '$lib/components/Deploy.svelte';
-	import Users from '$lib/components/Users.svelte';
-	import Settings from '$lib/components/Settings.svelte';
-	import Schedules from '$lib/components/Schedules.svelte';
-	import Alerts from '$lib/components/Alerts.svelte';
-	import GameStartup from '$lib/components/GameStartup.svelte';
-	import GameNetwork from '$lib/components/GameNetwork.svelte';
 	import GameStatusStrip from '$lib/components/GameStatusStrip.svelte';
-	import GameProperties from '$lib/components/GameProperties.svelte';
-	import GamePlayers from '$lib/components/GamePlayers.svelte';
-	import GameAddons from '$lib/components/GameAddons.svelte';
 	import type { GameDetail } from '$lib/api/games';
 	import { goto } from '$app/navigation';
 	import { publishTarget } from '$lib/ai/context.svelte';
-	import UsageAnalytics from '$lib/components/UsageAnalytics.svelte';
 
 	let { id }: { id: string } = $props();
 
@@ -241,6 +222,16 @@
 			</Notice>
 		{/if}
 
+		<!-- Every tab except Manage downloads its code when first opened, so a bot
+		     page ships one tab instead of all twenty. A failed download usually
+		     means the panel was updated while this page was open. -->
+		{#snippet tabLoading()}<Skeleton rows={4} label="Loading {sections.find((x) => x.id === tab)?.label ?? 'section'}" />{/snippet}
+		{#snippet tabFailed()}
+			<Notice tone="fail" title="This section could not be loaded">
+				The panel may have been updated since this page opened.
+				{#snippet action()}<button class="btn btn-sm" onclick={() => location.reload()}>Reload page</button>{/snippet}
+			</Notice>
+		{/snippet}
 		{#if tab === 'manage'}
 			<!-- Manage: the console with status and recent activity below it, and
 			     the side facts (source, backups, details) in a narrow column. -->
@@ -249,43 +240,43 @@
 				{#snippet bottom()}{#if can(bot!, Perm.console)}<LogDays path="/bots/{bot!.id}/logs/days" filename="server-{bot!.id.slice(0, 8)}" label="Log history" empty="No day files yet. Console output is copied every few minutes while the {isGame ? 'server' : 'bot'} runs." />{/if}{/snippet}
 			</Overview>
 		{:else if tab === 'page'}
-			<PageStudio botId={id} botName={bot.name} canEdit={can(bot, Perm.files)} canAdmin={admin} {stopped} />
+			{#await import('$lib/components/PageStudio.svelte')}{@render tabLoading()}{:then { default: PageStudio }}<PageStudio botId={id} botName={bot.name} canEdit={can(bot, Perm.files)} canAdmin={admin} {stopped} />{:catch}{@render tabFailed()}{/await}
 		{:else if tab === 'players'}
-			<GamePlayers {bot} />
+			{#await import('$lib/components/GamePlayers.svelte')}{@render tabLoading()}{:then { default: GamePlayers }}<GamePlayers {bot} />{:catch}{@render tabFailed()}{/await}
 		{:else if tab === 'properties'}
-			<GameProperties {bot} onOpenFiles={() => goto(sectionHref('files'))} />
+			{#await import('$lib/components/GameProperties.svelte')}{@render tabLoading()}{:then { default: GameProperties }}<GameProperties {bot} onOpenFiles={() => goto(sectionHref('files'))} />{:catch}{@render tabFailed()}{/await}
 		{:else if tab === 'mods'}
-			<GameAddons {bot} />
+			{#await import('$lib/components/GameAddons.svelte')}{@render tabLoading()}{:then { default: GameAddons }}<GameAddons {bot} />{:catch}{@render tabFailed()}{/await}
 		{:else if tab === 'files'}
-			<Files botId={id} running={!stopped} {isGame} />
+			{#await import('$lib/components/Files.svelte')}{@render tabLoading()}{:then { default: Files }}<Files botId={id} running={!stopped} {isGame} />{:catch}{@render tabFailed()}{/await}
 		{:else if tab === 'packages'}
-			<Packages botId={id} running={!stopped} />
+			{#await import('$lib/components/Packages.svelte')}{@render tabLoading()}{:then { default: Packages }}<Packages botId={id} running={!stopped} />{:catch}{@render tabFailed()}{/await}
 		{:else if tab === 'deploy'}
-			<Deploy {bot} {admin} />
+			{#await import('$lib/components/Deploy.svelte')}{@render tabLoading()}{:then { default: Deploy }}<Deploy {bot} {admin} />{:catch}{@render tabFailed()}{/await}
 		{:else if tab === 'env'}
-			<Env {bot} running={!stopped} />
+			{#await import('$lib/components/Env.svelte')}{@render tabLoading()}{:then { default: Env }}<Env {bot} running={!stopped} />{:catch}{@render tabFailed()}{/await}
 		{:else if tab === 'startup' && isGame}
-			<GameStartup {bot} {stopped} onSaved={(b) => (bot = b)} />
+			{#await import('$lib/components/GameStartup.svelte')}{@render tabLoading()}{:then { default: GameStartup }}<GameStartup {bot} {stopped} onSaved={(b) => (bot = b)} />{:catch}{@render tabFailed()}{/await}
 		{:else if tab === 'startup'}
-			<Startup {bot} {stopped} onSaved={(b) => (bot = b)} />
+			{#await import('$lib/components/Startup.svelte')}{@render tabLoading()}{:then { default: Startup }}<Startup {bot} {stopped} onSaved={(b) => (bot = b)} />{:catch}{@render tabFailed()}{/await}
 		{:else if tab === 'addons'}
-			<Addons {bot} {stopped} />
+			{#await import('$lib/components/Addons.svelte')}{@render tabLoading()}{:then { default: Addons }}<Addons {bot} {stopped} />{:catch}{@render tabFailed()}{/await}
 		{:else if tab === 'network' && isGame}
-			<GameNetwork {bot} {stopped} onSaved={(b) => (bot = b)} />
+			{#await import('$lib/components/GameNetwork.svelte')}{@render tabLoading()}{:then { default: GameNetwork }}<GameNetwork {bot} {stopped} onSaved={(b) => (bot = b)} />{:catch}{@render tabFailed()}{/await}
 		{:else if tab === 'network'}
-			<Network {bot} {stopped} owner={isOwner} onSaved={(b) => (bot = b)} />
+			{#await import('$lib/components/Network.svelte')}{@render tabLoading()}{:then { default: Network }}<Network {bot} {stopped} owner={isOwner} onSaved={(b) => (bot = b)} />{:catch}{@render tabFailed()}{/await}
 		{:else if tab === 'backups'}
-			<Backups {bot} {stopped} {admin} onSaved={(b) => (bot = b)} />
+			{#await import('$lib/components/Backups.svelte')}{@render tabLoading()}{:then { default: Backups }}<Backups {bot} {stopped} {admin} onSaved={(b) => (bot = b)} />{:catch}{@render tabFailed()}{/await}
 		{:else if tab === 'alerts'}
-			<Alerts {bot} {admin} />
+			{#await import('$lib/components/Alerts.svelte')}{@render tabLoading()}{:then { default: Alerts }}<Alerts {bot} {admin} />{:catch}{@render tabFailed()}{/await}
 		{:else if tab === 'usage'}
-			<UsageAnalytics {bot} />
+			{#await import('$lib/components/UsageAnalytics.svelte')}{@render tabLoading()}{:then { default: UsageAnalytics }}<UsageAnalytics {bot} />{:catch}{@render tabFailed()}{/await}
 		{:else if tab === 'schedules'}
-			<Schedules {bot} />
+			{#await import('$lib/components/Schedules.svelte')}{@render tabLoading()}{:then { default: Schedules }}<Schedules {bot} />{:catch}{@render tabFailed()}{/await}
 		{:else if tab === 'users'}
-			<Users botId={id} botName={bot.name} isGame={isGame} />
+			{#await import('$lib/components/Users.svelte')}{@render tabLoading()}{:then { default: Users }}<Users botId={id} botName={bot.name} isGame={isGame} />{:catch}{@render tabFailed()}{/await}
 		{:else if tab === 'settings'}
-			<Settings {bot} {stopped} onSaved={(b) => (bot = b)} />
+			{#await import('$lib/components/Settings.svelte')}{@render tabLoading()}{:then { default: Settings }}<Settings {bot} {stopped} onSaved={(b) => (bot = b)} />{:catch}{@render tabFailed()}{/await}
 		{/if}
 	</section>
 {/if}

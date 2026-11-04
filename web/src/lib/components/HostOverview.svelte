@@ -15,6 +15,7 @@
 	let range = $state<Range>('1h');
 	let hist = $state<History | null>(null);
 	let node = $state<NodeInfo | null>(null);
+	let nodeLoaded = $state(false);
 	let error = $state('');
 	let loading = $state(false);
 
@@ -23,6 +24,8 @@
 			node = (await api<{ nodes: NodeInfo[] }>('GET', '/nodes')).nodes[0] ?? null;
 		} catch {
 			/* the charts below report the failure */
+		} finally {
+			nodeLoaded = true;
 		}
 	}
 	async function loadHistory() {
@@ -171,6 +174,18 @@
 				<dd class="mt-1 font-mono text-section font-semibold">{last.running_bots}</dd>
 				<dd class="mt-2 text-small"><button class="link" onclick={() => goto('bots')}>Usage per app</button></dd>
 			</div>
+		</dl>
+	{:else if !nodeLoaded}
+		<!-- Same grid and tile heights as the metrics, so nothing below moves
+		     when the first sample arrives. -->
+		<dl class="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6" role="status" aria-label="Loading host usage">
+			{#each ['CPU', 'Memory', 'Disk', 'Network', 'Disk I/O', 'Running apps'] as label (label)}
+				<div class="stat">
+					<dt class="eyebrow">{label}</dt>
+					<dd class="mt-1 h-6 w-16 bg-paper-2/70"></dd>
+					<dd class="mt-2 h-7 bg-paper-2/70"></dd>
+				</div>
+			{/each}
 		</dl>
 	{:else}
 		<p class="mt-2 text-muted">Collecting the first samples. Metrics appear after about a minute.</p>
