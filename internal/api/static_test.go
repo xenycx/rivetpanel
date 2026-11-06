@@ -71,6 +71,15 @@ func TestStaticServesPrecompressedVariants(t *testing.T) {
 	if body, enc, vary, _ := get("/_app/immutable/b.png", "br, gzip"); body != "png" || enc != "" || vary != "" {
 		t.Errorf("no variant: body %q enc %q vary %q", body, enc, vary)
 	}
+	// Extension pages are routes even though their dotted ids look like files.
+	for _, p := range []string{"/admin/extensions/dev.example.tool", "/x/dev.example.tool/setup"} {
+		if body, _, _, ct := get(p, ""); body != "<!doctype html><title>x</title>" || ct != "text/html; charset=utf-8" {
+			t.Errorf("%s: body %q type %q", p, body, ct)
+		}
+	}
+	if _, _, _, ct := get("/missing.js", ""); ct == "text/html; charset=utf-8" {
+		t.Error("a missing asset got the app shell")
+	}
 	// A client-side route gets the compressed SPA shell.
 	if body, enc, _, ct := get("/dashboard", "br, gzip"); body != "gz-html" || enc != "gzip" || ct != "text/html; charset=utf-8" {
 		t.Errorf("shell: body %q enc %q type %q", body, enc, ct)

@@ -17,7 +17,7 @@ web:
 # First-party extensions (WebAssembly bundles the binary embeds). Set
 # RIVET_EXT_SIGNING_KEY to also sign them.
 extensions:
-	GO=$(GO) ./extensions/build.sh
+	GO="$(GO)" ./extensions/build.sh
 
 # Production binary (frontend and built-in extensions embedded).
 build: version-check web extensions

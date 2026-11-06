@@ -26,6 +26,7 @@ the guides below.
 - [Bot Sites and static hosting](sites.md) — Page Studio, editable drafts, custom domains, DNS, and TLS through the proxy
 - [AI operator](ai-operator.md) — providers, modes, tools, approvals, research, secret boundaries, diagnostics, and recovery
 - [Custom dashboard widgets](widgets.md) — one JSON API for all supported languages
+- [Extensions (preview)](extensions.md) — signed, sandboxed add-ons: Discord insights, Discord ChatOps, the database browser, and writing your own
 - [Automation API](automation.md) — scoped tokens and examples
 - [Architecture](architecture.md) — state model and runner design
 - [Remote nodes (preview)](agents.md) — install, enroll, place workloads, administer certificates, and understand current limits

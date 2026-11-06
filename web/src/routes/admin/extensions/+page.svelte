@@ -16,6 +16,7 @@
 	let publishers = $state<ExtPublisher[]>([]);
 	let safeMode = $state(false);
 	let unsignedAllowed = $state(false);
+	let engine = $state('');
 	let error = $state('');
 	let uploading = $state(false);
 	let pubName = $state('');
@@ -26,12 +27,13 @@
 	async function load() {
 		try {
 			const [r, p] = await Promise.all([
-				api<{ extensions: ExtensionView[]; safe_mode: boolean; unsigned_allowed: boolean }>('GET', '/admin/extensions'),
+				api<{ extensions: ExtensionView[]; safe_mode: boolean; unsigned_allowed: boolean; engine: string }>('GET', '/admin/extensions'),
 				api<{ publishers: ExtPublisher[] }>('GET', '/admin/extension-publishers')
 			]);
 			list = r.extensions;
 			safeMode = r.safe_mode;
 			unsignedAllowed = r.unsigned_allowed;
+			engine = r.engine;
 			publishers = p.publishers;
 			error = '';
 		} catch (e) {
@@ -107,6 +109,7 @@
 {#if error}<Notice tone="fail" class="mt-4" live>{error}</Notice>{/if}
 {#if safeMode}<Notice tone="warn" class="mt-4" title="Safe mode">The panel started with <code>RIVET_EXTENSIONS_SAFE_MODE=1</code>: no extension code runs and no extension appears in the interface until it restarts without it.</Notice>{/if}
 {#if unsignedAllowed}<p class="mt-3 text-small text-warn">Development mode: unsigned bundles can be installed. Production panels accept only signed ones.</p>{/if}
+{#if engine === 'interpreter'}<p class="mt-3 max-w-3xl text-small text-muted">Extensions run in the WebAssembly interpreter because this process may not create executable memory (for example the systemd unit's <code>MemoryDenyWriteExecute</code>). It works, but each extension in use needs roughly ten times more memory than with the compiler; unused extensions are unloaded after ten minutes.</p>{/if}
 
 {#if !list && !error}
 	<div class="mt-5"><Skeleton rows={4} label="Loading extensions" /></div>

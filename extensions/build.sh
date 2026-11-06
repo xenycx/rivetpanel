@@ -7,7 +7,7 @@
 set -eu
 root=$(cd "$(dirname "$0")/.." && pwd)
 out="$root/internal/extensions/builtin/dist"
-go=${GO:-go}
+go=${GO:-go} # may hold a command with arguments ("env GOCACHE=… go")
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 find "$out" -mindepth 1 ! -name .gitkeep -delete
@@ -16,7 +16,7 @@ for dir in "$root"/extensions/*/; do
 	[ -f "$dir/manifest.json" ] || continue
 	stage="$work/$name"
 	mkdir -p "$stage"
-	(cd "$root" && CGO_ENABLED=0 GOOS=wasip1 GOARCH=wasm "$go" build -buildmode=c-shared -trimpath -ldflags='-s -w' -o "$stage/plugin.wasm" "./extensions/$name")
+	(cd "$root" && CGO_ENABLED=0 GOOS=wasip1 GOARCH=wasm $go build -buildmode=c-shared -trimpath -ldflags='-s -w' -o "$stage/plugin.wasm" "./extensions/$name")
 	cp "$dir/manifest.json" "$stage/"
 	[ -f "$dir/icon.svg" ] && cp "$dir/icon.svg" "$stage/"
 	if [ -d "$dir/ui" ]; then
@@ -27,5 +27,5 @@ for dir in "$root"/extensions/*/; do
 	if [ -n "${RIVET_EXT_SIGNING_KEY:-}" ]; then
 		set -- "$@" -key "$RIVET_EXT_SIGNING_KEY"
 	fi
-	(cd "$root" && "$go" run ./cmd/rivet-ext pack "$@")
+	(cd "$root" && $go run ./cmd/rivet-ext pack "$@")
 done

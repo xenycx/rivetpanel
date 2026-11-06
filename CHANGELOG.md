@@ -8,12 +8,74 @@ authoritative current version.
 
 ### Added
 
+- **Extensions** (preview module, off by default; turn it on under
+  Administration → Modules). Extensions are signed WebAssembly bundles that
+  run sandboxed inside the panel with only the capabilities an administrator
+  grants at installation, and can add sidebar pages, bot tabs, bot overview
+  cards, scheduled jobs, reactions to bot state changes and signed webhooks.
+  Administration → Extensions installs, reviews, configures, upgrades, rolls
+  back (the three newest versions are kept) and uninstalls them; a version
+  that asks for more capabilities waits for a new review. Uploaded bundles
+  must be signed by a publisher key an administrator trusts (revoking a key
+  stops the extensions it signed); built-in ones ship with the panel. New
+  `extensions.manage` permission for turning extensions on and off and
+  changing their settings; installing and trusting keys stay with built-in
+  administrators. `RIVET_EXTENSIONS_SAFE_MODE=1` starts the panel without
+  running extension code. Writing extensions: `docs/extensions.md`, the Go
+  SDK in `extensions/sdk` and the new `rivet-ext` tool (keygen, pack, sign,
+  verify, inspect).
+- **Discord bot insights** extension: a Discord card on each bot's overview
+  with the bot user, application, approximate server count, invite link and
+  token state, refreshed every 30 minutes. It keeps the bot's Discord name
+  and avatar current and notifies the owner once per token when Discord
+  rejects it. It works only on bots someone who manages their variables
+  switched it on for, and never sees the token: the panel attaches it.
+- **Discord ChatOps** extension: `/status`, `/logs`, `/start`, `/stop`,
+  `/restart` and `/deploy` in a Discord server through Discord's signed HTTP
+  interactions (no gateway connection). Commands run as the panel account
+  linked to the Discord user, with that person's current permissions and only
+  the scopes they allowed under the new Settings → Extensions page; changes
+  need a confirmation button only that person can press, within a minute,
+  once. A ChatOps page in the sidebar shows the endpoint URL and registers the
+  commands.
+- **Database browser** extension: a Data tab on bots with PostgreSQL,
+  MariaDB, Redis or MongoDB add-ons to browse tables, keys and collections
+  and run queries. Queries run read-only in a disposable, capability-free
+  client container on the bot's private network; a change runs only after
+  the exact statement is confirmed in a panel dialog. Queries are logged by
+  kind and hash, never by text. Needs permission to manage the bot's
+  environment; apps on remote nodes are not supported yet.
+
 - The file explorer can sort a folder by name, size, date modified or type,
   in either direction, with folders first or mixed in. Names sort naturally
   (`file2` before `file10`) and the choice is remembered per browser. File
   listings now include each entry's modification time, which also reaches
   SFTP clients for bots on remote nodes; nodes running an older agent show no
   time until they are upgraded.
+
+### Changed
+
+- The panel binary is about 7 MB larger (the WebAssembly runtime and the
+  built-in extensions). With the extensions module off, memory use is
+  unchanged; each extension in use adds about 35 MB, or about 115 MB under the
+  systemd unit, whose `MemoryDenyWriteExecute` setting forces the slower
+  interpreter. Unused extensions are unloaded after ten minutes
+  (`docs/footprint.md`).
+- `make build` and the container image also build the built-in extensions
+  (`make extensions`).
+
+### Security
+
+- Extension code has no files, environment variables, sockets or Docker
+  access; memory is capped per extension, every call has a deadline, and
+  every host call is checked against the granted capabilities, the acting
+  person's permissions, per-bot switches and per-person consent. Extension
+  HTTPS requests go only to the hosts the manifest lists, never to private,
+  local or metadata addresses. Secret settings are encrypted and write-only.
+  Public endpoints verify Discord or HMAC signatures before any extension code
+  runs. Custom extension pages run in a sandboxed frame with an opaque origin,
+  no cookies and no network, and the panel's own pages now state
+  `frame-src 'self'` explicitly.
 
 ## 0.9.1 - 2026-11-05
 

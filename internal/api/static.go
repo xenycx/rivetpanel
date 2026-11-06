@@ -90,7 +90,9 @@ func staticHandler(fsys fs.FS) fiber.Handler {
 		}
 		p := path.Clean("/" + strings.TrimPrefix(c.Path(), "/"))
 		name := strings.TrimPrefix(p, "/")
-		isRoute := path.Ext(p) == "" // extensionless paths are client-side routes
+		// Extensionless paths are client-side routes; so are extension pages,
+		// whose reverse-DNS ids (dev.example.tool) look like file names.
+		isRoute := path.Ext(p) == "" || strings.HasPrefix(p, "/admin/extensions/") || strings.HasPrefix(p, "/x/")
 		if name == "" {
 			name = "index.html"
 		}

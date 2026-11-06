@@ -43,7 +43,8 @@ convert databases created by the predecessor product. Start with a new
   no capabilities, non-root); separate build stage per language
 * Live stdout/stderr and controlled stdin over WebSocket, reconnect/resume,
   bounded slow-client handling
-* Web file manager (CodeMirror), zip upload with safe extraction
+* Web file manager (CodeMirror), zip upload with safe extraction, sorting by
+  name, size, date modified or type
 * AES-256-GCM encrypted environment variables, masked in every response
 * Node telemetry with bounded retention; SQLite-aware backup and restore
 * Users with ownership checks, Argon2id, CSRF-protected cookie sessions
@@ -59,6 +60,14 @@ convert databases created by the predecessor product. Start with a new
 * **Analyze repository**: detects language, start/build commands, variables,
   databases and resources, with verified recipes for Red-DiscordBot and YAGPDB
   and optional AI refinement
+* **Extensions** (preview): signed WebAssembly bundles that run sandboxed with
+  only the capabilities an administrator grants, adding pages, bot tabs,
+  overview cards, jobs and signed webhooks. Built in: **Discord bot insights**
+  (profile, server count, invite link, token-reset warnings), **Discord
+  ChatOps** (`/status`, `/logs`, `/restart` and more, as each person's own
+  panel account, with confirmation buttons) and a **database browser**
+  (read-only queries and confirmed changes for every add-on database)
+  (`docs/extensions.md`)
 * **Databases** (add-ons): PostgreSQL, Redis, MongoDB and MariaDB per bot on a private,
   internet-less network, with connection variables injected; custom build
   commands for larger projects

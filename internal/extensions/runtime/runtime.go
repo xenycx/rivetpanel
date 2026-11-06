@@ -3,9 +3,11 @@
 // call deadline, or network: the only way out is the "rivet" host module,
 // whose calls the caller authorizes one by one.
 //
-// The interpreter is used (not the compiler) because the panel's systemd
-// unit sets MemoryDenyWriteExecute, which forbids the executable mappings a
-// JIT needs; it also keeps CGO_ENABLED=0 builds working everywhere.
+// wazero's compiler is used where the host allows executable memory; it is
+// faster and needs far less memory than the interpreter (about a tenth for a
+// typical Go extension). Under the panel's systemd unit, which sets
+// MemoryDenyWriteExecute, the compiler cannot map code and the interpreter is
+// used instead (see Mode). Both are pure Go, so CGO_ENABLED=0 builds work.
 package runtime
 
 import (
@@ -74,6 +76,58 @@ var (
 	ErrClosed   = errors.New("extension is not running")
 )
 
+// Engines.
+const (
+	ModeCompiler    = "compiler"
+	ModeInterpreter = "interpreter"
+)
+
+var (
+	modeOnce sync.Once
+	mode     string
+)
+
+// minimalWasm is (module (func (export "f") (result i32) i32.const 1)), used to
+// find out whether this process may map compiled code.
+var minimalWasm = []byte{0, 'a', 's', 'm', 1, 0, 0, 0, 1, 5, 1, 0x60, 0, 1, 0x7f, 3, 2, 1, 0, 7, 5, 1, 1, 'f', 0, 0, 10, 6, 1, 4, 0, 0x41, 1, 0x0b}
+
+// Mode reports which engine runs extensions: the compiler when this platform
+// supports it and the process may create executable memory, else the
+// interpreter.
+func Mode() string {
+	modeOnce.Do(func() {
+		mode = ModeInterpreter
+		if probeCompiler() {
+			mode = ModeCompiler
+		}
+	})
+	return mode
+}
+
+func probeCompiler() (ok bool) {
+	defer func() {
+		if recover() != nil {
+			ok = false
+		}
+	}()
+	ctx := context.Background()
+	rt := wazero.NewRuntimeWithConfig(ctx, wazero.NewRuntimeConfigCompiler())
+	defer rt.Close(ctx)
+	mod, err := rt.Instantiate(ctx, minimalWasm)
+	if err != nil {
+		return false
+	}
+	res, err := mod.ExportedFunction("f").Call(ctx)
+	return err == nil && len(res) == 1 && res[0] == 1
+}
+
+func baseConfig() wazero.RuntimeConfig {
+	if Mode() == ModeCompiler {
+		return wazero.NewRuntimeConfigCompiler()
+	}
+	return wazero.NewRuntimeConfigInterpreter()
+}
+
 // global bounds every extension together.
 var global = make(chan struct{}, 16)
 
@@ -120,7 +174,7 @@ func Compile(ctx context.Context, name string, wasm []byte, l Limits, log *slog.
 	if log == nil {
 		log = slog.New(slog.NewTextHandler(io.Discard, nil))
 	}
-	cfg := wazero.NewRuntimeConfigInterpreter().
+	cfg := baseConfig().
 		WithCloseOnContextDone(true).
 		WithMemoryLimitPages(uint32(l.MemoryMB) * 16). // 64 KiB pages
 		WithCoreFeatures(api.CoreFeaturesV2)
@@ -300,6 +354,9 @@ func (m *Module) janitor() {
 		m.mu.Unlock()
 	}
 }
+
+// Invocations counts calls since the module was compiled.
+func (m *Module) Invocations() int64 { return m.invocations.Load() }
 
 // Warm reports how many instances are idle (for diagnostics and tests).
 func (m *Module) Warm() int {

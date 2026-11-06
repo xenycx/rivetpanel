@@ -140,7 +140,8 @@ func (c *client) req(method, path string, body any, mods ...func(*http.Request))
 	for _, m := range mods {
 		m(r)
 	}
-	resp, err := c.e.app.Test(r)
+	// Generous: an extension's first call compiles its WebAssembly.
+	resp, err := c.e.app.Test(r, fiber.TestConfig{Timeout: 30 * time.Second, FailOnTimeout: true})
 	if err != nil {
 		c.e.t.Fatal(err)
 	}

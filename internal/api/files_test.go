@@ -342,7 +342,7 @@ func (c *client) rawH(method, path string, body []byte, hdr map[string]string) (
 	}
 	r.AddCookie(&http.Cookie{Name: sessionCookie, Value: c.cookie})
 	r.Header.Set(csrfHeader, c.csrf)
-	resp, err := c.e.app.Test(r)
+	resp, err := c.e.app.Test(r, fiber.TestConfig{Timeout: 30 * time.Second, FailOnTimeout: true})
 	if err != nil {
 		c.e.t.Fatal(err)
 	}

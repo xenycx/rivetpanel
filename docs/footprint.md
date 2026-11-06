@@ -254,3 +254,31 @@ All test containers were deleted through the panel afterwards.
 * Not measured: many bots, many concurrent console or SFTP sessions, remote
   nodes, or a host with transparent huge pages set to `madvise`/`never` (there
   the THP change does nothing and the before/after gap is smaller).
+
+## Extensions (2026-11-07, preview module)
+
+Measured on the development host (amd64, Docker 29.9.2) with a fresh database
+and the local runner; RSS from `/proc/<pid>/status`, so not directly
+comparable with the tables above, whose method excluded parts this run
+includes.
+
+* The binary grew from 32.2 MB to 39.3 MB: the WebAssembly runtime (wazero)
+  and the three built-in extension bundles (about 1.3–1.5 MB each, stored in
+  the database too once synced).
+* With the extensions module **off**, no extension code is compiled and idle
+  memory is unchanged.
+* A loaded extension costs about **35 MB** with wazero's compiler (66 MB to
+  138 MB with two loaded) and about **115 MB** with the interpreter (61 MB to
+  288 MB with two loaded). The interpreter is used automatically where
+  executable memory is forbidden, which includes the shipped systemd unit
+  (`MemoryDenyWriteExecute=true`); the container image has no such
+  restriction and uses the compiler.
+* Extensions unused for ten minutes are unloaded and the memory returned to
+  the system, so idle panels pay only for extensions with public endpoints
+  (Discord ChatOps), which stay loaded so Discord's three-second deadline is
+  met (first command after start: 12 ms instead of 4.3 s cold).
+* Compilation takes about 1.4 s (compiler) or 0.2 s (interpreter) per
+  extension; warm calls take about 0.3 ms (compiler) or 2–4 ms (interpreter).
+
+On a memory-constrained host, prefer the container image (compiler), install
+only the extensions you use, and leave ChatOps off unless you need it.

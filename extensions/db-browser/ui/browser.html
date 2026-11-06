@@ -248,10 +248,10 @@ pre.text { margin: 0; padding: 12px; font: 12.5px/1.5 var(--mono); white-space: 
 
 	function show(r) {
 		const meta = $('meta');
-		meta.replaceChildren(
+		meta.replaceChildren(...[
 			el('span', { text: r.rows ? `${r.rows.length} row${r.rows.length === 1 ? '' : 's'}` : 'Done' }),
 			el('span', { text: `${r.ms ?? 0} ms` }),
-			r.truncated ? el('span', { class: 'pill write', text: 'Truncated to the first 500 rows' }) : null);
+			r.truncated ? el('span', { class: 'pill write', text: 'Truncated to the first 500 rows' }) : null].filter(Boolean));
 		meta.hidden = false;
 		if (r.columns && r.columns.length) {
 			const table = el('table', {},

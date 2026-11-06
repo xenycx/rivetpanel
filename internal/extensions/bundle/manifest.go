@@ -201,8 +201,7 @@ type UIPage struct {
 
 // Events an extension may subscribe to.
 var Events = map[string]string{
-	"bot.status":         "a bot's observed state changed",
-	"operation.finished": "a deploy, backup, restore or other operation finished",
+	"bot.status": "a bot's observed state changed",
 }
 
 var (

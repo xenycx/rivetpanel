@@ -76,6 +76,22 @@ as unable to enforce limits.
 * Runtime image digests are resolved and pinned in memory per process. To pin
   permanently, put `digest:` / `builder_digest:` in the catalog YAML.
 
+## Extensions (preview)
+
+Extension code runs inside the panel process as WebAssembly (wazero), so it
+shares the panel's privileges at the operating-system level; the boundary is
+the WebAssembly sandbox and the host-call checks, not a separate process or
+user. It has no files, environment, sockets or direct Docker access; it can
+reach the outside only through `http.fetch` to the hosts its manifest lists
+(private, local and metadata addresses are refused), and bot actions go
+through the same authorization as the API, as the person using it. Memory is
+capped per extension and calls have a wall-clock deadline; there is no CPU
+metering within a call. Custom pages run in a sandboxed frame with an opaque
+origin and no network. Database-browser queries run in disposable,
+capability-free client containers on the bot's private add-on network; their
+read-only mode guards against mistakes and is not a security boundary. See
+`docs/extensions.md`.
+
 ## Added by the MVP feature set
 
 Each of these widens what a bot or a user can reach; none changes the container

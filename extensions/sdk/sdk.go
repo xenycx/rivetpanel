@@ -56,9 +56,27 @@ func JSON(status int, v any) *Response {
 	return &Response{Status: status, Body: b}
 }
 
-// Error builds an error response the panel shows as {"error": msg}.
+// Error builds an error response in the panel's own format,
+// {"error": {"code", "message"}}, so the interface shows msg as is.
 func Error(status int, msg string) *Response {
-	return JSON(status, map[string]string{"error": msg})
+	code := "error"
+	switch status {
+	case 400:
+		code = "bad_request"
+	case 403:
+		code = "forbidden"
+	case 404:
+		code = "not_found"
+	case 429:
+		code = "rate_limited"
+	case 503:
+		code = "unavailable"
+	default:
+		if status >= 500 {
+			code = "internal"
+		}
+	}
+	return JSON(status, map[string]map[string]string{"error": {"code": code, "message": msg}})
 }
 
 // Handler serves every invocation.

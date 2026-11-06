@@ -20,9 +20,39 @@ items state exactly what remains.
   off. Enforcement is application-level configuration and API
   discovery; routes for future modules do not exist yet. Scope decisions
   (2026-10-04): Proxmox virtual machines are **dropped** (not planned; the
-  `virtual_machines` catalog entry was removed) and
-  panel extensions are in the **backlog** (not scheduled; the `extensions`
-  entry is likewise inert).
+  `virtual_machines` catalog entry was removed). Panel extensions were taken
+  out of the backlog on 2026-11-06 and are now a default-off preview module
+  (see below).
+- [x] Panel extensions (preview module `extensions`, default off; migration
+  `0060`; `docs/extensions.md`). Signed `.rpx` bundles (Ed25519 over every
+  file's SHA-256; administrator-trusted publisher keys, revocation fails
+  running extensions; unsigned only with `RIVET_ENV=development`; built-ins
+  trusted because they ship in the binary), strict manifest v1, `rivet-ext`
+  keygen/pack/sign/verify/inspect. Enforcement: the **runtime** (wazero,
+  compiler where executable memory is allowed, interpreter under
+  `MemoryDenyWriteExecute`) gives extension code no files, environment or
+  sockets, caps memory per extension, bounds each call by a wall-clock
+  deadline (no CPU metering), output, host calls and concurrency; the
+  **application** checks every host call against granted capabilities, the
+  acting person's role and bot permissions (through `BotService`), per-bot
+  enablement and per-person consent, enforces the HTTPS host allowlist with
+  connect-time private/metadata address refusal, keeps secret settings sealed
+  and write-only, verifies public-route signatures before code runs, and
+  audits administration and actions taken through extensions; the
+  **browser** isolates custom pages (CSP `sandbox allow-scripts`, opaque
+  origin, `connect-src 'none'`, hashed inline script, `postMessage` bridge
+  that calls only that extension's routes). Install/upgrade with
+  re-consent for new capabilities, rollback to the three newest stored
+  versions, uninstall with full data removal, five-failure auto-stop with a
+  notification, `RIVET_EXTENSIONS_SAFE_MODE=1`, idle unloading after ten
+  minutes. Built-in extensions: **Discord bot insights**, **Discord ChatOps**
+  (HTTP interactions, per-person scoped consent, single-use confirmation
+  buttons) and the **database browser** (disposable client containers on the
+  add-on network; read-only sessions are an accident guard, not a security
+  boundary; local nodes only). Not done: remote-node database queries (needs
+  an agent route and protocol bump), third-party extension catalog or
+  registry, and event types beyond `bot.status` (for example finished
+  operations).
 - [x] Clean-break database identity (`0000_rivetpanel_identity.sql`). Migration
   refuses a non-empty database without the RivetPanel schema marker before
   creating its migration ledger or modifying tables. Enforcement is in the
@@ -1082,6 +1112,7 @@ Migrations added since 0.2.0 (the schema-version assertion in
 | `0057_user_role_permissions.sql` | Data only: writes the built-in User role's permission list (every resource permission, including the new `workspaces.rename`) into `roles.permissions_json` for `id = 'user'`, so the stored list becomes what such accounts get; appends `workspaces.rename` to every custom role that lacks it. Accounts keep exactly their previous abilities. The literal list is checked against `domain.DefaultUserPermissions()` by `internal/domain/migration_permissions_test.go` |
 | `0058_invite_setup.sql` | Additive: five nullable `account_invites` columns, `role_id` (`roles`, `ON DELETE SET NULL`), `quota_json` (JSON object, at most 1024 bytes), `node_id` (`nodes`, `ON DELETE SET NULL`), `workspace_id` (`workspaces`, `ON DELETE SET NULL`), `workspace_role` (`admin`, `developer` or `viewer`). The `role` CHECK is unchanged; existing invitation rows and links keep working |
 | `0059_workspace_node.sql` | Additive: nullable `workspaces.node_id` (`nodes`, `ON DELETE SET NULL`) with index `workspaces_node_idx`; NULL means the panel default node |
+| `0060_extensions.sql` | Additive: `extension_publishers` (trusted Ed25519 keys, revocation time), `extensions` (installed extension, active version, state, granted capabilities, last error), `extension_versions` (stored bundles with SHA-256 and manifest; the application keeps three plus the active one), `extension_settings` (sealed secrets, namespace `ext:<id>`, included in reseal), `extension_kv`, `extension_bot_enablements` (`bots` `ON DELETE CASCADE`), `extension_user_consents` (`users` `ON DELETE CASCADE`), `extension_jobs`; everything but versions and publishers cascades from `extensions` |
 | `0054_web_apps.sql` | Rebuilds `bots` (kind gains `web`, runtime gains `php`, new `release_command`) and `sites` (mode gains `app`; `app_id`, `framework`, `build_output_dir`, `app_port`, `health_path`, `max_body_bytes`) with explicit column lists and foreign keys off (checked with `PRAGMA foreign_key_check`; all indexes recreated); additive `site_releases.source_ref` and `bot_health_probes.target` (`host`/`app`). Covered by `apps_migration_test.go` |
 | `0030_ai_global_chat.sql` | Rebuilds `ai_conversations` so a chat may have no target; `ai_runs.bot_id`/`site_id`, `ai_messages.context_json` (the conversation subtree is stashed and restored, rows preserved) |
 
@@ -1229,8 +1260,10 @@ network, filesystem, or container-runtime mechanism.
   Lavalink), named volumes, add-on backups and custom domains for bot HTTP
   ports remain.
 - [ ] Pull-request previews and health-gated blue/green or canary rollout.
-- [ ] A supported panel plugin model for custom pages and jobs (extensions:
-  backlog, not scheduled — user decision 2026-10-04).
+- [~] A supported panel plugin model for custom pages and jobs: done as the
+  preview `extensions` module (see above). Remaining: a catalog or registry
+  for third-party extensions, remote-node database queries, and more event
+  types.
 - [ ] .NET, Deno/Bun and opt-in custom Dockerfile runtimes (PHP is available
   since site apps; see above).
 - [ ] Signed callback action widgets, dashboard filters, and drill-down.

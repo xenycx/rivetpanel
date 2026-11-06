@@ -326,9 +326,9 @@
 
 		{#if v.routes.some((r) => r.auth === 'public')}
 			<SettingsSection title="Public endpoints" description="Addresses other services call. The panel checks every request's signature before the extension sees it.">
-				<ul class="grid gap-2">
+				<ul class="grid min-w-0 grid-cols-1 gap-2">
 					{#each v.routes.filter((r) => r.auth === 'public') as r (r.id)}
-						<li class="flex flex-wrap items-center gap-2">
+						<li class="flex min-w-0 items-center gap-2">
 							<code class="min-w-0 flex-1 truncate rounded-control bg-paper-2 px-2 py-1 text-small" title={publicURL(r.path)}>{publicURL(r.path)}</code>
 							<button class="btn btn-sm" onclick={() => copy(publicURL(r.path))}><Icon name="copy" size={13} />Copy</button>
 						</li>

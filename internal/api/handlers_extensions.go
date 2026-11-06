@@ -10,6 +10,7 @@ import (
 
 	"github.com/xenycx/rivetpanel/internal/domain"
 	"github.com/xenycx/rivetpanel/internal/extensions/bundle"
+	extrt "github.com/xenycx/rivetpanel/internal/extensions/runtime"
 	"github.com/xenycx/rivetpanel/internal/service"
 )
 
@@ -64,7 +65,7 @@ func (s *panel) listExtensions(c fiber.Ctx) error {
 		return err
 	}
 	return c.JSON(fiber.Map{"extensions": list, "capabilities": bundle.Capabilities, "safe_mode": s.extensions.SafeMode,
-		"unsigned_allowed": s.extensions.AllowUnsigned})
+		"unsigned_allowed": s.extensions.AllowUnsigned, "engine": extrt.Mode()})
 }
 
 func (s *panel) getExtension(c fiber.Ctx) error {

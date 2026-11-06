@@ -14,6 +14,7 @@ import (
 	"math/rand/v2"
 	"net/http"
 	"regexp"
+	"runtime/debug"
 	"slices"
 	"sort"
 	"strconv"
@@ -116,7 +117,13 @@ type loadedExt struct {
 	compiled sync.Once
 	err      error
 	failures int
+	lastUsed time.Time
 }
+
+// extIdleUnload is how long compiled extension code stays in memory unused.
+// Extensions with public routes (Discord interactions must answer within
+// three seconds) stay loaded once used.
+const extIdleUnload = 10 * time.Minute
 
 // ExtensionCapabilityView is one requested capability on the review screen.
 type ExtensionCapabilityView struct {
@@ -381,6 +388,7 @@ func (s *ExtensionService) Activate(ctx context.Context, actor domain.User, id, 
 		return ExtensionView{}, err
 	}
 	s.unload(id)
+	s.warmPublic(context.WithoutCancel(ctx))
 	return s.view(ctx, id)
 }
 
@@ -438,6 +446,9 @@ func (s *ExtensionService) SetEnabled(ctx context.Context, actor domain.User, id
 		return ExtensionView{}, err
 	}
 	s.unload(id)
+	if on {
+		s.warmPublic(context.WithoutCancel(ctx))
+	}
 	return s.view(ctx, id)
 }
 
@@ -890,12 +901,78 @@ func (s *ExtensionService) load(ctx context.Context, id string) (*loadedExt, err
 	return l, nil
 }
 
-// Running reports whether an extension's code is loaded (tests, diagnostics).
-func (s *ExtensionService) Running(id string) bool {
+// warmPublic compiles, in the background, enabled extensions that answer
+// requests from outside (Discord gives an interaction three seconds, less
+// than a cold compile can take).
+func (s *ExtensionService) warmPublic(ctx context.Context) {
+	if s.SafeMode {
+		return
+	}
+	exts, err := s.Store.ListExtensions(ctx)
+	if err != nil {
+		return
+	}
+	for _, e := range exts {
+		if e.State != domain.ExtEnabled {
+			continue
+		}
+		m, err := s.manifestFor(ctx, e.ID)
+		if err != nil {
+			continue
+		}
+		for _, r := range m.Routes {
+			if r.Auth == "public" {
+				id := e.ID
+				go func() { _, _ = s.load(context.Background(), id) }()
+				break
+			}
+		}
+	}
+}
+
+// unloadIdle frees the compiled code of extensions nobody used for a while
+// and returns the memory to the operating system.
+func (s *ExtensionService) unloadIdle() {
+	var idle []string
 	s.mu.Lock()
-	defer s.mu.Unlock()
+	for id, l := range s.loaded {
+		if l.mod == nil || time.Since(l.lastUsed) < extIdleUnload {
+			continue
+		}
+		public := false
+		for _, r := range l.man.Routes {
+			public = public || r.Auth == "public"
+		}
+		if !public {
+			idle = append(idle, id)
+		}
+	}
+	s.mu.Unlock()
+	for _, id := range idle {
+		s.mu.Lock()
+		l := s.loaded[id]
+		delete(s.loaded, id)
+		s.mu.Unlock()
+		if l != nil && l.mod != nil {
+			_ = l.mod.Close(context.Background())
+		}
+	}
+	if len(idle) > 0 {
+		debug.FreeOSMemory()
+		s.log().Debug("unloaded idle extensions", "extensions", idle)
+	}
+}
+
+// Invocations counts calls into an extension's code since it was loaded
+// (tests, diagnostics).
+func (s *ExtensionService) Invocations(id string) int64 {
+	s.mu.Lock()
 	l := s.loaded[id]
-	return l != nil && l.mod != nil
+	s.mu.Unlock()
+	if l == nil || l.mod == nil {
+		return 0
+	}
+	return l.mod.Invocations()
 }
 
 func (s *ExtensionService) unload(id string) {
@@ -916,6 +993,9 @@ func (s *ExtensionService) invoke(ctx context.Context, id string, inv *invocatio
 		return nil, err
 	}
 	inv.svc, inv.ext = s, l
+	s.mu.Lock()
+	l.lastUsed = time.Now()
+	s.mu.Unlock()
 	if inv.user != nil {
 		req["user"] = map[string]any{"id": inv.user.ID, "name": userName(*inv.user), "admin": inv.user.IsAdmin()}
 	}
@@ -1379,6 +1459,7 @@ func (s *ExtensionService) Run(ctx context.Context) {
 		defer sub.Close()
 		evc = sub.C
 	}
+	s.warmPublic(ctx)
 	queue := make(chan func(), 64)
 	go func() {
 		for f := range queue {
@@ -1395,6 +1476,7 @@ func (s *ExtensionService) Run(ctx context.Context) {
 			return
 		case <-t.C:
 			s.runDueJobs(ctx, queue)
+			s.unloadIdle()
 		case st, ok := <-evc:
 			if !ok {
 				evc = nil

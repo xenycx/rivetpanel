@@ -252,8 +252,8 @@ func TestExtensionPublicRouteVerifiesSignature(t *testing.T) {
 	if resp, _ := send(ed25519.Sign(priv, append([]byte(old), ping...)), old); resp.StatusCode != 401 {
 		t.Fatalf("stale timestamp accepted: %d", resp.StatusCode)
 	}
-	if ext.Running(id) {
-		t.Fatal("extension code ran for a request with a bad signature")
+	if n := ext.Invocations(id); n != 0 {
+		t.Fatalf("extension code ran %d times for requests with a bad signature", n)
 	}
 	resp, b := send(ed25519.Sign(priv, append([]byte(ts), ping...)), ts)
 	if resp.StatusCode != 200 || !strings.Contains(string(b), `"type":1`) {
