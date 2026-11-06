@@ -48,7 +48,7 @@
 						<span><span class="font-medium">{s.label}</span><span class="block text-small text-muted">{s.description}</span></span>
 					</label>
 				{/each}
-				<p class="text-small text-muted">It always acts with your current panel permissions; allowing something here never gives you more.{#if x.consented.length} Allowed now: {x.consented.join(', ')}.{/if}</p>
+				<p class="text-small text-muted">It always acts with your current panel permissions; allowing something here never gives you more.{#if x.consented.length}{' '}Allowed now: {x.consented.join(', ')}.{/if}</p>
 				<div class="flex flex-wrap gap-2">
 					<button class="btn btn-primary" disabled={saving === x.id} onclick={() => save(x)}>Save</button>
 					{#if x.consented.length}<button class="btn btn-quiet" disabled={saving === x.id} onclick={() => save(x, [])}>Withdraw all</button>{/if}

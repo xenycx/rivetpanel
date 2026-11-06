@@ -174,15 +174,15 @@
 		<div class="flex flex-wrap items-center gap-x-4 gap-y-3 px-4 pt-3 pb-3">
 			<a href={isGame ? '/servers' : '/bots'} class="btn btn-quiet btn-icon btn-sm -ml-1 shrink-0 text-muted" aria-label="Back to {noun}s" title="Back to {noun}s"><Icon name="chevronLeft" size={16} /></a>
 			{#if bot.logo_url}
-				<img src={bot.logo_url} alt="" class="size-10 shrink-0 rounded-tile object-cover" referrerpolicy="no-referrer" />
+				<img src={bot.logo_url} alt="" class="size-10 shrink-0 rounded-tile object-cover" referrerpolicy="no-referrer" data-vt-icon={bot.id} />
 			{:else if isGame}
-				<GameIcon type={game?.blueprint} size={40} />
+				<span class="grid shrink-0" data-vt-icon={bot.id}><GameIcon type={game?.blueprint} size={40} /></span>
 			{:else}
-				<span class="grid size-10 shrink-0 place-items-center rounded-tile bg-paper-2 text-muted"><Icon name="box" size={18} /></span>
+				<span class="grid size-10 shrink-0 place-items-center rounded-tile bg-paper-2 text-muted" data-vt-icon={bot.id}><Icon name="box" size={18} /></span>
 			{/if}
 			<div class="min-w-0 flex-1 basis-48">
 				<div class="flex min-w-0 items-center gap-2.5">
-					<h1 class="truncate text-page font-semibold">{bot.name}</h1>
+					<h1 class="truncate text-page font-semibold" data-vt-name={bot.id}>{bot.name}</h1>
 					{#if d}<span class="pill shrink-0" data-tone={d.tone} title={d.detail || undefined}><span class="size-1.5 rounded-pill {dotTone} {d.busy ? 'animate-pulse' : ''}" aria-hidden="true"></span>{d.label}</span>{/if}
 				</div>
 				<p class="truncate text-small text-muted" title="{bot.runtime}, {fmtBytes(bot.memory_bytes)} memory, {fmtCpu(bot.nano_cpus)}">

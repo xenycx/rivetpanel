@@ -5,7 +5,7 @@
 	import { fmtAgo, fmtTime } from '$lib/args';
 	import { session } from '$lib/session.svelte';
 	import { loadExtensions } from '$lib/extensions/store.svelte';
-	import type { ExtCapability, ExtensionView, ExtSetting, ExtVersion } from '$lib/extensions/types';
+	import type { ExtCapability, ExtCapabilityArea, ExtensionView, ExtSetting, ExtVersion } from '$lib/extensions/types';
 	import { confirmDialog } from '$lib/ui/dialogs.svelte';
 	import { toast } from '$lib/ui/toast.svelte';
 	import Icon from '$lib/components/ui/Icon.svelte';
@@ -208,7 +208,19 @@
 		}
 	}
 
-	const riskTone: Record<string, string | undefined> = { high: 'fail', medium: 'warn', low: undefined };
+	// Permissions are grouped by what they touch, in this order.
+	const areas: { id: ExtCapabilityArea; title: string }[] = [
+		{ id: 'bots', title: 'Bots' },
+		{ id: 'people', title: 'People' },
+		{ id: 'internet', title: 'Internet' },
+		{ id: 'own', title: 'Its own data' }
+	];
+	const inArea = (caps: ExtCapability[], a: ExtCapabilityArea) => caps.filter((c) => c.area === a);
+	// The hosts the reviewed version may reach with what is ticked now.
+	const reach = $derived([...new Set((review?.capabilities ?? []).filter((c) => c.name === 'http.fetch' && grants[c.name]).flatMap((c) => c.hosts ?? []))]);
+	// Discord's read-only API reached through the panel (bot.discord_api): the
+	// panel makes those calls, but they still leave the server, so they count.
+	const viaPanel = $derived(!!review?.capabilities.some((c) => c.name === 'bot.discord_api' && grants[c.name]));
 	const stateLabel: Record<string, string> = { enabled: 'On', disabled: 'Off', failed: 'Stopped', available: 'Not installed' };
 	const publicURL = (path: string) => `${location.origin}/api/v1/ext-public/${id}${path}`;
 	const newCaps = (c: ExtCapability) => !!reviewing?.new_capabilities?.includes(c.name);
@@ -222,6 +234,40 @@
 	}
 </script>
 
+{#snippet capList(caps: ExtCapability[], editable: boolean)}
+	<div class="mt-4 grid gap-5">
+		{#each areas as a (a.id)}
+			{@const group = inArea(caps, a.id)}
+			{#if group.length}
+				<div>
+					<p class="text-small font-medium text-muted">{a.title}</p>
+					<ul class="mt-1.5 list-card">
+						{#each group as c (c.name)}
+							<li class="flex items-start gap-3 px-4 py-3">
+								{#if editable}
+									<input id="cap-{c.name}" type="checkbox" class="mt-0.5" bind:checked={grants[c.name]} disabled={!c.optional || !builtinAdmin} aria-describedby="cap-{c.name}-guard" />
+								{:else}
+									<Icon name={c.granted ? 'check' : 'x'} size={15} class="mt-0.5 shrink-0 {c.granted ? 'text-run' : 'text-muted'}" />
+								{/if}
+								<div class="min-w-0 flex-1">
+									<p class="flex flex-wrap items-center gap-x-2 gap-y-1">
+										{#if editable}<label for="cap-{c.name}" class="font-medium">{c.label}</label>{:else}<span class="font-medium {c.granted ? '' : 'text-muted'}">{c.label}</span>{/if}
+										{#if c.optional}<span class="pill">{editable ? 'Optional' : c.granted ? 'Optional, on' : 'Optional, off'}</span>{/if}
+										{#if editable && newCaps(c)}<span class="pill" data-tone="warn">New in this version</span>{/if}
+									</p>
+									{#if c.reason}<p class="mt-0.5 text-small">{c.reason}</p>{/if}
+									{#if c.hosts?.length}<p class="mt-0.5 font-mono text-small text-muted">{c.hosts.join(', ')}</p>{/if}
+									{#if c.guard}<p id="cap-{c.name}-guard" class="mt-1 flex items-start gap-1.5 text-small text-muted"><Icon name="lock" size={12} class="mt-[3px] shrink-0" />{c.guard}</p>{/if}
+								</div>
+							</li>
+						{/each}
+					</ul>
+				</div>
+			{/if}
+		{/each}
+	</div>
+{/snippet}
+
 <svelte:head><title>{v?.name ?? 'Extension'} · Extensions · RivetPanel</title></svelte:head>
 
 <a class="link text-small" href="/admin/extensions"><Icon name="chevronLeft" size={12} class="mr-0.5 inline align-[-1px]" />Extensions</a>
@@ -232,13 +278,13 @@
 	<div class="mt-4"><Skeleton rows={6} label="Loading extension" /></div>
 {:else}
 	<header class="mt-2 flex flex-wrap items-start gap-4">
-		<div class="min-w-0 flex-1">
+		<div class="min-w-48 flex-1">
 			<div class="flex flex-wrap items-center gap-2">
 				<h2 class="text-section">{v.name}</h2>
 				<span class="pill" data-tone={v.state === 'enabled' ? 'run' : v.state === 'failed' ? 'fail' : undefined}>{stateLabel[v.state]}</span>
 				{#if v.source === 'dev'}<span class="pill" data-tone="warn">Unsigned</span>{/if}
 			</div>
-			<p class="mt-0.5 text-small text-muted">{v.publisher} · version {v.version} · <code>{v.id}</code>{#if v.homepage} · <a class="link" href={v.homepage} target="_blank" rel="noopener noreferrer">Homepage</a>{/if}</p>
+			<p class="mt-0.5 text-small text-muted">{v.publisher} · version {v.version} · <code>{v.id}</code>{#if v.homepage}{' '}· <a class="link" href={v.homepage} target="_blank" rel="noopener noreferrer">Homepage</a>{/if}</p>
 			<p class="mt-2 max-w-3xl">{v.description}</p>
 		</div>
 		{#if v.installed && v.state !== 'failed'}
@@ -254,37 +300,50 @@
 	{/if}
 
 	{#if reviewing}
-		<section class="mt-6 rounded-card border border-rule bg-panel p-5" aria-labelledby="review-title">
-			<h3 id="review-title" class="text-title font-semibold">{v.installed ? `Review version ${reviewing.version}` : 'Review and install'}</h3>
-			<p class="mt-1 text-small text-muted">
-				{reviewing.source === 'builtin' ? 'Ships with this panel.' : reviewing.source === 'dev' ? 'Unsigned development bundle.' : `Signed by ${reviewing.publisher_key_name || 'key'} ${reviewing.key_id}.`}
-				SHA-256 <code class="break-all">{reviewing.sha256.slice(0, 16)}…</code>
-			</p>
-			{#if !reviewing.compatible}<Notice tone="fail" class="mt-3">This version does not support this panel version.</Notice>{/if}
-			<h4 class="mt-4 font-medium">It asks for</h4>
-			<ul class="mt-2 space-y-2.5">
-				{#each review?.capabilities ?? [] as c (c.name)}
-					<li class="flex items-start gap-3">
-						<input id="cap-{c.name}" type="checkbox" class="mt-1" bind:checked={grants[c.name]} disabled={!c.optional || !builtinAdmin} />
-						<label for="cap-{c.name}" class="min-w-0">
-							<span class="font-medium">{c.label}</span>
-							{#if c.risk !== 'low'}<span class="pill ml-1" data-tone={riskTone[c.risk]}>{c.risk === 'high' ? 'Sensitive' : 'Review'}</span>{/if}
-							{#if c.optional}<span class="pill ml-1">Optional</span>{/if}
-							{#if newCaps(c)}<span class="pill ml-1" data-tone="warn">New in this version</span>{/if}
-							<span class="block text-small text-muted">{c.reason}{#if c.hosts?.length} Hosts: {c.hosts.join(', ')}.{/if}</span>
-						</label>
-					</li>
-				{/each}
-			</ul>
-			{#if v.contributes.bot_enablement}<p class="mt-3 text-small text-muted"><strong class="text-ink">Per bot:</strong> it only touches a bot after someone who manages that bot's variables turns it on for it.</p>{/if}
-			{#if builtinAdmin}
-				<div class="mt-5 flex flex-wrap gap-2">
-					<button class="btn btn-primary" disabled={busy || !reviewing.compatible} onclick={install}>{v.installed ? `Switch to ${reviewing.version}` : 'Install and turn on'}</button>
-					{#if v.installed}<button class="btn btn-quiet" onclick={() => (reviewVersion = '')}>Not now</button>{/if}
+		<section class="mt-6 overflow-hidden rounded-card border border-rule bg-panel" aria-labelledby="review-title">
+			<div class="px-5 pt-5 pb-4">
+				<h3 id="review-title" class="text-section font-semibold">{v.installed ? `Review version ${reviewing.version}` : 'Review and install'}</h3>
+				<p class="mt-1 max-w-3xl text-small text-muted">Everything below is enforced by the panel itself, whatever the extension's code tries to do.</p>
+				{#if !reviewing.compatible}<Notice tone="fail" class="mt-3">This version does not support this panel version.</Notice>{/if}
+			</div>
+			<!-- How it is contained: facts about this exact bundle, not promises from its author. -->
+			<dl class="grid border-y border-rule-soft bg-paper/40 sm:grid-cols-2 xl:grid-cols-4">
+				<div class="contain">
+					<dt>Origin</dt>
+					<dd class="flex items-center gap-1.5">
+						{#if reviewing.source === 'dev'}<Icon name="alert" size={14} class="shrink-0 text-warn" />Unsigned{:else}<Icon name="shield" size={14} class="shrink-0 text-run" />{reviewing.source === 'builtin' ? 'Ships with this panel' : `Signed by ${reviewing.publisher_key_name || 'a trusted key'}`}{/if}
+					</dd>
+					<p>{reviewing.source === 'dev' ? 'Development panels only.' : reviewing.source === 'builtin' ? 'Part of the panel binary you installed.' : 'Every file is checked against the signature before it runs.'} <span class="font-mono" title="SHA-256 {reviewing.sha256}">{reviewing.sha256.slice(0, 12)}</span></p>
 				</div>
-			{:else}
-				<p class="mt-4 text-small text-muted">Only built-in administrators install extensions and grant capabilities.</p>
-			{/if}
+				<div class="contain">
+					<dt>Sandbox</dt>
+					<dd>WebAssembly, {review?.memory_mb ?? v.memory_mb} MiB a copy</dd>
+					<p>No files, processes or sockets. At most 4 copies run at once; each call ends after {(review?.timeout_ms ?? v.timeout_ms) / 1000} s.</p>
+				</div>
+				<div class="contain">
+					<dt>Internet</dt>
+					<dd class="break-words">{reach.length || viaPanel ? [...new Set([...reach, ...(viaPanel ? ['discord.com'] : [])])].join(', ') : 'No access'}</dd>
+					<p>{reach.length ? 'HTTPS to these hosts only, nothing private or local.' : viaPanel ? "Discord's read-only API, called by the panel for it." : 'It cannot connect anywhere.'}</p>
+				</div>
+				<div class="contain">
+					<dt>Removal</dt>
+					<dd>Leaves nothing behind</dd>
+					<p>Uninstalling deletes its data, settings and grants. Bots keep running.</p>
+				</div>
+			</dl>
+			<div class="px-5 pt-5 pb-5">
+				<h4 class="font-medium">What it can do</h4>
+				<p class="mt-0.5 text-small text-muted">Granted once here, checked by the panel on every use.{#if v.contributes.bot_enablement}{' '}It touches a bot only after someone who manages that bot's variables turns it on for that bot.{/if}</p>
+				{@render capList(review?.capabilities ?? [], true)}
+				{#if builtinAdmin}
+					<div class="mt-6 flex flex-wrap gap-2">
+						<button class="btn btn-primary" disabled={busy || !reviewing.compatible} onclick={install}>{v.installed ? `Switch to ${reviewing.version}` : 'Install and turn on'}</button>
+						{#if v.installed}<button class="btn btn-quiet" onclick={() => (reviewVersion = '')}>Not now</button>{/if}
+					</div>
+				{:else}
+					<p class="mt-5 text-small text-muted">Only built-in administrators install extensions and grant permissions.</p>
+				{/if}
+			</div>
 		</section>
 	{:else if v.update_version && builtinAdmin}
 		<Notice tone="info" class="mt-4" title="Version {v.update_version} is available">
@@ -315,7 +374,7 @@
 								{:else}
 									<input id="set-{s.key}" class="field" type={s.type === 'number' ? 'number' : 'text'} bind:value={values[s.key]} spellcheck="false" />
 								{/if}
-								{#if s.description}<p class="text-small text-muted">{s.description}{#if s.inject_hosts?.length} Sent only to {s.inject_hosts.join(', ')}.{/if}</p>{/if}
+								{#if s.description}<p class="text-small text-muted">{s.description}{#if s.inject_hosts?.length}{' '}Sent only to {s.inject_hosts.join(', ')}.{/if}</p>{/if}
 							{/if}
 						</div>
 					{/each}
@@ -342,7 +401,7 @@
 				<ul class="list-card">
 					{#each v.jobs as j (j.job)}
 						<li class="flex flex-wrap items-center gap-3 px-4 py-3">
-							<div class="min-w-0 flex-1">
+							<div class="min-w-48 flex-1">
 								<p class="font-medium"><code>{j.job}</code> {#if j.last_status}<span class="pill" data-tone={j.last_status === 'ok' ? 'run' : j.last_status === 'running' ? undefined : 'fail'}>{j.last_status}</span>{/if}</p>
 								<p class="text-small text-muted">{j.last_run_ms ? `Last ran ${fmtAgo(j.last_run_ms)}` : 'Not run yet'} · next {fmtTime(j.next_run_ms)}</p>
 								{#if j.last_error}<p class="text-small text-fail">{j.last_error}</p>{/if}
@@ -354,16 +413,9 @@
 			</SettingsSection>
 		{/if}
 
-		<SettingsSection title="Granted capabilities" description="Approved at installation. A version that needs more asks again before it runs.">
-			<ul class="grid gap-1.5">
-				{#each v.capabilities as c (c.name)}
-					<li class="flex items-start gap-2 text-small">
-						<Icon name={c.granted ? 'check' : 'x'} size={14} class="mt-0.5 shrink-0 {c.granted ? 'text-run' : 'text-muted'}" />
-						<span><span class="font-medium">{c.label}</span>{#if c.hosts?.length} <span class="text-muted">({c.hosts.join(', ')})</span>{/if}</span>
-					</li>
-				{/each}
-			</ul>
-			<p class="mt-3 text-small text-muted">Runs with at most {v.memory_mb} MiB of memory and {v.timeout_ms / 1000} s per call.{#if v.bots} Turned on for {v.bots} bot{v.bots === 1 ? '' : 's'}.{/if}</p>
+		<SettingsSection title="Permissions" description="Approved at installation and checked on every use. A version that needs more asks again before it runs.">
+			{@render capList(v.capabilities, false)}
+			<p class="mt-4 text-small text-muted">Runs sandboxed with at most {v.memory_mb} MiB of memory per running copy (at most 4 at once) and {v.timeout_ms / 1000} s per call.{#if v.bots}{' '}Turned on for {v.bots} bot{v.bots === 1 ? '' : 's'}.{/if}</p>
 		</SettingsSection>
 	{/if}
 
@@ -371,9 +423,9 @@
 		<ul class="list-card">
 			{#each v.versions as x (x.version)}
 				<li class="flex flex-wrap items-center gap-3 px-4 py-3">
-					<div class="min-w-0 flex-1">
+					<div class="min-w-48 flex-1">
 						<p class="font-medium">{x.version} {#if x.active}<span class="pill" data-tone="run">Active</span>{/if}{#if !x.compatible}<span class="pill" data-tone="fail">Incompatible</span>{/if}</p>
-						<p class="text-small text-muted">{x.source === 'builtin' ? 'Ships with the panel' : x.source === 'dev' ? 'Unsigned' : `Signed by ${x.publisher_key_name || x.key_id}`} · {fmtTime(x.created_at_ms)}{#if x.new_capabilities?.length && !x.active} · asks for {x.new_capabilities.length} more capabilit{x.new_capabilities.length === 1 ? 'y' : 'ies'}{/if}</p>
+						<p class="text-small text-muted">{x.source === 'builtin' ? 'Ships with the panel' : x.source === 'dev' ? 'Unsigned' : `Signed by ${x.publisher_key_name || x.key_id}`} · {fmtTime(x.created_at_ms)}{#if x.new_capabilities?.length && !x.active}{' '}· asks for {x.new_capabilities.length} more capabilit{x.new_capabilities.length === 1 ? 'y' : 'ies'}{/if}</p>
 					</div>
 					{#if builtinAdmin && !x.active}
 						{#if v.installed}<button class="btn btn-sm" disabled={busy || !x.compatible} onclick={() => switchTo(x)}>Switch</button>{:else}<button class="btn btn-sm" onclick={() => (reviewVersion = x.version)}>Review</button>{/if}
@@ -390,3 +442,48 @@
 		</SettingsSection>
 	{/if}
 {/if}
+
+<style>
+	/* One fact in the containment band: a quiet label, the fact, a line of detail. */
+	.contain {
+		display: grid;
+		align-content: start;
+		gap: 0.125rem;
+		padding: 0.875rem 1.25rem;
+		font-size: var(--text-small);
+		line-height: var(--text-small--line-height);
+		color: var(--color-muted);
+	}
+	.contain + .contain {
+		border-top: 1px solid var(--color-rule-soft);
+	}
+	@media (min-width: 40rem) {
+		.contain + .contain {
+			border-top: 0;
+		}
+		.contain:nth-child(even) {
+			border-left: 1px solid var(--color-rule-soft);
+		}
+		.contain:nth-child(n + 3) {
+			border-top: 1px solid var(--color-rule-soft);
+		}
+	}
+	@media (min-width: 80rem) {
+		.contain:nth-child(n + 2) {
+			border-left: 1px solid var(--color-rule-soft);
+		}
+		.contain:nth-child(n + 3) {
+			border-top: 0;
+		}
+	}
+	.contain dt {
+		font-size: var(--text-label);
+		font-weight: 500;
+	}
+	.contain dd {
+		font-size: var(--text-body);
+		line-height: var(--text-body--line-height);
+		font-weight: 500;
+		color: var(--color-ink);
+	}
+</style>

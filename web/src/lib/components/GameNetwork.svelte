@@ -64,7 +64,7 @@
 			{#each allocs as a (a.id)}
 				{@const addr = host(a) ? `${host(a)}:${a.port}` : `port ${a.port}`}
 				<li class="flex flex-wrap items-center gap-3 px-4 py-3">
-					<div class="min-w-0 flex-1">
+					<div class="min-w-48 flex-1">
 						<button class="flex items-center gap-1.5 font-mono text-small font-medium hover:underline" onclick={() => copy(addr)} title="Copy address">{addr}<Icon name="copy" size={12} class="text-muted" /></button>
 						<p class="text-small text-muted">Bound on {a.ip}{a.notes ? ` · ${a.notes}` : ''}</p>
 					</div>

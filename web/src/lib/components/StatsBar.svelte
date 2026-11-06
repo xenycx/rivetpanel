@@ -3,6 +3,7 @@
 	import { fmtBytes } from '$lib/api/client';
 	import type { Bot, Gauge } from '$lib/api/types';
 	import Icon from '$lib/components/ui/Icon.svelte';
+	import Roll from '$lib/components/ui/Roll.svelte';
 
 	// Live usage as one compact strip in the page header. One SSE stream per
 	// open bot page; the lists never open these. `extra` adds items such as a
@@ -36,7 +37,7 @@
 <div class="stat-strip" role="group" aria-label="Resource usage">
 	{#each meters as m (m.k)}
 		<div title="{m.k}: {m.v}{m.of ? ` of ${m.of}` : ''}">
-			<div class="flex items-baseline justify-between gap-2"><span class="stat-k shrink-0">{m.k}</span><span class="truncate font-mono text-[12.5px] tabular-nums">{m.v}</span></div>
+			<div class="flex items-baseline justify-between gap-2"><span class="stat-k shrink-0">{m.k}</span><span class="truncate font-mono text-[12.5px] tabular-nums"><Roll value={m.v} /></span></div>
 			<div class="meter mt-1.5" data-level={level(m.p)} role="meter" aria-label="{m.k} usage" aria-valuemin="0" aria-valuemax="100" aria-valuenow={Math.round(m.p)} aria-valuetext={m.v}>
 				<i style="width: {Math.max(m.p, m.p > 0 ? 3 : 0)}%"></i>
 			</div>
@@ -45,8 +46,8 @@
 	<div title="Network received and sent since the container started">
 		<span class="stat-k">Network</span>
 		<span class="stat-v flex items-center gap-2 tabular-nums">
-			<span class="inline-flex min-w-0 items-center gap-0.5"><Icon name="download" size={11} class="shrink-0 text-muted" /><span class="sr-only">In</span>{g ? fmtBytes(g.net_rx_bytes) : '0 B'}</span>
-			<span class="inline-flex min-w-0 items-center gap-0.5"><Icon name="upload" size={11} class="shrink-0 text-muted" /><span class="sr-only">Out</span>{g ? fmtBytes(g.net_tx_bytes) : '0 B'}</span>
+			<span class="inline-flex min-w-0 items-center gap-0.5"><Icon name="download" size={11} class="shrink-0 text-muted" /><span class="sr-only">In</span><Roll value={g ? fmtBytes(g.net_rx_bytes) : '0 B'} /></span>
+			<span class="inline-flex min-w-0 items-center gap-0.5"><Icon name="upload" size={11} class="shrink-0 text-muted" /><span class="sr-only">Out</span><Roll value={g ? fmtBytes(g.net_tx_bytes) : '0 B'} /></span>
 		</span>
 	</div>
 	{#if extra}{@render extra()}{/if}

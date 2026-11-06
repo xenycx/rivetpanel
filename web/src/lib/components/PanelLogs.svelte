@@ -120,13 +120,13 @@
 		{@const newDay = i === 0 || day(entries[i - 1].time_ms) !== day(e.time_ms)}
 		{#if newDay}<p class="py-1 text-center text-label tracking-wide text-term-ink/60 uppercase">{day(e.time_ms)}</p>{/if}
 		<div class="group rounded-inner px-1.5 py-px hover:bg-white/5 {e.level === 'error' ? 'bg-fail/10' : ''}">
-			<button class="flex w-full items-start gap-2 text-left" onclick={() => (open[e.seq] = !open[e.seq])} aria-expanded={open[e.seq] ?? false} disabled={!e.attrs?.length}>
+			<button class="flex w-full flex-wrap items-start gap-x-2 text-left sm:flex-nowrap" onclick={() => (open[e.seq] = !open[e.seq])} aria-expanded={open[e.seq] ?? false} disabled={!e.attrs?.length}>
 				<span class="shrink-0 text-term-ink/50">{time(e.time_ms)}</span>
 				<span class="w-11 shrink-0 font-semibold uppercase {tone[e.level]}">{e.level}</span>
-				<span class="min-w-0 flex-1 break-words whitespace-pre-wrap">{e.msg}{#if e.attrs?.length && !open[e.seq]}<span class="text-term-ink/50">{#each e.attrs.slice(0, 4) as a (a.key)}&nbsp; {a.key}=<span class="text-term-ink/80">{a.value.length > 60 ? a.value.slice(0, 60) + '…' : a.value}</span>{/each}{e.attrs.length > 4 ? ` +${e.attrs.length - 4}` : ''}</span>{/if}</span>
+				<span class="min-w-0 flex-1 basis-full break-words whitespace-pre-wrap sm:basis-0">{e.msg}{#if e.attrs?.length && !open[e.seq]}<span class="text-term-ink/50">{#each e.attrs.slice(0, 4) as a (a.key)}&nbsp; {a.key}=<span class="text-term-ink/80">{a.value.length > 60 ? a.value.slice(0, 60) + '…' : a.value}</span>{/each}{e.attrs.length > 4 ? ` +${e.attrs.length - 4}` : ''}</span>{/if}</span>
 			</button>
 			{#if open[e.seq] && e.attrs}
-				<dl class="mt-0.5 mb-1 ml-[8.5rem] grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 text-term-ink/80">
+				<dl class="mt-0.5 mb-1 ml-3 sm:ml-[8.5rem] grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 text-term-ink/80">
 					{#each e.attrs as a (a.key)}<dt class="text-term-ink/50">{a.key}</dt><dd class="break-all whitespace-pre-wrap">{a.value}</dd>{/each}
 				</dl>
 			{/if}

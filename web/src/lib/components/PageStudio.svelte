@@ -181,7 +181,7 @@
 	{#if error}<Notice tone="fail" class="mt-4">{error}</Notice>{/if}
 {:else}
 	<div class="mb-5 flex flex-wrap items-center gap-3 border-b border-rule pb-4">
-		<div class="min-w-0 flex-1">
+		<div class="min-w-48 flex-1">
 			<div class="flex flex-wrap items-center gap-2"><h2 class="text-section">Public page</h2><span class="pill" data-tone={d.site.disabled ? 'fail' : live ? 'run' : 'warn'}>{d.site.disabled ? 'Suspended' : live ? 'Live' : 'Draft'}</span></div>
 			<a class="mt-0.5 inline-flex max-w-full items-center gap-1 font-mono text-small text-action hover:underline" href={d.site.url} target="_blank" rel="noopener"><span class="truncate">{d.site.url}</span><Icon name="external" size={12} /></a>
 		</div>
@@ -243,7 +243,7 @@
 		</div>
 	{:else if view === 'files'}
 		<div class="mb-4 flex flex-wrap items-center gap-3 rounded-tile border border-rule-soft bg-panel p-3">
-			<div class="min-w-0 flex-1"><p class="font-medium">Private working draft</p><p class="text-small text-muted">Saving a file does not change the live site. Publish when the draft is ready; every publish remains available for rollback.</p></div>
+			<div class="min-w-48 flex-1"><p class="font-medium">Private working draft</p><p class="text-small text-muted">Saving a file does not change the live site. Publish when the draft is ready; every publish remains available for rollback.</p></div>
 			<button class="btn btn-primary" onclick={publishFiles} disabled={publishing}><Icon name="rocket" size={14} />{publishing ? 'Publishing…' : 'Publish draft'}</button>
 			{#if d.site.mode !== 'files'}<button class="btn" onclick={() => setMode('files')}>Use custom files live</button>{/if}
 		</div>

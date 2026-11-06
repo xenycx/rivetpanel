@@ -9,6 +9,7 @@
 	import Notice from '$lib/components/ui/Notice.svelte';
 	import NewMenu from '$lib/components/NewMenu.svelte';
 	import ResourceTable from '$lib/components/ResourceTable.svelte';
+	import Roll from '$lib/components/ui/Roll.svelte';
 	import { currentWorkspace, workspaceName, workspaces, wsName } from '$lib/workspaces.svelte';
 	import type { Blueprint, GameStatus } from '$lib/api/games';
 
@@ -154,7 +155,7 @@
 	{#each kpis as k (k.label)}
 		<div class="kpi">
 			<p class="eyebrow flex items-center justify-between gap-2">{k.label}{#if k.label === 'Memory' && isAdmin}<a href="/admin/host" class="font-normal hover:text-ink">Host details</a>{/if}</p>
-			<p class="kpi-value">{all || host ? k.value : '–'}{#if k.of}<small>{k.of}</small>{/if}</p>
+			<p class="kpi-value"><Roll value={all || host ? String(k.value) : '–'} />{#if k.of}<small>{k.of}</small>{/if}</p>
 			<div class="meter mt-2" data-level={level(k.pct)} data-open={k.pct === undefined} role={k.pct === undefined ? undefined : 'meter'} aria-label={k.pct === undefined ? undefined : `${k.label} used`} aria-valuemin={k.pct === undefined ? undefined : 0} aria-valuemax={k.pct === undefined ? undefined : 100} aria-valuenow={k.pct === undefined ? undefined : Math.round(k.pct)}>
 				<i style="width: {k.pct ?? 0}%"></i>
 			</div>

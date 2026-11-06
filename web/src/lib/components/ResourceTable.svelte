@@ -138,15 +138,15 @@
 			{/if}
 			<div class="flex min-w-0 items-center gap-3" role="cell">
 				{#if b.logo_url}
-					<img src={b.logo_url} alt="" class="size-8 shrink-0 rounded-control object-cover" referrerpolicy="no-referrer" />
+					<img src={b.logo_url} alt="" class="size-8 shrink-0 rounded-control object-cover" referrerpolicy="no-referrer" data-vt-icon={b.id} />
 				{:else if kind === 'game'}
-					<GameIcon type={blueprints[b.blueprint_id ?? '']} size={32} />
+					<span class="grid shrink-0" data-vt-icon={b.id}><GameIcon type={blueprints[b.blueprint_id ?? '']} size={32} /></span>
 				{:else}
-					<span class="grid size-8 shrink-0 place-items-center rounded-control bg-paper-2 font-mono text-[11px] font-medium text-muted" aria-hidden="true">{b.template_id === 'discordts' ? 'TS' : (runtimeTag[b.runtime] ?? b.runtime.slice(0, 2).toUpperCase())}</span>
+					<span class="grid size-8 shrink-0 place-items-center rounded-control bg-paper-2 font-mono text-[11px] font-medium text-muted" aria-hidden="true" data-vt-icon={b.id}>{b.template_id === 'discordts' ? 'TS' : (runtimeTag[b.runtime] ?? b.runtime.slice(0, 2).toUpperCase())}</span>
 				{/if}
 				<div class="min-w-0">
 					<p class="flex min-w-0 items-center gap-1.5">
-						<a {href} class="truncate font-medium hover:underline" title={b.name}>{b.name}</a>
+						<a {href} class="truncate font-medium hover:underline" title={b.name} data-vt-name={b.id}>{b.name}</a>
 						{#if b.favorite}<span class="shrink-0 text-small text-muted" title="Favorite" aria-label="Favorite">★</span>{/if}
 					</p>
 					<p class="truncate text-small text-muted">{typeLine(b)}{note(b) ? `, ${note(b)}` : ''}</p>

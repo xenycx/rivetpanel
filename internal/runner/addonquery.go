@@ -3,7 +3,9 @@ package runner
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"encoding/csv"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -28,6 +30,32 @@ type AddonQuery struct {
 	JSON  string   `json:"json"`       // mongodb filter, pipeline or document
 }
 
+// ForKind keeps only the fields the add-on kind uses, so what a person is
+// shown and what runs are always the same request.
+func (q AddonQuery) ForKind(kind string) AddonQuery {
+	out := AddonQuery{Mode: q.Mode}
+	switch kind {
+	case "postgres", "mariadb":
+		out.Query = q.Query
+	case "redis":
+		out.Args = q.Args
+	case "mongodb":
+		out.Op, out.DB, out.Coll, out.JSON = q.Op, q.DB, q.Coll, q.JSON
+	}
+	return out
+}
+
+// Describe is the request as the confirmation dialog shows it.
+func (q AddonQuery) Describe(kind string) string {
+	switch kind {
+	case "redis":
+		return strings.Join(q.Args, " ")
+	case "mongodb":
+		return strings.TrimSpace(q.Op + " " + q.DB + "." + q.Coll + " " + q.JSON)
+	}
+	return q.Query
+}
+
 // AddonQueryResult is a bounded answer.
 type AddonQueryResult struct {
 	Columns   []string   `json:"columns"`
@@ -50,8 +78,13 @@ const (
 // through its environment, and the query text only through the environment
 // or as exec arguments (never through a shell command line).
 //
-// Read mode is a guard against accidents, not a security boundary: anyone
-// allowed to query can also reveal the add-on's password.
+// Read mode is enforced by the database, not by the query text: SQL reads
+// run as a separate reader account (ReaderUser) that holds only SELECT
+// rights, re-provisioned for every query with a new random password that
+// expires within minutes. A read query therefore cannot write even if it
+// switches its own session to read-write, so code that may only read (an
+// extension without a confirmed change) cannot change data. Changes run as
+// the add-on's own account and only after the person confirmed them.
 type AddonQuerier struct {
 	Docker    Docker
 	User      string
@@ -88,6 +121,35 @@ else throw new Error('unknown operation');
 print('@@RIVET@@' + EJSON.stringify(out, { relaxed: true }));
 `
 
+// ReaderUser is the database account SQL reads run as.
+const ReaderUser = "rivet_reader"
+
+// readerSetup returns the statements, run as the add-on's administrator,
+// that (re)create the reader account with only read rights and password pw
+// (hex, so it needs no quoting) valid until the given time.
+func readerSetup(kind, pw string, until time.Time) string {
+	switch kind {
+	case "postgres":
+		return `DO $$BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '` + ReaderUser + `') THEN CREATE ROLE ` + ReaderUser + `; END IF; END$$; ` +
+			`ALTER ROLE ` + ReaderUser + ` WITH LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS PASSWORD '` + pw + `' VALID UNTIL '` + until.UTC().Format("2006-01-02 15:04:05") + `+00'; ` +
+			`GRANT pg_read_all_data TO ` + ReaderUser + `; ` +
+			`ALTER ROLE ` + ReaderUser + ` SET default_transaction_read_only = on;`
+	case "mariadb":
+		u := `'` + ReaderUser + `'@'%'`
+		return `CREATE USER IF NOT EXISTS ` + u + ` IDENTIFIED BY '` + pw + `'; ` +
+			`ALTER USER ` + u + ` IDENTIFIED BY '` + pw + `'; ` +
+			`REVOKE ALL PRIVILEGES, GRANT OPTION FROM ` + u + `; ` +
+			"GRANT SELECT, SHOW VIEW ON `bot`.* TO " + u + `;`
+	}
+	return ""
+}
+
+func randomHex(n int) string {
+	b := make([]byte, n)
+	_, _ = rand.Read(b)
+	return hex.EncodeToString(b)
+}
+
 // Query runs q against the add-on kind of bot b.
 func (a *AddonQuerier) Query(ctx context.Context, b domain.Bot, kind, password string, q AddonQuery) (AddonQueryResult, error) {
 	var res AddonQueryResult
@@ -114,21 +176,32 @@ func (a *AddonQuerier) Query(ctx context.Context, b domain.Bot, kind, password s
 			return res, domain.Invalid("enter a SQL query (at most 20000 characters)")
 		}
 		opts := "-c statement_timeout=10000 -c lock_timeout=3000"
-		if !write {
-			opts += " -c default_transaction_read_only=on"
+		if write {
+			env = append(env, "PGPASSWORD="+password, "PGOPTIONS="+opts, "PGCONNECT_TIMEOUT=5", "RIVET_Q="+q.Query)
+			entry = []string{"sh", "-c", `exec psql -X -q -v ON_ERROR_STOP=1 --csv -P footer=off -h postgres -U bot -d bot -c "$RIVET_Q"`}
+			break
 		}
-		env = append(env, "PGPASSWORD="+password, "PGOPTIONS="+opts, "PGCONNECT_TIMEOUT=5", "RIVET_Q="+q.Query)
-		entry = []string{"sh", "-c", `exec psql -X -q -v ON_ERROR_STOP=1 --csv -P footer=off -h postgres -U bot -d bot -c "$RIVET_Q"`}
+		opts += " -c default_transaction_read_only=on"
+		rpw := randomHex(24)
+		env = append(env, "PGCONNECT_TIMEOUT=5", "RIVET_PW="+password, "RIVET_RPW="+rpw, "RIVET_OPTS="+opts,
+			"RIVET_SETUP="+readerSetup(kind, rpw, time.Now().Add(2*time.Minute)), "RIVET_Q="+q.Query)
+		entry = []string{"sh", "-c", `PGPASSWORD="$RIVET_PW" PGOPTIONS="-c client_min_messages=warning" psql -X -q -v ON_ERROR_STOP=1 -h postgres -U bot -d bot -c "$RIVET_SETUP" >/dev/null && ` +
+			`PGPASSWORD="$RIVET_RPW" PGOPTIONS="$RIVET_OPTS" exec psql -X -q -v ON_ERROR_STOP=1 --csv -P footer=off -h postgres -U ` + ReaderUser + ` -d bot -c "$RIVET_Q"`}
 	case "mariadb":
 		if strings.TrimSpace(q.Query) == "" || len(q.Query) > 20000 {
 			return res, domain.Invalid("enter a SQL query (at most 20000 characters)")
 		}
 		pre := "SET SESSION max_statement_time=10; "
-		if !write {
-			pre += "SET SESSION TRANSACTION READ ONLY; "
+		if write {
+			env = append(env, "MYSQL_PWD="+password, "RIVET_Q="+pre+q.Query)
+			entry = []string{"sh", "-c", `exec mariadb --connect-timeout=5 -h mariadb -u bot bot --batch -e "$RIVET_Q"`}
+			break
 		}
-		env = append(env, "MYSQL_PWD="+password, "RIVET_Q="+pre+q.Query)
-		entry = []string{"sh", "-c", `exec mariadb --connect-timeout=5 -h mariadb -u bot bot --batch -e "$RIVET_Q"`}
+		pre += "SET SESSION TRANSACTION READ ONLY; "
+		rpw := randomHex(24)
+		env = append(env, "RIVET_PW="+password, "RIVET_RPW="+rpw, "RIVET_SETUP="+readerSetup(kind, rpw, time.Time{}), "RIVET_Q="+pre+q.Query)
+		entry = []string{"sh", "-c", `MYSQL_PWD="$RIVET_PW" mariadb --connect-timeout=5 -h mariadb -u root -e "$RIVET_SETUP" >/dev/null && ` +
+			`MYSQL_PWD="$RIVET_RPW" exec mariadb --connect-timeout=5 -h mariadb -u ` + ReaderUser + ` bot --batch -e "$RIVET_Q"`}
 	case "redis":
 		if len(q.Args) == 0 || len(q.Args) > 32 {
 			return res, domain.Invalid("enter a Redis command")

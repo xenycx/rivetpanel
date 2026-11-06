@@ -10,11 +10,26 @@
 	// cannot read the panel's pages. It asks the panel for things through
 	// postMessage, and the panel only ever calls that extension's own routes
 	// (on this bot, inside a bot tab) as the signed-in person.
+	//
+	// The bridge serves exactly one document: the signed page the panel
+	// loaded. It answers the first "ready" only, and if the frame ever loads
+	// another document (the page navigated itself somewhere), the frame is
+	// removed and nothing it sends is answered again, so code from anywhere
+	// else can never drive the extension's routes.
 	let { ext, page, botId = '', title, height = 'max(32rem, calc(100dvh - 16rem))' }: { ext: string; page: string; botId?: string; title: string; height?: string } = $props();
 
 	let frame: HTMLIFrameElement | undefined = $state();
 	let frameHeight = $state('');
 	let ready = $state(false);
+	let loads = 0;
+	let closed = $state(false);
+	function onLoad() {
+		loads += 1;
+		if (loads > 1) {
+			closed = true;
+			ready = false;
+		}
+	}
 	const nonce = crypto.getRandomValues(new Uint32Array(4)).join('-');
 	const src = $derived(`/api/v1/ext-ui/${encodeURIComponent(ext)}/${encodeURIComponent(page)}`);
 
@@ -48,10 +63,11 @@
 	const errBody = (e: unknown) => ({ error: { message: e instanceof ApiError ? e.message : 'The request failed.' } });
 
 	async function onMessage(e: MessageEvent) {
-		if (!frame || e.source !== frame.contentWindow) return;
+		if (!frame || closed || e.source !== frame.contentWindow) return;
 		const m = e.data;
 		if (!m || typeof m !== 'object' || m.rivet !== 1) return;
 		if (m.type === 'ready') {
+			if (ready) return;
 			ready = true;
 			post({ type: 'init', nonce, theme: themeVars(), context: { bot_id: botId || null } });
 			return;
@@ -75,10 +91,13 @@
 				try {
 					const p = await api<{ bot_id: string; kind: string; query: string }>('GET', `/extensions/confirmations/${m.token}`);
 					if (botId && p.bot_id !== botId) return reply(false, { error: { message: 'That confirmation belongs to another app.' } });
+					// Name the app the change runs against, also on pages outside a bot.
+					const app = await api<{ name: string }>('GET', `/bots/${encodeURIComponent(p.bot_id)}`).then((b) => b.name, () => p.bot_id);
 					const ok = await confirmDialog({
 						title: 'Run this change?',
 						body: 'It runs without the read-only guard, as you, against this app’s database. Changes cannot be undone from here; take a backup first if in doubt.',
 						details: [
+							['App', app],
 							['Database', p.kind],
 							['Statement', p.query]
 						],
@@ -107,8 +126,14 @@
 
 <svelte:window onmessage={onMessage} />
 
+{#if closed}
+	<div class="grid place-items-center rounded-tile border border-rule-soft bg-panel p-8 text-center text-small text-muted" style:min-height="12rem" role="status">
+		<p>This page tried to open another address, so the panel closed it.<br />Reload the page to open it again.</p>
+	</div>
+{:else}
 <iframe
 	bind:this={frame}
+	onload={onLoad}
 	{src}
 	{title}
 	sandbox="allow-scripts"
@@ -118,3 +143,4 @@
 	class="block w-full rounded-tile border border-rule-soft bg-panel"
 	style:height={frameHeight || height}
 ></iframe>
+{/if}

@@ -146,7 +146,7 @@
 	<div class="mt-3 rounded-tile border border-rule-soft bg-panel p-4">
 		<h2 class="text-title font-semibold">Send stats from your bot</h2>
 		<ol class="mt-2 list-decimal space-y-1 pl-5">
-			<li>Generate a key{#if !stopped} <span class="text-warn">(stop the bot first: the key is stored in its environment)</span>{/if}. It is added to the bot as <code class="font-mono">RIVET_TELEMETRY_KEY</code>, together with <code class="font-mono">RIVET_URL</code> when the panel's public address is configured.</li>
+			<li>Generate a key{#if !stopped}{' '}<span class="text-warn">(stop the bot first: the key is stored in its environment)</span>{/if}. It is added to the bot as <code class="font-mono">RIVET_TELEMETRY_KEY</code>, together with <code class="font-mono">RIVET_URL</code> when the panel's public address is configured.</li>
 			<li>Copy the snippet below into your bot and call it as shown at the top of the file.</li>
 			<li>Start the bot. Stats appear within a minute. Pushes are limited to 60 per minute and one sample per stat every 10 seconds.</li>
 		</ol>

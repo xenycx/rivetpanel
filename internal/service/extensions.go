@@ -106,6 +106,9 @@ type ExtensionService struct {
 	loaded map[string]*loadedExt
 	// confirmations are one-time write approvals (see addons.query).
 	confirms map[string]pendingConfirm
+	// seen holds signatures of verified public requests until they could no
+	// longer be accepted, so a captured request cannot be replayed.
+	seen map[string]time.Time
 	rate     map[string]*rateWindow
 }
 
@@ -129,7 +132,8 @@ const extIdleUnload = 10 * time.Minute
 type ExtensionCapabilityView struct {
 	Name     string   `json:"name"`
 	Label    string   `json:"label"`
-	Risk     string   `json:"risk"`
+	Area     string   `json:"area"`
+	Guard    string   `json:"guard"`
 	Reason   string   `json:"reason"`
 	Optional bool     `json:"optional"`
 	Hosts    []string `json:"hosts,omitempty"`
@@ -766,7 +770,7 @@ func (s *ExtensionService) viewVersion(ctx context.Context, id, version string) 
 	}
 	for _, c := range m.Capabilities {
 		info := capInfo(c.Name)
-		view.Capabilities = append(view.Capabilities, ExtensionCapabilityView{Name: c.Name, Label: info.Label, Risk: info.Risk, Reason: c.Reason,
+		view.Capabilities = append(view.Capabilities, ExtensionCapabilityView{Name: c.Name, Label: info.Label, Area: info.Area, Guard: info.Guard, Reason: c.Reason,
 			Optional: c.Optional, Hosts: c.Hosts, Granted: installed && slices.Contains(ext.Granted, c.Name)})
 	}
 	stored := map[string]domain.ExtensionSetting{}
@@ -827,7 +831,7 @@ func capInfo(name string) bundle.CapabilityInfo {
 			return c
 		}
 	}
-	return bundle.CapabilityInfo{Name: name, Label: name, Risk: "high"}
+	return bundle.CapabilityInfo{Name: name, Label: name, Area: "own"}
 }
 
 // manifestFor returns the active manifest of an installed extension.
@@ -1138,7 +1142,9 @@ func (s *ExtensionService) HandleRoute(ctx context.Context, actor *domain.User, 
 		}
 		inv.system = true
 	}
-	if !s.allow("route:"+id, 600) {
+	// Public endpoints have their own budget, so heavy use of an extension's
+	// pages can never crowd out the requests other services send it.
+	if !s.allow("route:"+route.Auth+":"+id, 600) {
 		return RouteResult{}, domain.Invalid("the extension is receiving too many requests")
 	}
 	resp, err := s.invoke(ctx, id, inv, map[string]any{"kind": "route", "route": route.ID, "method": r.Method, "path": r.Path,
@@ -1203,6 +1209,8 @@ func (s *ExtensionService) verifyPublic(ctx context.Context, id string, route *b
 		if !ed25519.Verify(pub, append([]byte(ts), r.Body...), sig) {
 			return errors.New("bad signature")
 		}
+		// The timestamp bounds acceptance to ten minutes; remember it that long.
+		return s.once(id, "ed25519:"+hex.EncodeToString(sig), 10*time.Minute)
 	case "hmac-sha256":
 		got := strings.TrimPrefix(r.Headers["x-signature"], "sha256=")
 		mac := hmac.New(sha256.New, []byte(key))
@@ -1211,9 +1219,45 @@ func (s *ExtensionService) verifyPublic(ctx context.Context, id string, route *b
 		if !hmac.Equal([]byte(got), []byte(want)) {
 			return errors.New("bad signature")
 		}
+		// The signature covers only the body, so an identical delivery is
+		// refused for a day; senders put a timestamp or id in the body.
+		return s.once(id, "hmac:"+want, 24*time.Hour)
 	default:
 		return errors.New("unknown scheme")
 	}
+}
+
+// maxSeen bounds the replay cache; at the per-address rate limit it is
+// reached only under a flood, and then the oldest entries go first.
+const maxSeen = 100_000
+
+// once accepts a verified signature the first time only, within keep.
+func (s *ExtensionService) once(id, sig string, keep time.Duration) error {
+	now := time.Now()
+	k := id + "\x00" + sig
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.seen == nil {
+		s.seen = map[string]time.Time{}
+	}
+	if until, ok := s.seen[k]; ok && now.Before(until) {
+		return errors.New("this request was already received")
+	}
+	if len(s.seen) >= maxSeen {
+		var oldK string
+		var oldT time.Time
+		for sk, t := range s.seen {
+			if t.Before(now) {
+				delete(s.seen, sk)
+			} else if oldK == "" || t.Before(oldT) {
+				oldK, oldT = sk, t
+			}
+		}
+		if len(s.seen) >= maxSeen {
+			delete(s.seen, oldK)
+		}
+	}
+	s.seen[k] = now.Add(keep)
 	return nil
 }
 

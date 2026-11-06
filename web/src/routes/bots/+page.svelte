@@ -150,7 +150,7 @@
 			<input class="field pl-8" type="search" placeholder="Search by name" bind:value={q} />
 		</label>
 		<button class="btn sm:hidden" aria-expanded={filtersOpen} onclick={() => (filtersOpen = !filtersOpen)}>
-			Filters{#if [stateF, runtimeF, ownerF, tagF].filter(Boolean).length} ({[stateF, runtimeF, ownerF, tagF].filter(Boolean).length}){/if}
+			Filters{#if [stateF, runtimeF, ownerF, tagF].filter(Boolean).length}{' '}({[stateF, runtimeF, ownerF, tagF].filter(Boolean).length}){/if}
 		</button>
 		<div class="{filtersOpen ? 'grid' : 'hidden'} w-full grid-cols-2 gap-2 sm:contents">
 			<select class="field w-auto" bind:value={stateF} aria-label="State">

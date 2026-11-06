@@ -88,7 +88,7 @@
 {:else if !pk.supported}
 	<p class="max-w-prose text-muted">The visual package manager is available for Node.js, Python, Rust and Go bots. For this runtime, manage dependencies in the file manager.</p>
 {:else}
-	<p class="mb-4 max-w-prose text-muted">Edits <code class="font-mono">{pk.file}</code>. {#if !pk.exists}It does not exist yet and will be created when you add a package.{/if} Dependencies are installed when the bot next starts.{#if running} <strong>The bot is running: restart it to apply changes.</strong>{/if}</p>
+	<p class="mb-4 max-w-prose text-muted">Edits <code class="font-mono">{pk.file}</code>. {#if !pk.exists}It does not exist yet and will be created when you add a package.{/if} Dependencies are installed when the bot next starts.{#if running}{' '}<strong>The bot is running: restart it to apply changes.</strong>{/if}</p>
 
 	{#each groups as g (g)}
 		<h3 class="mt-4 text-title font-semibold">{g}</h3>

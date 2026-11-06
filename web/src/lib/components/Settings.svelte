@@ -169,12 +169,12 @@
 				<div>
 					<span class="label" id="settings-memory-label">Memory</span>
 					<ResourcePicker kind="memory" id="settings-memory" labelledby="settings-memory-label" value={form.memory} onchange={(v) => (form.memory = v)} min={minMem} max={maxMem} disabled={!stopped} />
-					<span class="help">{#if limits}{fmtBytes(minMem)} to {fmtBytes(maxMem ?? limits.max_memory_bytes)}{#if maxMem != null && maxMem < limits.max_memory_bytes} in this workspace{:else} on this node{/if}.{/if}{#if memRoomText} Workspace room: {memRoomText}.{/if}</span>
+					<span class="help">{#if limits}{fmtBytes(minMem)} to {fmtBytes(maxMem ?? limits.max_memory_bytes)}{#if maxMem != null && maxMem < limits.max_memory_bytes}{' '}in this workspace{:else}{' '}on this node{/if}.{/if}{#if memRoomText}{' '}Workspace room: {memRoomText}.{/if}</span>
 				</div>
 				<div>
 					<span class="label" id="settings-cpu-label">CPU</span>
 					<ResourcePicker kind="cpu" id="settings-cpu" labelledby="settings-cpu-label" value={form.cpu} onchange={(v) => (form.cpu = v)} min={minCpu} max={maxCpu} disabled={!stopped} />
-					<span class="help">{#if limits}{fmtCpu(minCpu)} to {fmtCpu(maxCpu ?? limits.max_nano_cpus)}{#if maxCpu != null && maxCpu < limits.max_nano_cpus} in this workspace{:else} on this node{/if}.{/if}{#if cpuRoomText} Workspace room: {cpuRoomText}.{/if}</span>
+					<span class="help">{#if limits}{fmtCpu(minCpu)} to {fmtCpu(maxCpu ?? limits.max_nano_cpus)}{#if maxCpu != null && maxCpu < limits.max_nano_cpus}{' '}in this workspace{:else}{' '}on this node{/if}.{/if}{#if cpuRoomText}{' '}Workspace room: {cpuRoomText}.{/if}</span>
 				</div>
 				<label class="block max-w-xs">
 					<span class="label">Processes</span>

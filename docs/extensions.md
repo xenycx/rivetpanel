@@ -21,11 +21,19 @@ Extensions are a preview module, off by default. Turn it on under
 restart. **Administration → Extensions** then lists the built-in extensions
 and any uploaded ones.
 
-Installing is a review step. The page lists every capability the extension
-asks for, in plain language, with the hosts it may contact. Required
-capabilities must all be granted; optional ones can be left off. **Install and
-turn on** stores the grant and enables the extension. A later version that asks
-for more capabilities is not used until an administrator reviews it again.
+Installing is a review step. The page first states how this exact bundle is
+contained: where it comes from (shipped with the panel, or the publisher key
+that signed it, with its SHA-256), its sandbox limits, the internet hosts it
+can reach (including Discord's API when the panel calls it on the
+extension's behalf), and that uninstalling deletes everything it stored. It
+then lists every permission the extension asks for, grouped by what it
+touches (bots, people, internet, its own data), each with the extension's own
+reason and the safeguard the panel enforces on every use. Permissions are not
+ranked as risky or safe: each is shown with its limit, so the decision rests
+on facts. Required permissions must all be granted; optional ones can be left
+off. **Install and turn on** stores the grant and enables the extension. A
+later version that asks for more is not used until an administrator reviews
+it again.
 
 Who may do what:
 
@@ -132,16 +140,24 @@ capabilities, 128 MiB of memory, 64 processes, 20 seconds. The password reaches
 it only through its environment, and the query text never through a shell
 command line. Results are limited to 500 rows and 1 MiB.
 
-**Run** uses a read-only session: PostgreSQL `default_transaction_read_only`,
-MariaDB `SET SESSION TRANSACTION READ ONLY`, an allowlist of Redis read
-commands, and only find, count and aggregate (without `$out` or `$merge`) for
-MongoDB. **Run as change…** asks the panel to confirm: the panel shows the exact
-statement in its own dialog, and only that dialog can approve it (the
-extension's page cannot). Each query is recorded in the activity log by kind,
+**Run** is read-only, enforced by the database where it can be. PostgreSQL
+and MariaDB reads run as a separate `rivet_reader` account that holds only
+read rights (`pg_read_all_data`; `SELECT` and `SHOW VIEW` on the `bot`
+database). The panel re-creates it for every query with a new random password
+that expires within minutes, so a query that switches its own session to
+read-write still cannot change, drop or create anything. Redis reads are
+limited to an allowlist of read commands, and MongoDB to find, count and
+aggregate (without `$out` or `$merge`). **Run as change…** asks the panel to
+confirm. The dialog names the app and database and shows the exact statement
+that will run (the request is reduced to the fields that database reads, so
+nothing else can ride along; a statement too long to show in full cannot be
+confirmed). Only that dialog can approve it; the extension's page cannot. Each query is recorded in the activity log by kind,
 mode and a hash, never by its text.
 
-> Read-only mode protects against accidents, not against the person querying:
+> Read-only mode binds the extension and the page, not the person querying:
 > anyone allowed to use the Data tab can also reveal the database password.
+> A PostgreSQL function the bot itself defined as `SECURITY DEFINER` runs
+> with its owner's rights when a read calls it.
 
 Not available yet: apps on remote nodes (the query has to run on the node; this
 needs a new agent route), and Redis or MongoDB schemas beyond the first page of
@@ -152,13 +168,14 @@ keys.
 | Boundary | Enforced by |
 | --- | --- |
 | Bundle integrity and publisher | Ed25519 signature over every file's SHA-256, checked on upload and again before the code runs (application) |
-| Extension code | WebAssembly sandbox (wazero): no files, environment variables, arguments or sockets. Memory is capped per extension (at most 128 MiB), each call has a wall-clock deadline (at most 30 s), at most 200 host calls and 1 MiB of output per call, and 4 calls at once (16 for all extensions). Runtime |
+| Extension code | WebAssembly sandbox (wazero): no files, environment variables, arguments or sockets. Memory is capped per running copy (at most 128 MiB each), with at most 4 copies of one extension and 16 across all extensions at once; each call has a wall-clock deadline (at most 30 s), at most 200 host calls and 1 MiB of output. Runtime |
 | What the code may do | Every host call is checked against the capabilities granted, the person a route runs for (their role and bot access, through the same checks as the API), the per-bot switch and per-person consent (application) |
-| HTTPS | Exact host allowlist from the manifest, HTTPS only, redirects re-checked, private, local and metadata addresses refused when connecting, 120 requests a minute, 4 MiB responses (application) |
+| HTTPS | Exact host allowlist from the manifest, HTTPS on port 443 only, no credentials in addresses; every redirect is held to the same rules and loses the `Authorization` header; private, local and metadata addresses refused when connecting, 120 requests a minute, 4 MiB responses (application) |
+| Acting for others | `identity.discord` works only in a verified public request, a job or an event, never in a request a signed-in person made, which always acts as that person (application) |
 | Secrets | Secret settings are sealed with the panel keyring, write-only, and attached only to requests to the hosts the manifest lists; bot tokens are attached by the panel (application) |
-| Custom pages | Served with `Content-Security-Policy: sandbox allow-scripts`, an opaque origin, only the page's own hashed inline script, `connect-src 'none'`: no cookies, no CSRF token, no network, no access to the panel's pages. They talk to the panel by `postMessage`, and the panel only calls that extension's own routes as the signed-in person (browser) |
+| Custom pages | Served with `Content-Security-Policy: sandbox allow-scripts`, an opaque origin, only the page's own hashed inline script, `connect-src 'none'`: no cookies, no CSRF token, no network requests, no access to the panel's pages. They talk to the panel by `postMessage`, and the panel only calls that extension's own routes as the signed-in person. The bridge answers the first document only: if the frame loads anything else, the panel removes it and ignores it from then on. Browsers cannot stop a frame from navigating itself, so a page could still put what it shows into an address it opens; review a page's code as you would any code with access to that data (browser) |
 | Overview cards | Declarative widget JSON rendered as text by the panel; images only from `cdn.discordapp.com` (browser) |
-| Public endpoints | Signature (Discord Ed25519 or HMAC-SHA256) checked before code runs, 120 requests a minute per address, 64 KiB bodies (application) |
+| Public endpoints | Signature (Discord Ed25519 or HMAC-SHA256) checked before code runs; each signed request is accepted once (Discord's within its five-minute window; an identical HMAC delivery is refused for a day, so senders include a timestamp or id in the body); 120 requests a minute per address, with a budget separate from the extension's pages; 64 KiB bodies unless the manifest allows up to 256 KiB (application) |
 
 There is no CPU metering inside a call: the wall-clock deadline is the bound.
 
@@ -257,7 +274,7 @@ for.
 
 ### Custom pages
 
-A page is one HTML file with inline script and style. It has no network. It
+A page is one HTML file with inline script and style. It cannot make network requests. It
 talks to the panel by `postMessage` with this protocol:
 
 1. On load, send `{rivet: 1, type: "ready"}` to `parent`.

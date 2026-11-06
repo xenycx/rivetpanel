@@ -206,7 +206,7 @@
 		<ul class="mt-3 list-card">
 			{#each invites as v (v.id)}
 				<li class="flex flex-wrap items-center gap-3 px-3 py-2">
-					<div class="min-w-0 flex-1">
+					<div class="min-w-48 flex-1">
 						<p>{permNames(v.permissions)}</p>
 						<p class="text-small text-muted">Created by {v.created_by} · expires {new Date(v.expires_at_ms).toLocaleString()}</p>
 					</div>

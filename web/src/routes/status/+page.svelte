@@ -42,7 +42,7 @@
 			<span class="pill capitalize">{words(i.status)}</span>
 			{#if i.kind === 'incident' && i.impact !== 'none'}<span class="text-[12px] text-muted">{i.impact} impact</span>{/if}
 		</div>
-		{#if i.kind === 'maintenance' && i.starts_at_ms}<p class="mt-1 text-small text-muted">Window: {fmtWhen(i.starts_at_ms)}{#if i.ends_at_ms} – {fmtWhen(i.ends_at_ms)}{/if}</p>{/if}
+		{#if i.kind === 'maintenance' && i.starts_at_ms}<p class="mt-1 text-small text-muted">Window: {fmtWhen(i.starts_at_ms)}{#if i.ends_at_ms}{' '}– {fmtWhen(i.ends_at_ms)}{/if}</p>{/if}
 		{#if i.components.length}<p class="mt-1 text-small text-muted">Affects {i.components.map((c) => c.name).join(', ')}</p>{/if}
 		<ol class="mt-3 grid gap-3 border-l-2 border-rule-soft pl-4">
 			{#each i.updates as u}

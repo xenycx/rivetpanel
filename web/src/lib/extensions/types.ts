@@ -19,7 +19,10 @@ export type ExtContribution = {
 	bot_enablement?: string;
 };
 
-export type ExtCapability = { name: string; label: string; risk: 'low' | 'medium' | 'high'; reason: string; optional: boolean; hosts?: string[]; granted: boolean };
+/** A capability as the review screen shows it: what it allows, the part of
+ * the panel it touches and the safeguard the panel enforces on every use. */
+export type ExtCapabilityArea = 'bots' | 'people' | 'internet' | 'own';
+export type ExtCapability = { name: string; label: string; area: ExtCapabilityArea; guard: string; reason: string; optional: boolean; hosts?: string[]; granted: boolean };
 export type ExtSetting = {
 	key: string;
 	label: string;

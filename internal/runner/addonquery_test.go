@@ -29,9 +29,17 @@ func TestAddonQueryPostgresReadOnly(t *testing.T) {
 	if len(res.Columns) != 2 || len(res.Rows) != 2 || res.Rows[1][1] != "be,ta" {
 		t.Fatalf("%+v", res)
 	}
+	// Reads run as the reader account, which a query cannot switch out of:
+	// it holds only read rights, whatever the session settings say.
 	env := strings.Join(spec.Env, "\n")
-	if !strings.Contains(env, "default_transaction_read_only=on") || !strings.Contains(env, "PGPASSWORD=s3cret") {
-		t.Fatalf("env: %s", env)
+	entry := strings.Join(spec.Entrypoint, " ")
+	if !strings.Contains(env, "default_transaction_read_only=on") || !strings.Contains(env, "RIVET_PW=s3cret") ||
+		!strings.Contains(env, "GRANT pg_read_all_data TO "+ReaderUser) || !strings.Contains(env, "NOSUPERUSER") ||
+		!strings.Contains(entry, "-U "+ReaderUser) || !strings.Contains(entry, `PGPASSWORD="$RIVET_RPW"`) {
+		t.Fatalf("env: %s\nentry: %s", env, entry)
+	}
+	if strings.Contains(env, "RIVET_RPW=s3cret") || strings.Contains(entry, "s3cret") {
+		t.Fatal("the reader must get its own password")
 	}
 	// The query travels in the environment, never in the command line.
 	if strings.Contains(strings.Join(spec.Entrypoint, " "), "select") || spec.Network != AddonNetwork(queryBot().ID) || spec.WorkspaceHostPath != "" || spec.MemoryBytes > 128<<20 {
@@ -41,10 +49,31 @@ func TestAddonQueryPostgresReadOnly(t *testing.T) {
 		t.Fatal("the client container was not removed")
 	}
 
-	// Writes drop the read-only option.
+	// Confirmed writes run as the add-on's own account.
 	q.Query(context.Background(), queryBot("postgres"), "postgres", "s3cret", AddonQuery{Mode: "write", Query: "delete from t"})
-	if strings.Contains(strings.Join(spec.Env, "\n"), "read_only") {
+	if strings.Contains(strings.Join(spec.Env, "\n"), "read_only") || strings.Contains(strings.Join(spec.Entrypoint, " "), ReaderUser) {
 		t.Fatal("write mode kept read-only")
+	}
+}
+
+func TestAddonQueryMariaDBReadsAsReader(t *testing.T) {
+	f := newFake()
+	var spec ContainerSpec
+	f.onCreate = func(s ContainerSpec) { spec = s }
+	f.tail = "id\n1\n"
+	q := &AddonQuerier{Docker: f}
+	if _, err := q.Query(context.Background(), queryBot("mariadb"), "mariadb", "s3cret", AddonQuery{Mode: "read", Query: "SET SESSION TRANSACTION READ WRITE; DELETE FROM t"}); err != nil {
+		t.Fatal(err)
+	}
+	env := strings.Join(spec.Env, "\n")
+	entry := strings.Join(spec.Entrypoint, " ")
+	if !strings.Contains(env, "GRANT SELECT, SHOW VIEW ON `bot`.* TO '"+ReaderUser+"'@'%'") || !strings.Contains(env, "REVOKE ALL PRIVILEGES") ||
+		!strings.Contains(entry, "-u "+ReaderUser) || strings.Contains(entry, "-u bot") {
+		t.Fatalf("env: %s\nentry: %s", env, entry)
+	}
+	q.Query(context.Background(), queryBot("mariadb"), "mariadb", "s3cret", AddonQuery{Mode: "write", Query: "DELETE FROM t"})
+	if strings.Contains(strings.Join(spec.Entrypoint, " "), ReaderUser) {
+		t.Fatal("a confirmed change must run as the add-on's account")
 	}
 }
 

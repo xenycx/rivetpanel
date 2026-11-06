@@ -95,7 +95,7 @@
 		{#if !pwOpen}
 			<div class="flex flex-wrap items-center gap-4">
 				<span class="grid size-10 shrink-0 place-items-center rounded-tile bg-paper-2 {session.hasPassword ? 'text-run' : 'text-muted'}"><Icon name="key" /></span>
-				<div class="min-w-0 flex-1">
+				<div class="min-w-48 flex-1">
 					<p class="font-medium">{session.hasPassword ? 'A password is set' : 'No password yet'}</p>
 					<p class="text-small text-muted">{session.hasPassword ? 'Use at least 12 characters; a few unrelated words work well.' : 'Add one to sign in without a provider.'}</p>
 				</div>

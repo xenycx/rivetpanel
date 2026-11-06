@@ -190,7 +190,7 @@
 		<!-- The release: what runs now and what would come next. -->
 		<section class="spine overflow-hidden rounded-tile border border-rule-soft bg-panel py-4 pr-4 pl-6" data-tone={link.deploying ? 'warn' : link.last_error ? 'fail' : link.last_sha ? 'run' : 'idle'} data-busy={link.deploying} aria-label="Current release">
 			<div class="flex flex-wrap items-start gap-3">
-				<div class="min-w-0 flex-1">
+				<div class="min-w-48 flex-1">
 					<p class="flex items-center gap-2 text-title font-semibold"><Icon name="github" /><span class="break-all">{link.full_name}</span></p>
 					<p class="text-muted">Branch <code>{link.branch}</code>{link.root_dir ? `, folder /${link.root_dir}` : ''}. {link.auto_deploy ? (link.hook_created ? 'Deploys on every push.' : link.polling ? 'Checks for new commits every few minutes.' : 'Waiting for the webhook to be added.') : 'Deploys when you ask.'}</p>
 					{#if link.pending_push_at_ms && !link.deploying}
@@ -249,7 +249,7 @@
 					<dt class="text-muted">Secret</dt><dd>{#if secret}<code class="break-all">{secret}</code>{:else}<span class="text-muted">shown once, after you save the settings again</span>{/if}</dd>
 					<dt class="text-muted">Events</dt><dd>Just the push event</dd>
 				</dl>
-				<p class="mt-1 text-small text-muted">GitHub did not accept the webhook automatically. The connected account may lack admin rights on the repository.{#if link.polling} Until it is added, the panel checks the branch every few minutes.{/if}</p>
+				<p class="mt-1 text-small text-muted">GitHub did not accept the webhook automatically. The connected account may lack admin rights on the repository.{#if link.polling}{' '}Until it is added, the panel checks the branch every few minutes.{/if}</p>
 			</Notice>
 		{/if}
 

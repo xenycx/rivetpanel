@@ -259,6 +259,14 @@ func TestExtensionPublicRouteVerifiesSignature(t *testing.T) {
 	if resp.StatusCode != 200 || !strings.Contains(string(b), `"type":1`) {
 		t.Fatalf("ping: %d %s", resp.StatusCode, b)
 	}
+	// The same signed request sent again is a replay: refused before any code runs.
+	ran := ext.Invocations(id)
+	if resp, b := send(ed25519.Sign(priv, append([]byte(ts), ping...)), ts); resp.StatusCode != 401 {
+		t.Fatalf("replayed request accepted: %d %s", resp.StatusCode, b)
+	}
+	if ext.Invocations(id) != ran {
+		t.Fatal("extension code ran for a replayed request")
+	}
 
 	// The sandboxed page is served with a sandbox CSP that pins its script.
 	resp, b = admin.do("GET", "/api/v1/ext-ui/"+id+"/setup", nil)

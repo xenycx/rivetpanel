@@ -135,7 +135,7 @@
 					<label><span class="label">Public address</span><input class="field font-mono" bind:value={d.public_address} placeholder="play.example.com" /><span class="help">Host name or IP users connect to.</span></label>
 					<div class="grid content-start gap-2 pt-1"><label class="flex items-center gap-2"><input type="checkbox" bind:checked={d.enabled} /><span>Enabled</span></label><label class="flex items-center gap-2"><input type="checkbox" bind:checked={d.draining} /><span>Drain: no new servers</span></label></div>
 				</div>
-				<div class="mt-4 flex flex-wrap items-center gap-3"><button class="btn btn-primary btn-sm" onclick={() => save(n)}>Save</button><span class="text-small text-muted">Last seen: {time(n.last_seen_at_ms)}{#if n.agent?.agent_version} · agent {n.agent.agent_version}{/if}{#if n.agent?.certificate_expires_at_ms} · certificate expires {time(n.agent.certificate_expires_at_ms)}{/if}</span></div>
+				<div class="mt-4 flex flex-wrap items-center gap-3"><button class="btn btn-primary btn-sm" onclick={() => save(n)}>Save</button><span class="text-small text-muted">Last seen: {time(n.last_seen_at_ms)}{#if n.agent?.agent_version}{' '}· agent {n.agent.agent_version}{/if}{#if n.agent?.certificate_expires_at_ms}{' '}· certificate expires {time(n.agent.certificate_expires_at_ms)}{/if}</span></div>
 				{#if n.agent?.capabilities?.problem}<Notice tone="warn" class="mt-3">{String(n.agent.capabilities.problem)}</Notice>{/if}
 			</section>
 		{/each}

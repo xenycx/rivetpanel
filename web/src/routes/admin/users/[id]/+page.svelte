@@ -34,7 +34,7 @@
 {:else if v}
 	<header class="card flex flex-wrap items-center gap-4 p-5">
 		{#if v.user.avatar_url}<img src={v.user.avatar_url} alt="" class="size-12 rounded-pill object-cover" />{:else}<span class="grid size-12 place-items-center rounded-pill bg-paper-2 font-semibold text-muted" aria-hidden="true">{(v.user.display_name || v.user.email).slice(0, 2).toUpperCase()}</span>{/if}
-		<div class="min-w-0 flex-1">
+		<div class="min-w-48 flex-1">
 			<h2 class="truncate text-section">{v.user.display_name || v.user.email}</h2>
 			<p class="text-small text-muted">{v.user.display_name ? `${v.user.email} · ` : ''}{v.user.role === 'admin' ? 'Administrator' : v.user.role_name || 'User'} · email {v.user.email_verified ? 'verified' : 'not verified'} · joined {fmtWhen(v.user.created_at_ms)} · {v.has_password ? 'password' : 'provider sign-in only'}</p>
 		</div>

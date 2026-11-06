@@ -292,7 +292,7 @@
 			</div>
 		</details>
 
-		<div class="sticky bottom-4 flex justify-end xl:col-span-2"><button class="btn btn-primary shadow-overlay" disabled={saving}>{saving ? 'Saving…' : 'Save and apply'}</button></div>
+		<div class="save-bar xl:col-span-2"><button class="btn btn-primary" disabled={saving}>{saving ? 'Saving…' : 'Save and apply'}</button></div>
 	</form>
 
 	<section class="mt-10 scroll-mt-24 border-t border-rule-soft pt-8" id="limits" aria-labelledby="limits-h">

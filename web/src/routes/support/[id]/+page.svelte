@@ -76,13 +76,13 @@
 	<Notice tone="warn" class="mt-4">This ticket does not exist or you cannot see it.</Notice>
 {:else if view && t}
 	<header class="mt-3 flex flex-wrap items-start gap-3 border-b border-rule-soft pb-5">
-		<div class="min-w-0 flex-1">
+		<div class="min-w-48 flex-1">
 			<p class="font-mono text-small text-muted">#{t.number}</p>
 			<h1 class="text-page break-words">{t.subject}</h1>
 			<p class="mt-1 text-small text-muted">
 				{categoryLabel(t.category)} · {t.priority} priority · opened {fmtWhen(t.created_at_ms)}
-				{#if t.bot_name} · about {#if t.bot_id && view.requester}<a class="link" href="/bots/{t.bot_id}">{t.bot_name}</a>{:else}{t.bot_name}{/if}{/if}
-				{#if view.staff} · by {t.requester_email}{/if}
+				{#if t.bot_name}{' '}· about {#if t.bot_id && view.requester}<a class="link" href="/bots/{t.bot_id}">{t.bot_name}</a>{:else}{t.bot_name}{/if}{/if}
+				{#if view.staff}{' '}· by {t.requester_email}{/if}
 			</p>
 		</div>
 		<span class="rounded-pill border px-2.5 py-1 text-small {statusTone[t.status]}">{labels[t.status]}</span>
@@ -108,7 +108,7 @@
 			</label>
 		</div>
 	{:else if view.staff}
-		<p class="mt-4 text-small text-muted">You can read this ticket and its internal notes but not answer it.{#if t.assignee_email} Assigned to {t.assignee_email}.{/if}</p>
+		<p class="mt-4 text-small text-muted">You can read this ticket and its internal notes but not answer it.{#if t.assignee_email}{' '}Assigned to {t.assignee_email}.{/if}</p>
 	{/if}
 
 	{#if error}<Notice tone="fail" class="mt-4" live>{error}</Notice>{/if}

@@ -159,7 +159,7 @@
 					</div>
 					<p class="mt-1 text-muted">{a.description}</p>
 					<p class="mt-2 text-small text-muted">
-						The {noun} receives {#each a.variables as v, i (v)}<code>{v}</code>{i < a.variables.length - 1 ? ', ' : ''}{/each}.{#if isGame} Use Show connection to copy the host, user and password into a plugin's configuration file.{:else} Reference them from your own variables as <code>{'${' + a.variables[0] + '}'}</code>.{/if}
+						The {noun} receives {#each a.variables as v, i (v)}<code>{v}</code>{i < a.variables.length - 1 ? ', ' : ''}{/each}.{#if isGame}{' '}Use Show connection to copy the host, user and password into a plugin's configuration file.{:else}{' '}Reference them from your own variables as <code>{'${' + a.variables[0] + '}'}</code>.{/if}
 					</p>
 					<div class="mt-3 flex flex-wrap gap-2">
 						{#if canEnv}<button class="btn btn-sm" onclick={() => reveal(a)}><Icon name={revealed[a.kind] ? 'eyeOff' : 'eye'} size={14} />{revealed[a.kind] ? 'Hide connection' : 'Show connection'}</button>{/if}

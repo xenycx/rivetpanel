@@ -165,7 +165,7 @@
 	<!-- Providers -->
 	<section id="ai-providers" class="card min-w-0 p-5 sm:p-6" aria-labelledby="ai-prov-h">
 		<div class="flex flex-wrap items-start gap-3">
-			<div class="min-w-0 flex-1">
+			<div class="min-w-48 flex-1">
 				<h3 id="ai-prov-h" class="flex flex-wrap items-center gap-2 text-title font-semibold">Providers
 					{#if editing === null}<span class="pill" data-tone={ready ? 'run' : 'warn'}>{ready ? 'Assistant ready' : providers.length ? 'No usable provider' : 'Not set up'}</span>{/if}
 				</h3>

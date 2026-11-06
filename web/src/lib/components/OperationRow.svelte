@@ -25,9 +25,9 @@
 
 <li class="spine py-3 pr-2 pl-5" data-tone={tone} data-busy={active(op)}>
 	<div class="flex flex-wrap items-start gap-x-3 gap-y-1">
-		<div class="min-w-0 flex-1">
+		<div class="min-w-48 flex-1">
 			<p class="font-medium">
-				{opNoun(op)}{#if showBot}{' '}of <a class="link" href={opOwnerHref(op)}>{op.bot_name}</a>{/if}{#if sha} <code class="text-small">{sha}</code>{/if}
+				{opNoun(op)}{#if showBot}{' '}of <a class="link" href={opOwnerHref(op)}>{op.bot_name}</a>{/if}{#if sha}{' '}<code class="text-small">{sha}</code>{/if}
 				<span class="ml-1 text-small font-normal {tone === 'fail' ? 'text-fail' : tone === 'run' ? 'text-run' : 'text-muted'}">{active(op) ? op.stage || statusText[op.status] : statusText[op.status]}</span>
 			</p>
 			<p class="text-small text-muted">

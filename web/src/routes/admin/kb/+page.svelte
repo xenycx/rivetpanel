@@ -113,7 +113,7 @@
 			<ul class="card mt-2 divide-y divide-rule-soft">
 				{#each data.categories as c, i (c.id)}
 					<li class="flex flex-wrap items-center gap-2 px-4 py-2.5">
-						<span class="min-w-0 flex-1"><span class="font-medium">{c.name}</span> <span class="text-small text-muted">/{c.slug} · {data.articles.filter((a) => a.category_id === c.id).length} articles</span>{#if c.description}<span class="block text-small text-muted">{c.description}</span>{/if}</span>
+						<span class="min-w-48 flex-1"><span class="font-medium">{c.name}</span> <span class="text-small text-muted">/{c.slug} · {data.articles.filter((a) => a.category_id === c.id).length} articles</span>{#if c.description}<span class="block text-small text-muted">{c.description}</span>{/if}</span>
 						<button class="btn btn-quiet btn-icon" aria-label="Move {c.name} up" disabled={i === 0} onclick={() => moveCategory(c, -1)}>↑</button>
 						<button class="btn btn-quiet btn-icon" aria-label="Move {c.name} down" disabled={i === data.categories.length - 1} onclick={() => moveCategory(c, 1)}>↓</button>
 						<button class="btn btn-quiet" onclick={() => renameCategory(c)}>Edit</button>

@@ -144,7 +144,7 @@
 				<ul class="card divide-y divide-rule-soft overflow-hidden">
 					{#each v.sites as s (s.id)}
 						<li class="flex flex-wrap items-center gap-3 px-4 py-2.5">
-							<div class="min-w-0 flex-1">
+							<div class="min-w-48 flex-1">
 								<a class="block truncate font-medium hover:underline" href="/sites/{s.id}">{s.name}</a>
 								<a class="block truncate font-mono text-[12px] text-action hover:underline" href={s.url} target="_blank" rel="noopener">{s.url.replace(/^https?:\/\//, '')}</a>
 							</div>

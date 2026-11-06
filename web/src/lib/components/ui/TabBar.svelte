@@ -68,10 +68,10 @@
 			href={t.href}
 			data-sveltekit-noscroll
 			data-sveltekit-keepfocus
-			class="{tabClass} {fill ? 'grow' : ''} {current === t.id ? 'text-ink after:absolute after:inset-x-1 after:-bottom-px after:h-0.5 after:rounded-pill after:bg-action' : 'text-muted hover:text-ink'}"
+			class="{tabClass} {fill ? 'grow' : ''} {current === t.id ? 'text-ink' : 'text-muted hover:text-ink'}"
 			aria-current={current === t.id ? 'page' : undefined}
 		>
-			<Icon name={t.icon} size={14} />{t.label}
+			<Icon name={t.icon} size={14} />{t.label}{#if current === t.id}<span class="absolute inset-x-1 -bottom-px h-0.5 rounded-pill bg-action" data-tab-ink aria-hidden="true"></span>{/if}
 		</a>
 	{/each}
 	{#if split.hidden.length}

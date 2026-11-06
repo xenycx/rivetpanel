@@ -594,8 +594,11 @@
 	}
 
 	/* Wizard footer: Back and Cancel on the left, the next step on the right,
-	   spanning exactly the width of the step above it. */
-	.wizard-foot {
+	   spanning exactly the width of the step above it. A settings form's save
+	   bar is the same strip: it owns its surface, so it never floats over a
+	   field while the page scrolls under it. */
+	.wizard-foot,
+	.save-bar {
 		position: sticky;
 		bottom: 0;
 		z-index: 10;
@@ -610,6 +613,12 @@
 	}
 	.wizard-foot > .wizard-next {
 		margin-left: auto;
+	}
+	.save-bar {
+		flex-wrap: wrap;
+		justify-content: flex-end;
+		margin-top: 1.5rem;
+		padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
 	}
 
 
@@ -646,11 +655,27 @@
 	}
 	.side-link[data-active='true'] {
 		position: relative;
-		background: color-mix(in srgb, var(--color-ink) 7%, transparent);
 		color: var(--color-ink);
 		font-weight: 500;
 	}
-	.side-link[data-active='true']::before {
+	/* The active main link draws its highlight as its own element (.side-ink),
+	   so a navigation can slide it to the next link; favorites keep the plain
+	   highlight on the link itself. */
+	.side-link[data-active='true']:not(:has(.side-ink)),
+	.side-ink {
+		background: color-mix(in srgb, var(--color-ink) 7%, transparent);
+	}
+	.side-ink {
+		position: absolute;
+		inset: 0;
+		border-radius: inherit;
+		pointer-events: none;
+	}
+	.side-link:has(.side-ink) > :not(.side-ink) {
+		position: relative;
+	}
+	.side-link[data-active='true']:not(:has(.side-ink))::before,
+	.side-ink::before {
 		content: '';
 		position: absolute;
 		inset: 0.5rem auto 0.5rem -0.75rem;
@@ -844,6 +869,10 @@
 		height: 100%;
 		border-radius: inherit;
 		background: color-mix(in srgb, var(--color-ink) 55%, transparent);
+		/* Readings glide to their new level instead of jumping. */
+		transition:
+			width 600ms cubic-bezier(0.16, 1, 0.3, 1),
+			background-color 300ms;
 	}
 	.meter[data-level='warn'] > i {
 		background: var(--color-warn);
@@ -855,6 +884,9 @@
 		background: var(--color-fail);
 	}
 	.pill {
+		transition:
+			background-color 300ms,
+			color 300ms;
 		display: inline-flex;
 		align-items: center;
 		gap: 0.375rem;
@@ -913,8 +945,15 @@
 		background: transparent;
 		box-shadow: inset 0 0 0 1.5px var(--color-rule);
 	}
+	.spine::before {
+		transition: background-color 300ms;
+	}
+	/* Work in progress moves: the hatching runs down the rail while the state
+	   lasts, so a building or starting app reads as busy at a glance. */
 	.spine[data-busy='true']::before {
 		background: repeating-linear-gradient(-45deg, var(--spine) 0 3px, color-mix(in srgb, var(--spine) 30%, transparent) 3px 6px);
+		background-size: 100% 8.485px;
+		animation: spine-run 900ms linear infinite;
 	}
 }
 
@@ -970,6 +1009,93 @@
 	}
 }
 
+@keyframes spine-run {
+	to {
+		background-position: 0 8.485px;
+	}
+}
+/* A glyph for work in progress (StatusBadge) turns slowly. */
+@keyframes turn {
+	to {
+		transform: rotate(1turn);
+	}
+}
+.busy-turn {
+	transform-origin: 50% 50%;
+	animation: turn 1.6s linear infinite;
+}
+
+/* Navigation (lib/ui/motion.ts). The chrome holds still and the content
+   fades through; an app's icon
+   and name travel from its list row into the page header on an expo-out
+   curve, and the active tab and sidebar indicators slide to their new item. */
+aside.sidebar {
+	view-transition-name: vt-sidebar;
+}
+.topbar {
+	view-transition-name: vt-topbar;
+}
+/* While a navigation is captured the top bar is opaque: its blur has nothing
+   to blur inside a transition layer. */
+:root[data-navigating] .topbar {
+	background: var(--color-paper);
+}
+/* The chrome stays put: no blend, no dip, its new state shows at once. */
+::view-transition-group(vt-sidebar),
+::view-transition-group(vt-topbar),
+::view-transition-new(vt-sidebar),
+::view-transition-new(vt-topbar) {
+	animation: none;
+}
+::view-transition-old(vt-sidebar),
+::view-transition-old(vt-topbar) {
+	display: none;
+}
+/* The content fades through: the old page leaves quickly, the new one
+   settles in from a few pixels below, so the two never overlap legibly. */
+::view-transition-old(root) {
+	animation: 90ms cubic-bezier(0.4, 0, 1, 1) both vt-leave;
+}
+::view-transition-new(root) {
+	animation: 240ms cubic-bezier(0.16, 1, 0.3, 1) 50ms both vt-arrive;
+}
+@keyframes vt-leave {
+	to {
+		opacity: 0;
+	}
+}
+@keyframes vt-arrive {
+	from {
+		opacity: 0;
+		transform: translateY(6px);
+	}
+}
+::view-transition-group(vt-name),
+::view-transition-group(vt-icon) {
+	animation-duration: 340ms;
+	animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+}
+::view-transition-group(vt-tab-ink),
+::view-transition-group(vt-side-ink) {
+	animation-duration: 280ms;
+	animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+}
+/* Indicators are the same shape before and after: show one, not a blend. */
+::view-transition-old(vt-tab-ink),
+::view-transition-old(vt-side-ink) {
+	display: none;
+}
+::view-transition-new(vt-tab-ink),
+::view-transition-new(vt-side-ink) {
+	animation: none;
+}
+/* Text scales with the morph: keep both renderings at their own aspect. */
+::view-transition-old(vt-name),
+::view-transition-new(vt-name) {
+	height: 100%;
+	width: auto;
+}
+
 /* Reduced motion keeps every state change visible without movement: menus
    and dialogs fade in instead of rising or sliding up, switches, check marks
    and meters change in place, and looping pulses stop. Colour and opacity
@@ -991,7 +1117,16 @@
 	*::after {
 		transition-property: color, background-color, border-color, outline-color, text-decoration-color, fill, stroke, opacity, box-shadow !important;
 	}
-	.animate-pulse {
+	.animate-pulse,
+	.busy-turn,
+	.spine[data-busy='true']::before {
 		animation: none !important;
+	}
+	/* Navigation pieces fade where they land instead of travelling. */
+	::view-transition-group(*) {
+		animation: none !important;
+	}
+	::view-transition-new(root) {
+		animation-name: fade;
 	}
 }

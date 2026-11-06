@@ -78,7 +78,7 @@
 		<ul class="divide-y divide-rule-soft">
 			{#each keys as k (k.id)}
 				<li class="flex flex-wrap items-center gap-3 px-4 py-3">
-					<div class="min-w-0 flex-1">
+					<div class="min-w-48 flex-1">
 						<div class="font-medium">{k.name} <code class="ml-1 font-mono text-[12px] text-muted">{k.prefix}…</code></div>
 						<div class="text-small text-muted">Created {fmtTime(k.created_at_ms)} · {k.last_used_at_ms ? `last used ${fmtTime(k.last_used_at_ms)}` : 'never used'} · {k.expires_at_ms ? `expires ${fmtTime(k.expires_at_ms)}` : 'no expiry'}</div>
 					</div>

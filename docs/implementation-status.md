@@ -31,25 +31,42 @@ items state exactly what remains.
   keygen/pack/sign/verify/inspect. Enforcement: the **runtime** (wazero,
   compiler where executable memory is allowed, interpreter under
   `MemoryDenyWriteExecute`) gives extension code no files, environment or
-  sockets, caps memory per extension, bounds each call by a wall-clock
+  sockets, caps memory per running copy (at most 4 copies of one extension,
+  16 overall), bounds each call by a wall-clock
   deadline (no CPU metering), output, host calls and concurrency; the
   **application** checks every host call against granted capabilities, the
   acting person's role and bot permissions (through `BotService`), per-bot
   enablement and per-person consent, enforces the HTTPS host allowlist with
-  connect-time private/metadata address refusal, keeps secret settings sealed
-  and write-only, verifies public-route signatures before code runs, and
+  connect-time private/metadata address refusal and the same rules (port 443,
+  no userinfo, listed host) on every redirect, keeps secret settings sealed
+  and write-only (including a secret basic-auth user), allows
+  `identity.discord` only without a signed-in person, verifies public-route
+  signatures before code runs and accepts each signed request once (replay
+  cache, in memory: a restart forgets it, Discord's five-minute timestamp
+  window still applies), keeps page-route and public-route rate budgets
+  apart, and
   audits administration and actions taken through extensions; the
   **browser** isolates custom pages (CSP `sandbox allow-scripts`, opaque
   origin, `connect-src 'none'`, hashed inline script, `postMessage` bridge
-  that calls only that extension's routes). Install/upgrade with
+  that calls only that extension's routes and answers only the first
+  document: a frame that loads anything else is removed; a page navigating
+  itself to an outside address cannot be prevented by browsers and is
+  documented). The review screen shows permissions with the safeguard each
+  one carries instead of risk levels. Install/upgrade with
   re-consent for new capabilities, rollback to the three newest stored
   versions, uninstall with full data removal, five-failure auto-stop with a
   notification, `RIVET_EXTENSIONS_SAFE_MODE=1`, idle unloading after ten
   minutes. Built-in extensions: **Discord bot insights**, **Discord ChatOps**
   (HTTP interactions, per-person scoped consent, single-use confirmation
   buttons) and the **database browser** (disposable client containers on the
-  add-on network; read-only sessions are an accident guard, not a security
-  boundary; local nodes only). Not done: remote-node database queries (needs
+  add-on network; SQL reads run as a `rivet_reader` database account with
+  only read rights, re-provisioned with a fresh expiring password per query,
+  so read mode is enforced by the **database** for PostgreSQL and MariaDB
+  (verified against PostgreSQL 17 and MariaDB 11); Redis and MongoDB reads
+  remain an application allowlist; confirmed changes show exactly the
+  request that runs; local nodes only). Not enforced: a failing route can
+  count toward the five-failure auto-stop for everyone, and one job queue
+  serves all extensions. Not done: remote-node database queries (needs
   an agent route and protocol bump), third-party extension catalog or
   registry, and event types beyond `bot.status` (for example finished
   operations).

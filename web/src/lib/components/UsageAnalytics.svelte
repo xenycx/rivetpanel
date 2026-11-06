@@ -75,12 +75,12 @@
 		<div class="stat">
 			<dt class="eyebrow">CPU</dt>
 			<dd class="mt-1 font-mono text-section font-semibold">{tot.cpu_avg !== null ? fmtCores(tot.cpu_avg) : '—'}</dd>
-			<dd class="text-small text-muted">{tot.cpu_max !== null ? `peak ${fmtCores(tot.cpu_max)}` : 'not measured'}{#if cpuLimit} · limit {fmtCores(cpuLimit)}{/if}</dd>
+			<dd class="text-small text-muted">{tot.cpu_max !== null ? `peak ${fmtCores(tot.cpu_max)}` : 'not measured'}{#if cpuLimit}{' '}· limit {fmtCores(cpuLimit)}{/if}</dd>
 		</div>
 		<div class="stat">
 			<dt class="eyebrow">Memory</dt>
 			<dd class="mt-1 font-mono text-section font-semibold">{tot.mem_avg !== null ? fmtBytes(tot.mem_avg) : '—'}</dd>
-			<dd class="text-small text-muted">{tot.mem_max !== null ? `peak ${fmtBytes(tot.mem_max)}` : 'not measured'}{#if memLimit} · limit {fmtBytes(memLimit)}{/if}</dd>
+			<dd class="text-small text-muted">{tot.mem_max !== null ? `peak ${fmtBytes(tot.mem_max)}` : 'not measured'}{#if memLimit}{' '}· limit {fmtBytes(memLimit)}{/if}</dd>
 		</div>
 		<div class="stat">
 			<dt class="eyebrow">Network</dt>

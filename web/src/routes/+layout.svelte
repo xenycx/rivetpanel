@@ -25,8 +25,10 @@
 	import NewMenu from '$lib/components/NewMenu.svelte';
 	import { loadWorkspaces } from '$lib/workspaces.svelte';
 	import { resourceHref } from '$lib/api/games';
+	import { fluidNavigation } from '$lib/ui/motion';
 
 	let { children } = $props();
+	fluidNavigation();
 	let drawer = $state(false);
 	let palette = $state(false);
 
@@ -215,7 +217,7 @@
 		{#each items as n (n.href)}
 			<li>
 				<a href={n.href} class="side-link {compact ? 'justify-center px-0' : ''}" data-active={n.active} aria-current={n.active ? 'page' : undefined} aria-label={compact ? n.label : undefined} title={compact ? n.label : undefined}>
-					<Icon name={n.icon} class="side-icon" />{#if !compact}<span>{n.label}</span>{/if}
+					{#if n.active}<span class="side-ink" aria-hidden="true"></span>{/if}<Icon name={n.icon} class="side-icon" />{#if !compact}<span>{n.label}</span>{/if}
 				</a>
 			</li>
 		{/each}
@@ -272,7 +274,7 @@
 {#if session.user && !bare}
 	<a href="#main" class="sr-only z-50 bg-raised px-3 py-2 focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:rounded-control focus:shadow-overlay">Skip to content</a>
 	<div class="lg:grid {sidebarCollapsed ? 'lg:grid-cols-[68px_minmax(0,1fr)]' : 'lg:grid-cols-[15rem_minmax(0,1fr)]'}">
-		<aside class="sidebar sticky top-0 z-40 hidden h-dvh flex-col overflow-y-auto border-r border-rule-soft px-3 py-4 lg:flex" aria-label="Sidebar">
+		<aside class="sidebar scrollbar-thin sticky top-0 z-40 hidden h-dvh flex-col overflow-y-auto overscroll-contain border-r border-rule-soft px-3 py-4 lg:flex" aria-label="Sidebar">
 			{@render sidebar(sidebarCollapsed, true)}
 		</aside>
 		<div class="min-w-0">

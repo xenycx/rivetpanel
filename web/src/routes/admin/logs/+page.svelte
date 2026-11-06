@@ -283,7 +283,7 @@
 			<SettingsSection title="What is written" description="Day files are created with owner-only permissions next to the database and are not part of rivetpanel backup.">
 				<div class="space-y-4">
 					<Switch label="Keep console output of apps" bind:checked={f.capture_bots}>
-						Copied from Docker, or from the node's agent for remote servers, and stored on the panel.{#if !v.capture_available} This panel has no container runtime and no nodes, so there is nothing to copy right now.{/if}
+						Copied from Docker, or from the node's agent for remote servers, and stored on the panel.{#if !v.capture_available}{' '}This panel has no container runtime and no nodes, so there is nothing to copy right now.{/if}
 					</Switch>
 					<label class="block pl-12">
 						<span class="label">Copy new output every</span>
@@ -319,9 +319,10 @@
 
 		{#if saveError}<Notice tone="fail" class="mt-2" live>{saveError}</Notice>{/if}
 		{#if manage}
-			<div class="sticky bottom-4 mt-2 flex flex-wrap justify-end gap-2">
-				{#if dirty}<button type="button" class="btn shadow-overlay" onclick={reset}>Discard</button>{/if}
-				<button class="btn btn-primary shadow-overlay" disabled={saving || !dirty || Object.keys(errors).length > 0}>{saving ? 'Saving…' : 'Save and apply'}</button>
+			<div class="save-bar">
+				<span class="mr-auto text-small text-muted" aria-live="polite">{dirty ? 'Unsaved changes' : 'All changes saved'}</span>
+				{#if dirty}<button type="button" class="btn" onclick={reset}>Discard</button>{/if}
+				<button class="btn btn-primary" disabled={saving || !dirty || Object.keys(errors).length > 0}>{saving ? 'Saving…' : 'Save and apply'}</button>
 			</div>
 		{/if}
 	</form>

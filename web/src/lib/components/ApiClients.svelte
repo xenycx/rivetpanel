@@ -119,7 +119,7 @@
 	{#each clients ?? [] as c (c.id)}
 		{@const expired = c.expires_at_ms !== null && c.expires_at_ms < Date.now()}
 		<li class="flex flex-wrap items-center gap-3 px-4 py-3">
-			<div class="min-w-0 flex-1">
+			<div class="min-w-48 flex-1">
 				<p class="font-medium">{c.name} <code class="ml-1 font-mono text-[12px] text-muted">{c.prefix}…</code></p>
 				<p class="mt-0.5 flex flex-wrap gap-1">
 					{#each c.permissions as p (p)}<span class="eyebrow rounded-control border border-rule px-1.5 py-px" title={permLabel(p)}>{p}</span>{/each}

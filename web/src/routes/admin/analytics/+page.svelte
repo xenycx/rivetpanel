@@ -124,7 +124,7 @@
 			<div class="stat">
 				<dt class="eyebrow">Support tickets</dt>
 				<dd class="mt-1 font-mono text-section font-semibold">{fmtCount(data.tickets.opened)} <span class="text-small font-normal text-muted">opened</span> · {fmtCount(data.tickets.closed)} <span class="text-small font-normal text-muted">closed</span></dd>
-				<dd class="text-small text-muted">{fmtCount(data.tickets.open_now)} waiting now{#if data.tickets.median_response_ms !== null} · first reply in {fmtDuration(data.tickets.median_response_ms)} (median){/if}</dd>
+				<dd class="text-small text-muted">{fmtCount(data.tickets.open_now)} waiting now{#if data.tickets.median_response_ms !== null}{' '}· first reply in {fmtDuration(data.tickets.median_response_ms)} (median){/if}</dd>
 			</div>
 		{/if}
 	</dl>
@@ -155,7 +155,7 @@
 
 	<section class="mt-8" aria-labelledby="top-h">
 		<h3 id="top-h" class="text-title font-semibold">Top consumers</h3>
-		<p class="text-small text-muted">Averages over the range while the app was measured.{#if data.top_cpu.length && !data.top_cpu[0].owner} Owners are shown to accounts that can view accounts.{/if}</p>
+		<p class="text-small text-muted">Averages over the range while the app was measured.{#if data.top_cpu.length && !data.top_cpu[0].owner}{' '}Owners are shown to accounts that can view accounts.{/if}</p>
 		<div class="mt-3 grid gap-3 xl:grid-cols-3">
 			{#each tables as t (t.id)}
 				<div class="card p-4">

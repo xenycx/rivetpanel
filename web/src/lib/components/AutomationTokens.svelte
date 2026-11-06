@@ -98,7 +98,7 @@
 <ul class="divide-y divide-rule-soft">
 	{#each tokens ?? [] as t (t.id)}
 		<li class="flex flex-wrap items-center gap-3 px-4 py-3">
-			<div class="min-w-0 flex-1">
+			<div class="min-w-48 flex-1">
 				<p class="font-medium">{t.name} <code class="ml-1 font-mono text-[12px] text-muted">{t.prefix}…</code></p>
 				<p class="mt-0.5 flex flex-wrap gap-1">
 					{#each t.actions as a (a)}<span class="eyebrow rounded-control border border-rule px-1.5 py-px">{a}</span>{/each}

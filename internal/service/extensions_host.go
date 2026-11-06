@@ -310,8 +310,16 @@ func (inv *invocation) fetch(ctx context.Context, raw []byte) []byte {
 			return replyErr("invalid", "setting "+ref.key+" is not configured")
 		}
 		if ref.basic {
-			// The basic-auth user is the extension's (non-secret) application id setting.
-			app, _ := inv.svc.settingText(ctx, inv.ext.man.ID, "application_id")
+			// The basic-auth user is the extension's application id setting.
+			// If a manifest declares it secret, it is held to the same host
+			// list as any other secret.
+			app := ""
+			if d, ok := inv.ext.man.Setting("application_id"); ok {
+				if d.Type == "secret" && !slices.Contains(d.InjectHosts, strings.ToLower(u.Hostname())) {
+					return replyErr("denied", "setting application_id may not be sent to "+u.Hostname())
+				}
+				app, _ = inv.svc.settingText(ctx, inv.ext.man.ID, "application_id")
+			}
 			req.SetBasicAuth(app, secret)
 		} else {
 			req.Header.Set("Authorization", ref.prefix+secret)
@@ -356,7 +364,10 @@ func (s *ExtensionService) client(hosts []string) *http.Client {
 		Transport: &http.Transport{DialContext: d.DialContext, TLSHandshakeTimeout: 10 * time.Second, MaxIdleConns: 4,
 			IdleConnTimeout: 30 * time.Second, ResponseHeaderTimeout: 15 * time.Second, Proxy: nil},
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			if len(via) >= 3 || req.URL.Scheme != "https" || !slices.Contains(hosts, strings.ToLower(req.URL.Hostname())) {
+			// A redirect is held to the same rules as the first request:
+			// https, no credentials in the address, port 443, a listed host.
+			if len(via) >= 3 || req.URL.Scheme != "https" || req.URL.User != nil || (req.URL.Port() != "" && req.URL.Port() != "443") ||
+				!slices.Contains(hosts, strings.ToLower(req.URL.Hostname())) {
 				return http.ErrUseLastResponse
 			}
 			req.Header.Del("Authorization")
@@ -673,6 +684,12 @@ func (inv *invocation) identity(ctx context.Context, raw []byte) []byte {
 	if on, err := inv.svc.Store.ExtensionBotEnabled(ctx, inv.ext.man.ID, r.BotID); err != nil || !on {
 		return replyErr("denied", "this extension is not switched on for the bot")
 	}
+	// On a person's behalf, only for a bot that person can see.
+	if inv.user != nil {
+		if _, err := inv.svc.Bots.Get(ctx, *inv.user, r.BotID); err != nil {
+			return errReply(err)
+		}
+	}
 	if !discordID.MatchString(r.UserID) || r.Username == "" || len(r.Username) > 64 {
 		return replyErr("invalid", "a Discord user id and name are required")
 	}
@@ -690,6 +707,12 @@ func (inv *invocation) discordUser(ctx context.Context, raw []byte) []byte {
 		DiscordUserID string `json:"discord_user_id"`
 	}
 	_ = json.Unmarshal(raw, &r)
+	// Only work that arrives without a signed-in person (a verified public
+	// request, a job or an event) may act for someone else; a route a person
+	// calls always acts as that person.
+	if inv.user != nil {
+		return replyErr("denied", "a request made by a signed-in person cannot act for someone else")
+	}
 	if !discordID.MatchString(r.DiscordUserID) {
 		return replyErr("invalid", "not a Discord user id")
 	}
@@ -763,6 +786,9 @@ func (inv *invocation) addons(ctx context.Context, name string, raw []byte) []by
 	if err := json.Unmarshal(raw, &r); err != nil {
 		return replyErr("invalid", "malformed request")
 	}
+	// Only the fields this database kind reads survive, so the statement the
+	// confirmation dialog shows is exactly the one that runs.
+	r.Query = r.Query.ForKind(r.Kind)
 	if inv.user == nil {
 		return errReply(&domain.PermissionError{Perm: "a signed-in person"})
 	}
@@ -847,7 +873,10 @@ func (s *ExtensionService) ConfirmAddonWrite(ctx context.Context, actor domain.U
 	if queryHash(p.kind, p.q) != p.hash {
 		return AddonQueryResult{}, domain.Invalid("the query changed")
 	}
-	res, err := s.Addons.QueryAddon(ctx, b, p.kind, p.q)
+	if len(p.q.ForKind(p.kind).Describe(p.kind)) > 2000 {
+		return AddonQueryResult{}, domain.Invalid("this change is too long to show for confirmation")
+	}
+	res, err := s.Addons.QueryAddon(ctx, b, p.kind, p.q.ForKind(p.kind))
 	s.recordQuery(ctx, actor, b.ID, p.kind, "write", p.hash, err)
 	return res, err
 }
@@ -860,14 +889,13 @@ func (s *ExtensionService) PendingAddonWrite(actor domain.User, token string) (m
 	if !ok || time.Now().After(p.expires) || p.user != actor.ID {
 		return nil, domain.ErrNotFound
 	}
-	text := p.q.Query
-	if p.q.Op != "" {
-		text = p.q.Op + " " + p.q.DB + "." + p.q.Coll + " " + p.q.JSON
+	text := p.q.ForKind(p.kind).Describe(p.kind)
+	// A statement too long to show in full is not offered for confirmation:
+	// a person approves only what they could read.
+	if len(text) > 2000 {
+		return nil, domain.Invalid("this change is too long to show for confirmation (at most 2000 characters)")
 	}
-	if len(p.q.Args) > 0 {
-		text = strings.Join(p.q.Args, " ")
-	}
-	return map[string]string{"bot_id": p.bot, "kind": p.kind, "query": clipService(text, 2000)}, nil
+	return map[string]string{"bot_id": p.bot, "kind": p.kind, "query": text}, nil
 }
 
 func (s *ExtensionService) recordQuery(ctx context.Context, u domain.User, botID, kind, mode, hash string, err error) {

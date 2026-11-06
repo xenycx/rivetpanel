@@ -6,6 +6,75 @@ authoritative current version.
 
 ## Unreleased
 
+### Added
+
+- Navigation keeps its place: in browsers with View Transitions, opening a
+  bot or game server from a list morphs its row (icon and name) into the page
+  header and back, the active section tab and sidebar indicators slide to
+  their new item, and the content fades through while the sidebar and top bar
+  hold still. Other browsers navigate instantly as before; with reduced
+  motion the pieces fade in place instead of travelling.
+- Live readings move with the data: Overview capacity numbers and a bot's
+  live usage strip roll only the digits that changed, meters glide to their
+  new level, status pills change colour smoothly, and work in progress
+  visibly runs (the hatched state rail moves, the busy status glyph turns).
+
+### Changed
+
+- Extension review no longer marks permissions as "Sensitive" or "Review".
+  It opens with how the exact bundle is contained (where it comes from and
+  its SHA-256, its sandbox limits, the internet hosts it can reach, and that
+  uninstalling removes everything it stored), then lists permissions grouped
+  by what they touch, each with the extension's reason and the safeguard the
+  panel enforces on every use. The extensions list shows each extension's
+  internet reach instead of a count of sensitive capabilities. The API's
+  capability `risk` field is replaced by `area` and `guard`.
+
+### Security
+
+- Database browser reads can no longer change data. A read could switch its
+  own PostgreSQL or MariaDB session back to read-write (for example
+  `SET TRANSACTION READ WRITE; DELETE …`) and so write without the
+  confirmation dialog. SQL reads now run as a separate `rivet_reader`
+  database account with only read rights, re-created with a new expiring
+  password for every query; writes still run only after confirmation.
+- The change-confirmation dialog shows exactly the statement that runs and
+  names the app: fields another database kind would read are dropped, and a
+  statement too long to show in full cannot be confirmed.
+- A custom extension page that loads another document (navigates away) is
+  removed, and the panel stops answering it, so code from another address
+  can never call the extension's routes.
+- Signed public extension requests are accepted once: replayed Discord
+  interactions and repeated HMAC deliveries are refused before any extension
+  code runs. Page traffic can no longer use up the rate budget of an
+  extension's public endpoints.
+- Extension HTTPS redirects are held to the first request's rules (port 443,
+  no credentials in the address); a manifest can no longer send a secret
+  `application_id` setting as a basic-auth user to a host it was not
+  allowed for; `bot.identity` on a person's behalf now requires access to the
+  bot; and `identity.discord` works only for verified public requests, jobs
+  and events, never in a request a signed-in person made.
+
+### Fixed
+
+- Missing spaces in about forty generated sentences across the interface,
+  such as "31.0 GiBon this node", "not measured· limit 0.5 cores", "Built in·
+  1 sensitive capability" and "stored on the panel.This panel has no…", in
+  bot settings, usage, extensions, nodes, status page, support, logs and
+  others.
+- The Administration and Settings section lists scroll on their own when
+  taller than the window, so every section stays reachable, and the wheel
+  over them no longer scrolls the page behind; the main sidebar likewise
+  keeps its scrolling to itself.
+- On phones, rows with an action beside their text (password, passkeys, SFTP
+  and automation keys, API clients, extensions, users and others) now move
+  the action below the text instead of squeezing the text into a narrow
+  column, and panel log lines put the time and level above a full-width
+  message.
+- Save and apply in Panel settings and Logs and retention is now a sticky
+  bar with its own surface (and, for logs, an unsaved-changes note) instead
+  of a floating button that covered form fields while scrolling.
+
 ## 1.0.0 - 2026-11-07
 
 ### Added

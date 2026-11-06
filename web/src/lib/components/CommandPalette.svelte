@@ -243,7 +243,7 @@
 				{#if i === active}<kbd class="text-small text-muted">Enter</kbd>{/if}
 			</li>
 		{:else}
-			<li class="px-2 py-3 text-muted">Nothing matches “{q}”{scope !== 'all' ? ` in ${scopes.find((s) => s.id === scope)?.label}` : ''}.{#if aiOn} Press Tab to widen the search, or ask the assistant.{/if}</li>
+			<li class="px-2 py-3 text-muted">Nothing matches “{q}”{scope !== 'all' ? ` in ${scopes.find((s) => s.id === scope)?.label}` : ''}.{#if aiOn}{' '}Press Tab to widen the search, or ask the assistant.{/if}</li>
 		{/each}
 	</ul>
 	<p class="mt-1 border-t border-rule-soft pt-2 text-small text-muted"><kbd>↑</kbd> <kbd>↓</kbd> move · <kbd>Enter</kbd> open · <kbd>Tab</kbd> change scope · several words narrow the search</p>

@@ -88,7 +88,11 @@
 	const stateTone: Record<string, string | undefined> = { enabled: 'run', failed: 'fail', disabled: undefined, available: undefined };
 	const stateLabel: Record<string, string> = { enabled: 'On', disabled: 'Off', failed: 'Stopped', available: 'Not installed' };
 	const sourceLabel = (v: ExtensionView) => (v.source === 'builtin' ? 'Built in' : v.source === 'dev' ? 'Unsigned' : 'Signed upload');
-	const highRisk = (v: ExtensionView) => v.capabilities.filter((c) => c.risk === 'high').length;
+	// What a row says about reach: the internet hosts it may contact, or none.
+	// Discord's API called by the panel for an extension (bot.discord_api) counts too.
+	const hosts = (v: ExtensionView) => [
+		...new Set([...v.capabilities.filter((c) => c.name === 'http.fetch').flatMap((c) => c.hosts ?? []), ...(v.capabilities.some((c) => c.name === 'bot.discord_api') ? ['discord.com'] : [])])
+	];
 </script>
 
 <svelte:head><title>Extensions · RivetPanel</title></svelte:head>
@@ -96,7 +100,7 @@
 <div class="flex flex-wrap items-start justify-between gap-3">
 	<div class="max-w-3xl">
 		<h2 class="text-section">Extensions</h2>
-		<p class="mt-1 text-muted">Extensions add pages, bot tabs, overview cards and background jobs. Each runs sandboxed in WebAssembly and can only use the capabilities you grant it; custom pages run in an isolated frame with no access to the panel.</p>
+		<p class="mt-1 text-muted">Extensions add pages, bot tabs, overview cards and background jobs. Each runs sandboxed in WebAssembly, uses only the permissions you grant it, and every use is checked by the panel; custom pages run in an isolated frame with no access to the panel.</p>
 	</div>
 	{#if builtinAdmin}
 		<label class="btn cursor-pointer focus-within:outline-2 focus-within:outline-action" title="Upload a signed .rpx bundle">
@@ -135,7 +139,7 @@
 					</div>
 					<div class="shrink-0 text-small text-muted sm:text-right">
 						<p>{v.publisher} · {v.version}</p>
-						<p>{sourceLabel(v)}{#if highRisk(v)} · <span class="text-warn">{highRisk(v)} sensitive capabilit{highRisk(v) === 1 ? 'y' : 'ies'}</span>{/if}</p>
+						<p>{sourceLabel(v)} · {hosts(v).length ? `reaches ${hosts(v).join(', ')}` : 'no internet access'}</p>
 					</div>
 				</a>
 			</li>
@@ -150,7 +154,7 @@
 		<ul class="list-card mt-3">
 			{#each publishers as p (p.key_id)}
 				<li class="flex flex-wrap items-center gap-3 px-4 py-3">
-					<div class="min-w-0 flex-1">
+					<div class="min-w-48 flex-1">
 						<p class="font-medium">{p.name} {#if p.revoked_at_ms}<span class="pill" data-tone="fail">Revoked</span>{/if}</p>
 						<p class="truncate font-mono text-small text-muted" title={p.public_key}>{p.key_id} · added {fmtTime(p.created_at_ms)}</p>
 					</div>

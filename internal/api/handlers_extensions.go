@@ -287,7 +287,10 @@ func (s *panel) extBotRoute(c fiber.Ctx) error {
 }
 
 func (s *panel) extPublicRoute(c fiber.Ctx) error {
-	if n := c.RequestCtx().Request.Header.ContentLength(); n > 64<<10 {
+	// A cheap early refusal at the largest limit any route may declare; the
+	// route's own limit (64 KiB unless its manifest says otherwise) is then
+	// checked on the received body, chunked or not, before anything runs.
+	if n := c.RequestCtx().Request.Header.ContentLength(); n > 256<<10 {
 		return fiber.NewError(fiber.StatusRequestEntityTooLarge, "request body too large")
 	}
 	return s.serveExtRoute(c, nil, "public", "")

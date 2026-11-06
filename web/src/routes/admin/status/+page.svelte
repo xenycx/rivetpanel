@@ -168,11 +168,11 @@
 				{#each data.components as c, i (c.id)}
 					<li class="flex flex-wrap items-center gap-2 px-4 py-3">
 						<span class="size-2.5 rounded-pill {stateTone[c.state]?.bg}" aria-hidden="true"></span>
-						<span class="min-w-0 flex-1">
+						<span class="min-w-48 flex-1">
 							<span class="font-medium">{c.name}</span>
 							<span class="block text-small text-muted">
-								{kindLabel[c.source?.kind ?? ''] ?? ''}{#if c.source?.name}: {c.source.name}{/if}{#if c.source?.missing} <span class="text-fail">(source no longer exists)</span>{/if}
-								· {stateLabel[c.state]}{#if c.uptime !== null} · {c.uptime}% over {data.retention_days} days{/if}
+								{kindLabel[c.source?.kind ?? ''] ?? ''}{#if c.source?.name}: {c.source.name}{/if}{#if c.source?.missing}{' '}<span class="text-fail">(source no longer exists)</span>{/if}
+								· {stateLabel[c.state]}{#if c.uptime !== null}{' '}· {c.uptime}% over {data.retention_days} days{/if}
 							</span>
 						</span>
 						<button class="btn btn-quiet btn-icon" aria-label="Move {c.name} up" disabled={i === 0} onclick={() => moveComponent(c, -1)}>↑</button>
@@ -239,7 +239,7 @@
 							<button class="btn btn-quiet ml-auto text-fail" onclick={() => removeIncident(i)}><Icon name="trash" />Delete</button>
 						</div>
 						<p class="text-small text-muted">
-							{#if i.kind === 'incident'}{i.impact} impact · {/if}{#if i.starts_at_ms}{fmtWhen(i.starts_at_ms)}{#if i.ends_at_ms} – {fmtWhen(i.ends_at_ms)}{/if} · {/if}{i.components.map((c) => c.name).join(', ') || 'no components'}
+							{#if i.kind === 'incident'}{i.impact} impact ·{' '}{/if}{#if i.starts_at_ms}{fmtWhen(i.starts_at_ms)}{#if i.ends_at_ms}{' '}– {fmtWhen(i.ends_at_ms)}{/if} ·{' '}{/if}{i.components.map((c) => c.name).join(', ') || 'no components'}
 						</p>
 						<ol class="mt-3 grid gap-2 border-l-2 border-rule-soft pl-4">
 							{#each i.updates as u}<li class="text-small"><span class="font-medium capitalize">{words(u.status)}</span> <span class="text-muted">· {fmtWhen(u.created_at_ms)}</span><p class="whitespace-pre-line">{u.body}</p></li>{/each}

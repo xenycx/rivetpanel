@@ -340,7 +340,7 @@
 							<li class="flex flex-wrap items-center gap-3 px-5 py-3">
 								<span class="grid size-8 shrink-0 place-items-center rounded-control {r.current ? 'bg-run/12 text-run' : 'bg-paper-2 text-muted'}"><Icon name={r.source === 'github' ? 'github' : 'upload'} size={14} /></span>
 								<div class="min-w-0 flex-1 basis-56">
-									<p class="truncate font-medium">{r.source_label ?? 'ZIP upload'}{#if r.source_ref} <code class="text-small font-normal text-muted">{r.source_ref.slice(0, 7)}</code>{/if}{#if r.current}<span class="pill ml-2 align-middle" data-tone="run">Serving</span>{/if}</p>
+									<p class="truncate font-medium">{r.source_label ?? 'ZIP upload'}{#if r.source_ref}{' '}<code class="text-small font-normal text-muted">{r.source_ref.slice(0, 7)}</code>{/if}{#if r.current}<span class="pill ml-2 align-middle" data-tone="run">Serving</span>{/if}</p>
 									<p class="text-small text-muted">{r.files} files · {fmtBytes(r.bytes)} · {fmtAgo(r.created_at_ms)}{r.actor ? ` by ${r.actor}` : ''}</p>
 								</div>
 								{#if !r.current && canEdit}<button class="btn btn-sm" onclick={() => activate(r)}>Serve this</button>{/if}
@@ -390,7 +390,7 @@
 								{#if x.last_error}<p class="mt-2 text-small text-warn">{x.last_error}</p>{/if}
 								{#if canEdit}<button class="btn btn-sm mt-3 w-full" onclick={() => verify(x)} disabled={checking[x.domain]}>{checking[x.domain] ? 'Checking DNS…' : 'Check DNS now'}</button>{/if}
 							{:else}
-								<p class="mt-1 text-small text-muted">Verified {fmtAgo(x.verified_at_ms ?? 0)}.{#if x.last_error} <span class="text-warn">Last re-check: {x.last_error}</span>{/if}</p>
+								<p class="mt-1 text-small text-muted">Verified {fmtAgo(x.verified_at_ms ?? 0)}.{#if x.last_error}{' '}<span class="text-warn">Last re-check: {x.last_error}</span>{/if}</p>
 							{/if}
 						</li>
 					{/each}

@@ -66,7 +66,8 @@ convert databases created by the predecessor product. Start with a new
   (profile, server count, invite link, token-reset warnings), **Discord
   ChatOps** (`/status`, `/logs`, `/restart` and more, as each person's own
   panel account, with confirmation buttons) and a **database browser**
-  (read-only queries and confirmed changes for every add-on database)
+  (reads through a read-only database account, and changes only after a
+  confirmation that shows the exact statement)
   (`docs/extensions.md`)
 * **Databases** (add-ons): PostgreSQL, Redis, MongoDB and MariaDB per bot on a private,
   internet-less network, with connection variables injected; custom build

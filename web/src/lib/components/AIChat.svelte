@@ -213,7 +213,7 @@
 			<details class="group rounded-tile border border-rule-soft bg-paper-2/40" open={live(r) || undefined}>
 				<summary class="flex cursor-pointer items-center gap-2 px-2.5 py-1.5 text-small text-muted select-none">
 					{#if live(r)}<span class="size-2 shrink-0 animate-pulse rounded-pill bg-action" aria-hidden="true"></span>{:else}<Icon name="activity" size={13} />{/if}
-					<span class="min-w-0 flex-1 truncate">{summary(r)}{#if r.focus} · {r.focus}{/if}</span>
+					<span class="min-w-0 flex-1 truncate">{summary(r)}{#if r.focus}{' '}· {r.focus}{/if}</span>
 					<Icon name="chevronDown" size={13} class="transition-transform group-open:rotate-180" />
 				</summary>
 				<ul class="space-y-0.5 border-t border-rule-soft px-2.5 py-1.5">

@@ -39,25 +39,46 @@ const (
 	CapAddonsQuery = "addons.query"     // query a bot's database add-on as the acting user
 )
 
-// CapabilityInfo describes a capability for the review screen.
+// CapabilityInfo describes a capability for the review screen: what it
+// lets an extension do (Label), which part of the panel it touches (Area:
+// "own", "bots", "people" or "internet") and the safeguard the panel itself
+// enforces on every use (Guard). Capabilities are not ranked by danger: each
+// is shown with the limit that applies to it, so a reviewer decides from
+// facts, not from a warning colour.
 type CapabilityInfo struct {
-	Name, Label, Risk string
+	Name  string `json:"name"`
+	Label string `json:"label"`
+	Area  string `json:"area"`
+	Guard string `json:"guard"`
 }
 
-// Capabilities is the plain-language catalog shown before consent.
+// Capabilities is the plain-language catalog shown before consent. Every
+// Guard sentence must describe a check the host performs (extensions_host.go).
 var Capabilities = []CapabilityInfo{
-	{CapKV, "Store its own data in the panel database", "low"},
-	{CapSettings, "Read its own settings", "low"},
-	{CapNotify, "Send in-panel notifications", "low"},
-	{CapHTTP, "Connect to the listed internet hosts over HTTPS", "medium"},
-	{CapBotsRead, "See bots: as the person using it, or bots it was enabled on", "medium"},
-	{CapBotLogs, "Read recent bot logs as the person using it", "medium"},
-	{CapDiscordAPI, "Call Discord's read-only API with a bot's own token (the token stays in the panel)", "medium"},
-	{CapBotIdentity, "Update a bot's Discord name and avatar shown in the panel", "low"},
-	{CapBotPower, "Start, stop and restart bots as the person using it", "high"},
-	{CapBotDeploy, "Redeploy bots as the person using it", "high"},
-	{CapDiscordUser, "Act for panel users who linked Discord and consented", "high"},
-	{CapAddonsQuery, "Query bot databases as the person using it", "high"},
+	{CapKV, "Store its own data in the panel", "own",
+		"Kept apart from other extensions, at most 8 MiB, and deleted when it is uninstalled."},
+	{CapSettings, "Read its own settings", "own",
+		"Secret settings are never readable: the panel attaches them to requests itself."},
+	{CapNotify, "Send in-panel notifications", "people",
+		"Only to a bot's owner or the person using it, at most 30 a minute."},
+	{CapHTTP, "Connect to the listed internet hosts", "internet",
+		"HTTPS to exactly these hosts; redirects are re-checked and private or local addresses are refused."},
+	{CapBotsRead, "See bots", "bots",
+		"Never more than the person using it can see; on its own, only bots it was turned on for."},
+	{CapBotLogs, "Read recent bot output", "bots",
+		"At most 200 lines, through the same access checks as the panel."},
+	{CapDiscordAPI, "Read a bot's Discord profile", "bots",
+		"Read-only Discord endpoints. The panel adds the bot's token; the extension never sees it."},
+	{CapBotIdentity, "Update a bot's Discord name and avatar in the panel", "bots",
+		"Only the name and picture the panel shows for that bot, and only for bots it was turned on for."},
+	{CapBotPower, "Start, stop and restart bots", "bots",
+		"With the permissions of the person using it, never more."},
+	{CapBotDeploy, "Redeploy bots", "bots",
+		"With the permissions of the person using it, never more."},
+	{CapDiscordUser, "Act for people who linked Discord", "people",
+		"Only people who allowed it under Settings, with the scopes they chose; it never adds permissions."},
+	{CapAddonsQuery, "Query bot databases", "bots",
+		"Read-only sessions; a change runs only after the person confirms it in a panel dialog."},
 }
 
 func knownCapability(n string) bool {

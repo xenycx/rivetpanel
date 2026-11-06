@@ -91,7 +91,7 @@
 		<ul class="divide-y divide-rule-soft">
 			{#each keys ?? [] as k (k.id)}
 				<li class="flex flex-wrap items-center gap-3 px-4 py-3">
-					<div class="min-w-0 flex-1">
+					<div class="min-w-48 flex-1">
 						<p class="font-medium">{k.name}</p>
 						<p class="text-small text-muted">Added {fmtWhen(k.created_at_ms)} · {k.last_used_at_ms ? `used ${fmtAgo(k.last_used_at_ms)}` : 'not used yet'}</p>
 					</div>
