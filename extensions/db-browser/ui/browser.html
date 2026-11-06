@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Database browser</title>
+<style>
+:root {
+	--paper: #f7f6f3; --panel: #fff; --paper-2: #efeee9; --ink: #1d1c1a; --muted: #6b6862; --rule: #d9d6cf; --rule-soft: #e7e4de;
+	--action: #b44718; --action-ink: #fff; --fail: #b3261e; --run: #1f7a4d; --warn: #8a5a00; --term: #16181d; --term-ink: #e6e6e6;
+	--radius: 8px; --font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; --mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body { font: 14px/1.45 var(--font); color: var(--ink); background: var(--panel); display: flex; flex-direction: column; }
+button, select, input, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+.bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--rule-soft); }
+.seg { display: inline-flex; border: 1px solid var(--rule); border-radius: var(--radius); overflow: hidden; }
+.seg button { border: 0; background: transparent; padding: 5px 12px; }
+.seg button + button { border-left: 1px solid var(--rule); }
+.seg button[aria-pressed="true"] { background: var(--paper-2); font-weight: 600; }
+.pill { font-size: 12px; padding: 2px 8px; border-radius: 999px; background: var(--paper-2); color: var(--muted); }
+.pill.write { background: color-mix(in srgb, var(--warn) 15%, transparent); color: var(--warn); }
+.grow { flex: 1; }
+.layout { flex: 1; min-height: 0; display: grid; grid-template-columns: 15rem minmax(0, 1fr); }
+@media (max-width: 720px) { .layout { grid-template-columns: 1fr; grid-template-rows: auto 1fr; } .side { max-height: 9rem; border-right: 0; border-bottom: 1px solid var(--rule-soft); } }
+.side { border-right: 1px solid var(--rule-soft); overflow: auto; padding: 8px; }
+.side h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 6px 6px 4px; font-weight: 600; }
+.side ul { list-style: none; margin: 0; padding: 0; }
+.side li button { width: 100%; text-align: left; border: 0; background: transparent; padding: 4px 8px; border-radius: 6px; font-family: var(--mono); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.side li button:hover { background: var(--paper-2); }
+.side .muted { padding: 4px 8px; }
+.main { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+.editor { padding: 10px 12px; border-bottom: 1px solid var(--rule-soft); display: grid; gap: 8px; }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+textarea, input[type=text], select { border: 1px solid var(--rule); border-radius: var(--radius); background: var(--panel); padding: 6px 8px; }
+textarea { width: 100%; min-height: 5.5rem; resize: vertical; font-family: var(--mono); font-size: 13px; }
+input[type=text] { font-family: var(--mono); font-size: 13px; min-width: 0; }
+textarea:focus, input:focus, select:focus, button:focus-visible { outline: 2px solid var(--action); outline-offset: 1px; }
+.btn { border: 1px solid var(--rule); background: var(--panel); border-radius: var(--radius); padding: 5px 12px; }
+.btn.primary { background: var(--action); border-color: var(--action); color: var(--action-ink); font-weight: 600; }
+.btn.danger { color: var(--fail); }
+.btn:disabled { opacity: .55; cursor: default; }
+.out { flex: 1; min-height: 0; overflow: auto; }
+.meta { padding: 6px 12px; color: var(--muted); font-size: 12px; border-bottom: 1px solid var(--rule-soft); display: flex; gap: 12px; }
+table { border-collapse: collapse; font-family: var(--mono); font-size: 12.5px; }
+th, td { border-bottom: 1px solid var(--rule-soft); padding: 4px 10px; text-align: left; vertical-align: top; white-space: pre; max-width: 32rem; overflow: hidden; text-overflow: ellipsis; }
+th { position: sticky; top: 0; background: var(--paper); font-weight: 600; z-index: 1; }
+td.null { color: var(--muted); font-style: italic; }
+pre.text { margin: 0; padding: 12px; font: 12.5px/1.5 var(--mono); white-space: pre-wrap; word-break: break-word; }
+.notice { margin: 12px; padding: 10px 12px; border-radius: var(--radius); background: var(--paper-2); }
+.notice.fail { background: color-mix(in srgb, var(--fail) 10%, transparent); color: var(--fail); }
+.muted { color: var(--muted); }
+.kbd { font-size: 11px; color: var(--muted); }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+</style>
+</head>
+<body>
+<div class="bar">
+	<div class="seg" id="kinds" role="group" aria-label="Add-on"></div>
+	<span class="pill" id="mode" title="Queries run in a read-only session. A change runs only after you confirm it in the panel.">Read-only</span>
+	<span class="grow"></span>
+	<span class="muted" id="status" role="status" aria-live="polite"></span>
+</div>
+<div class="layout">
+	<nav class="side" id="side" aria-label="Schema"></nav>
+	<section class="main">
+		<div class="editor" id="editor"></div>
+		<div class="meta" id="meta" hidden></div>
+		<div class="out" id="out"><div class="notice muted">Loading…</div></div>
+	</section>
+</div>
+<script>
+(() => {
+	'use strict';
+	const $ = (id) => document.getElementById(id);
+	const el = (tag, props = {}, ...kids) => {
+		const n = document.createElement(tag);
+		for (const [k, v] of Object.entries(props)) {
+			if (k === 'on') for (const [ev, fn] of Object.entries(v)) n.addEventListener(ev, fn);
+			else if (k === 'text') n.textContent = v;
+			else if (v !== undefined && v !== false) n.setAttribute(k, v === true ? '' : v);
+		}
+		for (const kid of kids) if (kid != null) n.append(kid);
+		return n;
+	};
+
+	// Bridge to the panel (this page has an opaque origin and no network).
+	let nonce = null, seq = 0;
+	const waiting = new Map();
+	window.addEventListener('message', (e) => {
+		if (e.source !== window.parent) return;
+		const m = e.data;
+		if (!m || m.rivet !== 1) return;
+		if (m.type === 'init' && !nonce) { nonce = m.nonce; theme(m.theme || {}); start(); return; }
+		if (m.type === 'theme') { theme(m.theme || {}); return; }
+		if (m.type === 'reply' && waiting.has(m.id)) {
+			const w = waiting.get(m.id); waiting.delete(m.id);
+			m.ok ? w.res(m.body) : w.rej(new Error((m.body && m.body.error && (m.body.error.message || m.body.error)) || 'The request failed.'));
+		}
+	});
+	const call = (type, payload) => new Promise((res, rej) => {
+		const id = ++seq; waiting.set(id, { res, rej });
+		window.parent.postMessage(Object.assign({ rivet: 1, nonce, id, type }, payload), '*');
+	});
+	const rpc = (method, path, body) => call('rpc', { method, path, body });
+	window.parent.postMessage({ rivet: 1, type: 'ready' }, '*');
+
+	function theme(vars) {
+		for (const [k, v] of Object.entries(vars)) if (/^--[a-z0-9-]+$/.test(k) && typeof v === 'string' && v.length < 200) document.documentElement.style.setProperty(k, v);
+	}
+
+	const NAMES = { postgres: 'PostgreSQL', mariadb: 'MariaDB', redis: 'Redis', mongodb: 'MongoDB' };
+	const SQL = { postgres: true, mariadb: true };
+	let addons = [], kind = '', busy = false, mongoDB = '';
+
+	const status = (t) => { $('status').textContent = t || ''; };
+	const notice = (text, fail) => { $('out').replaceChildren(el('div', { class: 'notice' + (fail ? ' fail' : '') , text })); $('meta').hidden = true; };
+
+	async function start() {
+		try {
+			const r = await rpc('GET', '/addons');
+			if (r.remote) return notice('Database queries are not available yet for apps on remote nodes.');
+			addons = (r.addons || []).filter((a) => NAMES[a.kind]);
+		} catch (e) { return notice(e.message, true); }
+		if (!addons.length) return notice('This app has no database add-on. Add PostgreSQL, MariaDB, Redis or MongoDB in its add-on settings, start the app, then come back.');
+		$('kinds').replaceChildren(...addons.map((a) => el('button', { type: 'button', 'aria-pressed': 'false', 'data-kind': a.kind, on: { click: () => choose(a.kind) } }, NAMES[a.kind])));
+		choose(addons[0].kind);
+	}
+
+	function choose(k) {
+		kind = k;
+		for (const b of $('kinds').children) b.setAttribute('aria-pressed', String(b.dataset.kind === k));
+		buildEditor(); loadSchema();
+		notice('Run a query to see results here.');
+	}
+
+	function buildEditor() {
+		const run = el('button', { class: 'btn primary', type: 'button', on: { click: () => go('read') } }, 'Run');
+		const change = el('button', { class: 'btn danger', type: 'button', title: 'Runs without the read-only guard after you confirm it in the panel', on: { click: () => go('write') } }, 'Run as change…');
+		const keys = (e) => { if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); go('read'); } };
+		let fields;
+		if (SQL[kind]) {
+			fields = [el('label', { class: 'sr', for: 'q' }, 'SQL'), el('textarea', { id: 'q', spellcheck: 'false', placeholder: 'SELECT * FROM … LIMIT 100', on: { keydown: keys } })];
+		} else if (kind === 'redis') {
+			fields = [el('label', { class: 'sr', for: 'q' }, 'Command'), el('input', { id: 'q', type: 'text', spellcheck: 'false', placeholder: 'GET key   ·   HGETALL key   ·   SCAN 0 MATCH user:* COUNT 100', style: 'width:100%', on: { keydown: (e) => { if (e.key === 'Enter') { e.preventDefault(); go('read'); } } } })];
+		} else {
+			const ops = ['find', 'count', 'aggregate', 'insert', 'update', 'delete'];
+			fields = [
+				el('div', { class: 'row' },
+					el('label', { for: 'op', class: 'muted' }, 'Operation'),
+					el('select', { id: 'op' }, ...ops.map((o) => el('option', { value: o }, o))),
+					el('label', { for: 'coll', class: 'muted' }, 'Collection'),
+					el('input', { id: 'coll', type: 'text', spellcheck: 'false', placeholder: 'users', size: '18' })),
+				el('label', { class: 'sr', for: 'q' }, 'Filter, pipeline or document (JSON)'),
+				el('textarea', { id: 'q', spellcheck: 'false', placeholder: '{ "active": true }   (a filter; aggregate takes a pipeline array; update takes {"filter":…, "update":…})', on: { keydown: keys } }),
+			];
+		}
+		$('editor').replaceChildren(...fields, el('div', { class: 'row' }, run, change, el('span', { class: 'kbd' }, SQL[kind] || kind === 'mongodb' ? 'Ctrl+Enter runs' : 'Enter runs')));
+	}
+
+	async function query(q) { return rpc('POST', '/query', { kind, query: q }); }
+
+	async function loadSchema() {
+		const side = $('side');
+		side.replaceChildren(el('div', { class: 'muted', text: 'Loading…' }));
+		const list = (title, items, onpick) => {
+			const ul = el('ul');
+			for (const it of items) ul.append(el('li', {}, el('button', { type: 'button', title: it, on: { click: () => onpick(it) } }, it)));
+			return [el('h2', { text: title }), items.length ? ul : el('div', { class: 'muted', text: 'None' })];
+		};
+		try {
+			if (kind === 'postgres') {
+				const r = await query({ query: "select table_schema || '.' || table_name from information_schema.tables where table_schema not in ('pg_catalog','information_schema') order by 1" });
+				const names = (r.rows || []).map((x) => x[0]);
+				side.replaceChildren(...list('Tables', names, (t) => { const [s, n] = t.split('.'); setQ(`SELECT * FROM "${s}"."${n}" LIMIT 100`); go('read'); }));
+			} else if (kind === 'mariadb') {
+				const r = await query({ query: 'SHOW TABLES' });
+				const names = (r.rows || []).map((x) => x[0]);
+				side.replaceChildren(...list('Tables', names, (t) => { setQ('SELECT * FROM `' + t.replace(/`/g, '``') + '` LIMIT 100'); go('read'); }));
+			} else if (kind === 'redis') {
+				const r = await query({ args: ['SCAN', '0', 'COUNT', '200'] });
+				const lines = (r.text || '').split('\n').map((l) => l.replace(/^\d+\)\s*/, '').replace(/^"|"$/g, '')).filter(Boolean);
+				const keys = lines.slice(1, 201);
+				side.replaceChildren(...list('Keys (first scan page)', keys, (k) => { setQ('TYPE ' + quote(k)); go('read'); }));
+			} else {
+				const r = await query({ op: 'databases' });
+				const dbs = (r.rows || []).map((x) => JSON.parse(x[0]).name).filter((n) => !['admin', 'config', 'local'].includes(n));
+				const pick = el('select', { id: 'db', 'aria-label': 'Database', on: { change: () => { mongoDB = pick.value; loadCollections(); } } }, ...dbs.map((d) => el('option', { value: d }, d)));
+				mongoDB = mongoDB && dbs.includes(mongoDB) ? mongoDB : (dbs[0] || '');
+				pick.value = mongoDB;
+				side.replaceChildren(el('h2', { text: 'Database' }), dbs.length ? pick : el('div', { class: 'muted', text: 'No databases yet' }), el('div', { id: 'colls' }));
+				loadCollections();
+				async function loadCollections() {
+					if (!mongoDB) return;
+					const c = await query({ op: 'collections', database: mongoDB });
+					const names = (c.rows || []).map((x) => JSON.parse(x[0]).name);
+					$('colls').replaceChildren(...list('Collections', names, (n) => { $('coll').value = n; $('op').value = 'find'; setQ('{}'); go('read'); }));
+				}
+			}
+		} catch (e) {
+			side.replaceChildren(el('div', { class: 'muted', text: 'The schema could not be read: ' + e.message }));
+		}
+	}
+
+	const setQ = (v) => { $('q').value = v; $('q').focus(); };
+	const quote = (s) => /[\s"']/.test(s) ? '"' + s.replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"' : s;
+
+	// Splits a Redis command line, honouring double and single quotes.
+	function splitArgs(line) {
+		const out = []; let cur = '', q = '', had = false;
+		for (let i = 0; i < line.length; i++) {
+			const c = line[i];
+			if (q) { if (c === '\\' && q === '"' && i + 1 < line.length) cur += line[++i]; else if (c === q) q = ''; else cur += c; }
+			else if (c === '"' || c === "'") { q = c; had = true; }
+			else if (/\s/.test(c)) { if (cur || had) out.push(cur); cur = ''; had = false; }
+			else cur += c;
+		}
+		if (cur || had) out.push(cur);
+		return out;
+	}
+
+	function build(mode) {
+		const text = $('q').value;
+		if (SQL[kind]) return { mode, query: text };
+		if (kind === 'redis') return { mode, args: splitArgs(text) };
+		return { mode, op: $('op').value, database: mongoDB, collection: $('coll').value.trim(), json: text.trim() };
+	}
+
+	async function go(mode) {
+		if (busy || !kind) return;
+		const q = build(mode);
+		busy = true; status(mode === 'write' ? 'Waiting for confirmation…' : 'Running…');
+		try {
+			let r = await query(q);
+			if (r && r.confirm) {
+				r = await call('confirm-write', { token: r.confirm });
+				if (!r) { status('Cancelled'); return; }
+				loadSchema();
+			}
+			show(r);
+			status('');
+		} catch (e) {
+			notice(e.message, true); status('');
+		} finally { busy = false; }
+	}
+
+	function show(r) {
+		const meta = $('meta');
+		meta.replaceChildren(
+			el('span', { text: r.rows ? `${r.rows.length} row${r.rows.length === 1 ? '' : 's'}` : 'Done' }),
+			el('span', { text: `${r.ms ?? 0} ms` }),
+			r.truncated ? el('span', { class: 'pill write', text: 'Truncated to the first 500 rows' }) : null);
+		meta.hidden = false;
+		if (r.columns && r.columns.length) {
+			const table = el('table', {},
+				el('thead', {}, el('tr', {}, ...r.columns.map((c) => el('th', { scope: 'col', text: c })))),
+				el('tbody', {}, ...(r.rows || []).map((row) => el('tr', {}, ...row.map((v) => v === '' || v === 'NULL' ? el('td', { class: 'null', text: v === '' ? '' : 'NULL' }) : el('td', { text: v, title: v.length > 60 ? v : undefined }))))));
+			$('out').replaceChildren(table);
+		} else {
+			$('out').replaceChildren(el('pre', { class: 'text', text: r.text || 'The statement ran and returned nothing.' }));
+		}
+	}
+})();
+</script>
+</body>
+</html>

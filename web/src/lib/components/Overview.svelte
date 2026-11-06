@@ -23,8 +23,9 @@
 		onAct,
 		game = null,
 		top,
-		bottom
-	}: { bot: Bot; now: number; acting: boolean; onAct: (a: PowerAction) => void; game?: GameDetail | null; top?: Snippet; bottom?: Snippet } = $props();
+		bottom,
+		side
+	}: { bot: Bot; now: number; acting: boolean; onAct: (a: PowerAction) => void; game?: GameDetail | null; top?: Snippet; bottom?: Snippet; side?: Snippet } = $props();
 	const isGame = $derived(bot.kind === 'game');
 	const noun = $derived(isGame ? 'server' : 'bot');
 
@@ -278,5 +279,6 @@
 				<dt class="text-muted">{isGame ? 'Server ID' : 'Bot ID'}</dt><dd><code class="break-all">{bot.id}</code></dd>
 			</dl>
 		</section>
+		{#if side}{@render side()}{/if}
 	</aside>
 </div>

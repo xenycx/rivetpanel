@@ -13,17 +13,24 @@ import (
 	"github.com/xenycx/rivetpanel/internal/service"
 )
 
-// extensionRoutes registers the extension API. With the extensions module
-// off the service is nil and none of these routes exist.
-func (s *panel) extensionRoutes(v1, authed fiber.Router) {
+// extensionPublicRoutes registers signed requests from outside (Discord
+// interactions). It must run before the authenticated group is created, so
+// session middleware never applies; the signature is checked before any
+// extension code runs.
+func (s *panel) extensionPublicRoutes(v1 fiber.Router) {
 	if s.extensions == nil {
 		return
 	}
-	// Signed requests from outside (Discord interactions). The signature is
-	// checked before any extension code runs.
 	publicLimit := newLimiter(limiter.Config{Max: 120, Expiration: time.Minute, KeyGenerator: func(c fiber.Ctx) string { return c.IP() }})
 	v1.Post("/ext-public/:ext/*", publicLimit, s.extPublicRoute)
+}
 
+// extensionRoutes registers the extension API. With the extensions module
+// off the service is nil and none of these routes exist.
+func (s *panel) extensionRoutes(authed fiber.Router) {
+	if s.extensions == nil {
+		return
+	}
 	authed.Get("/admin/extensions", s.listExtensions)
 	authed.Post("/admin/extensions/upload", s.uploadExtension)
 	authed.Get("/admin/extensions/:ext", s.getExtension)
@@ -61,7 +68,7 @@ func (s *panel) listExtensions(c fiber.Ctx) error {
 }
 
 func (s *panel) getExtension(c fiber.Ctx) error {
-	v, err := s.extensions.Get(c.Context(), currentUser(c), strings.Clone(c.Params("ext")))
+	v, err := s.extensions.Get(c.Context(), currentUser(c), strings.Clone(c.Params("ext")), strings.Clone(c.Query("version")))
 	if err != nil {
 		return err
 	}
@@ -136,7 +143,7 @@ func (s *panel) runExtensionJob(c fiber.Ctx) error {
 	if err := s.extensions.RunJobNow(c.Context(), currentUser(c), strings.Clone(c.Params("ext")), strings.Clone(c.Params("job"))); err != nil {
 		return err
 	}
-	v, err := s.extensions.Get(c.Context(), currentUser(c), strings.Clone(c.Params("ext")))
+	v, err := s.extensions.Get(c.Context(), currentUser(c), strings.Clone(c.Params("ext")), "")
 	if err != nil {
 		return err
 	}

@@ -34,7 +34,8 @@ const labels: Record<string, string> = {
 	'tickets.manage': 'answering tickets',
 	'kb.manage': 'the knowledgebase',
 	'status.manage': 'the status page',
-	'analytics.view': 'usage analytics'
+	'analytics.view': 'usage analytics',
+	'extensions.manage': 'extensions'
 };
 
 /** A readable list of permissions ("files, backups and sharing"). */
@@ -62,5 +63,6 @@ export const adminPermissions = [
 	'tickets.manage',
 	'kb.manage',
 	'status.manage',
-	'analytics.view'
+	'analytics.view',
+	'extensions.manage'
 ];

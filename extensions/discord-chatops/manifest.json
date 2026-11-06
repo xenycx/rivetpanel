@@ -1,0 +1,153 @@
+{
+  "manifest_version": 1,
+  "id": "dev.rivetpanel.discord-chatops",
+  "name": "Discord ChatOps",
+  "version": "1.0.0",
+  "publisher": "RivetPanel",
+  "description": "Slash commands in your Discord server for the panel: /status, /logs, /start, /stop, /restart and /deploy. Each person acts with their own panel permissions after linking Discord and allowing ChatOps; changes need a confirmation button.",
+  "compat": {
+    "panel": ">=0.9.0 <2.0.0",
+    "abi": 1
+  },
+  "runtime": {
+    "memory_mb": 32,
+    "timeout_ms": 2500
+  },
+  "capabilities": [
+    {
+      "name": "identity.discord",
+      "reason": "Find the panel account that linked the Discord user who ran a command, and check that they allowed ChatOps."
+    },
+    {
+      "name": "bots.read",
+      "reason": "List and show the bots that person can see."
+    },
+    {
+      "name": "bot.logs",
+      "reason": "Show recent bot output for /logs."
+    },
+    {
+      "name": "bot.power",
+      "reason": "Start, stop and restart bots for /start, /stop and /restart, after a confirmation."
+    },
+    {
+      "name": "bot.deploy",
+      "reason": "Redeploy a bot from its linked repository for /deploy, after a confirmation.",
+      "optional": true
+    },
+    {
+      "name": "kv",
+      "reason": "Remember pending confirmations for one minute and recently handled interactions."
+    },
+    {
+      "name": "settings",
+      "reason": "Read the application id and guild."
+    },
+    {
+      "name": "http.fetch",
+      "reason": "Register the slash commands with Discord.",
+      "hosts": [
+        "discord.com"
+      ]
+    }
+  ],
+  "settings": [
+    {
+      "key": "application_id",
+      "label": "Application ID",
+      "type": "string",
+      "required": true,
+      "description": "From the Discord Developer Portal, General Information."
+    },
+    {
+      "key": "public_key",
+      "label": "Public key",
+      "type": "string",
+      "required": true,
+      "description": "From the Developer Portal, General Information. Every request from Discord is checked against it."
+    },
+    {
+      "key": "client_secret",
+      "label": "Client secret",
+      "type": "secret",
+      "inject_hosts": [
+        "discord.com"
+      ],
+      "description": "From the Developer Portal, OAuth2. Used only to register the slash commands; it is never readable by the extension."
+    },
+    {
+      "key": "guild_id",
+      "label": "Server ID (optional)",
+      "type": "string",
+      "description": "Register the commands in one server, where they appear at once. Empty registers them everywhere the app is installed (can take up to an hour)."
+    }
+  ],
+  "routes": [
+    {
+      "id": "interactions",
+      "method": "POST",
+      "path": "/interactions",
+      "auth": "public",
+      "verify": {
+        "scheme": "discord-ed25519",
+        "key_setting": "public_key"
+      },
+      "max_body": 65536
+    },
+    {
+      "id": "register",
+      "method": "POST",
+      "path": "/register",
+      "auth": "user",
+      "perm": "extensions.manage",
+      "mutating": true
+    },
+    {
+      "id": "setup",
+      "method": "GET",
+      "path": "/setup",
+      "auth": "user",
+      "perm": "extensions.manage"
+    }
+  ],
+  "contributes": {
+    "user_consent": {
+      "explanation": "Discord ChatOps runs slash commands in Discord as you, with your panel permissions, once your Discord account is linked under Settings → Connected accounts. Choose what it may do for you.",
+      "scopes": [
+        {
+          "id": "status",
+          "label": "See bots",
+          "description": "/status lists the bots you can see and their state."
+        },
+        {
+          "id": "logs",
+          "label": "Read output",
+          "description": "/logs shows a bot's recent console output (only to you)."
+        },
+        {
+          "id": "power",
+          "label": "Start, stop, restart",
+          "description": "/start, /stop and /restart, each after a confirmation button."
+        },
+        {
+          "id": "deploy",
+          "label": "Deploy",
+          "description": "/deploy redeploys a bot from its linked repository, after a confirmation button."
+        }
+      ]
+    },
+    "nav": [
+      {
+        "label": "ChatOps",
+        "page": "setup",
+        "perm": "extensions.manage"
+      }
+    ]
+  },
+  "ui": [
+    {
+      "id": "setup",
+      "file": "ui/setup.html"
+    }
+  ]
+}

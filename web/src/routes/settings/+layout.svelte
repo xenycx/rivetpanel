@@ -1,7 +1,8 @@
 <script lang="ts">
 	import SubNav from '$lib/components/ui/SubNav.svelte';
+	import { extensions } from '$lib/extensions/store.svelte';
 	let { children } = $props();
-	const links = [
+	const base = [
 		{ href: '/settings/profile', label: 'Profile', icon: 'users' as const },
 		{ href: '/settings/appearance', label: 'Appearance', icon: 'sliders' as const },
 		{ href: '/settings/notifications', label: 'Notifications', icon: 'bell' as const },
@@ -10,6 +11,8 @@
 		{ href: '/settings/security', label: 'Security', icon: 'shield' as const },
 		{ href: '/settings/sftp', label: 'SFTP and API keys', icon: 'key' as const }
 	];
+	// Shown when an enabled extension can act for the account.
+	const links = $derived(extensions.list.some((x) => x.consent) ? [...base, { href: '/settings/extensions', label: 'Extensions', icon: 'package' as const }] : base);
 </script>
 
 <header class="border-b border-rule-soft pb-5">

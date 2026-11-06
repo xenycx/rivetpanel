@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { extensions, loadExtensions, extPageHref } from '$lib/extensions/store.svelte';
 	import '../app.css';
 	import { onMount } from 'svelte';
 	import { afterNavigate, beforeNavigate, goto } from '$app/navigation';
@@ -147,6 +148,15 @@
 				.catch(() => {});
 	});
 
+	// Extension contributions follow the signed-in account.
+	let extUser = '';
+	$effect(() => {
+		const uid = session.user?.id ?? '';
+		if (uid !== extUser) {
+			extUser = uid;
+			loadExtensions(true);
+		}
+	});
 	const path = $derived(page.url.pathname);
 	const adminHome = $derived(session.user && canAdminister() ? (adminLinks()[0]?.href ?? '') : '');
 	const withheld = $derived(session.verification.withheld ?? []);
@@ -160,7 +170,9 @@
 		{ href: '/activity', label: 'Activity', icon: 'activity', active: path.startsWith('/activity') },
 		...(can('tickets.create') || can('tickets.view_all') || can('tickets.manage')
 			? [{ href: '/support', label: 'Support', icon: 'lifebuoy' as IconName, active: path.startsWith('/support') }]
-			: [])
+			: []),
+		// Pages that enabled extensions add.
+		...extensions.list.flatMap((x) => x.nav.map((n) => ({ href: extPageHref(x.id, n.page), label: n.label, icon: 'layers' as IconName, active: path === extPageHref(x.id, n.page) })))
 	]);
 	// Account and installation settings sit apart, below the work areas.
 	const navEnd = $derived<NavItem[]>([

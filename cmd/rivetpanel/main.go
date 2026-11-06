@@ -623,6 +623,7 @@ func serve(log *slog.Logger, logs *logbuf.Buffer) error {
 		return fmt.Errorf("installation identity: %w", err)
 	}
 	var aiDiagnostic service.DiagnosticRunner
+	var addonQueries *runner.AddonQuerier
 	if cfg.RunnerMode == config.RunnerLocal {
 		var err error
 		dk, err = docker.New(cfg.DockerHost)
@@ -672,6 +673,7 @@ func serve(log *slog.Logger, logs *logbuf.Buffer) error {
 		aiDiagnostic = &runner.Diagnostic{Docker: dk, Files: wsm, Catalog: catalog, ScratchRoot: filepath.Join(filepath.Dir(cfg.DBPath), "ai-scratch"),
 			User: cfg.ContainerUser, InstallID: installID, NodeID: domain.LocalNodeID, Timeout: 10 * time.Minute,
 			MemoryBytes: 768 << 20, NanoCPUs: 1e9, PidsLimit: 256, TmpfsBytes: 128 << 20}
+		addonQueries = &runner.AddonQuerier{Docker: dk, User: cfg.ContainerUser, InstallID: installID}
 	}
 
 	var consoleSvc *console.Service
@@ -823,6 +825,9 @@ func serve(log *slog.Logger, logs *logbuf.Buffer) error {
 		extSvc = &service.ExtensionService{Store: db, Keys: keys, Bots: botSvc, Deploy: deploySvc, Notices: notices, Audit: audit,
 			Logs: aiLogs, Bus: bus, Builtins: builtin.Bundles(), PanelVersion: version, AllowUnsigned: !cfg.Production,
 			SafeMode: cfg.ExtensionsSafeMode, Log: log}
+		if addonQueries != nil {
+			extSvc.Addons = &service.LocalAddonQuerier{Runner: addonQueries, Bots: botSvc}
+		}
 		if err := extSvc.SyncBuiltins(ctx); err != nil {
 			return fmt.Errorf("built-in extensions: %w", err)
 		}

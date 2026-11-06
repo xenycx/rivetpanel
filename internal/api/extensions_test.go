@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -11,9 +12,11 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/xenycx/rivetpanel/internal/domain"
 	"github.com/xenycx/rivetpanel/internal/extensions/bundle"
@@ -22,36 +25,45 @@ import (
 )
 
 var (
-	insightsOnce sync.Once
-	insightsWasm []byte
-	insightsErr  error
+	extBuildMu sync.Mutex
+	extBuilt   = map[string][]byte{}
 )
 
-// insightsFiles builds the Discord insights extension for wasip1 (once).
-func insightsFiles(t *testing.T) map[string][]byte {
+// extFiles builds a first-party extension for wasip1 (once per test run)
+// and returns its bundle files.
+func extFiles(t *testing.T, name string) map[string][]byte {
 	t.Helper()
-	insightsOnce.Do(func() {
-		out := filepath.Join(os.TempDir(), "rivet-insights-test.wasm")
-		cmd := exec.Command("go", "build", "-buildmode=c-shared", "-trimpath", "-o", out, "./extensions/discord-insights")
+	extBuildMu.Lock()
+	wasm, ok := extBuilt[name]
+	if !ok {
+		out := filepath.Join(t.TempDir(), name+".wasm")
+		cmd := exec.Command("go", "build", "-buildmode=c-shared", "-trimpath", "-o", out, "./extensions/"+name)
 		cmd.Dir = filepath.Join("..", "..")
 		cmd.Env = append(os.Environ(), "GOOS=wasip1", "GOARCH=wasm", "CGO_ENABLED=0")
 		if b, err := cmd.CombinedOutput(); err != nil {
-			insightsErr = errors.New(string(b))
-			return
+			extBuildMu.Unlock()
+			t.Skip("cannot build the extension: ", errors.New(string(b)))
 		}
-		insightsWasm, insightsErr = os.ReadFile(out)
-	})
-	if insightsErr != nil {
-		t.Skip("cannot build the extension: ", insightsErr)
+		wasm, _ = os.ReadFile(out)
+		extBuilt[name] = wasm
 	}
-	dir := filepath.Join("..", "..", "extensions", "discord-insights")
-	manifest, err := os.ReadFile(filepath.Join(dir, "manifest.json"))
-	if err != nil {
-		t.Fatal(err)
+	extBuildMu.Unlock()
+	dir := filepath.Join("..", "..", "extensions", name)
+	files := map[string][]byte{bundle.WasmFile: wasm}
+	for _, f := range []string{bundle.ManifestFile, bundle.IconFile} {
+		if b, err := os.ReadFile(filepath.Join(dir, f)); err == nil {
+			files[f] = b
+		}
 	}
-	icon, _ := os.ReadFile(filepath.Join(dir, "icon.svg"))
-	return map[string][]byte{bundle.ManifestFile: manifest, bundle.WasmFile: insightsWasm, bundle.IconFile: icon}
+	pages, _ := filepath.Glob(filepath.Join(dir, "ui", "*.html"))
+	for _, p := range pages {
+		b, _ := os.ReadFile(p)
+		files["ui/"+filepath.Base(p)] = b
+	}
+	return files
 }
+
+func insightsFiles(t *testing.T) map[string][]byte { return extFiles(t, "discord-insights") }
 
 func TestExtensionsModuleOff(t *testing.T) {
 	e := newEnv(t)
@@ -199,6 +211,61 @@ func TestExtensionLifecycle(t *testing.T) {
 		if n != 0 {
 			t.Errorf("%s still has %d rows", table, n)
 		}
+	}
+}
+
+func TestExtensionPublicRouteVerifiesSignature(t *testing.T) {
+	files := extFiles(t, "discord-chatops")
+	var ext *service.ExtensionService
+	e := newEnvWith(t, func(d *Deps, keys *secrets.Keyring) {
+		ext = &service.ExtensionService{Store: d.DB.(service.ExtensionStore), Keys: keys, Bots: d.Bots, PanelVersion: "0.9.1", AllowUnsigned: true}
+		d.Extensions = ext
+	})
+	admin := e.user("root@example.com", domain.RoleAdmin)
+	raw, _ := bundle.Pack(files, nil)
+	if resp, b := admin.raw("POST", "/api/v1/admin/extensions/upload", raw, "application/octet-stream"); resp.StatusCode != 201 {
+		t.Fatalf("%d %s", resp.StatusCode, b)
+	}
+	const id = "dev.rivetpanel.discord-chatops"
+	all := []string{"identity.discord", "bots.read", "bot.logs", "bot.power", "bot.deploy", "kv", "settings", "http.fetch"}
+	admin.mustStatus(200, "POST", "/api/v1/admin/extensions/"+id+"/activate", map[string]any{"version": "1.0.0", "grants": all})
+	pub, priv, _ := ed25519.GenerateKey(rand.Reader)
+	admin.mustStatus(200, "PUT", "/api/v1/admin/extensions/"+id+"/settings", map[string]any{"values": map[string]any{
+		"application_id": "123456789012345678", "public_key": hex.EncodeToString(pub), "client_secret": "shh"}})
+
+	// The secret never comes back.
+	if b := admin.mustStatus(200, "GET", "/api/v1/admin/extensions/"+id, nil); strings.Contains(string(b), "shh") {
+		t.Fatal("secret setting leaked")
+	}
+
+	ping := []byte(`{"id":"1","type":1}`)
+	send := func(sig []byte, ts string) (*http.Response, []byte) {
+		return (&client{e: e}).rawH("POST", "/api/v1/ext-public/"+id+"/interactions", ping, map[string]string{
+			"Content-Type": "application/json", "X-Signature-Ed25519": hex.EncodeToString(sig), "X-Signature-Timestamp": ts})
+	}
+	ts := strconv.FormatInt(time.Now().Unix(), 10)
+	_, otherKey, _ := ed25519.GenerateKey(rand.Reader)
+	if resp, b := send(ed25519.Sign(otherKey, append([]byte(ts), ping...)), ts); resp.StatusCode != 401 {
+		t.Fatalf("forged: %d %s", resp.StatusCode, b)
+	}
+	old := strconv.FormatInt(time.Now().Add(-time.Hour).Unix(), 10)
+	if resp, _ := send(ed25519.Sign(priv, append([]byte(old), ping...)), old); resp.StatusCode != 401 {
+		t.Fatalf("stale timestamp accepted: %d", resp.StatusCode)
+	}
+	if ext.Running(id) {
+		t.Fatal("extension code ran for a request with a bad signature")
+	}
+	resp, b := send(ed25519.Sign(priv, append([]byte(ts), ping...)), ts)
+	if resp.StatusCode != 200 || !strings.Contains(string(b), `"type":1`) {
+		t.Fatalf("ping: %d %s", resp.StatusCode, b)
+	}
+
+	// The sandboxed page is served with a sandbox CSP that pins its script.
+	resp, b = admin.do("GET", "/api/v1/ext-ui/"+id+"/setup", nil)
+	csp := resp.Header.Get("Content-Security-Policy")
+	if resp.StatusCode != 200 || !strings.HasPrefix(csp, "sandbox allow-scripts;") || !strings.Contains(csp, "'sha256-") || strings.Contains(csp, "allow-same-origin") ||
+		resp.Header.Get("X-Frame-Options") != "SAMEORIGIN" || !strings.Contains(string(b), "Register commands") {
+		t.Fatalf("%d %q", resp.StatusCode, csp)
 	}
 }
 

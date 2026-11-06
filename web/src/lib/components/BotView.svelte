@@ -14,6 +14,9 @@
 	import Skeleton from '$lib/components/ui/Skeleton.svelte';
 	import StatsBar from '$lib/components/StatsBar.svelte';
 	import Overview from '$lib/components/Overview.svelte';
+	import ExtensionCards from '$lib/components/ExtensionCards.svelte';
+	import ExtensionFrame from '$lib/components/ExtensionFrame.svelte';
+	import { extensions, loadExtensions, botPermBit } from '$lib/extensions/store.svelte';
 	import Console from '$lib/components/Console.svelte';
 	import LogDays from '$lib/components/LogDays.svelte';
 	import GameStatusStrip from '$lib/components/GameStatusStrip.svelte';
@@ -75,7 +78,16 @@
 	const permOf = (s: Section) => (s.id === 'startup' && bot?.kind === 'game' ? Perm.env : s.perm);
 	const allowed = (s: Section) =>
 		!!bot && !(bot.kind === 'game' && notForGames.has(s.id)) && !(onlyForGames.has(s.id) && (bot.kind !== 'game' || !gameHas(s.id))) && (!available[s.id] || session.features[available[s.id]]) && (permOf(s) === 0 || (permOf(s) === -1 ? !bot.shared : can(bot, permOf(s))));
-	const flat = $derived(sections.filter(allowed));
+	// Tabs that enabled extensions add, after the built-in ones.
+	$effect(() => {
+		if (session.features.extensions && !extensions.loaded) loadExtensions();
+	});
+	const extTabs = $derived(
+		extensions.list.flatMap((x) =>
+			x.bot_tabs.map((t) => ({ id: `x-${x.id}-${t.id}`, label: t.label, icon: 'layers' as IconName, perm: botPermBit(t.bot_perm), ext: x.id, page: t.page, extName: x.name }))
+		)
+	);
+	const flat = $derived([...sections.filter(allowed), ...extTabs.filter((t) => !!bot && (t.perm === 0 || can(bot, t.perm)))]);
 	// Links from before the tabs were reorganised keep working.
 	const legacy: Record<string, string> = { analytics: 'page', console: 'manage', ai: 'manage', overview: 'manage' };
 	const asked = $derived(page.url.searchParams.get('tab') ?? 'manage');
@@ -145,7 +157,7 @@
 	const botName = $derived(bot?.name ?? '');
 	$effect(() => {
 		if (!botName) return;
-		return publishTarget({ kind: 'bot', id, label: botName, section: tab === 'manage' ? 'Console' : (sections.find((x) => x.id === tab)?.label ?? tab) });
+		return publishTarget({ kind: 'bot', id, label: botName, section: tab === 'manage' ? 'Console' : (sections.find((x) => x.id === tab)?.label ?? extTabs.find((x) => x.id === tab)?.label ?? tab) });
 	});
 </script>
 
@@ -237,6 +249,7 @@
 			     the side facts (source, backups, details) in a narrow column. -->
 			<Overview {bot} {now} {game} onAct={act} {acting}>
 				{#snippet top()}{#if can(bot!, Perm.console)}<Console bot={bot!} />{/if}{/snippet}
+				{#snippet side()}{#if session.features.extensions}<ExtensionCards bot={bot!} />{/if}{/snippet}
 				{#snippet bottom()}{#if can(bot!, Perm.console)}<LogDays path="/bots/{bot!.id}/logs/days" filename="server-{bot!.id.slice(0, 8)}" label="Log history" empty="No day files yet. Console output is copied every few minutes while the {isGame ? 'server' : 'bot'} runs." />{/if}{/snippet}
 			</Overview>
 		{:else if tab === 'page'}
@@ -275,6 +288,12 @@
 			{#await import('$lib/components/Schedules.svelte')}{@render tabLoading()}{:then { default: Schedules }}<Schedules {bot} />{:catch}{@render tabFailed()}{/await}
 		{:else if tab === 'users'}
 			{#await import('$lib/components/Users.svelte')}{@render tabLoading()}{:then { default: Users }}<Users botId={id} botName={bot.name} isGame={isGame} />{:catch}{@render tabFailed()}{/await}
+		{:else if tab.startsWith('x-')}
+			{@const xt = extTabs.find((t) => t.id === tab)}
+			{#if xt}
+				<p class="mb-2 flex items-center gap-1.5 text-small text-muted"><Icon name="layers" size={13} />Extension: {xt.extName}</p>
+				<ExtensionFrame ext={xt.ext} page={xt.page} botId={id} title="{xt.label} ({xt.extName})" />
+			{/if}
 		{:else if tab === 'settings'}
 			{#await import('$lib/components/Settings.svelte')}{@render tabLoading()}{:then { default: Settings }}<Settings {bot} {stopped} onSaved={(b) => (bot = b)} />{:catch}{@render tabFailed()}{/await}
 		{/if}

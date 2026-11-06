@@ -3,8 +3,8 @@ import { api, setCsrf, setUnauthorizedHandler } from '$lib/api/client';
 import type { EmailVerification, User } from '$lib/api/types';
 import { adminPermissions } from '$lib/permissions';
 
-export type Features = { runner: boolean; console: boolean; stats: boolean; files: boolean; deploy: boolean; backups: boolean; analytics: boolean; sftp: boolean; operations: boolean; oauth: boolean; schedules: boolean; mfa: boolean; automation: boolean; health: boolean; sites: boolean; workspaces: boolean; ai: boolean; mail: boolean; public_repos: boolean; addons: boolean; games: boolean; agents: boolean; api_clients: boolean; passkeys: boolean; usage: boolean };
-const allOn: Features = { runner: true, console: true, stats: true, files: true, deploy: true, backups: true, analytics: true, sftp: true, operations: true, oauth: true, schedules: true, mfa: true, automation: true, health: true, sites: false, workspaces: true, ai: true, mail: false, public_repos: true, addons: true, games: false, agents: false, api_clients: true, passkeys: true, usage: true };
+export type Features = { runner: boolean; console: boolean; stats: boolean; files: boolean; deploy: boolean; backups: boolean; analytics: boolean; sftp: boolean; operations: boolean; oauth: boolean; schedules: boolean; mfa: boolean; automation: boolean; health: boolean; sites: boolean; workspaces: boolean; ai: boolean; mail: boolean; public_repos: boolean; addons: boolean; games: boolean; agents: boolean; api_clients: boolean; passkeys: boolean; usage: boolean; extensions: boolean };
+const allOn: Features = { runner: true, console: true, stats: true, files: true, deploy: true, backups: true, analytics: true, sftp: true, operations: true, oauth: true, schedules: true, mfa: true, automation: true, health: true, sites: false, workspaces: true, ai: true, mail: false, public_repos: true, addons: true, games: false, agents: false, api_clients: true, passkeys: true, usage: true, extensions: false };
 export const session = $state<{
 	user: User | null;
 	loaded: boolean;

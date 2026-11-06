@@ -442,6 +442,7 @@ func (s *panel) routes(v1 fiber.Router) {
 	if s.tokens != nil {
 		s.automationRoutes(v1)
 	}
+	s.extensionPublicRoutes(v1)
 	authed := v1.Group("", s.requireAuth, clientLimit(), s.auditMW)
 	if s.ai != nil {
 		s.aiRoutes(authed)
@@ -668,7 +669,7 @@ func (s *panel) routes(v1 fiber.Router) {
 	s.logArchiveRoutes(authed)
 
 	s.gameRoutes(authed)
-	s.extensionRoutes(v1, authed)
+	s.extensionRoutes(authed)
 	authed.Post("/bots/:id/command", s.requirePerm(domain.PermBotsPower), s.sendCommand)
 	authed.Post("/bots", s.requirePerm(domain.PermBotsCreate), s.createBot)
 	authed.Post("/bots/batch", s.requirePerm(domain.PermBotsPower), s.batchBots)

@@ -23,6 +23,7 @@ import (
 	"github.com/xenycx/rivetpanel/internal/ai"
 	"github.com/xenycx/rivetpanel/internal/domain"
 	"github.com/xenycx/rivetpanel/internal/extensions/bundle"
+	"github.com/xenycx/rivetpanel/internal/runner"
 )
 
 // invocation is the authority one extension call runs with.
@@ -284,7 +285,7 @@ func (inv *invocation) fetch(ctx context.Context, raw []byte) []byte {
 	}
 	for k, v := range r.Headers {
 		switch strings.ToLower(k) {
-		case "host", "cookie", "authorization", "proxy-authorization", "connection", "content-length", "transfer-encoding":
+		case "host", "cookie", "proxy-authorization", "connection", "content-length", "transfer-encoding":
 			continue
 		}
 		req.Header.Set(k, v)
@@ -732,24 +733,11 @@ func (s *ExtensionService) recordVia(ctx context.Context, u domain.User, action,
 	s.Audit.Record(ctx, e)
 }
 
-// AddonQuery is one database add-on request from an extension.
-type AddonQuery struct {
-	Mode  string   `json:"mode"`  // read | write
-	Query string   `json:"query"` // SQL (postgres, mariadb) or a command (redis)
-	Op    string   `json:"op"`    // mongodb: find | count | aggregate | collections
-	Coll  string   `json:"collection"`
-	Args  []string `json:"args"`
-	JSON  string   `json:"json"` // mongodb filter or pipeline
-}
-
-// AddonQueryResult is a query's answer, bounded in rows and bytes.
-type AddonQueryResult struct {
-	Columns   []string   `json:"columns"`
-	Rows      [][]string `json:"rows"`
-	Truncated bool       `json:"truncated"`
-	Text      string     `json:"text,omitempty"`
-	Millis    int64      `json:"ms"`
-}
+// AddonQuery and AddonQueryResult are the runner's query types.
+type (
+	AddonQuery       = runner.AddonQuery
+	AddonQueryResult = runner.AddonQueryResult
+)
 
 type pendingConfirm struct {
 	user, bot, kind, hash string
@@ -825,7 +813,7 @@ func (inv *invocation) addons(ctx context.Context, name string, raw []byte) []by
 		}
 		inv.svc.confirms[t] = pendingConfirm{user: u.ID, bot: b.ID, kind: r.Kind, hash: queryHash(r.Kind, r.Query), q: r.Query, expires: time.Now().Add(2 * time.Minute)}
 		inv.svc.mu.Unlock()
-		return reply(map[string]any{"confirm": t, "summary": clipService(r.Query.Query+r.Query.JSON, 300)})
+		return reply(map[string]any{"confirm": t})
 	}
 	r.Query.Mode = "read"
 	res, err := inv.svc.Addons.QueryAddon(ctx, b, r.Kind, r.Query)
@@ -873,8 +861,8 @@ func (s *ExtensionService) PendingAddonWrite(actor domain.User, token string) (m
 		return nil, domain.ErrNotFound
 	}
 	text := p.q.Query
-	if p.q.JSON != "" {
-		text = p.q.Op + " " + p.q.Coll + " " + p.q.JSON
+	if p.q.Op != "" {
+		text = p.q.Op + " " + p.q.DB + "." + p.q.Coll + " " + p.q.JSON
 	}
 	if len(p.q.Args) > 0 {
 		text = strings.Join(p.q.Args, " ")

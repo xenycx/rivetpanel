@@ -12,6 +12,21 @@ export type AuditPage = { events: AuditEvent[]; next_before?: number };
 
 /** Plain past-tense wording for recorded actions. */
 export const actionText: Record<string, string> = {
+	'admin.extension_upload': 'uploaded an extension',
+	'admin.extension_activate': 'installed or switched an extension version',
+	'admin.extension_enable': 'turned an extension on',
+	'admin.extension_disable': 'turned an extension off',
+	'admin.extension_configure': 'changed extension settings',
+	'admin.extension_job_run': 'ran an extension job',
+	'admin.extension_version_delete': 'deleted an extension version',
+	'admin.extension_uninstall': 'uninstalled an extension',
+	'admin.extension_publisher_add': 'trusted an extension publisher key',
+	'admin.extension_publisher_revoke': 'revoked an extension publisher key',
+	'extension.consent': 'changed what an extension may do for them',
+	'extension.bot_switch': 'switched an extension on or off for the app',
+	'extension.confirm_write': 'confirmed a database change',
+	'extension.route': 'used an extension',
+	'addon.query': 'queried a database add-on',
 	'bot.create': 'created the app',
 	'bot.update': 'changed its settings',
 	'bot.delete': 'deleted the app',

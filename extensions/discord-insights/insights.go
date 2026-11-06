@@ -46,7 +46,7 @@ func handle(r *sdk.Request) *sdk.Response {
 	switch {
 	case r.Kind == "route" && r.Route == "card":
 		snap, ok := load(r.BotID)
-		if !ok || now().Sub(time.UnixMilli(snap.FetchedAtMS)) > staleAfter {
+		if !ok || r.Query["refresh"] == "1" || now().Sub(time.UnixMilli(snap.FetchedAtMS)) > staleAfter {
 			snap = refresh(r.BotID)
 		}
 		return sdk.JSON(200, card(snap))

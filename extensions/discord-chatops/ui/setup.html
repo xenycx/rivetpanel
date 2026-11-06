@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Discord ChatOps</title>
+<style>
+:root { --paper: #f4f4f3; --panel: #fff; --paper-2: #e9e8e6; --ink: #1b1a19; --muted: #625f5b; --rule: #d6d4d0; --rule-soft: #e6e4e1; --action: #b44718; --action-ink: #fff; --run: #076c5c; --warn: #905600; --fail: #b33929; --radius: 8px; }
+* { box-sizing: border-box; }
+body { margin: 0; padding: 20px; font: 14px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; color: var(--ink); background: var(--panel); }
+h2 { font-size: 16px; margin: 0 0 4px; }
+ol { margin: 8px 0 0; padding-left: 20px; display: grid; gap: 10px; max-width: 46rem; }
+li .muted { display: block; }
+.muted { color: var(--muted); font-size: 13px; }
+code { font: 12.5px ui-monospace, Menlo, Consolas, monospace; background: var(--paper-2); padding: 2px 6px; border-radius: 6px; word-break: break-all; }
+.row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 6px; }
+.btn { font: inherit; border: 1px solid var(--rule); background: var(--panel); color: var(--ink); border-radius: var(--radius); padding: 5px 12px; cursor: pointer; }
+.btn.primary { background: var(--action); border-color: var(--action); color: var(--action-ink); font-weight: 600; }
+.btn:disabled { opacity: .55; cursor: default; }
+.btn:focus-visible { outline: 2px solid var(--action); outline-offset: 1px; }
+.state { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
+.dot { width: 8px; height: 8px; border-radius: 999px; background: var(--muted); }
+.dot.ok { background: var(--run); } .dot.no { background: var(--warn); }
+section + section { margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--rule-soft); }
+</style>
+</head>
+<body>
+<section>
+	<h2>Connect a Discord application</h2>
+	<p class="muted">Create an application in the Discord Developer Portal (or reuse the one for Discord sign-in) and follow these steps.</p>
+	<ol>
+		<li>Copy its <b>Application ID</b>, <b>Public key</b> (General Information) and <b>Client secret</b> (OAuth2) into this extension's settings under Administration → Extensions.
+			<div class="row"><span class="state"><span class="dot" id="cfg-dot"></span><span id="cfg">Checking…</span></span></div></li>
+		<li>Set the <b>Interactions Endpoint URL</b> (General Information) to:
+			<div class="row"><code id="endpoint"></code></div>
+			<span class="muted">Discord sends a signed test request when you save it; the panel answers only signed requests.</span></li>
+		<li>Install the app in your server with the <code>applications.commands</code> scope, then register the commands:
+			<div class="row"><button class="btn primary" id="register" type="button">Register commands</button><span class="state"><span class="dot" id="reg-dot"></span><span id="reg">Not registered yet</span></span></div></li>
+		<li>Everyone who wants to use the commands links Discord under <b>Settings → Connected accounts</b> and chooses what ChatOps may do for them under <b>Settings → Extensions</b>.</li>
+	</ol>
+</section>
+<section>
+	<h2>Commands</h2>
+	<p class="muted"><code>/status</code> <code>/logs</code> <code>/start</code> <code>/stop</code> <code>/restart</code> <code>/deploy</code>. Replies are only visible to the person who ran the command. Start, stop, restart and deploy ask for a confirmation button that only that person can press, within a minute.</p>
+</section>
+<script>
+(() => {
+	'use strict';
+	let nonce = null, seq = 0;
+	const waiting = new Map();
+	const $ = (id) => document.getElementById(id);
+	addEventListener('message', (e) => {
+		if (e.source !== parent) return;
+		const m = e.data;
+		if (!m || m.rivet !== 1) return;
+		if (m.type === 'init' && !nonce) { nonce = m.nonce; theme(m.theme || {}); start(); }
+		else if (m.type === 'theme') theme(m.theme || {});
+		else if (m.type === 'reply' && waiting.has(m.id)) {
+			const w = waiting.get(m.id); waiting.delete(m.id);
+			m.ok ? w.res(m.body) : w.rej(new Error((m.body && m.body.error && (m.body.error.message || m.body.error)) || 'The request failed.'));
+		}
+	});
+	const call = (type, payload) => new Promise((res, rej) => { const id = ++seq; waiting.set(id, { res, rej }); parent.postMessage(Object.assign({ rivet: 1, nonce, id, type }, payload), '*'); });
+	const rpc = (method, path, body) => call('rpc', { method, path, body });
+	parent.postMessage({ rivet: 1, type: 'ready' }, '*');
+	function theme(vars) { for (const [k, v] of Object.entries(vars)) if (/^--[a-z0-9-]+$/.test(k) && typeof v === 'string' && v.length < 200) document.documentElement.style.setProperty(k, v); }
+
+	$('endpoint').textContent = new URL('/api/v1/ext-public/dev.rivetpanel.discord-chatops/interactions', location.href).href;
+
+	function show(s) {
+		const ok = s.configured && s.secret_set;
+		$('cfg-dot').className = 'dot ' + (ok ? 'ok' : 'no');
+		$('cfg').textContent = ok ? 'Settings saved' : !s.configured ? 'Application ID and public key are not set' : 'Client secret is not set';
+		$('reg-dot').className = 'dot ' + (s.registered_at ? 'ok' : '');
+		$('reg').textContent = s.registered_at ? 'Registered ' + new Date(s.registered_at).toLocaleString() : 'Not registered yet';
+		$('register').disabled = !ok;
+	}
+	async function start() {
+		try { show(await rpc('GET', '/setup')); } catch (e) { $('cfg').textContent = e.message; }
+	}
+	$('register').addEventListener('click', async () => {
+		$('register').disabled = true;
+		try {
+			const r = await rpc('POST', '/register', {});
+			call('toast', { text: `Registered ${r.registered} commands (${r.scope === 'server' ? 'in your server' : 'everywhere; may take up to an hour'})`, tone: 'success' }).catch(() => {});
+			show(await rpc('GET', '/setup'));
+		} catch (e) {
+			call('toast', { text: e.message.slice(0, 200), tone: 'fail' }).catch(() => {});
+			$('register').disabled = false;
+		}
+	});
+})();
+</script>
+</body>
+</html>

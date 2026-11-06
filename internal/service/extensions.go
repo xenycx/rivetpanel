@@ -695,15 +695,21 @@ func (s *ExtensionService) Catalog(ctx context.Context, actor domain.User) ([]Ex
 	return out, nil
 }
 
-// Get describes one extension.
-func (s *ExtensionService) Get(ctx context.Context, actor domain.User, id string) (ExtensionView, error) {
+// Get describes one extension, as version would run ("" = as installed).
+func (s *ExtensionService) Get(ctx context.Context, actor domain.User, id, version string) (ExtensionView, error) {
 	if err := requireExtManage(actor); err != nil {
 		return ExtensionView{}, err
 	}
-	return s.view(ctx, id)
+	return s.viewVersion(ctx, id, version)
 }
 
 func (s *ExtensionService) view(ctx context.Context, id string) (ExtensionView, error) {
+	return s.viewVersion(ctx, id, "")
+}
+
+// viewVersion describes the extension as version would run ("": the active
+// version, or the newest when not installed).
+func (s *ExtensionService) viewVersion(ctx context.Context, id, version string) (ExtensionView, error) {
 	vs, err := s.Store.ListExtensionVersions(ctx, id)
 	if err != nil {
 		return ExtensionView{}, err
@@ -714,12 +720,18 @@ func (s *ExtensionService) view(ctx context.Context, id string) (ExtensionView, 
 	ext, extErr := s.Store.GetExtension(ctx, id)
 	installed := extErr == nil
 	shown := vs[0] // newest, unless installed
-	if installed {
-		for _, v := range vs {
-			if v.Version == ext.ActiveVersion {
-				shown = v
-			}
+	want := version
+	if want == "" && installed {
+		want = ext.ActiveVersion
+	}
+	found := want == ""
+	for _, v := range vs {
+		if v.Version == want {
+			shown, found = v, true
 		}
+	}
+	if !found {
+		return ExtensionView{}, domain.ErrNotFound
 	}
 	var m bundle.Manifest
 	if err := json.Unmarshal([]byte(shown.ManifestJSON), &m); err != nil {
@@ -876,6 +888,14 @@ func (s *ExtensionService) load(ctx context.Context, id string) (*loadedExt, err
 		return nil, domain.Invalid("extension could not start: " + l.err.Error())
 	}
 	return l, nil
+}
+
+// Running reports whether an extension's code is loaded (tests, diagnostics).
+func (s *ExtensionService) Running(id string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	l := s.loaded[id]
+	return l != nil && l.mod != nil
 }
 
 func (s *ExtensionService) unload(id string) {
@@ -1155,11 +1175,17 @@ type ExtensionContribution struct {
 	Source    string              `json:"source"`
 	Nav       []bundle.NavItem    `json:"nav"`
 	BotTabs   []bundle.BotTab     `json:"bot_tabs"`
-	BotCards  []bundle.BotCard    `json:"bot_cards"`
+	BotCards  []ExtensionCardView `json:"bot_cards"`
 	Consent   *bundle.UserConsent `json:"consent,omitempty"`
 	Consented []string            `json:"consented"`
 	BotEnable string              `json:"bot_enablement,omitempty"`
 	Settings  map[string]any      `json:"-"`
+}
+
+// ExtensionCardView is a bot overview card with the path of its route.
+type ExtensionCardView struct {
+	bundle.BotCard
+	Path string `json:"path"`
 }
 
 // Contributions lists what enabled extensions add to the interface for actor.
@@ -1178,7 +1204,7 @@ func (s *ExtensionService) Contributions(ctx context.Context, actor domain.User)
 			continue
 		}
 		c := ExtensionContribution{ID: e.ID, Name: m.Name, Publisher: m.Publisher, Version: m.Version, Source: e.Source,
-			Nav: []bundle.NavItem{}, BotTabs: m.Contributes.BotTabs, BotCards: m.Contributes.BotCards,
+			Nav: []bundle.NavItem{}, BotTabs: m.Contributes.BotTabs, BotCards: []ExtensionCardView{},
 			Consent: m.Contributes.UserConsent, Consented: []string{}, BotEnable: m.Contributes.BotEnablement}
 		for _, n := range m.Contributes.Nav {
 			if n.Perm == "" || actor.Can(n.Perm) {
@@ -1188,8 +1214,10 @@ func (s *ExtensionService) Contributions(ctx context.Context, actor domain.User)
 		if c.BotTabs == nil {
 			c.BotTabs = []bundle.BotTab{}
 		}
-		if c.BotCards == nil {
-			c.BotCards = []bundle.BotCard{}
+		for _, bc := range m.Contributes.BotCards {
+			if r, ok := m.Route(bc.Route); ok {
+				c.BotCards = append(c.BotCards, ExtensionCardView{bc, r.Path})
+			}
 		}
 		if c.Consent != nil {
 			if sc, err := s.Store.GetExtensionConsent(ctx, e.ID, actor.ID); err == nil {
