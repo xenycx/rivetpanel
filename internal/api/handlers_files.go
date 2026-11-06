@@ -112,6 +112,9 @@ type entryDTO struct {
 	Name string `json:"name"`
 	Type string `json:"type"` // file | dir | symlink
 	Size int64  `json:"size"`
+	// ModifiedMS is the last modification time (Unix ms); absent when the
+	// lister does not report it (an older node agent).
+	ModifiedMS int64 `json:"modified_ms,omitempty"`
 }
 
 func (s *panel) listFiles(c fiber.Ctx) error {
@@ -137,7 +140,11 @@ func (s *panel) listFiles(c fiber.Ctx) error {
 		case e.IsDir:
 			t = "dir"
 		}
-		out = append(out, entryDTO{e.Name, t, e.Size})
+		var mod int64
+		if !e.ModTime.IsZero() {
+			mod = e.ModTime.UnixMilli()
+		}
+		out = append(out, entryDTO{e.Name, t, e.Size, mod})
 	}
 	sort.Slice(out, func(i, j int) bool {
 		if (out[i].Type == "dir") != (out[j].Type == "dir") {

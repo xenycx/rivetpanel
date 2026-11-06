@@ -147,7 +147,7 @@ export type Limits = {
 };
 
 export type EnvVar = { name: string; value: string; updated_at_ms: number };
-export type FileEntry = { name: string; type: 'file' | 'dir' | 'symlink'; size: number };
+export type FileEntry = { name: string; type: 'file' | 'dir' | 'symlink'; size: number; modified_ms?: number };
 
 export type Sample = {
 	sampled_at_ms: number;

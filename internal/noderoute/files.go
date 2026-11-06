@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/xenycx/rivetpanel/internal/agentproto"
 	"github.com/xenycx/rivetpanel/internal/domain"
@@ -73,6 +74,7 @@ func (r *Router) ListDir(ctx context.Context, nodeID, botID, dir string) ([]file
 			Name string `json:"name"`
 			Type string `json:"type"`
 			Size int64  `json:"size"`
+			Mod  int64  `json:"modified_ms"`
 		} `json:"entries"`
 	}
 	if err := json.NewDecoder(io.LimitReader(resp.Body, 16<<20)).Decode(&out); err != nil {
@@ -83,7 +85,11 @@ func (r *Router) ListDir(ctx context.Context, nodeID, botID, dir string) ([]file
 		if e.Name == "" || strings.ContainsAny(e.Name, "/\x00") || e.Name == "." || e.Name == ".." {
 			continue // a well-behaved node never lists these
 		}
-		es = append(es, filesystem.Entry{Name: e.Name, IsDir: e.Type == "dir", Symlink: e.Type == "symlink", Size: e.Size})
+		en := filesystem.Entry{Name: e.Name, IsDir: e.Type == "dir", Symlink: e.Type == "symlink", Size: e.Size}
+		if e.Mod > 0 {
+			en.ModTime = time.UnixMilli(e.Mod)
+		}
+		es = append(es, en)
 	}
 	return es, nil
 }

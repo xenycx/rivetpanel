@@ -74,9 +74,14 @@ func (r remoteInfo) Mode() fs.FileMode {
 	}
 	return 0o640
 }
-func (r remoteInfo) ModTime() time.Time { return time.Unix(0, 0) }
-func (r remoteInfo) IsDir() bool        { return r.e.IsDir && !r.e.Symlink }
-func (r remoteInfo) Sys() any           { return nil }
+func (r remoteInfo) ModTime() time.Time {
+	if r.e.ModTime.IsZero() {
+		return time.Unix(0, 0) // an older node agent does not report it
+	}
+	return r.e.ModTime
+}
+func (r remoteInfo) IsDir() bool { return r.e.IsDir && !r.e.Symlink }
+func (r remoteInfo) Sys() any    { return nil }
 
 // remoteStat finds one entry by listing its parent directory on the node.
 func remoteStat(ctx context.Context, nf NodeFiles, t target) (filesystem.Entry, error) {

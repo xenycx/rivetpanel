@@ -249,7 +249,10 @@ bandwidth cap; enforcing one needs traffic shaping (`tc`) on the host.
 ## Files
 
 Web file manager with breadcrumbs, filter, upload with progress and cancel,
-zip extraction and a CodeMirror editor (loaded on demand). Saves are
+zip extraction and a CodeMirror editor (loaded on demand). The explorer sorts
+by name (natural order, so `file2` comes before `file10`), size, date modified
+or type, ascending or descending, with folders first or mixed in; the choice
+is remembered per browser. Saves are
 conditional on the file's revision: if SFTP, a deployment or another editor
 changed the file, the editor offers to download your version, load theirs or
 replace it deliberately, and a failed save keeps your text. While a deployment

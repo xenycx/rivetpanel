@@ -10,6 +10,8 @@
 	import Icon from '$lib/components/ui/Icon.svelte';
 	import Menu from '$lib/components/ui/Menu.svelte';
 	import Notice from '$lib/components/ui/Notice.svelte';
+	import { fmtAgo, fmtTime } from '$lib/args';
+	import { SORT_LABELS, parseSort, sortEntries, type FileSort, type SortKey } from '$lib/files/sort';
 
 	let {
 		botId = '',
@@ -57,6 +59,43 @@
 		}
 	}
 	let treeHidden = $state(pref('rivetpanel.filesTreeHidden'));
+
+	// The folder order, remembered per browser like the layout.
+	const SORT_KEY = 'rivetpanel.filesSort';
+	let sort = $state<FileSort>(
+		parseSort(
+			(() => {
+				try {
+					return localStorage.getItem(SORT_KEY);
+				} catch {
+					return null;
+				}
+			})()
+		)
+	);
+	function setSort(next: FileSort) {
+		sort = next;
+		try {
+			localStorage.setItem(SORT_KEY, JSON.stringify(next));
+		} catch {
+			/* the preference is optional */
+		}
+	}
+	// Choosing the active method again flips its direction; a new method starts
+	// in its natural direction (newest and largest first for time and size).
+	function chooseSort(key: SortKey) {
+		setSort(key === sort.key ? { ...sort, desc: !sort.desc } : { ...sort, key, desc: key === 'modified' || key === 'size' });
+	}
+	const sortItems = $derived([
+		{ heading: 'Sort by' },
+		...(Object.keys(SORT_LABELS) as SortKey[]).map((key) => ({
+			label: SORT_LABELS[key],
+			hint: key === sort.key ? (sort.desc ? '↓ desc' : '↑ asc') : undefined,
+			onselect: () => chooseSort(key)
+		})),
+		'separator' as const,
+		{ label: sort.foldersFirst ? 'Mix folders with files' : 'Show folders first', onselect: () => setSort({ ...sort, foldersFirst: !sort.foldersFirst }) }
+	]);
 	let focusMode = $state(false);
 	function toggleTree() {
 		treeHidden = !treeHidden;
@@ -120,7 +159,13 @@
 	onDestroy(() => editor?.destroy());
 
 	const crumbs = $derived(cwd ? cwd.split('/').map((name, i, a) => ({ name, path: a.slice(0, i + 1).join('/') })) : []);
-	const shownEntries = $derived((entries ?? []).filter((e) => !filter.trim() || e.name.toLowerCase().includes(filter.trim().toLowerCase())));
+	const shownEntries = $derived(
+		sortEntries(
+			(entries ?? []).filter((e) => !filter.trim() || e.name.toLowerCase().includes(filter.trim().toLowerCase())),
+			sort
+		)
+	);
+	const modifiedTitle = (e: FileEntry) => (e.modified_ms ? `Modified ${fmtTime(e.modified_ms)}` : undefined);
 	const language = $derived.by(() => {
 		const ext = open?.split('.').pop()?.toLowerCase() ?? '';
 		return ({ js: 'JavaScript', mjs: 'JavaScript', cjs: 'JavaScript', ts: 'TypeScript', py: 'Python', rs: 'Rust', go: 'Go', java: 'Java', rb: 'Ruby', json: 'JSON', md: 'Markdown', yml: 'YAML', yaml: 'YAML', toml: 'TOML', sh: 'Shell' } as Record<string, string>)[ext] ?? 'Plain text';
@@ -357,6 +402,7 @@
 		<div class="min-h-0 min-w-0 flex-col border-rule-soft lg:border-r {open ? 'hidden' : 'flex'} {treeHidden ? 'lg:hidden' : 'lg:flex'}">
 			<div class="flex items-center gap-1 border-b border-rule-soft px-2 py-1.5">
 				<p class="eyebrow flex-1 truncate px-1">Explorer</p>
+				<Menu items={sortItems} label="Sort files, currently by {SORT_LABELS[sort.key].toLowerCase()} {sort.desc ? 'descending' : 'ascending'}" icon="sliders" triggerClass="btn btn-sm btn-quiet btn-icon" />
 				<button class="btn btn-sm btn-quiet btn-icon" onclick={newFile} aria-label="New file" title="New file"><Icon name="plus" size={15} /></button>
 				<button class="btn btn-sm btn-quiet btn-icon" onclick={newFolder} aria-label="New folder" title="New folder"><Icon name="folder" size={15} /></button>
 				<label class="btn btn-sm btn-quiet btn-icon cursor-pointer focus-within:outline-2 focus-within:outline-action" title="Upload files"><Icon name="upload" size={15} /><span class="sr-only">Upload files</span><input type="file" multiple class="sr-only" onchange={uploadFiles} /></label>
@@ -405,12 +451,12 @@
 						{@const p = join(cwd, en.name)}
 						<li class="group flex items-center rounded-control {open === p ? 'bg-action/10 text-ink' : 'hover:bg-paper-2/60'}">
 							{#if en.type === 'dir'}
-								<button class="flex min-w-0 flex-1 items-center gap-2 px-2 py-1 text-left font-medium" onclick={() => list(p)}><Icon name="folder" size={15} class="text-muted" /><span class="truncate">{en.name}</span></button>
+								<button class="flex min-w-0 flex-1 items-center gap-2 px-2 py-1 text-left font-medium" onclick={() => list(p)} title={modifiedTitle(en)}><Icon name="folder" size={15} class="text-muted" /><span class="truncate">{en.name}</span></button>
 							{:else if en.type === 'symlink'}
 								<span class="flex min-w-0 flex-1 items-center gap-2 px-2 py-1 text-muted" title="Links are not followed"><Icon name="link" size={15} /><span class="truncate">{en.name}</span></span>
 							{:else}
-								<button class="flex min-w-0 flex-1 items-center gap-2 px-2 py-1 text-left" onclick={() => openFile(p)} aria-current={open === p ? 'true' : undefined}><Icon name={icon(en)} size={15} class={open === p ? 'text-action' : 'text-muted'} /><span class="truncate">{en.name}</span></button>
-								<span class="shrink-0 px-1 text-small text-muted tabular-nums">{fmtBytes(en.size)}</span>
+								<button class="flex min-w-0 flex-1 items-center gap-2 px-2 py-1 text-left" onclick={() => openFile(p)} aria-current={open === p ? 'true' : undefined} title={modifiedTitle(en)}><Icon name={icon(en)} size={15} class={open === p ? 'text-action' : 'text-muted'} /><span class="truncate">{en.name}</span></button>
+								<span class="shrink-0 px-1 text-small text-muted tabular-nums">{sort.key === 'modified' && en.modified_ms ? fmtAgo(en.modified_ms) : fmtBytes(en.size)}</span>
 							{/if}
 							<Menu
 								label="Actions for {en.name}"

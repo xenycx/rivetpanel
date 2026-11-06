@@ -173,6 +173,12 @@ func TestFileMkdirMoveDeleteAndListingOrder(t *testing.T) {
 	if len(list.Entries) != 3 || list.Entries[0].Name != "src" || list.Entries[0].Type != "dir" || list.Entries[1].Name != "alpha.txt" {
 		t.Fatalf("%+v", list.Entries)
 	}
+	for _, en := range list.Entries {
+		// Every entry carries its modification time so the UI can sort by it.
+		if age := time.Since(time.UnixMilli(en.ModifiedMS)); en.ModifiedMS == 0 || age < -time.Minute || age > time.Hour {
+			t.Fatalf("modified_ms for %s = %d", en.Name, en.ModifiedMS)
+		}
+	}
 	u.mustStatus(204, "POST", base+"/move", map[string]string{"from": "alpha.txt", "to": "src/lib/a.txt"})
 	u.mustStatus(400, "POST", base+"/move", map[string]string{"from": "src", "to": "src/lib/inner"})
 	u.mustStatus(400, "POST", base+"/move", map[string]string{"from": "../x", "to": "y"})

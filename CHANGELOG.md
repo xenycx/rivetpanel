@@ -6,6 +6,15 @@ authoritative current version.
 
 ## Unreleased
 
+### Added
+
+- The file explorer can sort a folder by name, size, date modified or type,
+  in either direction, with folders first or mixed in. Names sort naturally
+  (`file2` before `file10`) and the choice is remembered per browser. File
+  listings now include each entry's modification time, which also reaches
+  SFTP clients for bots on remote nodes; nodes running an older agent show no
+  time until they are upgraded.
+
 ## 0.9.1 - 2026-11-05
 
 ### Changed

@@ -17,6 +17,7 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -278,6 +279,7 @@ type Entry struct {
 	IsDir   bool
 	Symlink bool
 	Size    int64
+	ModTime time.Time // zero when unknown
 }
 
 // List returns the entries of a directory ("." for the workspace root).
@@ -300,8 +302,11 @@ func (w *Workspace) List(p string) ([]Entry, error) {
 	out := make([]Entry, 0, len(des))
 	for _, de := range des {
 		e := Entry{Name: de.Name(), IsDir: de.IsDir(), Symlink: de.Type()&fs.ModeSymlink != 0}
-		if info, err := de.Info(); err == nil && info.Mode().IsRegular() {
-			e.Size = info.Size()
+		if info, err := de.Info(); err == nil {
+			e.ModTime = info.ModTime()
+			if info.Mode().IsRegular() {
+				e.Size = info.Size()
+			}
 		}
 		out = append(out, e)
 	}
@@ -593,7 +598,7 @@ func (w *Workspace) Stat(p string) (Entry, error) {
 	if err != nil {
 		return Entry{}, err
 	}
-	return Entry{Name: path.Base(p), IsDir: st.IsDir(), Size: st.Size()}, nil
+	return Entry{Name: path.Base(p), IsDir: st.IsDir(), Size: st.Size(), ModTime: st.ModTime()}, nil
 }
 
 // OpenWrite opens a regular file for offset writes (SFTP), creating it and any
