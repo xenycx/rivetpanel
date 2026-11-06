@@ -6,6 +6,8 @@ authoritative current version.
 
 ## Unreleased
 
+## 1.0.0 - 2026-11-07
+
 ### Added
 
 - **Extensions** (preview module, off by default; turn it on under
