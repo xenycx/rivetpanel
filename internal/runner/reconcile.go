@@ -95,16 +95,45 @@ func (r *Runner) fail(ctx context.Context, bot domain.Bot, msg string, cause err
 	}
 	r.log.Warn("bot reconcile failed", "bot", bot.ID, "reason", msg, "err", cause)
 	d := r.backoff(st.bump())
-	st.nextAt = r.now().Add(d)
-	st.retryAt, st.failGen = st.nextAt, bot.Generation
 	reason := domain.ReasonSetupFailed
 	if strings.HasPrefix(msg, "build ") {
 		reason = domain.ReasonBuildFailed
 	}
+	if strings.HasPrefix(msg, "build failed") {
+		// The build ran and failed. Running it again a second later almost
+		// always fails the same way (a bad lockfile, a compile error), so
+		// back off from a longer floor and give up on repeats.
+		n := r.buildRepeat(bot, msg, st)
+		if n >= r.opts.MaxBuildRepeats {
+			st.parked, st.parkedGen = true, bot.Generation
+			st.nextAt, st.retryAt = time.Time{}, time.Time{}
+			r.log.Warn("build retries stopped", "bot", bot.ID, "attempts", n)
+			r.observe(ctx, bot, sqlite.Observation{State: "failed", SettleGeneration: true, Reason: reason,
+				LastError: fmt.Sprintf("%s\n\nRetries stopped: the build failed the same way %d times in a row. Fix the problem, then start or restart the bot.", msg, n)})
+			return 0
+		}
+		d = max(d, min(r.opts.BuildRetryBackoff<<(n-1), r.opts.MaxBackoff))
+	}
+	st.nextAt = r.now().Add(d)
+	st.retryAt, st.failGen = st.nextAt, bot.Generation
 	r.observe(ctx, bot, sqlite.Observation{State: "failed", SettleGeneration: true, LastError: msg,
 		Reason: reason, NextRetryAtMS: st.nextAt.UnixMilli()})
 	return d
 }
+
+// buildRepeat counts how many times in a row this generation's build failed
+// with the same message (numbers such as timestamps and durations ignored).
+func (r *Runner) buildRepeat(bot domain.Bot, msg string, st *botState) int {
+	key := digitsRe.ReplaceAllString(msg, "#")
+	if st.buildFailGen == bot.Generation && st.buildFailKey == key {
+		st.buildFailCount++
+	} else {
+		st.buildFailGen, st.buildFailKey, st.buildFailCount = bot.Generation, key, 1
+	}
+	return st.buildFailCount
+}
+
+var digitsRe = lazyre.New(`[0-9]+`)
 
 func (r *Runner) removeContainer(ctx context.Context, c ContainerInfo) error {
 	if c.Live() {
@@ -257,6 +286,10 @@ func (r *Runner) doRun(ctx context.Context, bot domain.Bot) time.Duration {
 	// generation (edit, restart) bypasses the gate.
 	if st.failGen == bot.Generation && r.now().Before(st.retryAt) {
 		return st.retryAt.Sub(r.now())
+	}
+	// A build that kept failing the same way waits for the user.
+	if st.parked && st.parkedGen == bot.Generation {
+		return 0
 	}
 	host, err := r.ws.Path(bot.ID)
 	if err != nil {
@@ -812,7 +845,9 @@ func (r *Runner) buildStage(ctx context.Context, bot domain.Bot, rt runtimes.Run
 		msg := fmt.Sprintf("build failed (exit code %d)", code)
 		// Builders receive no bot secrets, so their output is safe to surface.
 		// It is what tells the user why the build failed.
-		if tail, err := r.docker.Tail(context.WithoutCancel(ctx), id, 12); err == nil {
+		// npm puts the reason at the top of a long usage dump, so read well
+		// past the last few lines; tidyBuildOutput picks what matters.
+		if tail, err := r.docker.Tail(context.WithoutCancel(ctx), id, buildTailLines); err == nil {
 			if t := tidyBuildOutput(tail); t != "" {
 				msg += ": " + t
 			}
@@ -820,12 +855,23 @@ func (r *Runner) buildStage(ctx context.Context, bot domain.Bot, rt runtimes.Run
 		return msg, fmt.Errorf("builder exited %d", code)
 	}
 	st.built, st.builtGen = true, bot.Generation
+	st.buildFailCount, st.parked = 0, false
 	return "", nil
 }
 
+// buildTailLines is how much builder output is read when a build fails, and
+// buildExcerptLines how many of its last lines are shown when the output has
+// no recognizable error block.
+const (
+	buildTailLines    = 200
+	buildExcerptLines = 12
+)
+
 // tidyBuildOutput reduces builder output to a short single-purpose excerpt:
-// control characters and ANSI colors removed, at most ~700 characters, ending on
-// the last lines (where the actual error is).
+// control characters and ANSI colors removed, at most ~700 characters. npm
+// failures show npm's own error lines (code, reason, Invalid:/Missing:
+// details) instead of the usage text npm prints after them; other output
+// shows its last lines (where the actual error is).
 func tidyBuildOutput(s string) string {
 	s = ansiRe.ReplaceAllString(s, "")
 	var b strings.Builder
@@ -834,9 +880,25 @@ func tidyBuildOutput(s string) string {
 			b.WriteRune(r)
 		}
 	}
+	lines := strings.Split(strings.TrimSpace(b.String()), "\n")
+	if npmLines := npmErrorSummary(lines); len(npmLines) > 0 {
+		// npm leads with the reason: keep the start of its lines.
+		for i, l := range npmLines {
+			if r := []rune(l); len(r) > 240 {
+				npmLines[i] = string(r[:220]) + "…"
+			}
+		}
+		out := strings.Join(npmLines, "\n")
+		if r := []rune(out); len(r) > 700 {
+			out = string(r[:700]) + "…"
+		}
+		return out
+	}
+	if len(lines) > buildExcerptLines {
+		lines = lines[len(lines)-buildExcerptLines:]
+	}
 	// Compiler invocations can be a single enormous line whose end holds the
 	// reason (e.g. "(signal: 9, SIGKILL: kill)"): keep the tail of long lines.
-	lines := strings.Split(strings.TrimSpace(b.String()), "\n")
 	for i, l := range lines {
 		if r := []rune(l); len(r) > 200 {
 			lines[i] = "…" + string(r[len(r)-160:])
@@ -850,3 +912,77 @@ func tidyBuildOutput(s string) string {
 }
 
 var ansiRe = lazyre.New(`\x1b\[[0-9;?]*[ -/]*[@-~]`)
+
+// npmErrorSummary returns the meaningful lines of the last npm error block in
+// builder output: the error code and reason without npm's blank separators,
+// command usage text, help pointer and debug-log path. It returns nil when the
+// output has no npm error block.
+func npmErrorSummary(lines []string) []string {
+	body := func(l string) (string, bool) {
+		for _, p := range []string{"npm error", "npm ERR!"} {
+			if strings.HasPrefix(l, p) {
+				return strings.TrimSpace(l[len(p):]), true
+			}
+		}
+		return "", false
+	}
+	// The last contiguous run of npm error lines belongs to the npm command
+	// that failed the build (an earlier one may have been recovered from).
+	end := -1
+	for i := len(lines) - 1; i >= 0; i-- {
+		if _, ok := body(lines[i]); ok {
+			end = i
+			break
+		}
+	}
+	if end < 0 {
+		return nil
+	}
+	start := end
+	for start > 0 {
+		if _, ok := body(lines[start-1]); !ok {
+			break
+		}
+		start--
+	}
+	var bodies []string
+	for _, l := range lines[start : end+1] {
+		t, _ := body(l)
+		bodies = append(bodies, t)
+	}
+	// Usage text reads: <blank> <command description> <blank> "Usage:" ...
+	// Drop it along with the description line before it.
+	for i, t := range bodies {
+		if t != "Usage:" {
+			continue
+		}
+		j := i - 1
+		for j >= 0 && bodies[j] == "" {
+			j--
+		}
+		if j < 0 {
+			j = i
+		}
+		bodies = bodies[:j]
+		break
+	}
+	var out []string
+	inSync := false
+	for _, t := range bodies {
+		switch {
+		case t == "", strings.HasPrefix(t, "A complete log of this run"), strings.HasPrefix(t, `Run "npm help`):
+			continue
+		}
+		inSync = inSync || strings.Contains(t, "are in sync")
+		if len(out) < 8 {
+			out = append(out, "npm error "+t)
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	if inSync {
+		out = append(out, "Hint: package.json and package-lock.json are out of sync. Run npm install to update package-lock.json, or delete it so the next build creates a new one.")
+	}
+	return out
+}

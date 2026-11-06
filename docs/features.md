@@ -222,6 +222,15 @@ that already run there. At most 4 KiB. The default Python build now also
 installs packaged projects (`setup.py`, or `pyproject.toml` with `[project]` or
 Poetry metadata) when there is no `requirements.txt`.
 
+A failed build reports its exit code and an excerpt of the builder output:
+for npm, npm's error code and reason lines (with a hint when `package.json`
+and `package-lock.json` are out of sync) instead of the usage text npm prints
+after them; otherwise the last lines. A build that ran and failed is retried
+after 15 seconds, then 30 (doubling, at most 5 minutes). When the same
+generation fails the same way three times in a row, the panel stops retrying
+and says so in the bot's error; Start, Restart or a configuration change
+builds again. A panel restart also allows one new attempt.
+
 Restart policy: `on_failure` (default) restarts after a non-zero exit with
 exponential backoff and a limit on consecutive crashes (0 = unlimited); `never`
 leaves the bot down. A clean exit is never restarted. When the runner gives up,
@@ -276,6 +285,15 @@ crates.io; PyPI and the Go proxy resolve an exact name. Names and version specs
 are matched against per-ecosystem patterns, so nothing can be injected.
 Dependencies install when the bot next starts. Java (Maven) and Ruby (Bundler)
 manifests are not edited by the panel.
+
+The package manager edits only the manifest, not lockfiles. For Node.js, the
+build installs with `npm ci` when `package-lock.json` exists; when npm refuses
+because the lockfile no longer matches `package.json` (npm error code
+`EUSAGE`, for example after a version change here or in the file manager), the
+build logs a warning and runs `npm install` once instead, which rewrites
+`package-lock.json` in the workspace so the next build is a clean `npm ci`
+again. Imported Node projects whose build command the panel generated behave
+the same way; a custom build command runs exactly as written.
 
 ## Templates
 

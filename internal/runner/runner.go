@@ -64,7 +64,13 @@ type Options struct {
 	BuildTimeout   time.Duration
 	BaseBackoff    time.Duration
 	MaxBackoff     time.Duration
-	StableAfter    time.Duration // a run this long resets the crash backoff
+	// BuildRetryBackoff is the first delay after a build that ran and
+	// failed; it doubles while the same failure repeats (bounded by
+	// MaxBackoff). A build failing the same way MaxBuildRepeats times in a
+	// row stops being retried until the next start, restart or edit.
+	BuildRetryBackoff time.Duration
+	MaxBuildRepeats   int
+	StableAfter       time.Duration // a run this long resets the crash backoff
 
 	TmpfsBytes      int64
 	BuildTmpfsBytes int64
@@ -92,6 +98,10 @@ func (o *Options) defaults() {
 	set(&o.BuildTimeout, 10*time.Minute)
 	set(&o.BaseBackoff, time.Second)
 	set(&o.MaxBackoff, 5*time.Minute)
+	set(&o.BuildRetryBackoff, 15*time.Second)
+	if o.MaxBuildRepeats == 0 {
+		o.MaxBuildRepeats = 3
+	}
 	set(&o.StableAfter, time.Minute)
 	if o.Workers == 0 {
 		o.Workers = 2
@@ -132,22 +142,27 @@ func ParseUser(u string) (uid, gid int, err error) {
 }
 
 type botState struct {
-	attempts    int       // consecutive crashes of the current generation (restart_count)
-	failures    int       // consecutive setup failures (image, install, build, create, start); never counted as crashes
-	nextAt      time.Time // earliest time to retry after a failure
-	retryAt     time.Time // gate for setup failures (image, build, create, start)
-	failGen     int64     // generation the setup failure applies to
-	exitSeenID  string    // container whose exit was already counted
-	finalExit   string    // container whose exit ends the run (no restart)
-	finalMsg    string    // failure text for finalExit; empty for a clean exit
-	finalReason string    // domain.Reason* for finalExit
-	builtGen    int64     // generation whose build stage completed in this process
-	built       bool
-	releasedGen int64 // generation whose release command succeeded in this process
-	countGen    int64  // generation the crash counter belongs to
-	seeded      bool   // counter restored from the database after a panel restart
-	prepFailGen int64  // generation whose pre-build failure was recorded
-	prepFailMsg string // and its message, so identical retries are not re-recorded
+	attempts       int       // consecutive crashes of the current generation (restart_count)
+	failures       int       // consecutive setup failures (image, install, build, create, start); never counted as crashes
+	nextAt         time.Time // earliest time to retry after a failure
+	retryAt        time.Time // gate for setup failures (image, build, create, start)
+	failGen        int64     // generation the setup failure applies to
+	exitSeenID     string    // container whose exit was already counted
+	finalExit      string    // container whose exit ends the run (no restart)
+	finalMsg       string    // failure text for finalExit; empty for a clean exit
+	finalReason    string    // domain.Reason* for finalExit
+	builtGen       int64     // generation whose build stage completed in this process
+	built          bool
+	releasedGen    int64  // generation whose release command succeeded in this process
+	countGen       int64  // generation the crash counter belongs to
+	seeded         bool   // counter restored from the database after a panel restart
+	prepFailGen    int64  // generation whose pre-build failure was recorded
+	prepFailMsg    string // and its message, so identical retries are not re-recorded
+	buildFailGen   int64  // generation of the current run of identical build failures
+	buildFailKey   string // its normalized message
+	buildFailCount int    // how many times in a row it happened
+	parkedGen      int64  // generation whose build stopped being retried
+	parked         bool
 }
 
 // Runner is the in-process implementation of the runner interface.

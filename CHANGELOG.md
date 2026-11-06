@@ -6,6 +6,27 @@ authoritative current version.
 
 ## Unreleased
 
+### Fixed
+
+- Node.js bots no longer get stuck after a dependency version is changed in
+  Packages (or by editing `package.json` directly). When `package-lock.json`
+  no longer matches `package.json`, `npm ci` refuses to install; the build now
+  logs a warning and runs `npm install` once instead, which updates
+  `package-lock.json` in the workspace so later builds use `npm ci` again.
+  Previously every build failed until the lockfile was fixed by hand. Other
+  `npm ci` failures still fail the build. Imported Node projects and Node
+  site apps whose build command the panel generated get the same fallback
+  for new imports; existing custom build commands run as written.
+- A failed npm build now shows npm's error code and reason (for example
+  `Invalid: lock file's discord.js@14.27.0 does not satisfy
+  discord.js@14.28.1`) instead of the tail of npm's usage text, with a hint
+  when `package.json` and `package-lock.json` are out of sync.
+- Builds that fail are no longer retried in a tight loop. A build that ran
+  and failed waits 15 seconds, then 30, and after failing the same way three
+  times in a row stops retrying until the bot is started, restarted or
+  edited; the bot's error says so. Previously the same failing build ran
+  about five times in 25 seconds and kept going.
+
 ## 1.0.1 - 2026-11-07
 
 ### Added

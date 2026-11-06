@@ -480,8 +480,12 @@ func TestBuildStage(t *testing.T) {
 	if all, _ := g.fd.ListManaged(context.Background(), botID); len(all) != 0 {
 		t.Fatal("builder container leaked")
 	}
+	// A build that ran and failed is not retried right away.
+	if d := g.pass(); d < 14*time.Second {
+		t.Fatalf("build retry after %v, want the build retry floor", d)
+	}
 	g.fd.builderExit = 0
-	g.advance(1100 * time.Millisecond)
+	g.advance(15100 * time.Millisecond)
 	g.pass()
 	g.wantState("running")
 	builders := 0
@@ -952,6 +956,84 @@ func TestBuildFailureIncludesBuilderOutputTail(t *testing.T) {
 	long := "error: could not compile `serenity`\nCaused by: rustc " + strings.Repeat("--extern a=b ", 400) + "(signal: 9, SIGKILL: kill)"
 	if s := tidyBuildOutput(long); !strings.Contains(s, "(signal: 9, SIGKILL: kill)") || !strings.Contains(s, "could not compile `serenity`") {
 		t.Fatalf("excerpt lost the reason: %q", s)
+	}
+}
+
+// npm ci's usage dump must not hide the reason it failed (reported against
+// 0.9.1: the panel showed only "--include-workspace-root…, aliases: …").
+func TestBuildFailureShowsNPMErrorNotUsage(t *testing.T) {
+	usage := "npm error code EUSAGE\nnpm error\n" +
+		"npm error `npm ci` can only install packages when your package.json and package-lock.json or npm-shrinkwrap.json are in sync. Please update your lock file with `npm install` before continuing.\n" +
+		"npm error\nnpm error Invalid: lock file's discord.js@14.27.0 does not satisfy discord.js@14.28.1\nnpm error\n" +
+		"npm error Clean install a project\nnpm error\nnpm error Usage:\nnpm error npm ci\nnpm error\nnpm error Options:\n" +
+		strings.Repeat("npm error   --include-workspace-root\nnpm error     Include the workspace root.\nnpm error\n", 25) +
+		"npm error aliases: clean-install, ic, install-clean, isntall-clean\nnpm error\nnpm error Run \"npm help ci\" for more info\n" +
+		"npm error A complete log of this run can be found in: /workspace/.npm/_logs/2026-11-05T16_53_54_950Z-debug-0.log\n"
+	got := tidyBuildOutput(usage)
+	for _, want := range []string{"npm error code EUSAGE", "Invalid: lock file's discord.js@14.27.0 does not satisfy discord.js@14.28.1", "Hint: package.json and package-lock.json are out of sync"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("missing %q in %q", want, got)
+		}
+	}
+	for _, unwanted := range []string{"include-workspace-root", "aliases", "Clean install a project", "complete log", "npm help"} {
+		if strings.Contains(got, unwanted) {
+			t.Fatalf("usage text %q leaked into %q", unwanted, got)
+		}
+	}
+	// When npm ci's failure was recovered from, the npm command that failed
+	// the build is the one reported.
+	got = tidyBuildOutput(usage + "RivetPanel warning: package-lock.json is out of sync with package.json; running npm install to update it.\n" +
+		"npm error code ETARGET\nnpm error notarget No matching version found for discord.js@^99.0.0.\nnpm error A complete log of this run can be found in: /x.log\n")
+	if !strings.HasPrefix(got, "npm error code ETARGET\nnpm error notarget No matching version found for discord.js@^99.0.0.") || strings.Contains(got, "EUSAGE") {
+		t.Fatalf("excerpt = %q", got)
+	}
+}
+
+// Builds that fail the same way back off and then stop until the user acts
+// (reported against 0.9.1: five identical rebuilds in about 25 seconds).
+func TestIdenticalBuildFailuresStopRetrying(t *testing.T) {
+	g := newRig(t)
+	ws, _ := g.ws.Open(botID)
+	ws.Write("package.json", strings.NewReader("{}"), 100)
+	ws.Close()
+	g.fd.builderExit = 1
+	g.fd.tail = "npm error code EUSAGE\nnpm error A complete log of this run can be found in: /workspace/.npm/_logs/2026-11-05T16_53_54_950Z-debug-0.log\n"
+	g.desire("running", false)
+	builders := func() int {
+		n := 0
+		for _, c := range g.fd.created {
+			if c.Role == RoleBuilder {
+				n++
+			}
+		}
+		return n
+	}
+	var delays []time.Duration
+	for i := 0; i < 3; i++ {
+		d := g.pass()
+		delays = append(delays, d)
+		g.advance(d + time.Millisecond)
+		g.fd.tail = strings.Replace(g.fd.tail, "16_53_54", fmt.Sprintf("16_5%d_00", i), 1) // log names differ per run
+	}
+	if delays[0] != 15*time.Second || delays[1] != 30*time.Second || delays[2] != 0 {
+		t.Fatalf("delays = %v", delays)
+	}
+	b := g.wantState("failed")
+	if b.NextRetryAtMS != nil || !strings.Contains(deref(b.LastError), "Retries stopped") || !strings.HasPrefix(deref(b.LastError), "build failed (exit code 1)") {
+		t.Fatalf("parked state: next=%v err=%q", b.NextRetryAtMS, deref(b.LastError))
+	}
+	// Resyncs do not rebuild a parked generation.
+	g.advance(time.Hour)
+	if d := g.pass(); d != 0 || builders() != 3 {
+		t.Fatalf("parked build retried: d=%v builders=%d", d, builders())
+	}
+	// A restart (new generation) builds again.
+	g.fd.builderExit = 0
+	g.desire("running", true)
+	g.pass()
+	g.wantState("running")
+	if builders() != 4 {
+		t.Fatalf("builders = %d", builders())
 	}
 }
 

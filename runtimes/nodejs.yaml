@@ -3,10 +3,29 @@ display_name: Node.js
 image: node:24-alpine        # supported LTS; the runner resolves and pins the digest at run time
 builder_image: node:24-alpine
 build_if_files: [package.json]
+# npm ci refuses (code EUSAGE) when package-lock.json no longer matches
+# package.json, e.g. after a version change in Packages or the file manager.
+# That case falls back to one npm install, which rewrites the lockfile in the
+# workspace so the next build uses npm ci again. Any other npm ci failure
+# fails the build as before. Keep in step with reposcan.NPMCleanInstall.
 build_argv:
   - sh
   - -c
-  - if [ -f package-lock.json ]; then npm ci --omit=dev --no-audit --no-fund; else npm install --omit=dev --no-audit --no-fund; fi
+  - |
+    if [ -f package-lock.json ]; then
+      { npm ci --omit=dev --no-audit --no-fund 2>&1 && echo 0 >/tmp/.npm-ci.rc || echo $? >/tmp/.npm-ci.rc; } | tee /tmp/.npm-ci.log
+      rc=$(cat /tmp/.npm-ci.rc)
+      if [ "$rc" != 0 ]; then
+        if grep -q 'code EUSAGE' /tmp/.npm-ci.log; then
+          echo 'RivetPanel warning: package-lock.json is out of sync with package.json; running npm install to update it.'
+          npm install --omit=dev --no-audit --no-fund
+        else
+          exit "$rc"
+        fi
+      fi
+    else
+      npm install --omit=dev --no-audit --no-fund
+    fi
 default_argv: [node, index.js]
 allowed_commands: [node, npm, npx]
 env: {NODE_ENV: production}

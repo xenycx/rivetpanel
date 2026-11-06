@@ -204,7 +204,7 @@ func detectNode(s *Snapshot, p *Plan) {
 	}
 	lock := "npm install --no-audit --no-fund"
 	if s.Has("package-lock.json") {
-		lock = "npm ci --no-audit --no-fund"
+		lock = NPMCleanInstall("")
 	}
 	switch {
 	case ts && pkg.Scripts["build"] != "":

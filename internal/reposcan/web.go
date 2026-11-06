@@ -35,12 +35,13 @@ type WebPlan struct {
 	Evidence       []string `json:"evidence"`
 }
 
-const (
-	npmInstall = "if [ -f package-lock.json ]; then npm ci --include=dev --no-audit --no-fund; else npm install --include=dev --no-audit --no-fund; fi"
+var (
+	npmInstall = NPMCleanInstall("--include=dev")
 	npmBuild   = npmInstall + "\nnpm run build"
 	npmApp     = npmBuild + "\nnpm prune --omit=dev --no-audit --no-fund"
-	pyPrefix   = "/workspace/.venv/bin/python"
 )
+
+const pyPrefix = "/workspace/.venv/bin/python"
 
 // webPresets are the frameworks the panel knows how to host. The first
 // entry of each kind is that kind's generic fallback.

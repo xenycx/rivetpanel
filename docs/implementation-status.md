@@ -456,6 +456,19 @@ items state exactly what remains.
   and keeps setup retries (image, install, build, create, start) on a
   separate backoff counter that is never reported as crashes. Test:
   `TestCrashStreakClearsAfterStableRunAndExcludesSetupRetries`.
+- [x] Build failure handling (2026-11-07, 1.0.2): builds that ran and failed
+  back off from 15 seconds (doubling to `MaxBackoff`) and stop retrying after
+  three identical failures in the same generation until Start/Restart or an
+  edit (in-memory runner state, so a panel restart allows one new attempt).
+  Failure excerpts show npm's error block instead of its usage text. The
+  Node.js builder (catalog recipe and generated import/site build commands)
+  falls back from `npm ci` to one `npm install` only on npm's `EUSAGE`
+  lockfile mismatch, which rewrites `package-lock.json` in the workspace; the
+  package manager itself still edits manifests only. Enforced by the
+  application runner and the builder shell script. Tests:
+  `TestIdenticalBuildFailuresStopRetrying`,
+  `TestBuildFailureShowsNPMErrorNotUsage`,
+  `TestNodeRuntimeUsesTheSharedInstallScript`.
 - [ ] Agents do not self-update, migrate workloads or provide automatic
   capacity scheduling. No privilege-boundary claim is made for Docker
   access.
