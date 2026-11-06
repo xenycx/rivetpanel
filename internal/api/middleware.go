@@ -122,6 +122,9 @@ var clientSessionOnly = []string{
 	// The notification inbox carries ticket replies and alerts about every
 	// resource of the account; preferences could silence them.
 	"/notifications", "/me/notification-prefs",
+	// Extensions: installing code, granting it capabilities, trusting keys
+	// and consenting for the account to be acted for need a person.
+	"/admin/extensions", "/admin/extension-publishers", "/extensions",
 }
 
 // clientScopedAllowed are the top-level API areas a client limited to some

@@ -51,7 +51,10 @@ type env struct {
 	consoleLimit *console.Limiter
 }
 
-func newEnv(t *testing.T) *env {
+func newEnv(t *testing.T) *env { t.Helper(); return newEnvWith(t, nil) }
+
+// newEnvWith lets a test add dependencies (for example an optional module).
+func newEnvWith(t *testing.T, extra func(d *Deps, keys *secrets.Keyring)) *env {
 	t.Helper()
 	dir := t.TempDir()
 	ctx := context.Background()
@@ -80,9 +83,13 @@ func newEnv(t *testing.T) *env {
 	bs.Bus = bus
 	csvc := &console.Service{Src: src, Bus: bus, Opts: console.Options{AccessRecheck: 50 * time.Millisecond, StatusPoll: 20 * time.Millisecond}}
 	limit := console.NewLimiter(0, 0, 2)
-	app := New(Deps{Log: slog.New(slog.NewTextHandler(io.Discard, nil)), DB: db, Auth: as, Bots: bs, Catalog: cat, SecureCookies: true,
+	deps := Deps{Log: slog.New(slog.NewTextHandler(io.Discard, nil)), DB: db, Auth: as, Bots: bs, Catalog: cat, SecureCookies: true,
 		Console: csvc, ConsoleLimit: limit, Nodes: db, Files: wsm, MaxUpload: 2 << 20,
-		Clients: &service.APIClientService{Store: db, Bots: bs}})
+		Clients: &service.APIClientService{Store: db, Bots: bs}}
+	if extra != nil {
+		extra(&deps, keys)
+	}
+	app := New(deps)
 	return &env{src, bus, rec, t, app, db, as, bs, data, limit}
 }
 

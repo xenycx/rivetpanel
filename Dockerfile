@@ -15,6 +15,7 @@ COPY --from=web /src/web/build/ /src/internal/webui/dist/
 ARG VERSION
 ARG TARGETOS
 ARG TARGETARCH
+RUN ./extensions/build.sh
 RUN build_version="${VERSION:-$(tr -d '\r\n' < VERSION)}" && \
     CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -ldflags="-s -w -X main.version=${build_version}" -o /out/rivetpanel ./cmd/rivetpanel && \
     CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -ldflags="-s -w -X main.version=${build_version}" -o /out/rivet-agent ./cmd/rivet-agent

@@ -15,6 +15,8 @@ var (
 	// ErrRunnerUnavailable means lifecycle requests cannot be served because no
 	// runner is configured for the node.
 	ErrRunnerUnavailable = errors.New("runner unavailable")
+	// ErrQuota refuses a write beyond a fixed storage allowance.
+	ErrQuota = errors.New("storage quota exceeded")
 )
 
 // ValidationError is a client-correctable input problem; its message is safe to return.

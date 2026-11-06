@@ -23,6 +23,7 @@ const (
 	NotifyAccess        = "access"
 	NotifyAnnouncements = "announcements"
 	NotifyTickets       = "tickets"
+	NotifyExtensions    = "extensions"
 )
 
 // NotificationCategory describes a category for the preferences page.
@@ -49,6 +50,7 @@ var NotificationCategories = []NotificationCategory{
 	{NotifyAccess, "Access and invitations", "Someone shared an app with you, added you to a workspace, transferred an app to you or accepted your invitation.", true, false, ""},
 	{NotifyAnnouncements, "Announcements", "Announcements from the panel's administrators.", false, false, ""},
 	{NotifyTickets, "Support tickets", "Replies and status changes on support tickets.", true, false, ""},
+	{NotifyExtensions, "Extensions", "Messages from panel extensions, and extensions that stopped after repeated failures (accounts that manage extensions).", true, false, ""},
 }
 
 // NotificationCategoryByName finds a category.

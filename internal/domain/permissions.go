@@ -46,6 +46,7 @@ const (
 	PermKBManage         = "kb.manage"
 	PermStatusManage     = "status.manage"
 	PermAnalyticsView    = "analytics.view"
+	PermExtensionsManage = "extensions.manage"
 )
 
 // PermissionInfo describes one permission for the roles editor.
@@ -91,6 +92,7 @@ var Permissions = []PermissionInfo{
 	{PermTicketsManage, "administration", "Answer tickets", "Read and answer every support ticket, write internal notes, change status and priority, and assign tickets."},
 	{PermKBManage, "administration", "Knowledgebase", "Write, publish and delete help articles and categories, and choose whether the help center is public."},
 	{PermStatusManage, "administration", "Status page", "Configure the public status page, its components, incidents and scheduled maintenance."},
+	{PermExtensionsManage, "administration", "Extensions", "Turn installed extensions on and off, change their settings and see their status. Installing extensions, granting their capabilities and trusting publisher keys stay with built-in administrators."},
 	{PermAnalyticsView, "administration", "Usage analytics", "Panel-wide usage analytics: accounts, apps, resource use, deployments, backups and top consumers (nodes only with Nodes, tickets only with ticket access)."},
 }
 

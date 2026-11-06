@@ -26,6 +26,19 @@ func param(n string) func(fiber.Ctx) string { return func(c fiber.Ctx) string { 
 func query(n string) func(fiber.Ctx) string { return func(c fiber.Ctx) string { return c.Query(n) } }
 
 var auditRoutes = map[string]auditRoute{
+	"POST /api/v1/admin/extensions/upload":                    {"admin.extension_upload", nil},
+	"POST /api/v1/admin/extensions/:ext/activate":             {"admin.extension_activate", param("ext")},
+	"POST /api/v1/admin/extensions/:ext/enable":               {"admin.extension_enable", param("ext")},
+	"POST /api/v1/admin/extensions/:ext/disable":              {"admin.extension_disable", param("ext")},
+	"PUT /api/v1/admin/extensions/:ext/settings":              {"admin.extension_configure", param("ext")},
+	"POST /api/v1/admin/extensions/:ext/jobs/:job/run":        {"admin.extension_job_run", param("job")},
+	"DELETE /api/v1/admin/extensions/:ext/versions/:version":  {"admin.extension_version_delete", param("version")},
+	"DELETE /api/v1/admin/extensions/:ext":                    {"admin.extension_uninstall", param("ext")},
+	"POST /api/v1/admin/extension-publishers":                 {"admin.extension_publisher_add", bodyField("name")},
+	"DELETE /api/v1/admin/extension-publishers/:key":          {"admin.extension_publisher_revoke", param("key")},
+	"PUT /api/v1/extensions/:ext/consent":                     {"extension.consent", param("ext")},
+	"PUT /api/v1/bots/:id/extensions/:ext":                    {"extension.bot_switch", param("ext")},
+	"POST /api/v1/extensions/confirmations/:token":            {"extension.confirm_write", nil},
 	"POST /api/v1/bots":                                       {"bot.create", nil},
 	"POST /api/v1/games":                                      {"game.create", nil},
 	"POST /api/v1/bots/:id/command":                           {"console.command", nil},

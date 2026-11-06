@@ -103,6 +103,8 @@ var Vars = []VarSpec{
 	// Preview modules
 	{Name: "RIVET_MODULES", Group: GroupModules, Kind: KindText, Example: "agents=preview,game_servers=preview",
 		Description: "Comma-separated module states (key=off, key=preview or key=stable). New preview modules are off until explicitly enabled."},
+	{Name: "RIVET_EXTENSIONS_SAFE_MODE", Group: GroupModules, Kind: KindBool, Default: "0", Boot: true,
+		Description: "With the extensions module on, 1 starts the panel without running any extension code (to recover from an extension that misbehaves). Installed extensions stay installed."},
 	{Name: "RIVET_AGENT_LISTEN", Group: GroupModules, Kind: KindText, Default: ":8444", Example: ":8444",
 		Description: "Address of the listener remote rivet-agents connect to (mutual TLS with the panel's agent certificate authority). Used when the agents module is on. Open this TCP port to your nodes; do not put it behind an HTTP reverse proxy."},
 	{Name: "RIVET_AGENT_ADDRESS", Group: GroupModules, Kind: KindText, Example: "panel.example.com:8444",

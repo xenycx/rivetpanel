@@ -31,6 +31,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"github.com/xenycx/rivetpanel/internal/extensions/builtin"
 	"io"
 	"io/fs"
 	"log/slog"
@@ -817,6 +818,19 @@ func serve(log *slog.Logger, logs *logbuf.Buffer) error {
 			return fmt.Errorf("game server blueprints: %w", err)
 		}
 	}
+	var extSvc *service.ExtensionService
+	if cfg.Modules.Enabled("extensions") {
+		extSvc = &service.ExtensionService{Store: db, Keys: keys, Bots: botSvc, Deploy: deploySvc, Notices: notices, Audit: audit,
+			Logs: aiLogs, Bus: bus, Builtins: builtin.Bundles(), PanelVersion: version, AllowUnsigned: !cfg.Production,
+			SafeMode: cfg.ExtensionsSafeMode, Log: log}
+		if err := extSvc.SyncBuiltins(ctx); err != nil {
+			return fmt.Errorf("built-in extensions: %w", err)
+		}
+		if cfg.ExtensionsSafeMode {
+			log.Warn("extension safe mode: no extension code will run")
+		}
+		go extSvc.Run(ctx)
+	}
 	var enrollmentSvc *service.AgentEnrollmentService
 	var router *noderoute.Router
 	var agentControl api.AgentControl
@@ -970,7 +984,7 @@ func serve(log *slog.Logger, logs *logbuf.Buffer) error {
 		Catalog: catalog, SecureCookies: cfg.Production, ProxyHeader: cfg.ProxyHeader, MetricsToken: cfg.MetricsToken, Modules: cfg.Modules, Checks: checks, Nodes: db, Files: wsm, MaxUpload: cfg.MaxUploadBytes,
 		Console: consoleSvc, BaseCtx: ctx, RunnerReady: runnerReady, Ops: ops, Audit: audit, Schedules: scheduler,
 		MFA: mfaSvc, Tokens: &service.TokenService{Store: db, Bots: botSvc}, Clients: &service.APIClientService{Store: db, Bots: botSvc}, Passkeys: &service.PasskeyService{Store: db, Auth: authSvc, MFA: mfaSvc, PublicURL: oauthSvc.CurrentPublicURL}, OIDC: &service.OIDCService{Store: db, Auth: authSvc, Keys: keys, PublicURL: oauthSvc.CurrentPublicURL, States: oauthSvc.States, Log: log}, Enrollment: enrollmentSvc, AgentControl: agentControl, GameAddress: gameAddress, Games: gameSvc, Router: router, Health: health,
-		Settings: settingsSvc, Notifications: notices, Tickets: tickets, KB: kbSvc, Status: statusSvc, Usage: usageSvc, Mail: mailSvc, Resets: resetSvc, Verify: verifySvc, MailPrefs: db, Sites: sitesSvc, AI: aiSvc, Env: envSvc, Host: monitor, Logs: logs, LogArchive: logArchive, SetupCodeFile: setupCodeFile, OnSetupDone: func() { _ = os.Remove(setupCodeFile) }})
+		Settings: settingsSvc, Notifications: notices, Tickets: tickets, KB: kbSvc, Status: statusSvc, Usage: usageSvc, Mail: mailSvc, Resets: resetSvc, Verify: verifySvc, MailPrefs: db, Sites: sitesSvc, AI: aiSvc, Extensions: extSvc, Env: envSvc, Host: monitor, Logs: logs, LogArchive: logArchive, SetupCodeFile: setupCodeFile, OnSetupDone: func() { _ = os.Remove(setupCodeFile) }})
 	ln, err := net.Listen("tcp", cfg.Listen)
 	if err != nil {
 		return err

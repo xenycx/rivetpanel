@@ -43,6 +43,8 @@ type Config struct {
 	DBMaxOpenConns  int
 	ShutdownTimeout time.Duration
 	Modules         modules.Registry
+	// ExtensionsSafeMode loads no extension code (recovery from a bad extension).
+	ExtensionsSafeMode bool
 
 	KeyDir       string // directory of <id>.key files, outside SQLite
 	ActiveKeyID  string
@@ -299,6 +301,7 @@ func LoadLookup(look Lookup) (Config, error) {
 		c.WorkspaceOwner, c.WorkspaceOwnerSet = v, true
 	}
 	c.AllowRootUser = getenv("RIVET_ALLOW_ROOT_CONTAINER_USER") == "1"
+	c.ExtensionsSafeMode = getenv("RIVET_EXTENSIONS_SAFE_MODE") == "1"
 	c.AllowSharedUID = getenv("RIVET_ALLOW_SHARED_UID") == "1"
 	if v := getenv("RIVET_RUNNER_WORKERS"); v != "" {
 		n, err := strconv.Atoi(v)

@@ -67,6 +67,7 @@ type Deps struct {
 	// address set ("" = unknown); nil = none known.
 	GameAddress   func(nodeID string) string
 	Games         *service.GameService              // nil disables game servers
+	Extensions    *service.ExtensionService         // nil: the extensions module is off
 	Router        *noderoute.Router                 // per-node routing (remote agents); nil = local only
 	Health        *service.HealthService            // nil disables application health and alert rules
 	Settings      *service.SettingsService          // nil disables the setup wizard and panel settings
@@ -147,6 +148,7 @@ type panel struct {
 	agentControl  AgentControl
 	gameAddress   func(nodeID string) string
 	games         *service.GameService
+	extensions    *service.ExtensionService
 	trustedFiles  bool // rivet-agent file routes (see NodeFiles)
 	router        *noderoute.Router
 	health        *service.HealthService
@@ -253,7 +255,7 @@ func New(d Deps) *fiber.App {
 		return c.JSON(fiber.Map{"status": "ok", "checks": checks})
 	})
 	if d.Auth != nil && d.Bots != nil {
-		s := &panel{log: d.Log, auth: d.Auth, bots: d.Bots, oauth: d.OAuth, sftp: d.SFTP, analytics: d.Analytics, publicURL: d.PublicURL, registry: d.Registry, stats: d.Stats, backups: d.Backups, deploy: d.Deploy, ops: d.Ops, audit: d.Audit, schedules: d.Schedules, mfa: d.MFA, tokens: d.Tokens, clients: d.Clients, oidc: d.OIDC, passkeys: d.Passkeys, enrollment: d.Enrollment, agentControl: d.AgentControl, gameAddress: d.GameAddress, games: d.Games, router: d.Router, health: d.Health, settings: d.Settings, mail: d.Mail, notifications: d.Notifications, tickets: d.Tickets, kb: d.KB, status: d.Status, usage: d.Usage, resets: d.Resets, verify: d.Verify, mailPrefs: d.MailPrefs, sites: d.Sites, ai: d.AI, env: d.Env, host: d.Host, logs: d.Logs, logArchive: d.LogArchive, setupCodeFile: d.SetupCodeFile, onSetupDone: d.OnSetupDone, statsLimit: console.NewLimiter(0, 0, 0), catalog: d.Catalog, secureCookies: d.SecureCookies, modules: d.Modules,
+		s := &panel{log: d.Log, auth: d.Auth, bots: d.Bots, oauth: d.OAuth, sftp: d.SFTP, analytics: d.Analytics, publicURL: d.PublicURL, registry: d.Registry, stats: d.Stats, backups: d.Backups, deploy: d.Deploy, ops: d.Ops, audit: d.Audit, schedules: d.Schedules, mfa: d.MFA, tokens: d.Tokens, clients: d.Clients, oidc: d.OIDC, passkeys: d.Passkeys, enrollment: d.Enrollment, agentControl: d.AgentControl, gameAddress: d.GameAddress, games: d.Games, extensions: d.Extensions, router: d.Router, health: d.Health, settings: d.Settings, mail: d.Mail, notifications: d.Notifications, tickets: d.Tickets, kb: d.KB, status: d.Status, usage: d.Usage, resets: d.Resets, verify: d.Verify, mailPrefs: d.MailPrefs, sites: d.Sites, ai: d.AI, env: d.Env, host: d.Host, logs: d.Logs, logArchive: d.LogArchive, setupCodeFile: d.SetupCodeFile, onSetupDone: d.OnSetupDone, statsLimit: console.NewLimiter(0, 0, 0), catalog: d.Catalog, secureCookies: d.SecureCookies, modules: d.Modules,
 			console: d.Console, consoleLimit: d.ConsoleLimit, baseCtx: d.BaseCtx, nodes: d.Nodes, files: d.Files, maxUpload: d.MaxUpload,
 			runnerReady: d.RunnerReady, buildMemory: d.BuildMemory, diagnostics: d.Diagnostics}
 		if s.buildMemory == 0 {
@@ -292,7 +294,8 @@ func smallBody(c fiber.Ctx) error {
 	p := c.Path()
 	if (c.Method() == fiber.MethodPut && strings.HasSuffix(p, "/files/content")) ||
 		(c.Method() == fiber.MethodPost && strings.HasSuffix(p, "/files/extract")) ||
-		(c.Method() == fiber.MethodPost && strings.HasPrefix(p, "/api/v1/sites/") && strings.HasSuffix(p, "/upload")) {
+		(c.Method() == fiber.MethodPost && strings.HasPrefix(p, "/api/v1/sites/") && strings.HasSuffix(p, "/upload")) ||
+		(c.Method() == fiber.MethodPost && p == "/api/v1/admin/extensions/upload") { // capped at 16 MiB by its handler
 		return c.Next()
 	}
 	switch n := c.RequestCtx().Request.Header.ContentLength(); {
@@ -665,6 +668,7 @@ func (s *panel) routes(v1 fiber.Router) {
 	s.logArchiveRoutes(authed)
 
 	s.gameRoutes(authed)
+	s.extensionRoutes(v1, authed)
 	authed.Post("/bots/:id/command", s.requirePerm(domain.PermBotsPower), s.sendCommand)
 	authed.Post("/bots", s.requirePerm(domain.PermBotsCreate), s.createBot)
 	authed.Post("/bots/batch", s.requirePerm(domain.PermBotsPower), s.batchBots)

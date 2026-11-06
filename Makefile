@@ -4,7 +4,7 @@ BIN := bin
 # it explicitly (for example `make release VERSION=1.2.3-rc.1`).
 VERSION ?= $(shell tr -d '\r\n' < VERSION)
 
-.PHONY: all web build test check integration e2e run-dev clean release version-check namespace-check
+.PHONY: all web extensions build test check integration e2e run-dev clean release version-check namespace-check
 
 all: build
 
@@ -14,8 +14,13 @@ web:
 	find internal/webui/dist -mindepth 1 ! -name .gitkeep -delete
 	cp -r web/build/. internal/webui/dist/
 
-# Production binary (frontend embedded). Build the frontend first.
-build: version-check web
+# First-party extensions (WebAssembly bundles the binary embeds). Set
+# RIVET_EXT_SIGNING_KEY to also sign them.
+extensions:
+	GO=$(GO) ./extensions/build.sh
+
+# Production binary (frontend and built-in extensions embedded).
+build: version-check web extensions
 	mkdir -p $(BIN)
 	CGO_ENABLED=0 $(GO) build -trimpath -ldflags='-s -w -X main.version=$(VERSION)' -o $(BIN)/rivetpanel ./cmd/rivetpanel
 	CGO_ENABLED=0 $(GO) build -trimpath -ldflags='-s -w -X main.version=$(VERSION)' -o $(BIN)/rivet-agent ./cmd/rivet-agent

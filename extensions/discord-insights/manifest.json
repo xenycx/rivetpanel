@@ -1,0 +1,26 @@
+{
+  "manifest_version": 1,
+  "id": "dev.rivetpanel.discord-insights",
+  "name": "Discord bot insights",
+  "version": "1.0.0",
+  "publisher": "RivetPanel",
+  "description": "Shows each bot's Discord identity, application, server count and invite link, keeps the bot's name and avatar current, and warns the owner when Discord resets the bot's token.",
+  "compat": { "panel": ">=0.9.0 <2.0.0", "abi": 1 },
+  "runtime": { "memory_mb": 32, "timeout_ms": 10000 },
+  "capabilities": [
+    { "name": "bot.discord_api", "reason": "Read the bot user and application from Discord with the bot's own token (the token stays in the panel)." },
+    { "name": "bot.identity", "reason": "Keep the bot's Discord name and avatar shown in the panel current." },
+    { "name": "kv", "reason": "Remember the last result per bot so the card loads instantly." },
+    { "name": "notify", "reason": "Tell the bot's owner when Discord stops accepting its token." },
+    { "name": "bots.read", "reason": "Find the bots the extension was switched on for when it refreshes them." }
+  ],
+  "routes": [
+    { "id": "card", "method": "GET", "path": "/card", "auth": "bot", "bot_perm": "view" },
+    { "id": "refresh", "method": "POST", "path": "/refresh", "auth": "bot", "bot_perm": "view", "mutating": true }
+  ],
+  "jobs": [ { "id": "refresh", "every": "30m", "timeout_ms": 60000 } ],
+  "contributes": {
+    "bot_enablement": "Reads this bot's Discord token from its environment variables to show its Discord profile, application and server count, and warns you if Discord resets the token. The token never leaves the panel except to Discord.",
+    "bot_cards": [ { "id": "discord", "title": "Discord", "route": "card" } ]
+  }
+}

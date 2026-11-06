@@ -29,6 +29,7 @@ var sealedSources = []sealedSource{
 	{"panel_settings", "key", "'settings'", "key", "secret_cipher", "secret_nonce", "secret_key_id"},
 	{"env_overrides", "name", "'env'", "name", "secret_cipher", "secret_nonce", "secret_key_id"},
 	{"oidc_providers", "id", "'oidc:' || id", "'client_secret'", "secret_ciphertext", "secret_nonce", "secret_key_id"},
+	{"extension_settings", "extension_id, key", "'ext:' || extension_id", "key", "secret_cipher", "secret_nonce", "secret_key_id"},
 }
 
 // Reseal re-encrypts every sealed value through fn, in bounded batches. Each

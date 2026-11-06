@@ -20,3 +20,5 @@ internal/webui/dist/*
 .env.*
 *.log
 web/tests/e2e/out/
+internal/extensions/builtin/dist/*
+!internal/extensions/builtin/dist/.gitkeep
