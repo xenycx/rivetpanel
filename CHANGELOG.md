@@ -6,6 +6,8 @@ authoritative current version.
 
 ## Unreleased
 
+## 1.0.2 - 2026-11-07
+
 ### Fixed
 
 - Node.js bots no longer get stuck after a dependency version is changed in
