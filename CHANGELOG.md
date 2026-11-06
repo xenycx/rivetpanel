@@ -6,6 +6,8 @@ authoritative current version.
 
 ## Unreleased
 
+## 1.0.1 - 2026-11-07
+
 ### Added
 
 - Navigation keeps its place: in browsers with View Transitions, opening a
