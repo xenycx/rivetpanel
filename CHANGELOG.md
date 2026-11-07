@@ -6,6 +6,8 @@ authoritative current version.
 
 ## Unreleased
 
+## 1.0.5 - 2026-11-07
+
 ### Added
 
 - **Containers** (preview module `containers`, on by default): run any image
