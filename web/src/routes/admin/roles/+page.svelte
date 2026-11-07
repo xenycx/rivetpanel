@@ -30,7 +30,8 @@
 	const msg = (e: unknown) => (e instanceof ApiError ? e.message.charAt(0).toUpperCase() + e.message.slice(1) : 'The request failed.');
 	const groups = [
 		{ id: 'resources', title: 'Apps and sites', help: 'What accounts with this role may do with what they own or what is shared with them.' },
-		{ id: 'administration', title: 'Administration', help: 'Parts of the administration area this role opens.' }
+		{ id: 'administration', title: 'Administration', help: 'Parts of the administration area this role opens.' },
+		{ id: 'extensions', title: 'Extensions', help: 'Installed extensions whose pages this role may see and use. Each extension decides which of its pages need this; pages for setting an extension up stay with the Extensions administration permission.' }
 	] as const;
 	const label = (p: string) => catalog.find((x) => x.name === p)?.label ?? p;
 	// Whether this account may change a role here (the server decides too).
@@ -76,7 +77,10 @@
 		busy = true;
 		formError = '';
 		// Keep the catalog order so the audit record and the list read naturally.
-		const body = { ...form, permissions: catalog.map((p) => p.name).filter((p) => form.permissions.includes(p)) };
+		// Permissions the catalog does not list right now (an extension's while
+		// the extensions module is off) are kept, not silently dropped.
+		const known = catalog.map((p) => p.name);
+		const body = { ...form, permissions: [...known.filter((p) => form.permissions.includes(p)), ...form.permissions.filter((p) => !known.includes(p))] };
 		try {
 			if (editing) {
 				await api('PATCH', `/admin/roles/${editing.id}`, body);
@@ -167,7 +171,7 @@
 			<p class="text-muted">{editing.description}</p>
 		{/if}
 		{#if editing?.id === 'user'}<Notice tone="info">Every account with the built-in User role, and every future invitee given it, gets exactly these permissions. Administrators are never affected.</Notice>{/if}
-		{#each groups as g (g.id)}
+		{#each groups.filter((g) => catalog.some((p) => p.group === g.id)) as g (g.id)}
 			<fieldset class="grid gap-2">
 				<legend class="label">{g.title}</legend>
 				<div class="-mt-1 flex flex-wrap items-baseline gap-2">

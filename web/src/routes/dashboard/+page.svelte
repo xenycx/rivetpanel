@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { api, ApiError, fmtBytes } from '$lib/api/client';
-	import type { Bot, Capacity, RuntimeInfo, Sample } from '$lib/api/types';
+	import type { Bot, Capacity, RuntimeInfo, Sample, Site } from '$lib/api/types';
 	import { can as canDo, session } from '$lib/session.svelte';
 	import { describe } from '$lib/status';
 	import Icon from '$lib/components/ui/Icon.svelte';
@@ -13,8 +13,9 @@
 	import { currentWorkspace, workspaceName, workspaces, wsName } from '$lib/workspaces.svelte';
 	import type { Blueprint, GameStatus } from '$lib/api/games';
 
-	// The overview: four numbers about capacity, then the game servers and
-	// bots that need a look first. Full lists with filters live on their pages.
+	// The overview: four numbers about capacity, then the bots, game servers,
+	// containers and websites that need a look first. Full lists with filters
+	// live under Apps.
 	let all = $state<Bot[] | null>(null);
 	let blueprints = $state<Record<string, Blueprint>>({});
 	let runtimes = $state<RuntimeInfo[]>([]);
@@ -93,7 +94,16 @@
 	const scope = $derived(currentWorkspace());
 	const multi = $derived(workspaces.list.length > 1 && workspaces.selected === 'all');
 	const scoped = $derived((all ?? []).filter((b) => workspaces.selected === 'all' || b.workspace_id === workspaces.selected));
-	const bots = $derived(scoped.filter((b) => b.kind !== 'game'));
+	const bots = $derived(scoped.filter((b) => b.kind === 'bot'));
+	const containers = $derived(scoped.filter((b) => b.kind === 'container'));
+	// Websites: a count and how many are live; the list is under Apps.
+	let sites = $state<Site[] | null>(null);
+	$effect(() => {
+		if (!session.features.sites) return;
+		api<{ sites: Site[] }>('GET', '/sites').then((r) => (sites = r.sites)).catch(() => {});
+	});
+	const scopedSites = $derived((sites ?? []).filter((x) => workspaces.selected === 'all' || x.workspace_id === workspaces.selected));
+	const liveSites = $derived(scopedSites.filter((x) => !x.disabled && (x.mode === 'app' ? x.app_state === 'running' : !!x.current_release)).length);
 	const servers = $derived(scoped.filter((b) => b.kind === 'game'));
 
 	// What needs a look comes first: failures, then work in progress, then running.
@@ -167,19 +177,34 @@
 	<p class="mt-3 flex items-center gap-2 text-small" role="status">
 		<span class="side-dot !m-0" data-tone="fail"></span>
 		<span><span class="font-medium">{attention}</span> {attention === 1 ? 'needs' : 'need'} attention.</span>
-		<a class="link" href="/bots?state=attention">Show bots</a>{#if session.features.games}<a class="link" href="/servers">Show servers</a>{/if}
+		<a class="link" href="/apps?state=attention">Show them</a>
 	</p>
 {/if}
 
 {#if all === null}
 	{#if !error}<div class="mt-6"><Skeleton rows={4} label="Loading" /></div>{/if}
 {:else}
+
+	<section class="mt-7" aria-labelledby="bots-h">
+		<div class="mb-2 flex items-baseline gap-3">
+			<h2 id="bots-h" class="text-section font-semibold">Bots</h2>
+			{#if bots.length}<p class="text-small text-muted">{running(bots)} of {bots.length} running</p>{/if}
+			{#if bots.length > SHOWN}<a href="/apps?kind=bot" class="ml-auto text-small text-muted hover:text-ink">View all {bots.length}</a>{:else if bots.length}<a href="/apps?kind=bot" class="ml-auto text-small text-muted hover:text-ink">Open list</a>{/if}
+		</div>
+		<ResourceTable kind="bot" label="Bots" items={order(bots).slice(0, SHOWN)} {now} {runtimes} {note} onChanged={refresh}>
+			{#snippet empty()}
+				<span>No bots{scope ? ' in this workspace' : ''} yet.</span>
+				{#if canDo('bots.create')}<a class="link" href="/bots/new?source=template">Start from a template</a><a class="link" href="/bots/new?source=github">Deploy from GitHub</a>{/if}
+			{/snippet}
+		</ResourceTable>
+	</section>
+
 	{#if session.features.games}
 		<section class="mt-7" aria-labelledby="games-h">
 			<div class="mb-2 flex items-baseline gap-3">
 				<h2 id="games-h" class="text-section font-semibold">Game servers</h2>
 				{#if servers.length}<p class="text-small text-muted">{running(servers)} of {servers.length} running</p>{/if}
-				{#if servers.length > SHOWN}<a href="/servers" class="ml-auto text-small text-muted hover:text-ink">View all {servers.length}</a>{:else if servers.length}<a href="/servers" class="ml-auto text-small text-muted hover:text-ink">Open list</a>{/if}
+				{#if servers.length > SHOWN}<a href="/apps?kind=game" class="ml-auto text-small text-muted hover:text-ink">View all {servers.length}</a>{:else if servers.length}<a href="/apps?kind=game" class="ml-auto text-small text-muted hover:text-ink">Open list</a>{/if}
 			</div>
 			<ResourceTable kind="game" label="Game servers" items={order(servers).slice(0, SHOWN)} {now} {blueprints} {players} {note} onChanged={refresh}>
 				{#snippet empty()}
@@ -190,21 +215,33 @@
 		</section>
 	{/if}
 
-	<section class="mt-7" aria-labelledby="bots-h">
-		<div class="mb-2 flex items-baseline gap-3">
-			<h2 id="bots-h" class="text-section font-semibold">Discord bots</h2>
-			{#if bots.length}<p class="text-small text-muted">{running(bots)} of {bots.length} running</p>{/if}
-			{#if bots.length > SHOWN}<a href="/bots" class="ml-auto text-small text-muted hover:text-ink">View all {bots.length}</a>{:else if bots.length}<a href="/bots" class="ml-auto text-small text-muted hover:text-ink">Open list</a>{/if}
-		</div>
-		<ResourceTable kind="bot" label="Discord bots" items={order(bots).slice(0, SHOWN)} {now} {runtimes} {note} onChanged={refresh}>
-			{#snippet empty()}
-				<span>No bots{scope ? ' in this workspace' : ''} yet.</span>
-				{#if canDo('bots.create')}<a class="link" href="/bots/new?source=template">Start from a template</a><a class="link" href="/bots/new?source=github">Deploy from GitHub</a>{/if}
-			{/snippet}
-		</ResourceTable>
-	</section>
+	{#if session.features.containers || containers.length}
+		<section class="mt-7" aria-labelledby="containers-h">
+			<div class="mb-2 flex items-baseline gap-3">
+				<h2 id="containers-h" class="text-section font-semibold">Containers</h2>
+				{#if containers.length}<p class="text-small text-muted">{running(containers)} of {containers.length} running</p>{/if}
+				{#if containers.length}<a href="/apps?kind=container" class="ml-auto text-small text-muted hover:text-ink">{containers.length > SHOWN ? `View all ${containers.length}` : 'Open list'}</a>{/if}
+			</div>
+			<ResourceTable kind="bot" label="Containers" items={order(containers).slice(0, SHOWN)} {now} {note} onChanged={refresh}>
+				{#snippet empty()}
+					<span>No containers{scope ? ' in this workspace' : ''} yet.</span>
+					{#if canDo('bots.create') && session.features.containers}<a class="link" href="/containers/new">Run an image</a><a class="link" href="/stacks/new">Import a Compose file</a>{/if}
+				{/snippet}
+			</ResourceTable>
+		</section>
+	{/if}
+
+	{#if session.features.sites && sites}
+		<section class="mt-7" aria-labelledby="web-h">
+			<div class="flex items-baseline gap-3">
+				<h2 id="web-h" class="text-section font-semibold">Websites</h2>
+				<p class="text-small text-muted">{scopedSites.length ? `${liveSites} of ${scopedSites.length} live` : `None${scope ? ' in this workspace' : ''} yet`}</p>
+				<a href="/apps?kind=web" class="ml-auto text-small text-muted hover:text-ink">{scopedSites.length ? 'Open list' : 'Create one'}</a>
+			</div>
+		</section>
+	{/if}
 {/if}
 
 {#if !all?.length && all !== null}
-	<p class="mt-6 flex items-center gap-2 text-small text-muted"><Icon name="book" size={14} />New here? The <a class="link" href="/docs">documentation</a> walks through a first bot and a first server.</p>
+	<p class="mt-6 flex items-center gap-2 text-small text-muted"><Icon name="book" size={14} />New here? <a class="link" href="/new">See what you can run</a>, or read the <a class="link" href="/docs">documentation</a> for a first bot, server, container or website.</p>
 {/if}

@@ -54,7 +54,7 @@
 
 	onMount(() => {
 		api<{ runtimes: RuntimeInfo[] }>('GET', '/runtimes').then((r) => (runtimes = r.runtimes));
-		return registerDirty({ label: 'Startup settings', isDirty: () => dirty, save: async () => await save() });
+		return registerDirty({ label: 'Configuration', isDirty: () => dirty, save: async () => await save() });
 	});
 	const chosen = $derived(runtimes.find((r) => r.id === runtime));
 	const changedRuntime = $derived(runtime !== bot.runtime);
@@ -84,10 +84,10 @@
 		try {
 			onSaved(await api<Bot>('PATCH', `/bots/${bot.id}`, body));
 			base = snapshot();
-			toast('Startup settings saved');
+			toast('Configuration saved');
 			return true;
 		} catch (err) {
-			error = err instanceof ApiError ? err.message : 'The startup settings could not be saved.';
+			error = err instanceof ApiError ? err.message : 'The configuration could not be saved.';
 			return false;
 		}
 	}
@@ -147,7 +147,7 @@
 
 	{#if error}<Notice tone="fail" live>{error}</Notice>{/if}
 	<div class="sticky bottom-0 z-10 flex items-center gap-3 border-t border-rule-soft bg-paper/95 py-3 backdrop-blur-sm">
-		<button class="btn btn-primary" disabled={!stopped || !dirty}>Save startup settings</button>
+		<button class="btn btn-primary" disabled={!stopped || !dirty}>Save configuration</button>
 		{#if dirty}<span class="text-small text-warn">Unsaved changes</span>{/if}
 	</div>
 </form>

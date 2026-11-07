@@ -2,6 +2,7 @@
 // sections, docs) live here with the words people use for them; bots, sites,
 // people and chats are added from the API when the palette opens.
 
+import { tabDefs, type AppKind } from '$lib/tabs';
 import type { IconName } from '$lib/components/ui/Icon.svelte';
 
 export type Scope = 'all' | 'actions' | 'pages' | 'bots' | 'sites' | 'admin' | 'people' | 'chats';
@@ -19,9 +20,9 @@ export const scopes: { id: Scope; label: string }[] = [
 /** Display order of the groups, and the scope each belongs to. */
 export const groups: { id: string; label: string; scope: Scope }[] = [
 	{ id: 'action', label: 'Actions', scope: 'actions' },
-	{ id: 'bot', label: 'Bots and servers', scope: 'bots' },
-	{ id: 'bot-tab', label: 'Bot sections', scope: 'bots' },
-	{ id: 'site', label: 'Sites', scope: 'sites' },
+	{ id: 'bot', label: 'Apps', scope: 'bots' },
+	{ id: 'bot-tab', label: 'App sections', scope: 'bots' },
+	{ id: 'site', label: 'Websites', scope: 'sites' },
 	{ id: 'page', label: 'Pages', scope: 'pages' },
 	{ id: 'settings', label: 'Your settings', scope: 'pages' },
 	{ id: 'admin', label: 'Administration', scope: 'admin' },
@@ -48,12 +49,15 @@ export type Entry = {
 
 export const pages: Entry[] = [
 	{ key: 'p-overview', group: 'page', label: 'Overview', hint: 'Capacity and apps at a glance', icon: 'home', href: '/dashboard', words: 'dashboard home fleet capacity' },
-	{ key: 'p-bots', group: 'page', label: 'Bots', hint: 'Every Discord bot, with filters', icon: 'box', href: '/bots', words: 'discord bots list filter batch' },
-	{ key: 'p-servers', group: 'page', label: 'Game servers', hint: 'Minecraft and Steam servers', icon: 'gamepad', href: '/servers', words: 'game minecraft paper fabric forge valheim rust zomboid steam' },
+	{ key: 'p-apps', group: 'page', label: 'Apps', hint: 'Bots, game servers, containers and websites', icon: 'box', href: '/apps', words: 'apps list filter batch all' },
+	{ key: 'p-bots', group: 'page', label: 'Bots', hint: 'Apps → Bots', icon: 'terminal', href: '/apps?kind=bot', words: 'discord bots list filter batch' },
+	{ key: 'p-servers', group: 'page', label: 'Game servers', hint: 'Apps → Game servers', icon: 'gamepad', href: '/apps?kind=game', words: 'game minecraft paper fabric forge valheim rust zomboid steam' },
+	{ key: 'p-containers', group: 'page', label: 'Containers', hint: 'Apps → Containers and stacks', icon: 'box', href: '/apps?kind=container', words: 'docker container image compose stack' },
+	{ key: 'p-new', group: 'page', label: 'New', hint: 'Everything you can create', icon: 'plus', href: '/new', words: 'create start new run' },
 	{ key: 'p-templates', group: 'page', label: 'Templates', hint: 'Bot templates, game server types and site templates', icon: 'layers', href: '/templates', words: 'starter discord.js discord.py jda example bot templates blueprints eggs server types site templates' },
 	{ key: 'p-templates-games', group: 'page', label: 'Game server templates', hint: 'Templates · every server type you can create', icon: 'gamepad', href: '/templates?tab=games', words: 'blueprints eggs minecraft steam server types imported' },
 	{ key: 'p-templates-sites', group: 'page', label: 'Site templates', hint: 'Templates · static site starters with previews', icon: 'globe', href: '/templates?tab=sites', words: 'landing docs portfolio coming soon community starter website' },
-	{ key: 'p-sites', group: 'page', label: 'Sites', hint: 'Hosted static sites', icon: 'globe', href: '/sites', words: 'static website pages domains' },
+	{ key: 'p-sites', group: 'page', label: 'Websites', hint: 'Apps → Websites: static files, builds and web apps', icon: 'globe', href: '/apps?kind=web', words: 'sites static website pages domains app build' },
 	{ key: 'p-activity', group: 'page', label: 'Activity', hint: 'Work in progress and recent changes', icon: 'activity', href: '/activity', words: 'audit log history operations changes builds deployments' },
 	{ key: 'p-notifications', group: 'page', label: 'Notifications', hint: 'Alerts, deployments, replies and announcements', icon: 'bell', href: '/notifications', words: 'inbox bell alerts unread' },
 	{ key: 'p-support', group: 'page', label: 'Support', hint: 'Your support tickets', icon: 'lifebuoy', href: '/support', words: 'help ticket question staff' },
@@ -92,33 +96,20 @@ export const adminPages: Entry[] = [
 
 /** Sections of /docs, linked by anchor. */
 export const docs: Entry[] = [
-	['version', 'Version and implementation status'], ['quickstart', 'Quick start'], ['deploy', 'Deployment and GitHub'], ['publish', 'Publishing a bot to GitHub'],
+	['version', 'Version and implementation status'], ['quickstart', 'Quick start'], ['containers', 'Containers and Compose stacks'], ['deploy', 'Deployment and GitHub'], ['publish', 'Publishing a bot to GitHub'],
 	['workspaces', 'Workspaces and roles'], ['sites', 'Bot Sites and public pages'], ['appearance', 'Appearance'], ['ai', 'AI assistant'], ['widgets', 'Dashboard and public widgets'],
 	['widget-data', 'Widget data shapes'], ['telemetry', 'Telemetry limits'], ['health', 'Health and alerts'], ['usage', 'Usage analytics'], ['security', 'Security and isolation'], ['backups', 'Backups and restore'],
 	['automation', 'Automation API'], ['admin-tools', 'Host, logs and environment'], ['log-archive', 'Log archive and retention'], ['operations', 'Operations guide']
 ].map(([id, title]) => ({ key: `d-${id}`, group: 'docs', label: title, hint: 'Documentation', icon: 'book' as IconName, href: `/docs#${id}` }));
 
-/** The tabs of a bot page; BotView falls back to Manage for ones the person may not open. */
-export const botTabs: { id: string; label: string; icon: IconName; words: string }[] = [
-	{ id: 'manage', label: 'Manage', icon: 'terminal', words: 'console overview status summary start stop restart logs output terminal activity source details' },
-	{ id: 'files', label: 'Files', icon: 'file', words: 'editor upload code' },
-	{ id: 'deploy', label: 'Deploy', icon: 'rocket', words: 'github push webhook release build' },
-	{ id: 'startup', label: 'Startup', icon: 'sliders', words: 'command entrypoint arguments restart policy build script' },
-	{ id: 'packages', label: 'Packages', icon: 'package', words: 'npm pip dependencies install' },
-	{ id: 'env', label: 'Environment variables', icon: 'key', words: 'env secrets token config' },
-	{ id: 'addons', label: 'Databases', icon: 'layers', words: 'postgres postgresql redis mongodb mariadb mysql database cache addon add-ons' },
-	{ id: 'network', label: 'Network', icon: 'network', words: 'ports publish outbound' },
-	{ id: 'page', label: 'Public page', icon: 'globe', words: 'site studio widgets analytics' },
-	{ id: 'alerts', label: 'Health', icon: 'activity', words: 'probe heartbeat sdk uptime tcp http' },
-	{ id: 'usage', label: 'Analytics', icon: 'chart', words: 'usage cpu memory network uptime crashes deployments backups history trends csv' },
-	{ id: 'backups', label: 'Backups', icon: 'archive', words: 'restore snapshot download' },
-	{ id: 'schedules', label: 'Schedules', icon: 'clock', words: 'cron restart timer' },
-	{ id: 'users', label: 'Access', icon: 'users', words: 'share invite permissions' },
-	{ id: 'settings', label: 'Settings', icon: 'gear', words: 'rename memory cpu limits transfer delete notifications alerts discord email crash' }
-];
-
-/** Bot tabs a game server does not have (BotView hides them too). */
-export const notGameTabs = new Set(['deploy', 'packages', 'env', 'page', 'alerts']);
+/** The sections an app of a kind can have, from the tab registry (labels and
+ * search words stay in one place); BotView falls back to Overview for ones
+ * the person may not open. */
+export function appTabs(kind: AppKind): { id: string; label: string; icon: IconName; words: string }[] {
+	return tabDefs
+		.filter((d) => d.kinds.includes(kind))
+		.map((d) => ({ id: d.id, label: typeof d.label === 'string' ? d.label : d.id === 'mods' ? 'Mods or plugins' : d.id, icon: d.icon, words: d.words ?? '' }));
+}
 
 const norm = (s: string) => s.toLowerCase();
 

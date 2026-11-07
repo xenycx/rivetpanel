@@ -222,6 +222,9 @@ func (s *BotService) TransferBot(ctx context.Context, actor domain.User, botID, 
 	if b.IsWeb() {
 		return false, errWebUnit
 	}
+	if stackMember(b) {
+		return false, errStackMember
+	}
 	norm, err := NormalizeEmail(email)
 	if err != nil {
 		return false, err

@@ -59,7 +59,7 @@ Use an **OAuth App** (not a GitHub App).
    |---|---|
    | Application name | `RivetPanel (panel.xenyc.ge)`, shown to users on the consent screen |
    | Homepage URL | `https://panel.xenyc.ge` (your `RIVET_PUBLIC_URL`) |
-   | Application description | optional, e.g. `Discord bot hosting panel` |
+   | Application description | optional, e.g. `Bot, game server and website hosting panel` |
    | Authorization callback URL | `https://panel.xenyc.ge/api/v1/auth/github/callback` |
    | Enable Device Flow | leave **unchecked** |
 3. **Register application**.

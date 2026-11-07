@@ -165,10 +165,8 @@
 	type NavItem = { href: string; label: string; icon: IconName; active: boolean };
 	const nav = $derived<NavItem[]>([
 		{ href: '/dashboard', label: 'Overview', icon: 'home', active: path === '/dashboard' },
-		...(session.features.games ? [{ href: '/servers', label: 'Game servers', icon: 'gamepad' as IconName, active: path.startsWith('/servers') }] : []),
-		{ href: '/bots', label: 'Bots', icon: 'box', active: path.startsWith('/bots') },
-		...(session.features.sites ? [{ href: '/sites', label: 'Sites', icon: 'globe' as IconName, active: path.startsWith('/sites') }] : []),
-		{ href: '/templates', label: 'Templates', icon: 'layers', active: path.startsWith('/templates') },
+		// Bots, game servers, containers, stacks and websites share one list.
+		{ href: '/apps', label: 'Apps', icon: 'box', active: ['/apps', '/bots', '/servers', '/sites', '/containers', '/stacks', '/new', '/templates'].some((p) => path === p || path.startsWith(p + '/')) },
 		{ href: '/activity', label: 'Activity', icon: 'activity', active: path.startsWith('/activity') },
 		...(can('tickets.create') || can('tickets.view_all') || can('tickets.manage')
 			? [{ href: '/support', label: 'Support', icon: 'lifebuoy' as IconName, active: path.startsWith('/support') }]
@@ -178,7 +176,7 @@
 	]);
 	// Account and installation settings sit apart, below the work areas.
 	const navEnd = $derived<NavItem[]>([
-		{ href: '/settings/connected-accounts', label: 'Settings', icon: 'gear', active: path.startsWith('/settings') },
+		{ href: '/settings/profile', label: 'Settings', icon: 'gear', active: path.startsWith('/settings') },
 		...(adminHome ? [{ href: adminHome, label: 'Administration', icon: 'shield' as IconName, active: path.startsWith('/admin') }] : [])
 	]);
 	// Secondary links share one "Help & resources" menu instead of a list.
@@ -203,7 +201,7 @@
 		{ heading: session.user?.email ?? '' },
 		'separator' as const,
 		{ label: 'Profile', onselect: () => goto('/settings/profile') },
-		{ label: 'Settings', onselect: () => goto('/settings/appearance') },
+		{ label: 'Appearance', onselect: () => goto('/settings/appearance') },
 		'separator' as const,
 		{ label: 'Sign out', onselect: logout }
 	]);
@@ -292,7 +290,7 @@
 						<button class="tb-btn" onclick={cycleTheme} aria-label="{themeLabel}. Switch theme" title="{themeLabel}, click to switch">
 							<Icon name={theme.pref === 'system' ? 'monitor' : theme.dark ? 'moon' : 'sun'} size={17} />
 						</button>
-						{#if path !== '/dashboard'}<NewMenu />{/if}
+						{#if path !== '/dashboard' && path !== '/apps'}<NewMenu />{/if}
 						<Menu label="Account" items={accountItems}>
 							{#snippet trigger()}{#if session.user?.avatar_url}<img class="avatar object-cover" src={session.user.avatar_url} alt="" />{:else}<span class="avatar" aria-hidden="true">{initials}</span>{/if}<Icon name="chevronDown" size={14} class="text-muted" />{/snippet}
 						</Menu>

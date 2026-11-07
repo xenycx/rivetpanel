@@ -125,13 +125,15 @@ type botDTO struct {
 
 	// Kind is "bot" or "game". Game servers also carry their blueprint,
 	// image choice ("" = automatic), installation state and allocations.
-	Kind              string     `json:"kind"`
-	BlueprintID       string     `json:"blueprint_id,omitempty"`
-	BlueprintRevision int64      `json:"blueprint_revision,omitempty"`
-	ImageChoice       string     `json:"image_choice,omitempty"`
-	InstallState      string     `json:"install_state,omitempty"`
-	InstalledVersion  string     `json:"installed_version,omitempty"` // what the last installation resolved, e.g. "1.21.11"
-	Allocations       []allocDTO `json:"allocations,omitempty"`
+	Kind              string `json:"kind"`
+	BlueprintID       string `json:"blueprint_id,omitempty"`
+	BlueprintRevision int64  `json:"blueprint_revision,omitempty"`
+	ImageChoice       string `json:"image_choice,omitempty"`
+	InstallState      string `json:"install_state,omitempty"`
+	InstalledVersion  string `json:"installed_version,omitempty"` // what the last installation resolved, e.g. "1.21.11"
+	// Container holds a container app's image settings (kind container).
+	Container   *containerDTO `json:"container,omitempty"`
+	Allocations []allocDTO    `json:"allocations,omitempty"`
 }
 
 type allocDTO struct {
@@ -180,6 +182,9 @@ func phaseOf(b domain.Bot, runnerErr error, hasRunner bool) string {
 	case "building":
 		if b.IsGame() {
 			return "installing"
+		}
+		if b.IsContainer() {
+			return "starting" // pulling the image
 		}
 		return "building"
 	case "starting":
@@ -246,6 +251,36 @@ func toBot(b domain.Bot) botDTO {
 	return d
 }
 
+type containerDTO struct {
+	User      string          `json:"user"`
+	Writable  []string        `json:"writable"`
+	Volumes   []domain.Volume `json:"volumes"`
+	StackID   string          `json:"stack_id,omitempty"`
+	Service   string          `json:"service,omitempty"`
+	DependsOn []string        `json:"depends_on"`
+}
+
+func toContainer(b domain.Bot) *containerDTO {
+	if !b.IsContainer() {
+		return nil
+	}
+	c := domain.ContainerConfig{}
+	if b.Container != nil {
+		c = *b.Container
+	}
+	d := &containerDTO{User: c.User, Writable: c.Writable, Volumes: c.Volumes, StackID: c.StackID, Service: c.Service, DependsOn: c.DependsOn}
+	if d.Writable == nil {
+		d.Writable = []string{}
+	}
+	if d.Volumes == nil {
+		d.Volumes = []domain.Volume{}
+	}
+	if d.DependsOn == nil {
+		d.DependsOn = []string{}
+	}
+	return d
+}
+
 func toBotBase(b domain.Bot) botDTO {
 	return botDTO{
 		ID: b.ID, OwnerID: b.OwnerID, WorkspaceID: b.WorkspaceID, NodeID: b.NodeID, Name: b.Name, Runtime: b.Runtime, ImageRef: b.ImageRef, Argv: b.Argv,
@@ -257,7 +292,7 @@ func toBotBase(b domain.Bot) botDTO {
 		Phase:       phaseOf(b, nil, true), StateReason: b.StateReason, RestartCount: b.RestartCount, NextRetryAtMS: b.NextRetryAtMS,
 		LastStartedAtMS: b.LastStartedAtMS, LogoURL: logoURL(b), CustomLogo: b.LogoUpdatedMS > 0,
 		Kind: kindOf(b), BlueprintID: b.BlueprintID, BlueprintRevision: b.BlueprintRevision, ImageChoice: b.ImageChoice,
-		InstallState: installStateOf(b), InstalledVersion: b.InstalledVersion,
+		InstallState: installStateOf(b), InstalledVersion: b.InstalledVersion, Container: toContainer(b),
 	}
 }
 

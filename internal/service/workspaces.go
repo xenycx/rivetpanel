@@ -298,6 +298,9 @@ func (s *BotService) moveBot(ctx context.Context, actor domain.User, botID, work
 	if b.IsWeb() && !web {
 		return domain.Bot{}, errWebUnit
 	}
+	if stackMember(b) && b.WorkspaceID != workspaceID {
+		return domain.Bot{}, errStackMember
+	}
 	if b.WorkspaceID == workspaceID {
 		return b, nil
 	}

@@ -150,9 +150,9 @@
 		<section>
 			<div class="mx-auto grid max-w-6xl items-center gap-12 px-5 pt-14 pb-16 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)] lg:pt-20">
 				<div>
-					<p class="eyebrow">Self-hosted bot and game server hosting</p>
+					<p class="eyebrow">Self-hosted bot, game server and website hosting</p>
 					<h1 class="mt-3 text-[2.25rem] leading-[1.1] font-semibold tracking-tight sm:text-[2.875rem]">Run every bot and server.<br />Know its state.</h1>
-					<p class="mt-4 max-w-xl text-title leading-relaxed text-muted">One small binary turns your machines into a host for Discord bots and Minecraft or Steam game servers: container isolation, GitHub deploys, crash-safe backups, remote nodes, teams, support tools and an AI assistant.</p>
+					<p class="mt-4 max-w-xl text-title leading-relaxed text-muted">One small binary turns your machines into a host for Discord bots, Minecraft or Steam game servers and websites: container isolation, GitHub deploys, crash-safe backups, remote nodes, teams, support tools and an AI assistant.</p>
 					<div class="mt-7 flex flex-wrap gap-3">
 						<a href={session.user ? '/dashboard' : '/login'} class="btn btn-primary h-10 px-4">{session.user ? 'Open your panel' : 'Sign in to your panel'}</a>
 						<a href="#self-host" class="btn h-10 px-4"><Icon name="download" size={15} />Install it</a>

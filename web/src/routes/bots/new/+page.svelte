@@ -615,7 +615,7 @@
 							</label>
 							{#if addonKinds.length}
 								<fieldset>
-									<legend class="label">Databases</legend>
+									<legend class="label">Services <span class="font-normal text-muted">(databases and caches)</span></legend>
 									<div class="grid gap-2 sm:grid-cols-2">
 										{#each addonKinds as k (k.id)}
 											<label class="flex items-start gap-2.5 rounded-tile border p-3 {addonSel.includes(k.id) ? 'border-action' : 'border-rule-soft'}">
@@ -729,7 +729,7 @@
 				{#if source !== 'template'}
 					<dt class="text-muted">Start</dt><dd><code class="break-all">{command.trim() || joinArgs(rt?.default_argv ?? [])}</code></dd>
 					<dt class="text-muted">Build</dt><dd>{#if buildCommand.trim()}<pre class="font-mono text-[12px] whitespace-pre-wrap">{buildCommand.trim()}</pre>{:else}Default for {rt?.display_name ?? 'the language'}{/if}</dd>
-					{#if chosenAddons.length}<dt class="text-muted">Databases</dt><dd>{chosenAddons.map((k) => `${k.display_name} (${fmtBytes(k.default_memory_bytes)})`).join(', ')}</dd>{/if}
+					{#if chosenAddons.length}<dt class="text-muted">Services</dt><dd>{chosenAddons.map((k) => `${k.display_name} (${fmtBytes(k.default_memory_bytes)})`).join(', ')}</dd>{/if}
 				{/if}
 				<dt class="text-muted">Variables</dt>
 				<dd>{Object.keys(env).filter((k) => env[k]?.trim()).concat(extra.filter((x) => x.name).map((x) => x.name)).join(', ') || 'None yet'}</dd>

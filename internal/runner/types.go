@@ -114,9 +114,12 @@ type ContainerSpec struct {
 	ExtraTmpfs          []string // extra in-memory paths
 	NetworkAliases      []string // host names on Network (user-defined networks only)
 	// Networks are joined after create, before start (the bot's private
-	// add-on network).
+	// add-on network, a container's stack network).
 	Networks []string
-	Health   []string // health-check command (exec form)
+	// JoinAliases are host names on the Networks joined after create (a stack
+	// service's name on its stack network).
+	JoinAliases map[string][]string
+	Health      []string // health-check command (exec form)
 }
 
 // Mount is a bind mount of a host directory.
@@ -209,6 +212,18 @@ type Networker interface {
 	ConnectNetwork(ctx context.Context, network, containerID string) error
 	// RemoveNetwork deletes a network; a missing one is not an error.
 	RemoveNetwork(ctx context.Context, name string) error
+}
+
+// AliasConnector attaches a container to a network under host names. It is
+// optional; without it a stack service is reachable only by address.
+type AliasConnector interface {
+	ConnectNetworkAliases(ctx context.Context, network, containerID string, aliases []string) error
+}
+
+// ImageSizer reports the size of a local image. It is optional; without it
+// the image size limit of container apps is not checked.
+type ImageSizer interface {
+	ImageSize(ctx context.Context, ref string) (int64, error)
 }
 
 // BuildRecorder records build stages as durable operations with retained

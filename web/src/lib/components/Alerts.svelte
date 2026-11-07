@@ -94,7 +94,7 @@
 			<div class="grid gap-3">
 				<p class="max-w-prose">{stateText[health.state][1]}</p>
 				<ol class="grid gap-2 text-small">
-					<li class="flex gap-3"><span class="step-no">1</span><span class="min-w-0 flex-1">Install the SDK for your runtime and call it once at start-up. <a class="link" href="/bots/{bot.id}?tab=page">Setup instructions are on the Page tab</a>.</span></li>
+					<li class="flex gap-3"><span class="step-no">1</span><span class="min-w-0 flex-1">Install the SDK for your runtime and call it once at start-up. <a class="link" href="/bots/{bot.id}?tab=page">Setup instructions are on the Public page tab</a>.</span></li>
 					<li class="flex gap-3"><span class="step-no">2</span><span class="min-w-0 flex-1">Report <code>ready: true</code> once your client has logged in to Discord, and <code>false</code> when it disconnects.</span></li>
 					<li class="flex gap-3"><span class="step-no">3</span><span class="min-w-0 flex-1">Choose in <a class="link" href="/bots/{bot.id}?tab=settings#notifications">Settings → Notifications</a> how long a silent bot may stay quiet before you are told.</span></li>
 				</ol>

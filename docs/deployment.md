@@ -177,7 +177,8 @@ key and certificate.
   `/var/lib/rivetpanel/log-archive` at the archive time (default 00:00, 30
   days kept); see `logs.md`.
 * Read `docs/isolation.md` before hosting untrusted users: there is no egress
-  policy, admission control or disk quota out of the box.
+  policy or disk quota out of the box, and workspace and node limits are
+  admission rules applied by the panel, not kernel limits.
 * `rivetpanel doctor` runs the Diagnostics checks from the command line. It
   is read-only: it opens the database read-only, runs no migrations and
   creates no directories (a missing database or data root is reported, not

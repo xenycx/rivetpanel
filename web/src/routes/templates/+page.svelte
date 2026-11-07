@@ -38,9 +38,9 @@
 	const manager = $derived(session.user?.role === 'admin' || can('blueprints.manage'));
 
 	const tabs = $derived<{ id: Kind; label: string; icon: IconName; href: string }[]>([
-		{ id: 'bots', label: 'Bot templates', icon: 'box', href: '/templates' },
+		{ id: 'bots', label: 'Bots', icon: 'terminal', href: '/templates' },
 		...(gamesOn ? [{ id: 'games' as Kind, label: 'Game servers', icon: 'gamepad' as IconName, href: '/templates?tab=games' }] : []),
-		...(sitesOn ? [{ id: 'sites' as Kind, label: 'Sites', icon: 'globe' as IconName, href: '/templates?tab=sites' }] : [])
+		...(sitesOn ? [{ id: 'sites' as Kind, label: 'Websites', icon: 'globe' as IconName, href: '/templates?tab=sites' }] : [])
 	]);
 	const tab = $derived.by<Kind>(() => {
 		const t = page.url.searchParams.get('tab');
@@ -180,7 +180,7 @@
 <header class="page-head">
 	<div class="min-w-0">
 		<h1 class="font-semibold">Templates</h1>
-		<p class="text-small text-muted">Start a bot, a game server or a site from a setup that already works.</p>
+		<p class="text-small text-muted">Start a bot, a game server or a website from a setup that already works. For your own image or Compose file, see <a class="link" href="/new">everything you can create</a>.</p>
 	</div>
 	<label class="relative ml-auto w-full min-w-0 sm:w-72">
 		<span class="sr-only">Search templates</span>

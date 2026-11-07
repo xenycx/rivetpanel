@@ -62,7 +62,7 @@ const (
 	GroupCapacity = "Capacity and limits"
 	GroupBackups  = "Backups"
 	GroupPorts    = "Published ports"
-	GroupSites    = "Static sites"
+	GroupSites    = "Sites"
 	GroupSFTP     = "SFTP"
 	GroupMonitor  = "Monitoring"
 	GroupAccounts = "Sign-in and address"
@@ -116,6 +116,10 @@ var Vars = []VarSpec{
 	{Name: "RIVET_RUNNER_MODE", Group: GroupRunner, Kind: KindEnum, Options: []string{"local", "none"}, Default: "local",
 		Description: "local runs apps in Docker on this host; none turns the runner off so only the control plane runs.",
 		Danger:      "Setting this to none stops managing app containers after the restart: apps can no longer be started, stopped or built from the panel."},
+	{Name: "RIVET_CONTAINER_REGISTRIES", Group: GroupRunner, Kind: KindText, Default: "docker.io,ghcr.io,quay.io", Example: "docker.io,ghcr.io,registry.example.com",
+		Description: "Registries container apps may pull images from, comma-separated (docker.io is Docker Hub). An image from any other registry is refused when the app is created and again at every start; empty allows none, which turns container apps off."},
+	{Name: "RIVET_CONTAINER_MAX_IMAGE_BYTES", Group: GroupRunner, Kind: KindBytes, Default: "2147483648 (2 GiB)", Example: "2147483648",
+		Description: "Largest image a container app may use, measured after the pull; a larger image is refused at start. 0 is no limit. Pulled images use the host's disk, which RivetPanel does not otherwise limit."},
 	{Name: "RIVET_DOCKER_HOST", Group: GroupRunner, Kind: KindText, Default: "unix:///var/run/docker.sock", Boot: true,
 		Description: "Docker endpoint. A wrong value stops every app from starting, so it stays in the environment file."},
 	{Name: "RIVET_CONTAINER_USER", Group: GroupRunner, Kind: KindText, Default: "65532:65532", Boot: true, Example: "65532:65532",
@@ -143,9 +147,9 @@ var Vars = []VarSpec{
 	{Name: "RIVET_NODE_MEMORY_BYTES", Group: GroupCapacity, Kind: KindBytes, Default: "unlimited",
 		Description: "Admission budget: the sum of memory limits of apps wanted running on this host. A start that would exceed it is refused. Bookkeeping, not a kernel limit; 0 is unlimited."},
 	{Name: "RIVET_USER_MEMORY_BYTES", Group: GroupCapacity, Kind: KindBytes, Managed: "/admin/settings#limits", Default: "unlimited",
-		Description: "Default memory (sum of app memory limits, add-ons included) for each workspace, used when Panel settings → Default limits sets none. Workspaces owned by administrators are exempt; 0 is unlimited. A workspace's own limits (Administration → Workspaces) replace it."},
+		Description: "Default memory (sum of app memory limits, add-ons included) for each workspace, used when Panel settings → Default limits sets none. Built-in administrators are never refused (other members are bounded even in a workspace an administrator owns); 0 is unlimited. A workspace's own limits (Administration → Workspaces) replace it."},
 	{Name: "RIVET_MAX_BOTS_PER_USER", Group: GroupCapacity, Kind: KindInt, Managed: "/admin/settings#limits", Default: "unlimited",
-		Description: "Default number of apps (bots, game servers and web apps together) for each workspace, used when Panel settings → Default limits sets none. Workspaces owned by administrators are exempt; 0 is unlimited. A workspace's own limits (Administration → Workspaces) replace it."},
+		Description: "Default number of apps (bots, game servers and web apps together) for each workspace, used when Panel settings → Default limits sets none. Built-in administrators are never refused (other members are bounded even in a workspace an administrator owns); 0 is unlimited. A workspace's own limits (Administration → Workspaces) replace it."},
 	{Name: "RIVET_MIN_FREE_DISK_BYTES", Group: GroupCapacity, Kind: KindBytes, Default: "1 GiB",
 		Description: "Free space backups, restores and deployments need before they start; 0 turns the check off."},
 
@@ -178,7 +182,7 @@ var Vars = []VarSpec{
 	{Name: "RIVET_SITE_MAX_BYTES", Group: GroupSites, Kind: KindBytes, Default: "100 MiB",
 		Description: "Largest site release, uncompressed (1 MiB to 4 GiB)."},
 	{Name: "RIVET_MAX_SITES_PER_USER", Group: GroupSites, Kind: KindInt, Managed: "/admin/settings#limits", Default: "10",
-		Description: "Default number of sites for each workspace, used when Panel settings → Default limits sets none. Workspaces owned by administrators are exempt; 0 is unlimited. A workspace's own limits (Administration → Workspaces) replace it."},
+		Description: "Default number of sites for each workspace, used when Panel settings → Default limits sets none. Built-in administrators are never refused (other members are bounded even in a workspace an administrator owns); 0 is unlimited. A workspace's own limits (Administration → Workspaces) replace it."},
 	{Name: "RIVET_SITES_DNS_TARGET", Group: GroupSites, Kind: KindText, Example: "sites.example.com",
 		Description: "Host name custom domains should point a CNAME at. Defaults to the host of the sites base URL."},
 	{Name: "RIVET_APPS_NETWORK", Group: GroupSites, Kind: KindText, Boot: true, Default: "rivetpanel-apps",

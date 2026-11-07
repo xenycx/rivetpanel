@@ -71,6 +71,8 @@ func (db *DB) DeleteUserAccount(ctx context.Context, userID string) error {
 	for _, q := range []string{
 		`DELETE FROM github_repos WHERE token_user_id = ?`,
 		`DELETE FROM sites WHERE owner_id = ?`,
+		// Stacks hold no apps by now (every bot is gone); they only group them.
+		`DELETE FROM stacks WHERE owner_id = ?1 OR workspace_id IN (SELECT id FROM workspaces WHERE owner_id = ?1)`,
 	} {
 		if _, err := tx.ExecContext(ctx, q, userID); err != nil {
 			return mapErr(err)

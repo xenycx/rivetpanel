@@ -1,8 +1,10 @@
 # Isolation and its limits
 
-## What every bot and build container gets
+## What every container gets
 
-Enforced in `internal/docker.HostConfig` (unit-tested) and asserted from
+Bots, game servers, site web apps, container apps, add-ons and every build,
+install or release container share one host configuration. Enforced by the container
+runtime through `internal/docker.HostConfig` (unit-tested) and asserted from
 **inside real containers** by `tests/integration`:
 
 | Setting | Value |
@@ -14,16 +16,24 @@ Enforced in `internal/docker.HostConfig` (unit-tested) and asserted from
 | Capabilities | drop ALL; no privileged mode, no devices |
 | Security | default seccomp kept, `no-new-privileges` |
 | Root filesystem | read-only; `/tmp` tmpfs (`nosuid,nodev`, bounded) |
-| Mounts | only the bot's own workspace at `/workspace` (bind, `CreateMountpoint=false`) |
-| Ports / host namespaces / Docker socket | none |
+| Mounts | the unit's own workspace at `/workspace` (bind, `CreateMountpoint=false`); a site web app also gets its persistent data folder at `/data`; add-ons get only their own data folder |
+| Host namespaces / devices / Docker socket | none |
+| Published ports | none unless configured (see *Published ports* and *Game servers* below) |
 | Logging | `json-file`, 10 MiB x 3 |
 | Restart policy | none (the runner decides) |
-| Command | exec form (`Entrypoint`); no shell, no interpolation |
+| Command | the main process runs in exec form (`Entrypoint`), no shell; build, install and release commands run as `sh -c` in their own limited containers |
 
 Builds run in separate resource-limited containers that receive only the
-runtime recipe's environment, never a bot's secrets. Image references come from
-the administrator-controlled catalog (`runtimes/*.yaml`); a Start request cannot
-supply an image, mount or flag.
+runtime recipe's environment, never a bot's secrets. Image references are
+chosen by administrators, never by the person starting a unit, except for
+container apps (below): bots and site web apps use the runtime catalog
+(`runtimes/*.yaml`); game servers use their
+server type's blueprint, either built in (`blueprints/*.yaml`) or saved by an
+account with the `blueprints.manage` permission, including drafts imported
+from Pterodactyl eggs, whose image references are validated for shape only
+and then pulled as written. Treat that permission as able to choose any image
+the host runs. A Start request cannot supply an image, mount or flag.
+Dockerfiles are never built.
 
 ## Evidence
 
@@ -43,9 +53,11 @@ as unable to enforce limits.
 
 ## Not provided (do not assume otherwise)
 
-* **No admission control or quotas.** Per-container caps do not bound the sum
-  across bots, disk usage, or inodes. Nothing stops a node being overcommitted.
-  Define node/user budgets before offering this to untrusted users.
+* **Admission limits are application rules, not kernel limits.** The panel
+  refuses to create apps or sites past a workspace's limits (count, memory,
+  CPU) and refuses starts past `RIVET_NODE_MEMORY_BYTES` (`features.md`,
+  `workspaces.md`). These are enforced by the application at creation and
+  start, not by the kernel; disk usage and inodes are not counted at all.
 * **No disk quota.** Workspaces and Docker logs consume host disk (logs are
   rotated; workspaces are not capped beyond upload limits).
 * **Egress is not restricted by RivetPanel.** Discord needs outbound access, and
@@ -56,14 +68,14 @@ as unable to enforce limits.
 
   ```sh
   docker network create --driver bridge --subnet 172.30.0.0/16 \
-      -o com.docker.network.bridge.name=bpbr0 \
+      -o com.docker.network.bridge.name=rvbr0 \
       -o com.docker.network.bridge.enable_icc=false rivetpanel
   # RIVET_CONTAINER_NETWORK=rivetpanel
   nft add table inet rivetpanel_egress
   nft add chain inet rivetpanel_egress fwd '{ type filter hook forward priority -1; }'
-  nft add rule  inet rivetpanel_egress fwd iifname bpbr0 ip daddr '{ 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16 }' drop
+  nft add rule  inet rivetpanel_egress fwd iifname rvbr0 ip daddr '{ 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16 }' drop
   nft add chain inet rivetpanel_egress in  '{ type filter hook input priority -1; }'
-  nft add rule  inet rivetpanel_egress in  iifname bpbr0 drop
+  nft add rule  inet rivetpanel_egress in  iifname rvbr0 drop
   ```
 * **The panel process is root-equivalent** (Docker socket). Its systemd sandbox
   reduces blast radius but cannot isolate that privilege; only a separate
@@ -137,3 +149,75 @@ limits).
   here) but accesses files only through the contained filesystem layer.
 * **Kill** sends `SIGKILL` through the Docker API; it needs the same socket
   access as every other lifecycle action.
+
+## Game servers
+
+* **Ports are public by default.** A game server's allocations are published
+  for TCP and UDP on `0.0.0.0` (or the allocation's bound IP), unlike a bot's
+  opt-in loopback ports, because players must reach them. Allocations come
+  from the pool under Administration → Allocations.
+* **Installation** downloads server software in the panel (checksums verified
+  where the provider publishes them) and runs the blueprint's install script,
+  or SteamCMD with an anonymous login, in a separate install container with
+  the same defaults as above, as the unprivileged server user, with network
+  access. Install scripts from imported eggs run the same way.
+* The same egress caveat applies: a game server reaches the internet and,
+  without a host firewall policy, your private networks.
+
+## Site web apps
+
+* **Shared apps network.** Every site web app joins one routable Docker
+  bridge (`RIVET_APPS_NETWORK`, default `rivetpanel-apps`) so the sites
+  listener can proxy to it. Docker's default inter-container communication is
+  on for this network, so **site apps can reach each other** by address; treat
+  them as mutually trusting or add a firewall policy. Their add-ons stay on
+  each app's own internal network.
+* Apps are reached only through the sites listener; they publish no host
+  ports. They always run on the panel's own host, not on remote nodes.
+* A **release command** (for example database migrations) runs as `sh -c`
+  once per deployment in a one-shot container shaped like the app's own: same
+  image, variables, networks and `/data`.
+
+## Container apps and stacks (preview)
+
+A container app runs an image its owner chose. What changes, and what does
+not:
+
+* **Image source is a registry allowlist, enforced by the application.**
+  `RIVET_CONTAINER_REGISTRIES` (default `docker.io,ghcr.io,quay.io`) is
+  checked when the app is created or its image changes, and again by the
+  runner before every pull, so narrowing the list stops existing apps from
+  pulling refused images. The Docker daemon contacts the allowed registries
+  from the host network. A registry account is never stored: only public
+  images work.
+* **Image size is checked after the pull** against
+  `RIVET_CONTAINER_MAX_IMAGE_BYTES` (default 2 GiB); a refused image stays in
+  Docker's image store until pruned. Pulls use host disk, which is not
+  otherwise limited.
+* **Image code runs as a non-root user** (the panel's container user or a
+  numeric `uid:gid` above 0, validated by the application) with the same
+  runtime-enforced defaults as every app: read-only root filesystem, all
+  capabilities dropped, `no-new-privileges`, default seccomp, memory, CPU
+  and PID limits, no host namespaces, devices or Docker socket. Writable
+  paths are 16 MiB tmpfs mounts; volumes are bind mounts of
+  `volumes/<name>` inside the app's own files, so they stay within backups.
+  Volume and writable paths under `/proc`, `/sys`, `/dev` and Docker's
+  `/etc/hosts`, `/etc/hostname` and `/etc/resolv.conf` are refused.
+* **Ports** follow the same opt-in published-port policy as bots.
+* **Stacks** add one Docker network per stack (`rivetpanel-stack-<id>`),
+  created `Internal: true` like add-on networks: services reach each other
+  by service name and nothing else; each service keeps its own outbound
+  access on the default network unless it is turned off. Different stacks
+  and standalone apps are not attached to each other's networks.
+* **Compose import is translation, not execution.** The panel never runs
+  `docker compose`; it maps a fixed set of keys onto container apps and
+  refuses privileged mode, added capabilities, security options, devices,
+  sysctls, host PID/IPC/network namespaces, the Docker socket, builds and
+  other keys that would widen the boundary (`containers.md`).
+
+Compared with a bot, the new exposure is the image itself: its code and
+whatever it downloads at start run in the same sandbox a bot's code runs
+in, but its supply chain is the image publisher's. Treat container apps as
+trusted-tenant until egress and disk quotas are enforced (see *Not
+provided*).
+

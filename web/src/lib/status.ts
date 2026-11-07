@@ -64,6 +64,9 @@ export function describe(b: Bot, now = Date.now()): Described {
 		case 'installing':
 			return { label: 'Installing', tone: 'warn', busy: true, detail: 'Downloading and installing the server software. The first start of a new version takes a little longer.', next: 'build-output' };
 		case 'starting':
+			if (reason === 'waiting_deps')
+				return { label: 'Waiting', tone: 'warn', busy: true, detail: b.last_error ? `${b.last_error[0].toUpperCase()}${b.last_error.slice(1)}.` : 'Waiting for the services it depends on to run.' };
+			if (b.kind === 'container') return { label: 'Starting', tone: 'warn', busy: true, detail: 'Pulling the image if needed and starting the container.' };
 			return { label: 'Starting', tone: 'warn', busy: true, detail: 'The container is starting.' };
 		case 'restarting':
 			return { label: 'Restarting', tone: 'warn', busy: true, detail: 'Replacing the container with the latest settings.' };

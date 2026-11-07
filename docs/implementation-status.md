@@ -1,6 +1,6 @@
 # Platform overhaul implementation status
 
-Updated 2026-10-29 for RivetPanel 0.9.0 (see `CHANGELOG.md`). This is the durable checklist for the requested platform
+Tracks the working tree; the root `VERSION` file and `CHANGELOG.md` are authoritative for the release number. This is the durable checklist for the requested platform
 overhaul. A checked item is implemented in the current working tree; partial
 items state exactly what remains.
 
@@ -10,6 +10,19 @@ items state exactly what remains.
   container image, systemd/Compose deployment, SDKs, environment variables,
   default data/configuration paths, container labels, DNS records, UI and
   operator documentation. Historical changelog entries remain unchanged.
+  Exception: most credential prefixes still use the older `bp` form
+  (`bpa_` automation tokens, `bpk_` SFTP/API keys, `bpt_` telemetry keys,
+  `bpu_` sessions, `bpi_` invitations, `bpr_` password resets, `bpv_` email
+  verification); only API clients (`rvc_`) and node enrollment
+  (`rvt_enroll_`) use the new form. Renaming them needs the panel to accept
+  both forms so issued credentials keep working.
+- [x] Consistency pass (Unreleased): stale version numbers removed from the
+  README, documentation index and this file (the in-product guide reads the
+  build version); module descriptions no longer claim LDAP, translations or
+  workload transfer; the New menu and Sites pages offer GitHub sites (static,
+  build or running web app) instead of reading as static-only; the isolation
+  guide states the real mounts, ports, shell use, image sources and the
+  shared apps network.
 - [x] Preview module catalog with `off`, `preview` and `stable` states,
   `RIVET_MODULES` overrides and authenticated `GET /api/v1/modules` discovery
   (each module also reports its built-in `default`). Administration → Modules
@@ -70,6 +83,13 @@ items state exactly what remains.
   an agent route and protocol bump), third-party extension catalog or
   registry, and event types beyond `bot.status` (for example finished
   operations).
+  Each installed extension has its own role permission `ext:<extension id>`
+  ("Use <name>" in the roles editor); nav items, pages and user routes that
+  declare `"perm": "extension"` require it, enforced by the application
+  before extension code runs; uninstalling removes it from every role and
+  API client. Remaining: the API-clients permission picker lists only the
+  fixed catalog (ext permissions can be granted to a client through the
+  API).
 - [x] Clean-break database identity (`0000_rivetpanel_identity.sql`). Migration
   refuses a non-empty database without the RivetPanel schema marker before
   creating its migration ledger or modifying tables. Enforcement is in the
@@ -1143,6 +1163,7 @@ Migrations added since 0.2.0 (the schema-version assertion in
 | `0058_invite_setup.sql` | Additive: five nullable `account_invites` columns, `role_id` (`roles`, `ON DELETE SET NULL`), `quota_json` (JSON object, at most 1024 bytes), `node_id` (`nodes`, `ON DELETE SET NULL`), `workspace_id` (`workspaces`, `ON DELETE SET NULL`), `workspace_role` (`admin`, `developer` or `viewer`). The `role` CHECK is unchanged; existing invitation rows and links keep working |
 | `0059_workspace_node.sql` | Additive: nullable `workspaces.node_id` (`nodes`, `ON DELETE SET NULL`) with index `workspaces_node_idx`; NULL means the panel default node |
 | `0060_extensions.sql` | Additive: `extension_publishers` (trusted Ed25519 keys, revocation time), `extensions` (installed extension, active version, state, granted capabilities, last error), `extension_versions` (stored bundles with SHA-256 and manifest; the application keeps three plus the active one), `extension_settings` (sealed secrets, namespace `ext:<id>`, included in reseal), `extension_kv`, `extension_bot_enablements` (`bots` `ON DELETE CASCADE`), `extension_user_consents` (`users` `ON DELETE CASCADE`), `extension_jobs`; everything but versions and publishers cascades from `extensions` |
+| `0061_containers.sql` | Rebuilds `bots` (SQLite cannot change a CHECK in place; every column is copied by name and foreign keys are checked before commit): `kind` gains `container`, `runtime` gains `image`, and `argv_json` may be empty for container apps (the image's own command). Additive: `stacks` (workspace, owner, name, the imported Compose file up to 256 KiB) and `bot_containers` (`bots` `ON DELETE CASCADE`: run user, writable paths, volumes, `stack_id` `ON DELETE SET NULL`, service name unique per stack, dependencies). Covered by `TestMigrateIdempotentAndSchema` and the populated-database upgrade in `sites_migration_test.go` |
 | `0054_web_apps.sql` | Rebuilds `bots` (kind gains `web`, runtime gains `php`, new `release_command`) and `sites` (mode gains `app`; `app_id`, `framework`, `build_output_dir`, `app_port`, `health_path`, `max_body_bytes`) with explicit column lists and foreign keys off (checked with `PRAGMA foreign_key_check`; all indexes recreated); additive `site_releases.source_ref` and `bot_health_probes.target` (`host`/`app`). Covered by `apps_migration_test.go` |
 | `0030_ai_global_chat.sql` | Rebuilds `ai_conversations` so a chat may have no target; `ai_runs.bot_id`/`site_id`, `ai_messages.context_json` (the conversation subtree is stashed and restored, rows preserved) |
 
@@ -1284,7 +1305,7 @@ network, filesystem, or container-runtime mechanism.
   versioning and diffs, then CLI and Terraform clients over the automation API.
 - [ ] Dependency and license intelligence: npm/pip/Cargo audits, lockfile
   handling, update pull requests, and license checks.
-- [~] Custom domains and automatic TLS exist for static sites (TLS through the
+- [~] Custom domains and automatic TLS exist for sites, static and web apps (TLS through the
   reverse proxy's on-demand issuance). Bots can now run companion database
   containers (add-ons); arbitrary multi-container bots (any image, e.g.
   Lavalink), named volumes, add-on backups and custom domains for bot HTTP
@@ -1296,8 +1317,38 @@ network, filesystem, or container-runtime mechanism.
   types.
 - [ ] .NET, Deno/Bun and opt-in custom Dockerfile runtimes (PHP is available
   since site apps; see above).
+- [x] Container apps (preview module `containers`, default on; migration
+  `0061`; `docs/containers.md`): `bots.kind = 'container'` runs an image its
+  owner chose, with settings in `bot_containers` (user, writable paths,
+  volumes, stack membership, dependencies). Enforcement: the registry
+  allowlist (`RIVET_CONTAINER_REGISTRIES`) is checked by the application at
+  creation and image change and again by the runner before every pull; the
+  image size limit (`RIVET_CONTAINER_MAX_IMAGE_BYTES`) by the runner after
+  the pull; non-root user, read-only root filesystem, dropped capabilities,
+  limits and tmpfs/bind mounts by the container runtime through the shared
+  `HostConfig`. Remaining: remote nodes (container apps run on the panel's
+  host only), private registries (no credentials are stored), Dockerfile
+  builds, and a sites address for a container (a site web app still needs
+  GitHub).
+- [x] Compose import into stacks (`stacks` table, migration `0061`): a
+  previewed, all-or-nothing translation of a fixed set of Compose keys into
+  container apps on a per-stack internal network with service-name aliases;
+  `depends_on` ordering by the runner (services wait as `waiting_deps`);
+  privileged mode, added capabilities, security options, devices, sysctls,
+  host namespaces, the Docker socket, builds, `extends`, `include`,
+  `secrets` and `configs` are refused by the application. Named volumes
+  shared between services are copied per service, not shared; health check
+  conditions are treated as started.
+- [x] One workload model in the interface: **Apps** (`/apps`) lists bots,
+  game servers, containers (with stacks) and websites with kind filters;
+  `/bots`, `/servers` and `/sites` redirect into it; **New** (`/new`) asks
+  what is being run; one tab registry (`web/src/lib/tabs.ts`) gives every
+  kind the same names (Overview, Configuration, Variables, Network,
+  Services, …) and groups pages with more than seven tabs.
 - [ ] Signed callback action widgets, dashboard filters, and drill-down.
-- [ ] SMTP-backed self-service signup/reset/alert workflows.
+- [~] Email-backed password reset, invitations, email verification, alerts
+  and announcements exist through Mailgun (`email.md`); an SMTP transport
+  remains.
 
 ## Remaining: governance and compliance
 

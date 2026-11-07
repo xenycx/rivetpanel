@@ -11,7 +11,7 @@
 	import { chat, type Conversation } from '$lib/ai/chat.svelte';
 	import { cycleTheme, theme } from '$lib/ui/theme.svelte';
 	import { workspaces } from '$lib/workspaces.svelte';
-	import { adminPages, botTabs, notGameTabs, docs, groups, pages, score, scopes, type Entry, type Scope } from '$lib/search';
+	import { adminPages, appTabs, docs, groups, pages, score, scopes, type Entry, type Scope } from '$lib/search';
 	import Dialog from '$lib/components/ui/Dialog.svelte';
 	import Icon from '$lib/components/ui/Icon.svelte';
 
@@ -88,7 +88,7 @@
 		for (const b of bots) {
 			const d = describe(b);
 			const game = b.kind === 'game';
-			out.push({ key: `b-${b.id}`, group: 'bot', label: b.name, hint: `${d.label} · ${game ? 'game server' : b.runtime}${b.tags.length ? ` · ${b.tags.join(' ')}` : ''}`, icon: game ? 'gamepad' : 'box', href: resourceHref(b), words: `${b.tags.join(' ')} ${b.runtime} ${game ? 'game server' : 'bot'} ${b.owner_id === session.user?.id ? '' : 'shared'}`, boost: b.favorite ? 8 : 0 });
+			out.push({ key: `b-${b.id}`, group: 'bot', label: b.name, hint: `${d.label} · ${game ? 'game server' : b.kind === 'container' ? b.image_ref.replace(/^docker\.io\/library\//, '') : b.runtime}${b.tags.length ? ` · ${b.tags.join(' ')}` : ''}`, icon: game ? 'gamepad' : 'box', href: resourceHref(b), words: `${b.tags.join(' ')} ${b.runtime} ${game ? 'game server' : 'bot'} ${b.owner_id === session.user?.id ? '' : 'shared'}`, boost: b.favorite ? 8 : 0 });
 		}
 		for (const s of sites) out.push({ key: `si-${s.id}`, group: 'site', label: s.name, hint: `Site · ${s.slug}${s.workspace_name ? ` · ${s.workspace_name}` : ''}`, icon: 'globe', href: `/sites/${s.id}`, words: s.slug });
 		for (const c of chats.slice(0, 30)) out.push({ key: `c-${c.id}`, group: 'chat', label: c.title || 'Untitled chat', hint: 'AI chat', icon: 'sparkle', run: () => { chat.show(); void chat.openConversation(c); } });
@@ -134,11 +134,10 @@
 				const name = b.name.toLowerCase();
 				if (!words.some((w) => name.includes(w))) continue;
 				const rest = words.filter((w) => !name.includes(w)).join(' ');
-				const isGame = b.kind === 'game';
-				for (const t of botTabs) {
-					if (isGame && notGameTabs.has(t.id)) continue;
+				const what = b.kind === 'game' ? 'Server section' : b.kind === 'container' ? 'Container section' : 'Bot section';
+				for (const t of appTabs(b.kind)) {
 					const s = rest ? score({ label: t.label, hint: '', words: t.words }, rest) : 1;
-					if (s > 0) found.push({ key: `bt-${b.id}-${t.id}`, group: 'bot-tab', label: `${b.name} › ${t.label}`, hint: isGame ? 'Server section' : 'Bot section', icon: t.icon, href: `${isGame ? '/servers' : '/bots'}/${b.id}?tab=${t.id}`, s: rest ? s - 2 : 2 });
+					if (s > 0) found.push({ key: `bt-${b.id}-${t.id}`, group: 'bot-tab', label: `${b.name} › ${t.label}`, hint: what, icon: t.icon, href: resourceHref(b, t.id), s: rest ? s - 2 : 2 });
 				}
 			}
 		}

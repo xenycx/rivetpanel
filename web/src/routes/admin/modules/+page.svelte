@@ -89,7 +89,7 @@
 <svelte:head><title>Modules · RivetPanel</title></svelte:head>
 
 <h2 class="text-section">Modules</h2>
-<p class="mt-1 max-w-3xl text-muted">On modules are ready for normal use. Preview modules are opt-in and may still change; turning one on does not mean every planned part is built. Off modules show no pages and answer no API calls. Changes are saved to <code>{NAME}</code> and apply after a restart.</p>
+<p class="mt-1 max-w-measure text-muted">On modules are ready for normal use. Preview modules are opt-in and may still change; turning one on does not mean every planned part is built. Off modules show no pages and answer no API calls. Changes are saved to <code>{NAME}</code> and apply after a restart.</p>
 
 {#if error}<Notice tone="fail" class="mt-4" live>{error}</Notice>{/if}
 {#if restarting}
@@ -118,7 +118,7 @@
 						<code class="text-small text-muted">{m.key}</code>
 						{#if want !== m.state}<span class="pill" data-tone="warn" title="Running now: {label[m.state]}">Restart to apply</span>{/if}
 					</div>
-					<p class="mt-1 text-small text-muted">{m.description}</p>
+					<p class="mt-1 max-w-measure text-small text-muted">{m.description}</p>
 				</div>
 				{#if m.key === 'core'}
 					<span class="pill shrink-0" data-tone="run" title="Core hosting cannot be turned off">Always on</span>

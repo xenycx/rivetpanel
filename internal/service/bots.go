@@ -196,6 +196,15 @@ type CreateBotInput struct {
 	ReleaseCommand string
 }
 
+// runtimeOf returns a bot's runtime: the catalog's, or a container app's own
+// image.
+func (s *BotService) runtimeOf(b domain.Bot) (runtimes.Runtime, bool) {
+	if b.IsContainer() {
+		return runtimes.ForImage(b.ImageRef), true
+	}
+	return s.Catalog.Get(b.Runtime)
+}
+
 // errWebUnit refuses bot operations on a site's web unit.
 var errWebUnit = domain.Invalid("this belongs to a site; manage it from the site instead")
 
@@ -561,9 +570,12 @@ func (s *BotService) Update(ctx context.Context, actor domain.User, id string, i
 	}
 	old := b
 	if b.IsGame() && (in.Runtime != nil || in.Argv != nil || in.Entrypoint != nil || in.BuildCommand != nil) {
-		return domain.Bot{}, domain.Invalid("a game server's startup comes from its server type; change its settings under Startup")
+		return domain.Bot{}, domain.Invalid("a game server's startup comes from its server type; change its settings under Configuration")
 	}
-	rt, ok := s.Catalog.Get(b.Runtime)
+	if b.IsContainer() && (in.Runtime != nil || in.BuildCommand != nil) {
+		return domain.Bot{}, domain.Invalid("a container app runs its own image; change the image under Configuration")
+	}
+	rt, ok := s.runtimeOf(b)
 	if !ok {
 		return domain.Bot{}, fmt.Errorf("runtime %q missing from catalog", b.Runtime)
 	}
@@ -594,7 +606,12 @@ func (s *BotService) Update(ctx context.Context, actor domain.User, id string, i
 	}
 	// A game server's startup comes from its server type (a shell wrapper the
 	// runtime's command list does not cover) and cannot be changed here.
-	if !b.IsGame() {
+	switch {
+	case b.IsContainer():
+		if err := checkContainerCommand(b.Argv, b.Entrypoint); err != nil {
+			return domain.Bot{}, err
+		}
+	case !b.IsGame():
 		if err := validateStartup(rt, b.Argv, b.Entrypoint); err != nil {
 			return domain.Bot{}, err
 		}
@@ -776,7 +793,7 @@ func (s *BotService) setIntent(ctx context.Context, actor domain.User, id, desir
 		if err != nil || !node.Enabled {
 			return domain.Bot{}, domain.Invalid("node is unavailable")
 		}
-		if _, ok := s.Catalog.Get(b.Runtime); !ok {
+		if _, ok := s.runtimeOf(b); !ok {
 			return domain.Bot{}, domain.Invalid("runtime is no longer available")
 		}
 		if err := s.checkRemotePorts(ctx, actor, b); err != nil {

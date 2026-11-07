@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"slices"
 
 	"github.com/xenycx/rivetpanel/internal/domain"
 )
@@ -65,6 +66,8 @@ func (db *DB) SetExtensionState(ctx context.Context, id, state, lastError string
 
 // DeleteExtension removes an extension and everything it stored: settings,
 // private data, enablements, consents, jobs (by cascade) and its bundles.
+// Its permission (ext:<id>) is removed from every role and API client, so a
+// later extension installed under the same id starts with nobody holding it.
 func (db *DB) DeleteExtension(ctx context.Context, id string) error {
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
@@ -77,7 +80,52 @@ func (db *DB) DeleteExtension(ctx context.Context, id string) error {
 	if _, err := tx.ExecContext(ctx, `DELETE FROM extensions WHERE id = ?`, id); err != nil {
 		return err
 	}
+	if domain.ValidExtensionID(id) {
+		perm := domain.ExtensionPermission(id)
+		if err := stripPermission(ctx, tx, "roles", perm); err != nil {
+			return err
+		}
+		if err := stripPermission(ctx, tx, "api_clients", perm); err != nil {
+			return err
+		}
+	}
 	return tx.Commit()
+}
+
+// stripPermission removes perm from the permissions_json list of every row
+// of table (roles or api_clients) holding it.
+func stripPermission(ctx context.Context, tx *sql.Tx, table, perm string) error {
+	quoted, _ := json.Marshal(perm)
+	rows, err := tx.QueryContext(ctx, `SELECT id, permissions_json FROM `+table+` WHERE instr(permissions_json, ?) > 0`, string(quoted))
+	if err != nil {
+		return err
+	}
+	type change struct{ id, perms string }
+	var changes []change
+	for rows.Next() {
+		var rid, js string
+		if err := rows.Scan(&rid, &js); err != nil {
+			rows.Close()
+			return err
+		}
+		var list []string
+		if json.Unmarshal([]byte(js), &list) != nil {
+			continue // unreadable: grants nothing anyway (decodePermissions)
+		}
+		keep := slices.DeleteFunc(list, func(p string) bool { return p == perm })
+		changes = append(changes, change{rid, encodePermissions(keep)})
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return err
+	}
+	for _, c := range changes {
+		if _, err := tx.ExecContext(ctx, `UPDATE `+table+` SET permissions_json = ? WHERE id = ?`, c.perms, c.id); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 const extVersionCols = `extension_id, version, source, sha256, manifest_json, key_id, uploaded_by, created_at_ms`

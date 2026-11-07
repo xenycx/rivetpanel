@@ -6,6 +6,126 @@ authoritative current version.
 
 ## Unreleased
 
+### Added
+
+- **Containers** (preview module `containers`, on by default): run any image
+  from a registry the administrator allows (`RIVET_CONTAINER_REGISTRIES`,
+  default Docker Hub, GHCR and Quay) as an app with its own console, files,
+  variables, published ports, persistent volumes, backups, schedules and
+  limits. New → Container → **Docker image**. An empty command keeps the
+  image's own; **Pull again** under Configuration fetches a newer image for a
+  moving tag. Containers run as a non-root user with a read-only root
+  filesystem and no capabilities; folders an image writes to are declared
+  as volumes (kept in the app's files and backups) or small in-memory
+  writable paths. Images above `RIVET_CONTAINER_MAX_IMAGE_BYTES` (2 GiB by
+  default) are refused after the pull. See `docs/containers.md`.
+- **Compose stacks**: New → Container → **Compose stack** imports a
+  `docker-compose.yml` (with an optional `.env`) as a stack of container
+  apps that reach each other by service name on a private network. A
+  preview lists every service with its image, ports, volumes, variables and
+  dependencies and every option the panel changes or refuses before
+  anything is created; services wait for the ones they depend on before
+  starting, and the stack page starts, stops, restarts or deletes them all.
+- **Apps** (`/apps`): one list for bots, game servers, containers (with
+  their stacks) and websites, with kind filters; the sidebar's Bots, Game
+  servers, Sites and Templates entries are replaced by **Apps**, and the old
+  `/bots`, `/servers` and `/sites` addresses open the matching filter.
+  **New** (`/new`) asks what you are running and lists every way to start.
+- Custom roles can be given access to a single extension. Each installed
+  extension has its own permission, shown in Administration → Roles under
+  **Extensions** as "Use <extension name>" (`ext:<extension id>`).
+  Extensions mark the nav items, pages and user routes it opens with
+  `"perm": "extension"` (or `"ext:<own id>"`) in their manifest. Built-in
+  administrators always hold these permissions, delegated role managers can
+  grant only the ones they hold, and the list is empty while the extensions
+  module is off.
+- API: `/api/v1/containers`, `/api/v1/bots/{id}/container`,
+  `/api/v1/stacks` (import with `dry_run`, power, rename, delete);
+  `/auth/me` reports `containers` and `site_builds` features; bot responses
+  carry `container` settings for container apps.
+
+### Changed
+
+- App pages use one tab registry: the same concept has the same name for
+  every kind — **Overview** (was Manage), **Deployments** (was Deploy),
+  **Configuration** (was Startup, Build and run), **Variables** (was Env),
+  **Services** (was Databases or Add-ons; Modrinth items are Mods or
+  Plugins). Pages with more than seven tabs show groups (Overview, Code,
+  Configuration, Services, Data, Observability) with the open group's tabs
+  in a second row, and Settings and Access behind a gear. A site's web app
+  shows the same tabs. Old `?tab=` links keep working.
+- The Overview lists bots, game servers and containers and how many
+  websites are live, in the same order as Apps.
+- The New menu shows only the kinds of apps (Bot, Game server, Container,
+  Website) with a link to the New page; account and administration chores
+  moved to the New page and Go to. The duplicate "Upload a ZIP" entry (it
+  opened the same form as "Empty bot") is merged into **Empty bot**.
+- Websites no longer read as static-only: the New menu offers **Website →
+  From GitHub** (static files, a static build or a running web app) when
+  the panel can build sites, the Websites list shows its GitHub action
+  disabled with the reason when it cannot, and the Sites module is described
+  as hosting static files, static builds and running web apps.
+- Server types are called "Server type" everywhere; "Pterodactyl egg"
+  appears only where an egg is imported.
+- Headings have a clearer type scale, long explanations wrap at a readable
+  line length, and the in-product documentation no longer nests cards.
+- The sidebar's **Settings** opens your profile, the first settings page;
+  the account menu's second entry is **Appearance**, where it always led.
+- Extension pages are served only to accounts that may see a nav item
+  opening them. Pages opened by a bot tab or by no nav item behave as
+  before. Manifests that name another extension's `ext:` permission are
+  refused.
+- Workspace limits count container apps with bots.
+- Database migration `0061_containers` rebuilds the `bots` table (every
+  column is copied; the kind and runtime checks gain `container` and
+  `image`) and adds `stacks` and `bot_containers`. Back up before upgrading,
+  as with every release; downgrading needs the backup.
+
+### Fixed
+
+- The in-product documentation names the version it ships with instead of
+  0.9.0, counts seven runtimes and three site modes, and summarizes 1.0. The
+  README, documentation index and implementation status no longer state
+  stale version numbers (0.5.0, 0.6.1, 0.9.0); `VERSION` is authoritative.
+- Module descriptions no longer promise features that do not exist: LDAP
+  (Extended identity), translations (Support and content) and workload
+  transfer (Remote nodes). Game servers now mention Steam server types.
+- The new-site page no longer says GitHub sign-in is required to build sites
+  from repositories; it names the real requirement, the Docker runner.
+- A bot's setup checklist no longer asks you to press Start when there is no
+  Start button: it says the panel has no Docker runner, or that someone with
+  power access has to start it.
+- Default-limit descriptions in Administration → Environment no longer say
+  administrator-owned workspaces are exempt; only built-in administrators
+  are, and other members are bounded in any workspace. The environment
+  group "Static sites" is now "Sites".
+- Page titles inside a header block (Templates and others) use the page
+  title size like every other page.
+- `RIVET_MAX_SITES_PER_USER` is documented as the per-workspace fallback
+  limit it has been since 0.8.0; `docs/features.md` no longer says remote
+  port probing is local-only.
+
+### Security
+
+- `docs/isolation.md` now matches the code: site web apps also mount `/data`;
+  game servers publish their allocations on all addresses by default; build,
+  install and release commands run through `sh -c`; game server images come
+  from blueprints, including imported Pterodactyl eggs, so the
+  `blueprints.manage` permission can choose any image the host runs; and all
+  site web apps share one routable apps network on which they can reach each
+  other. Workspace and node limits are described as application admission
+  rules rather than missing. Operators hosting untrusted users should review
+  the Game servers and Site web apps sections.
+- Container apps add a new exposure: the image's supply chain. The registry
+  allowlist is checked at creation and again before every pull; Compose
+  imports refuse privileged mode, added capabilities, security options,
+  devices, sysctls, host namespaces, the Docker socket and builds. Stack
+  networks are internal (no route out). Treat container apps as
+  trusted-tenant until egress and disk quotas are enforced.
+- Uninstalling an extension removes its permission from every role and API
+  client, so reinstalling it (or a different extension with the same id)
+  starts with nobody holding it.
+
 ## 1.0.2 - 2026-11-07
 
 ### Fixed

@@ -143,7 +143,7 @@ type Config struct {
 	SitesDomains    []string
 	SitesDir        string // releases, one directory per site
 	SiteMaxBytes    int64  // largest release (uncompressed)
-	MaxSitesPerUser int    // sites an account may create (0 = unlimited)
+	MaxSitesPerUser int    // fallback sites-per-workspace limit (0 = unlimited)
 	// SitesDNSTarget is the host name custom domains should CNAME to (shown in
 	// the domain instructions); defaults to the host of SitesBaseURL.
 	SitesDNSTarget string
@@ -151,6 +151,12 @@ type Config struct {
 	// proxies to them over it (the panel joins it when it runs in a
 	// container).
 	AppsNetwork string
+	// ContainerRegistries are the registries container apps may pull images
+	// from (host names as in an image reference; docker.io for Docker Hub).
+	ContainerRegistries []string
+	// ContainerMaxImageBytes bounds the size of a container app's image once
+	// pulled (0 = no bound).
+	ContainerMaxImageBytes int64
 	// SitesTrustedProxies are the peers (the TLS proxy in front of the sites
 	// listener) whose forwarded headers are believed; loopback always is.
 	SitesTrustedProxies []netip.Prefix
@@ -429,6 +435,23 @@ func LoadLookup(look Lookup) (Config, error) {
 	if v, ok := look("RIVET_APPS_NETWORK"); ok {
 		c.AppsNetwork = strings.TrimSpace(v)
 	}
+	c.ContainerRegistries = []string{"docker.io", "ghcr.io", "quay.io"}
+	if v, ok := look("RIVET_CONTAINER_REGISTRIES"); ok {
+		c.ContainerRegistries = nil
+		for _, r := range strings.Split(v, ",") {
+			if r = strings.ToLower(strings.TrimSpace(r)); r != "" {
+				c.ContainerRegistries = append(c.ContainerRegistries, r)
+			}
+		}
+	}
+	c.ContainerMaxImageBytes = 2 << 30
+	if v := getenv("RIVET_CONTAINER_MAX_IMAGE_BYTES"); v != "" {
+		n, err := strconv.ParseInt(v, 10, 64)
+		if err != nil {
+			return Config{}, fmt.Errorf("RIVET_CONTAINER_MAX_IMAGE_BYTES: %w", err)
+		}
+		c.ContainerMaxImageBytes = n
+	}
 	for _, v := range strings.Split(getenv("RIVET_SITES_TRUSTED_PROXIES"), ",") {
 		if v = strings.TrimSpace(v); v == "" {
 			continue
@@ -556,6 +579,14 @@ func (c Config) validateSites() []error {
 	if c.MaxSitesPerUser < 0 {
 		errs = append(errs, errors.New("RIVET_MAX_SITES_PER_USER cannot be negative (0 means unlimited)"))
 	}
+	for _, r := range c.ContainerRegistries {
+		if !registryRe.MatchString(r) {
+			errs = append(errs, fmt.Errorf("RIVET_CONTAINER_REGISTRIES: %q is not a registry host such as docker.io or registry.example.com:5000", r))
+		}
+	}
+	if c.ContainerMaxImageBytes < 0 {
+		errs = append(errs, errors.New("RIVET_CONTAINER_MAX_IMAGE_BYTES cannot be negative (0 means no limit)"))
+	}
 	if c.AppsNetwork != "" && !dockerNameRe.MatchString(c.AppsNetwork) {
 		errs = append(errs, errors.New("RIVET_APPS_NETWORK must be a Docker network name such as rivetpanel-apps"))
 	}
@@ -570,6 +601,7 @@ func (c Config) validateSites() []error {
 
 var (
 	dockerNameRe = lazyre.New(`^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,62}$`)
+	registryRe   = lazyre.New(`^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*(:[0-9]{1,5})?$`)
 	headerNameRe = lazyre.New(`^[A-Za-z0-9-]{1,64}$`)
 )
 

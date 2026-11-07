@@ -7,7 +7,7 @@
 	// the top bar, and as the primary action of the overview's page header.
 	// Keyboard: Enter/Space or ArrowDown opens, arrows move, Escape closes.
 	let { primary = false }: { primary?: boolean } = $props();
-	const groups = $derived(groupedCreateOptions());
+	const groups = $derived(groupedCreateOptions(true));
 	let open = $state(false);
 	let btn: HTMLButtonElement | undefined = $state();
 	let list: HTMLDivElement | undefined = $state();
@@ -114,6 +114,9 @@
 					</div>
 				{/each}
 			</div>
+			<a role="menuitem" href="/new" class="menu-item mt-1 justify-between border-t border-rule-soft px-2! pt-2! text-small text-muted" onclick={(e) => pick(e, '/new')}>
+				<span>Compare every way to start, with templates</span><Icon name="chevronRight" size={13} />
+			</a>
 		</div>
 	{/if}
 {/if}

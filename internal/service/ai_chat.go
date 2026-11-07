@@ -251,6 +251,9 @@ func (s *AIService) diagnosticPolicy(ctx context.Context, botID *string) string 
 	if e != nil {
 		return ""
 	}
+	if b.IsContainer() {
+		return "" // a container app's image decides what it can run
+	}
 	rt, ok := s.Bots.Catalog.Get(b.Runtime)
 	if !ok {
 		return ""

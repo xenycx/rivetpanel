@@ -98,7 +98,7 @@ export type Version = { id: string; stable: boolean };
 /** Where an app lives in the interface. A web app opens its site, which picks its own tab. */
 export function resourceHref(b: Pick<Bot, 'id' | 'kind'>, tab?: string): string {
 	if (b.kind === 'web') return `/sites/app/${b.id}`;
-	const base = b.kind === 'game' ? `/servers/${b.id}` : `/bots/${b.id}`;
+	const base = b.kind === 'game' ? `/servers/${b.id}` : b.kind === 'container' ? `/containers/${b.id}` : `/bots/${b.id}`;
 	return tab ? `${base}?tab=${tab}` : base;
 }
 

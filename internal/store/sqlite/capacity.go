@@ -40,7 +40,7 @@ func (db *DB) WorkspaceUsage(ctx context.Context, workspaceID string) (domain.Wo
 
 func workspaceUsage(ctx context.Context, db rowQuerier, workspaceID string) (u domain.WorkspaceUsage, err error) {
 	err = db.QueryRowContext(ctx, `SELECT count(*),
-		COALESCE(SUM(kind = 'bot'), 0), COALESCE(SUM(kind = 'game'), 0), COALESCE(SUM(kind = 'web'), 0),
+		COALESCE(SUM(kind IN ('bot', 'container')), 0), COALESCE(SUM(kind = 'game'), 0), COALESCE(SUM(kind = 'web'), 0),
 		COALESCE(SUM(`+botMemory+`), 0), COALESCE(SUM(nano_cpus), 0), (SELECT count(*) FROM sites WHERE workspace_id = ?1)
 		FROM bots WHERE workspace_id = ?1 AND desired_state != 'deleted'`, workspaceID).
 		Scan(&u.Apps, &u.Bots, &u.Games, &u.Web, &u.Memory, &u.CPU, &u.Sites)

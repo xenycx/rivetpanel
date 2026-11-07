@@ -94,7 +94,7 @@
 	}
 	onMount(() => {
 		load();
-		const a = registerDirty({ label: 'Server settings', isDirty: () => dirty, save: async () => await save() });
+		const a = registerDirty({ label: 'Server variables', isDirty: () => dirty, save: async () => await save() });
 		const b = registerDirty({ label: 'JVM arguments', isDirty: () => jvmDirty, save: async () => await saveJVM() });
 		return () => {
 			a();
@@ -125,7 +125,7 @@
 		try {
 			const b = await api<Bot>('PUT', `/bots/${bot.id}/game/variables`, { variables: changed });
 			onSaved(b);
-			toast(reinstallOnSave ? 'Saved. The new version is installed on the next start; your worlds and settings stay.' : 'Settings saved. They apply on the next start.');
+			toast(reinstallOnSave ? 'Saved. The new version is installed on the next start; your worlds and settings stay.' : 'Variables saved. They apply on the next start.');
 			await load();
 			return true;
 		} catch (err) {
@@ -190,8 +190,8 @@
 		<section class="card grid grid-cols-[minmax(0,1fr)] gap-3 p-5">
 			<div class="flex flex-wrap items-start justify-between gap-3">
 				<div>
-					<p class="eyebrow">Server type</p>
-					<p class="mt-1 text-title font-semibold">{detail.blueprint.name} <span class="text-small font-normal text-muted">· {detail.blueprint.category} · revision {bot.blueprint_revision}</span></p>
+					<h2 class="text-title font-semibold">{detail.blueprint.name}</h2>
+					<p class="text-small text-muted">Server type · {detail.blueprint.category} · revision {bot.blueprint_revision}</p>
 					<p class="mt-1 text-small text-muted">{detail.spec.description}</p>
 				</div>
 				<span class="pill" data-tone={bot.install_state === 'installed' ? 'run' : bot.install_state === 'failed' ? 'fail' : 'warn'}>
@@ -205,14 +205,14 @@
 				</Notice>
 			{/if}
 			<div>
-				<p class="eyebrow">Startup command</p>
+				<h3 class="text-small font-medium">Startup command</h3>
 				<code class="mt-1 block overflow-x-auto rounded-control bg-paper-2 px-3 py-2 font-mono text-small whitespace-pre">{detail.startup}</code>
 				<p class="help mt-1">Set by the server type. <code>$&#123;SERVER_MEMORY&#125;</code> is {detail.spec.resources.heap_percent ?? 85}% of the memory limit; <code>$&#123;SERVER_PORT&#125;</code> is the primary allocation.</p>
 			</div>
 		</section>
 
 		<form class="card grid gap-4 p-5" onsubmit={save}>
-			<h2 class="text-section font-semibold">Settings</h2>
+			<h2 class="text-section font-semibold">Variables</h2>
 			<fieldset class="grid gap-4" disabled={!stopped || !canEdit}>
 				{#each detail.variables as v (v.env)}
 					{@const list = versions[v.env]}
@@ -240,7 +240,7 @@
 			{#if error}<Notice tone="fail" live>{error}</Notice>{/if}
 			{#if canEdit}
 				<div class="flex flex-wrap items-center gap-2">
-					<button class="btn btn-primary" disabled={!stopped || !dirty || busy || Object.keys(problems).length > 0}>Save settings</button>
+					<button class="btn btn-primary" disabled={!stopped || !dirty || busy || Object.keys(problems).length > 0}>Save variables</button>
 					{#if reinstallOnSave}<span class="text-small text-warn">Saving reinstalls the server software on the next start.</span>{/if}
 				</div>
 			{/if}

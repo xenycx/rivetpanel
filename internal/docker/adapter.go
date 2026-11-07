@@ -569,6 +569,39 @@ func (a *Adapter) ConnectNetwork(ctx context.Context, net, id string) error {
 	return err
 }
 
+// ConnectNetworkAliases attaches a container to a network under host names
+// (a stack service's name on its stack network). Idempotent like
+// ConnectNetwork.
+func (a *Adapter) ConnectNetworkAliases(ctx context.Context, net, id string, aliases []string) error {
+	ctx, cancel := within(ctx, opTimeout)
+	defer cancel()
+	err := a.cli.NetworkConnect(ctx, net, id, &network.EndpointSettings{Aliases: append([]string(nil), aliases...)})
+	if err != nil && (errdefs.IsConflict(err) || strings.Contains(err.Error(), "already exists")) {
+		return nil
+	}
+	return err
+}
+
+var _ runner.AliasConnector = (*Adapter)(nil)
+
+// PullImage pulls an image even when a copy exists locally.
+func (a *Adapter) PullImage(ctx context.Context, ref string) error { return a.pull(ctx, ref) }
+
+var _ runner.ImagePuller = (*Adapter)(nil)
+
+// ImageSize returns the size of a local image in bytes.
+func (a *Adapter) ImageSize(ctx context.Context, ref string) (int64, error) {
+	ctx, cancel := within(ctx, opTimeout)
+	defer cancel()
+	img, err := a.cli.ImageInspect(ctx, ref)
+	if err != nil {
+		return 0, err
+	}
+	return img.Size, nil
+}
+
+var _ runner.ImageSizer = (*Adapter)(nil)
+
 // RemoveNetwork deletes a network; a missing one is not an error.
 func (a *Adapter) RemoveNetwork(ctx context.Context, name string) error {
 	ctx, cancel := within(ctx, opTimeout)

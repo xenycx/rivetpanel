@@ -83,6 +83,13 @@ type Options struct {
 	// AppsNetwork is the routable network site apps run on, which the
 	// sites listener reaches them through ("" = Network).
 	AppsNetwork string
+	// CheckImage, when set, refuses a container app's image before it is
+	// pulled (the administrator's registry policy, checked again at every
+	// start in case the policy changed).
+	CheckImage func(ref string) error
+	// MaxImageBytes bounds the size of a container app's image once pulled
+	// (0 = no bound).
+	MaxImageBytes int64
 
 	Now func() time.Time
 }
@@ -188,6 +195,7 @@ type Runner struct {
 	states  map[string]*botState
 	timers  map[string]*time.Timer
 	images  map[string]string // resolved immutable image references
+	pulls   map[string]bool   // container apps that pull their image again
 	// blueprints caches parsed blueprint revisions ("id@rev").
 	blueprints map[string]blueprint.Spec
 	prov       *blueprint.Providers

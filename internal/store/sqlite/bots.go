@@ -160,8 +160,10 @@ func (db *DB) GetBot(ctx context.Context, id string) (domain.Bot, error) {
 			return b, err
 		}
 	}
-	b.Addons, err = db.ListBotAddons(ctx, id)
-	return b, err
+	if b.Addons, err = db.ListBotAddons(ctx, id); err != nil {
+		return b, err
+	}
+	return b, db.loadContainer(ctx, &b)
 }
 
 // ListBots returns bots owned by ownerID, or all bots when ownerID is empty.
@@ -172,7 +174,6 @@ func (db *DB) ListBots(ctx context.Context, ownerID string) ([]domain.Bot, error
 		q += ` WHERE owner_id = ?`
 		args = append(args, ownerID)
 	}
-	// Bots created in the same millisecond still list in a stable order.
 	// Bots created in the same millisecond still list in a stable order.
 	rows, err := db.QueryContext(ctx, q+` ORDER BY created_at_ms, lower(name), id LIMIT 1000`, args...)
 	if err != nil {
@@ -187,7 +188,11 @@ func (db *DB) ListBots(ctx context.Context, ownerID string) ([]domain.Bot, error
 		}
 		out = append(out, b)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	rows.Close() // before the next query: the pool may hold one connection
+	return out, db.fillContainers(ctx, out)
 }
 
 // visibleBotsSQL selects the ids of bots a user (?) can see: owned, shared
@@ -213,7 +218,11 @@ func (db *DB) ListBotsForUser(ctx context.Context, userID string) ([]domain.Bot,
 		}
 		out = append(out, b)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	rows.Close() // before the next query: the pool may hold one connection
+	return out, db.fillContainers(ctx, out)
 }
 
 // stoppedPredicate is true only when no container can be live: intent is

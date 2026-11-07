@@ -51,8 +51,12 @@ func specHash(role Role, imageRef string, argv []string, s ContainerSpec) string
 		Networks   []string      `json:",omitempty"`
 		Mounts     []Mount       `json:",omitempty"`
 		Aliases    []string      `json:",omitempty"`
+		// Container apps only.
+		KeepEntry   bool                `json:",omitempty"`
+		Tmpfs       []string            `json:",omitempty"`
+		JoinAliases map[string][]string `json:",omitempty"`
 	}{role, imageRef, argv, s.User, s.Network, s.WorkspaceHostPath, s.MemoryBytes, s.NanoCPUs, s.PidsLimit, s.TmpfsBytes, s.OpenStdin,
-		s.Entrypoint, s.Ports, s.Networks, s.Mounts, s.NetworkAliases})
+		s.Entrypoint, s.Ports, s.Networks, s.Mounts, s.NetworkAliases, s.KeepImageEntrypoint, s.ExtraTmpfs, s.JoinAliases})
 	h := sha256.Sum256(b)
 	return hex.EncodeToString(h[:16])
 }
@@ -100,6 +104,9 @@ func (r *Runner) runtimeSpec(bot domain.Bot, rt runtimes.Runtime, image, host st
 	if bot.IsWeb() {
 		s.Ports = nil
 		r.applyWeb(bot, &s, host, rt.Env, provided, own)
+	}
+	if bot.IsContainer() {
+		r.applyContainer(bot, &s, host, provided, own)
 	}
 	s.SpecHash = specHash(RoleRuntime, rt.ImageRef(), bot.Argv, s)
 	return s

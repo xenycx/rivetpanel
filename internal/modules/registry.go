@@ -32,12 +32,13 @@ type Registry map[string]Descriptor
 var catalog = []Descriptor{
 	{Key: "core", Label: "Core hosting", Description: "Accounts, workspaces, lifecycle, files, console, backups and operations.", State: Stable},
 	{Key: "applications", Label: "Applications", Description: "Language runtimes, repository deployments, telemetry and package management.", State: Stable},
-	{Key: "sites", Label: "Sites", Description: "Static sites, releases and custom domains.", State: Stable},
+	{Key: "sites", Label: "Sites", Description: "Static files, static builds and running web apps from GitHub, with releases and custom domains.", State: Stable},
 	{Key: "ai", Label: "AI operations", Description: "Context-aware diagnostics and approval-gated repairs.", State: Stable},
-	{Key: "agents", Label: "Remote nodes", Description: "Authenticated node agents, placement, drain and transfer.", State: Off},
-	{Key: "game_servers", Label: "Game servers", Description: "Blueprint-based game hosting (Minecraft Java and proxies), allocations and player queries.", State: Preview},
-	{Key: "identity", Label: "Extended identity", Description: "Passkeys, OIDC, LDAP, email verification and custom roles.", State: Off},
-	{Key: "support", Label: "Support and content", Description: "Tickets, knowledgebase, status pages and translations.", State: Off},
+	{Key: "agents", Label: "Remote nodes", Description: "Authenticated node agents, explicit placement, drain and revocation.", State: Off},
+	{Key: "containers", Label: "Containers", Description: "Docker images and stacks imported from Compose files, run under the panel's isolation policy and registry allowlist.", State: Preview},
+	{Key: "game_servers", Label: "Game servers", Description: "Minecraft (Java and proxies) and Steam server types from blueprints, port allocations and player queries.", State: Preview},
+	{Key: "identity", Label: "Extended identity", Description: "Passkeys, OpenID Connect sign-in, email verification and custom roles.", State: Off},
+	{Key: "support", Label: "Support and content", Description: "Tickets, knowledgebase and status pages.", State: Off},
 	{Key: "extensions", Label: "Extensions", Description: "Signed, capability-scoped extension bundles.", State: Off},
 }
 

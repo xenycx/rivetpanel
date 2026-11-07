@@ -16,6 +16,10 @@ const (
 	// builds, environment and (for app sites) container. It is managed
 	// through the site, never listed or changed as a bot.
 	KindWeb = "web"
+	// KindContainer runs a Docker image chosen by its owner (within the
+	// administrator's registry policy), alone or as a service of a stack
+	// imported from a Compose file.
+	KindContainer = "container"
 )
 
 // Install states of a game server.
@@ -35,7 +39,7 @@ type Bot struct {
 	WorkspaceID string
 	NodeID      string
 	Name        string
-	// Kind is KindBot, KindGame or KindWeb ("" reads as KindBot).
+	// Kind is KindBot, KindGame, KindWeb or KindContainer ("" reads as KindBot).
 	Kind string
 	// Game servers: the pinned blueprint revision, the chosen image label
 	// ("" = automatic) and installation state.
@@ -85,6 +89,10 @@ type Bot struct {
 	BandwidthKbps   *int64
 	Ports           []BotPort // loaded by GetBot only
 
+	// Container holds the image settings of a container app (KindContainer;
+	// loaded by GetBot only, nil otherwise). ImageRef is its image.
+	Container *ContainerConfig
+
 	// BuildCommand, when set, is a shell script that replaces the runtime's
 	// default build step. It runs in the builder container (no bot secrets).
 	BuildCommand string
@@ -121,6 +129,9 @@ func (b Bot) IsGame() bool { return b.Kind == KindGame }
 
 // IsWeb reports whether the resource is the web unit of a site.
 func (b Bot) IsWeb() bool { return b.Kind == KindWeb }
+
+// IsContainer reports whether the resource runs its own Docker image.
+func (b Bot) IsContainer() bool { return b.Kind == KindContainer }
 
 // PrimaryAllocation returns the game server's primary allocation.
 func (b Bot) PrimaryAllocation() (Allocation, bool) {
@@ -181,6 +192,7 @@ const (
 	ReasonCleanupFailed  = "cleanup_failed"  // deletion could not finish; retrying
 	ReasonKilled         = "killed"          // stopped with SIGKILL by a user
 	ReasonPortConflict   = "port_conflict"   // a published host port is taken; not retried until the next Start
+	ReasonWaitingDeps    = "waiting_deps"    // a stack service waits for the services it depends on to run
 )
 
 const (

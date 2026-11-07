@@ -91,6 +91,9 @@ func gameImage(s blueprint.Spec, bot domain.Bot) blueprint.Image {
 // from the blueprint of a game server: its image, and its install script as
 // the build step.
 func (r *Runner) runtimeFor(ctx context.Context, bot domain.Bot) (runtimes.Runtime, bool, error) {
+	if bot.IsContainer() {
+		return containerRuntime(bot), true, nil
+	}
 	if !bot.IsGame() {
 		rt, ok := r.cat.Get(bot.Runtime)
 		return rt, ok, nil

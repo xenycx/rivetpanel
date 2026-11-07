@@ -38,9 +38,14 @@ const labels: Record<string, string> = {
 	'extensions.manage': 'extensions'
 };
 
+/** A readable name for one permission; an extension's own (ext:<id>) names the extension id. */
+function describe(p: string): string {
+	return labels[p] ?? (p.startsWith('ext:') ? `the ${p.slice(4)} extension` : p);
+}
+
 /** A readable list of permissions ("files, backups and sharing"). */
 export function describePermissions(perms: string[]): string {
-	const names = perms.map((p) => labels[p] ?? p);
+	const names = perms.map(describe);
 	return names.length < 2 ? (names[0] ?? '') : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
 }
 

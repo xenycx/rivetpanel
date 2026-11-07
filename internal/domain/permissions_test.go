@@ -52,3 +52,42 @@ func TestRolePermissionsInMemoryDefaults(t *testing.T) {
 		t.Fatalf("administrator: %v", got)
 	}
 }
+
+// Per-extension permissions: valid for well-formed ids whether or not the
+// extension is installed, held by administrators, granted by roles, and never
+// part of the User role's defaults or the administration area.
+func TestExtensionPermissions(t *testing.T) {
+	const p = "ext:dev.rivetpanel.db-browser"
+	for _, ok := range []string{p, "ext:dev.example.tool", ExtensionPermission("a.b")} {
+		if !ValidPermission(ok) {
+			t.Errorf("%q refused", ok)
+		}
+	}
+	for _, bad := range []string{"ext:", "ext:Tool", "ext:tool", "ext:dev..tool", "ext:dev.tool/x", "ext: dev.tool", "ext:" + string(make([]byte, 70)), "extension", "EXT:dev.tool"} {
+		if ValidPermission(bad) {
+			t.Errorf("%q accepted", bad)
+		}
+	}
+	if id, ok := ExtensionOfPermission(p); !ok || id != "dev.rivetpanel.db-browser" {
+		t.Fatalf("ExtensionOfPermission = %q %v", id, ok)
+	}
+	if slices.Contains(DefaultUserPermissions(), p) || slices.Contains(AllPermissions(), p) {
+		t.Fatal("extension permissions are not in the fixed catalog")
+	}
+	if !(User{Role: RoleAdmin}).Can(p) {
+		t.Fatal("administrators hold every extension permission")
+	}
+	if (User{Role: RoleUser}).Can(p) {
+		t.Fatal("the built-in User role defaults do not include extension permissions")
+	}
+	custom := User{Role: RoleUser, RoleID: "r", PermissionsLoaded: true, CustomPermissions: []string{PermBotsConsole, p}}
+	if !custom.Can(p) || custom.Can("ext:dev.example.other") || custom.HasAnyAdminPermission() {
+		t.Fatal("custom role")
+	}
+	if eff := custom.EffectivePermissions(); !slices.Equal(eff, []string{PermBotsConsole, p}) {
+		t.Fatalf("effective = %v", eff)
+	}
+	if (User{Role: RoleUser, RoleID: "r", PermissionsLoaded: true, CustomPermissions: []string{p}, Withheld: []string{p}}).Can(p) {
+		t.Fatal("the unverified-email policy can withhold an extension permission")
+	}
+}

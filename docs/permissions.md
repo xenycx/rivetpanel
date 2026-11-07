@@ -46,6 +46,13 @@ administrators only), see `docs/features.md#invitations`.
   signed out.
 * A role that any account holds cannot be deleted. Custom roles created
   before `workspaces.rename` existed gained it in migration `0057`.
+* A role can include **Use <extension name>** for each installed extension
+  (`ext:<extension id>`, listed under **Extensions** while the extensions
+  module is on). It shows and opens that extension's pages and routes marked
+  `"perm": "extension"`; see `docs/extensions.md#giving-a-role-access-to-one-extension`.
+  These are resource permissions: they do not open the administration area or
+  affect who outranks whom, and they are not in the User role's defaults.
+  Uninstalling the extension removes its permission from every role.
 * Creating, changing and deleting roles and assigning them are recorded in the
   activity log (`admin.role_create`, `admin.role_update`,
   `admin.role_delete`, `admin.user_role`), with the role name and permission
@@ -137,8 +144,18 @@ or `tickets.manage`, owners' addresses `users.view`. A bot's own Analytics tab
 needs console access to that bot (`bots.console` and a grant that includes
 console), like the live resource gauges.
 
-`GET /api/v1/admin/permissions` returns this catalog with labels;
-`GET /api/v1/auth/me` returns the signed-in account's effective `permissions`.
+Extension permissions (one per installed extension, resource-type, see
+`docs/extensions.md`):
+
+| Permission | Allows |
+| --- | --- |
+| `ext:<extension id>` | See and use the extension's nav items, pages and routes it marks `"perm": "extension"` |
+
+`GET /api/v1/admin/permissions` returns this catalog with labels, followed by
+one `ext:<id>` entry per installed extension (group `extensions`) while the
+extensions module is on; `GET /api/v1/auth/me` returns the signed-in account's
+effective `permissions` (extension permissions included for non-administrators;
+administrators hold every one).
 
 ## Enforcement boundary
 

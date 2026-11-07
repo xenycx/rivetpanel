@@ -1,13 +1,14 @@
 # RivetPanel
 
-Current version: **0.5.0**. See [CHANGELOG.md](CHANGELOG.md) for release notes
+The authoritative version is in [`VERSION`](VERSION). See [CHANGELOG.md](CHANGELOG.md) for release notes
 and [the implementation status](docs/implementation-status.md) for the staged
 platform-overhaul checklist.
 
 A lightweight self-hosted control plane for Discord bots and other isolated
-applications, **Minecraft servers**, and websites (static, built or running
-apps), with remote nodes and
-other modules being added as opt-in previews. The existing application runtimes cover Node.js, Python, Rust,
+applications, **Minecraft and Steam game servers**, **Docker containers and
+Compose stacks**, and websites (static, built or running apps), all in one
+**Apps** area, with remote nodes and other modules being added as opt-in
+previews. The existing application runtimes cover Node.js, Python, Rust,
 Go, Java, Ruby and PHP. The control plane uses Go, Fiber, SQLite and an embedded
 SvelteKit interface; Docker provides the current execution boundary.
 
@@ -24,6 +25,15 @@ convert databases created by the predecessor product. Start with a new
   a `server.properties` editor, a Modrinth plugin/mod installer, task-chain
   schedules with console commands, and an administrator-managed blueprint
   catalog (`docs/game-servers.md`)
+* **Containers and Compose stacks** (preview): run any image from an
+  administrator-allowed registry (Docker Hub, GHCR and Quay by default) as an
+  app with its own console, files, variables, published ports, persistent
+  volumes, backups and limits, or import a `docker-compose.yml` as a stack of
+  such apps that reach each other by service name. The import shows a
+  preview of exactly what is created and refuses privileged mode, added
+  capabilities, host namespaces, devices, the Docker socket and builds;
+  containers run as a non-root user with a read-only root filesystem
+  (`docs/containers.md`)
 * **Steam game servers** (preview): Valheim, Rust and Project Zomboid
   installed with an anonymous SteamCMD login, Steam A2S player status, and a
   Pterodactyl egg importer that turns eggs into reviewable blueprint drafts
@@ -53,7 +63,9 @@ convert databases created by the predecessor product. Start with a new
 * Optional email through Mailgun: password reset, invitations, bot alerts and security notices (`docs/email.md`) and an admin Announcements tab for HTML news and policy updates; off by default and free at idle
 * In-panel notifications (bell, per-category in-panel/email preferences) and support tickets with staff assignment and internal notes (`docs/support.md`)
 * Knowledgebase / help center at `/help` (Markdown articles, categories, public / signed-in / staff visibility, optional public access, related articles on new tickets) and a public status page at `/status` (selected components under public names, incidents, maintenance, 90-day uptime bars) (`docs/support.md`)
-* One **Templates** page: bot starters (discord.js, discord.py, Poise, JDA,
+* One **Apps** list with filters for bots, game servers, containers and
+  websites, and a **New** page that asks what you are running; one
+  **Templates** page: bot starters (discord.js, discord.py, Poise, JDA,
   DiscordGo and more), every game server type including imported eggs, and
   five static site templates with sandboxed previews; plus GitHub deployments from **any public repository** (no GitHub connection
   needed) with auto-deploy on push or by polling
@@ -199,7 +211,8 @@ not enforced (Docker has no native cap).
   streamed to the node) work through the agent, and the node's agent checks
   that a port is free before it is allocated or the server starts (a check,
   not a reservation; agent protocol 8).
-* **Egress, admission control and disk quotas are not enforced by RivetPanel**;
+* **Egress and disk quotas are not enforced by RivetPanel**, and workspace
+  and node limits are application admission rules rather than kernel limits;
   see `docs/isolation.md` before hosting untrusted users. The firewall example
   there was not run in the test environment.
 * The panel holds the Docker socket (root-equivalent). Its systemd sandbox

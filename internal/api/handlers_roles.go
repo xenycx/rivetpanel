@@ -37,8 +37,19 @@ func (s *panel) roleRoutes(authed fiber.Router) {
 	authed.Delete("/admin/roles/:rid", s.requirePerm(domain.PermRolesManage), s.deleteRole)
 }
 
+// listPermissions is the catalog for the roles editor: the fixed panel
+// permissions, then one "Use <name>" permission per installed extension
+// (group "extensions") while the extensions module is on.
 func (s *panel) listPermissions(c fiber.Ctx) error {
-	return c.JSON(fiber.Map{"permissions": domain.Permissions})
+	out := append([]domain.PermissionInfo{}, domain.Permissions...)
+	if s.extensions != nil {
+		exts, err := s.extensions.PermissionCatalog(c.Context())
+		if err != nil {
+			return err
+		}
+		out = append(out, exts...)
+	}
+	return c.JSON(fiber.Map{"permissions": out})
 }
 
 func (s *panel) listRoles(c fiber.Ctx) error {

@@ -40,7 +40,7 @@
 		eggError = '';
 		if (!f) return;
 		if (f.size > EGG_MAX) {
-			eggError = 'The egg is larger than 512 KiB.';
+			eggError = 'The Pterodactyl egg is larger than 512 KiB.';
 			return;
 		}
 		eggFile = f.name;
@@ -134,12 +134,12 @@
 <div class="flex flex-wrap items-start justify-between gap-3">
 	<div>
 		<h2 class="text-section">Server types</h2>
-		<p class="mt-1 max-w-3xl text-muted">Blueprints define how each kind of game server is installed and started. Built-in types update with RivetPanel; servers keep the revision they were created with until someone updates them from their Startup page.</p>
+		<p class="mt-1 max-w-measure text-muted">A server type defines how one kind of game server is installed and started. Built-in types update with RivetPanel; a server keeps the revision it was created with until someone updates it from its Configuration tab.</p>
 	</div>
 	{#if session.features.games}
 		<div class="flex flex-wrap gap-2">
 			<button class="btn" onclick={openEgg}><Icon name="upload" size={14} />Import Pterodactyl egg</button>
-			<button class="btn" onclick={() => ((importing = true), (importError = ''))}><Icon name="upload" size={14} />Import blueprint</button>
+			<button class="btn" onclick={() => ((importing = true), (importError = ''))}><Icon name="upload" size={14} />Import server type</button>
 		</div>
 	{/if}
 </div>
@@ -176,9 +176,9 @@
 	</ul>
 {/if}
 
-<Dialog bind:open={importing} title="Import a blueprint">
+<Dialog bind:open={importing} title="Import a server type">
 	<form class="grid gap-3" onsubmit={doImport}>
-		<p class="text-small text-muted">Paste or choose a blueprint YAML file. A new slug creates a server type; an existing custom slug adds a revision. Install scripts run as the unprivileged server user, with internet access, inside a container.</p>
+		<p class="text-small text-muted">Paste or choose a server type definition (YAML). A new slug creates a server type; an existing custom slug adds a revision. Install scripts run as the unprivileged server user, with internet access, inside a container.</p>
 		<input type="file" accept=".yaml,.yml,text/yaml" onchange={readFile} />
 		<textarea class="field min-h-72 font-mono text-[12px]" bind:value={yaml} spellcheck="false" placeholder="slug: my-game&#10;name: My game&#10;..." required></textarea>
 		{#if importError}<Notice tone="fail" live>{importError}</Notice>{/if}
@@ -192,8 +192,8 @@
 <Dialog bind:open={eggOpen} title="Import a Pterodactyl egg">
 	{#if !draft}
 		<form class="grid gap-3" onsubmit={previewEgg}>
-			<p class="text-small text-muted">Choose an egg export (PTDL_v1 or PTDL_v2 JSON, at most 512 KiB). It is converted into a blueprint draft for you to review; nothing is saved yet and nothing the egg links to is downloaded.</p>
-			<input type="file" accept=".json,application/json" onchange={readEgg} aria-label="Egg file" />
+			<p class="text-small text-muted">Choose an egg export (PTDL_v1 or PTDL_v2 JSON, at most 512 KiB). It is converted into a server type draft for you to review; nothing is saved yet and nothing the egg links to is downloaded.</p>
+			<input type="file" accept=".json,application/json" onchange={readEgg} aria-label="Pterodactyl egg file" />
 			{#if eggFile}<p class="text-small text-muted">Loaded <code>{eggFile}</code> ({Math.ceil(eggText.length / 1024)} KiB).</p>{/if}
 			{#if eggError}<Notice tone="fail" live>{eggError}</Notice>{/if}
 			<div class="flex justify-end gap-2">
@@ -213,7 +213,7 @@
 				</div>
 			{/if}
 			{#if draft.error}<Notice tone="warn">The draft does not validate yet: {draft.error}. Fix it in the YAML before saving.</Notice>{/if}
-			<label class="grid gap-1 text-small font-medium">Blueprint YAML
+			<label class="grid gap-1 text-small font-medium">Server type YAML
 				<textarea class="field min-h-72 font-mono text-[12px] font-normal" bind:value={draftYaml} spellcheck="false"></textarea>
 			</label>
 			<label class="flex items-center gap-2 text-small"><input type="checkbox" bind:checked={reviewed} />I reviewed the warnings and the install script.</label>

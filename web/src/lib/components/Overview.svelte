@@ -27,7 +27,7 @@
 		side
 	}: { bot: Bot; now: number; acting: boolean; onAct: (a: PowerAction) => void; game?: GameDetail | null; top?: Snippet; bottom?: Snippet; side?: Snippet } = $props();
 	const isGame = $derived(bot.kind === 'game');
-	const noun = $derived(isGame ? 'server' : 'bot');
+	const noun = $derived(isGame ? 'server' : bot.kind === 'container' ? 'container' : 'bot');
 
 	let template = $state<Template | null>(null);
 	let env = $state<EnvVar[] | null>(null);
@@ -124,12 +124,17 @@
 					? 'Building now. The first build can take a few minutes.'
 					: bot.phase === 'retrying' || bot.phase === 'failed'
 						? 'The last attempt failed. See the details above.'
-						: 'Press Start when the steps above are complete.'
+						: canPower
+							? 'Press Start when the steps above are complete.'
+							: !session.features.runner
+								? 'This panel has no Docker runner, so it cannot start here yet.'
+								: 'Someone with power access can start it once the steps above are complete.'
 		};
 		return [code, vars, start, ran];
 	});
 	// Game servers install themselves on the first start: no setup checklist.
-	const pendingSetup = $derived(!everRan && !isGame);
+	// Game servers install themselves and containers run their image: no checklist.
+	const pendingSetup = $derived(!everRan && !isGame && bot.kind !== 'container');
 	const versionVar = $derived(game?.variables.find((v) => v.versions) ?? null);
 	// A game server whose port another container holds can move to a free one.
 	const portBlocked = $derived(isGame && bot.state_reason === 'port_conflict' && can(bot, Perm.admin));
@@ -184,7 +189,7 @@
 							<a class="btn" href="?tab=manage" data-sveltekit-noscroll><Icon name="terminal" />Open console</a>
 						{/if}
 						{#if bot.state_reason === 'build_failed' && can(bot, Perm.admin)}
-							<a class="btn" href="?tab=startup" data-sveltekit-noscroll>Check startup settings</a>
+							<a class="btn" href="?tab=startup" data-sveltekit-noscroll>Check the configuration</a>
 						{/if}
 					</div>
 				{/if}
@@ -231,7 +236,11 @@
 						{#if !bot.installed_version}{bot.install_state === 'installing' ? 'Installing now.' : bot.install_state === 'failed' ? 'The last installation failed.' : 'Installed on the first start.'}{:else if versionVar}{versionVar.value === 'latest' || !versionVar.value ? 'Follows the latest stable release when reinstalled.' : `Pinned to ${versionVar.value}.`}{/if}
 						{#if game}Revision {bot.blueprint_revision ?? game.blueprint.current_revision}{game.update_available ? ', an update is available' : ''}.{/if}
 					</p>
-					{#if can(bot, Perm.admin)}<a class="link mt-1 inline-block text-small" href="?tab=startup" data-sveltekit-noscroll>Version and startup</a>{/if}
+					{#if can(bot, Perm.admin)}<a class="link mt-1 inline-block text-small" href="?tab=startup" data-sveltekit-noscroll>Version and configuration</a>{/if}
+				{:else if bot.kind === 'container'}
+					<p><code>{bot.image_ref.replace(/^docker\.io\/library\//, '')}</code></p>
+					<p class="text-small text-muted">{bot.container?.stack_id ? `Service ${bot.container.service} of a Compose stack.` : 'Its own image.'}{bot.container?.volumes.length ? ` Volumes are under Files → volumes.` : ''}</p>
+					{#if can(bot, Perm.admin)}<a class="link mt-1 inline-block text-small" href="?tab=startup" data-sveltekit-noscroll>Image and configuration</a>{/if}
 				{:else if bot.source_type === 'github'}
 					{#if repo}
 						<p><Icon name="github" class="mr-1 inline align-[-2px]" /><code>{repo.full_name}</code> on <code>{repo.branch}</code></p>

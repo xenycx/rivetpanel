@@ -477,7 +477,7 @@
 					{/each}
 
 					{#if !versionVar && mainVars.length === 0}
-						<p class="text-muted">This game has no settings to choose now. You can change its startup settings later.</p>
+						<p class="text-muted">This game has no settings to choose now. You can change its settings later under Configuration.</p>
 					{/if}
 
 					{#if extraVars.length || chosen.spec.images.length > 1}

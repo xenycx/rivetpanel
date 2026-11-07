@@ -128,7 +128,7 @@ How it maps:
 Reported as warnings and not imported: `yaml`, `json` and `xml` config
 parsers, find-and-replace objects, placeholders RivetPanel does not provide,
 hidden (`user_viewable: false`) variables (RivetPanel shows every variable on
-the Startup page), other features (`java_version`, `pid_limit`, …),
+the Configuration page), other features (`java_version`, `pid_limit`, …),
 `file_denylist`, `userInteraction`, package-manager calls in install scripts
 (they need root), and variables whose names are not `UPPER_SNAKE_CASE` or are
 provided by the panel. Eggs declare no resources or ports, so the draft uses
@@ -144,7 +144,7 @@ its limits. Saving a larger value is refused with the node's range, and a
 server saved earlier with more CPUs than its node has starts with the node's
 CPU count instead of failing (Docker refuses a CPU limit above the host's).
 
-Game servers → New server: choose the type, the version, memory and CPU, and
+New → Game server: choose the type, the version, memory and CPU, and
 accept the Minecraft EULA (required for every Minecraft type except the proxy;
 the acceptance is stored with the server and written to `eula.txt`).
 
@@ -219,7 +219,7 @@ memory, so the container limit is not exceeded by a correctly sized heap.
 ## JVM arguments
 
 Java server types (every Minecraft type, including Velocity) have a **JVM
-arguments** box on the Startup page. The options are passed to `java` right
+arguments** box on the Configuration page. The options are passed to `java` right
 after the heap size, through the panel-provided variable `SERVER_JVM_ARGS`:
 
 ```
@@ -264,7 +264,7 @@ java -Xms128M -Xmx${SERVER_MEMORY}M ${SERVER_JVM_ARGS} … -jar server.jar nogui
   (environment). Every change is recorded as `game.jvm_args` with the preset
   name or "custom options" (never the options themselves).
 * **Existing servers** keep the server-type revision they were created with,
-  which has no JVM-arguments box. Press **Update** on their Startup page
+  which has no JVM-arguments box. Press **Update** on their Configuration page
   (stopped server, full control) to move to the new revision. Velocity used
   to have `-XX:+UseG1GC` in its command line; the new revision moves it into
   the JVM arguments, and servers created from or updated to it start with
@@ -340,7 +340,7 @@ Server types that support it add three pages to a server:
   required dependencies to install next. A restart loads new files.
 
 Servers created before a server type gained these pages get them after
-"Update" on their Startup page (the new revision).
+"Update" on their Configuration page (the new revision).
 
 ## Worlds and archives
 
@@ -395,7 +395,7 @@ export its exact YAML, and import custom types.
 
 * Built-in types are stored as immutable **revisions**. When a RivetPanel
   update changes one, a new revision is added; existing servers keep the
-  revision they pinned until someone presses "Update" on their Startup page.
+  revision they pinned until someone presses "Update" on their Configuration page.
 * Custom imports cannot take over a built-in slug. Importing the same slug
   again adds a revision. Only unused custom types can be deleted.
 

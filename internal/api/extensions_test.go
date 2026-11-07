@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -75,6 +76,14 @@ func TestExtensionsModuleOff(t *testing.T) {
 	json.Unmarshal(admin.mustStatus(200, "GET", "/api/v1/auth/me", nil), &me)
 	if me.Features["extensions"] {
 		t.Fatal("extensions advertised while the module is off")
+	}
+	// The roles editor lists no extension permissions while the module is off.
+	var cat struct {
+		Permissions []domain.PermissionInfo `json:"permissions"`
+	}
+	json.Unmarshal(admin.mustStatus(200, "GET", "/api/v1/admin/permissions", nil), &cat)
+	if len(cat.Permissions) != len(domain.Permissions) {
+		t.Fatalf("catalog has %d entries, want the %d panel permissions", len(cat.Permissions), len(domain.Permissions))
 	}
 }
 
@@ -149,6 +158,24 @@ func TestExtensionLifecycle(t *testing.T) {
 	all := []string{"bot.discord_api", "bot.identity", "kv", "notify", "bots.read"}
 	admin.mustStatus(200, "POST", "/api/v1/admin/extensions/"+id+"/activate", map[string]any{"version": "1.0.0", "grants": all})
 
+	// The roles editor offers the extension's own permission, and a role can hold it.
+	var cat struct {
+		Permissions []domain.PermissionInfo `json:"permissions"`
+	}
+	json.Unmarshal(admin.mustStatus(200, "GET", "/api/v1/admin/permissions", nil), &cat)
+	extPerm := domain.ExtensionPermission(id)
+	if last := cat.Permissions[len(cat.Permissions)-1]; last.Name != extPerm || last.Group != "extensions" || !strings.HasPrefix(last.Label, "Use ") {
+		t.Fatalf("catalog does not list the extension: %+v", last)
+	}
+	var role struct {
+		ID          string   `json:"id"`
+		Permissions []string `json:"permissions"`
+	}
+	json.Unmarshal(admin.mustStatus(201, "POST", "/api/v1/admin/roles", map[string]any{"name": "Insights", "permissions": []string{domain.PermBotsConsole, extPerm}}), &role)
+	if !slices.Contains(role.Permissions, extPerm) {
+		t.Fatalf("role did not keep the extension permission: %v", role.Permissions)
+	}
+
 	var contrib struct {
 		Extensions []service.ExtensionContribution `json:"extensions"`
 	}
@@ -205,6 +232,9 @@ func TestExtensionLifecycle(t *testing.T) {
 	// Uninstall removes every trace.
 	u.mustStatus(403, "DELETE", "/api/v1/admin/extensions/"+id, nil)
 	admin.mustStatus(204, "DELETE", "/api/v1/admin/extensions/"+id, nil)
+	if r, err := e.db.GetRole(context.Background(), role.ID); err != nil || !slices.Equal(r.Permissions, []string{domain.PermBotsConsole}) {
+		t.Errorf("role after uninstall: %v %v", r.Permissions, err)
+	}
 	for _, table := range []string{"extensions", "extension_versions", "extension_settings", "extension_kv", "extension_bot_enablements", "extension_user_consents", "extension_jobs"} {
 		var n int
 		e.db.QueryRowContext(context.Background(), "SELECT count(*) FROM "+table).Scan(&n)

@@ -40,6 +40,7 @@ func (r *Runner) reconcile(ctx context.Context, id string) time.Duration {
 	}
 	switch bot.DesiredState {
 	case domain.DesiredDeleted:
+		defer r.removeStackNetwork(ctx, bot)
 		if err := r.teardown(ctx, id); err != nil {
 			if ctx.Err() == nil {
 				r.log.Error("delete bot", "bot", id, "err", err)
@@ -516,6 +517,13 @@ func (r *Runner) resolve(ctx context.Context, ref string) (string, error) {
 }
 
 func (r *Runner) create(ctx context.Context, bot domain.Bot, rt runtimes.Runtime, host string, st *botState, addonConts []ContainerInfo) time.Duration {
+	// A stack service starts once the services it depends on run.
+	if deps, err := r.waitingFor(ctx, bot); err != nil {
+		return r.backoff(st.bump())
+	} else if len(deps) > 0 {
+		r.observe(ctx, bot, sqlite.Observation{State: "starting", LastError: waitingMessage(deps), Reason: domain.ReasonWaitingDeps})
+		return dependencyPoll
+	}
 	if !r.observe(ctx, bot, sqlite.Observation{State: "building"}) {
 		return immediate
 	}
@@ -531,11 +539,28 @@ func (r *Runner) create(ctx context.Context, bot domain.Bot, rt runtimes.Runtime
 	}
 	var image string
 	var err error
+	if bot.IsContainer() {
+		// The policy is checked before anything is pulled.
+		if msg, err := r.prepareContainer(ctx, bot); err != nil {
+			return fail(msg, err)
+		}
+		if err := r.refreshImage(ctx, bot, rt.ImageRef()); err != nil {
+			return fail("the image could not be pulled", err)
+		}
+	}
 	// A game server that is about to install may still change its image
 	// (automatic Java selection): resolve it after the installation.
 	if !(bot.IsGame() && build) {
 		if image, err = r.resolve(ctx, rt.ImageRef()); err != nil {
+			if bot.IsContainer() {
+				return fail("the image could not be pulled", err)
+			}
 			return fail("runtime image is unavailable", err)
+		}
+	}
+	if bot.IsContainer() {
+		if err := r.checkImageSize(ctx, image); err != nil {
+			return fail("the image is too large", err)
 		}
 	}
 	if bot.IsWeb() {
@@ -543,7 +568,11 @@ func (r *Runner) create(ctx context.Context, bot domain.Bot, rt runtimes.Runtime
 			return fail("the app's data directory or network could not be prepared", err)
 		}
 	}
-	if err := r.ws.Prepare(bot.ID, r.uid, r.gid); err != nil {
+	uid, gid := r.uid, r.gid
+	if bot.IsContainer() {
+		uid, gid = r.containerOwner(bot)
+	}
+	if err := r.ws.Prepare(bot.ID, uid, gid); err != nil {
 		return fail("workspace ownership could not be prepared", err)
 	}
 	st.prepFailMsg = ""
@@ -634,14 +663,11 @@ func (r *Runner) create(ctx context.Context, bot domain.Bot, rt runtimes.Runtime
 		return r.fail(ctx, bot, "container could not be created", err, st)
 	}
 	if len(spec.Networks) > 0 {
-		nw, err := r.networker()
-		for _, n := range spec.Networks {
-			if err == nil {
-				err = nw.ConnectNetwork(ctx, n, id)
-			}
-		}
-		if err != nil {
+		if err := r.joinNetworks(ctx, spec, id); err != nil {
 			_ = r.docker.Remove(ctx, id)
+			if bot.IsContainer() {
+				return r.fail(ctx, bot, "the container could not join its stack or add-on network", err, st)
+			}
 			return r.fail(ctx, bot, "the bot could not join its add-on network", err, st)
 		}
 	}

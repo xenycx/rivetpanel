@@ -1,5 +1,5 @@
 [Unit]
-Description=RivetPanel: Discord bot and game server hosting panel
+Description=RivetPanel: bot, game server and website hosting panel
 Documentation=file:///usr/share/doc/rivetpanel/README.md
 After=network-online.target docker.service
 Wants=network-online.target

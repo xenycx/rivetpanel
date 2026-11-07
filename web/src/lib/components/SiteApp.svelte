@@ -1,8 +1,11 @@
 <script lang="ts">
+	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { api, ApiError, MiB } from '$lib/api/client';
 	import { power, type PowerAction } from '$lib/api/bots';
-	import type { Bot, Site } from '$lib/api/types';
+	import { Perm, type Bot, type Site } from '$lib/api/types';
+	import { session } from '$lib/session.svelte';
+	import { resolveTab, tabNav, tabsFor } from '$lib/tabs';
 	import { joinArgs, splitArgs } from '$lib/args';
 	import { toast } from '$lib/ui/toast.svelte';
 	import Icon from '$lib/components/ui/Icon.svelte';
@@ -15,22 +18,28 @@
 	import Files from '$lib/components/Files.svelte';
 	import RecentOperations from '$lib/components/RecentOperations.svelte';
 
-	// A site deployed from a repository: its web unit's deployments, logs,
-	// variables, add-ons, files and build settings, managed from the site.
+	// A site deployed from a repository: its web unit's logs, files,
+	// deployments, configuration, variables and services, managed from the site.
 	let { site, app, canEdit, canAdmin, onChanged }: { site: Site; app: Bot; canEdit: boolean; canAdmin: boolean; onChanged: () => void } = $props();
 
 	const isApp = $derived(site.mode === 'app');
 	const stopped = $derived(app.desired_state === 'stopped' && (app.observed_state === 'stopped' || app.observed_state === 'failed'));
-	const tab = $derived(page.url.searchParams.get('tab') ?? 'overview');
-	const tabs = $derived([
-		{ id: 'overview', label: 'Overview', icon: 'overview' as const, href: '?tab=overview' },
-		{ id: 'deployments', label: 'Deployments', icon: 'commit' as const, href: '?tab=deployments' },
-		...(isApp ? [{ id: 'logs', label: 'Logs', icon: 'terminal' as const, href: '?tab=logs' }] : []),
-		{ id: 'environment', label: 'Variables', icon: 'key' as const, href: '?tab=environment' },
-		...(isApp ? [{ id: 'addons', label: 'Add-ons', icon: 'package' as const, href: '?tab=addons' }] : []),
-		{ id: 'files', label: isApp ? 'Files and data' : 'Files', icon: 'folder' as const, href: '?tab=files' },
-		...(canEdit ? [{ id: 'build', label: isApp ? 'Build and run' : 'Build', icon: 'sliders' as const, href: '?tab=build' }] : [])
-	]);
+	// The same sections, labels and ?tab= values as every other app page, from
+	// the tab registry; the site's former ids (deployments, environment, build,
+	// logs) still open their tab.
+	const tabs = $derived(
+		tabsFor({ kind: 'web', bot: app, site, features: session.features, game: null, allow: (p) => (p === -1 ? canAdmin : p === Perm.admin ? canEdit : true) })
+	);
+	const resolved = $derived(resolveTab(page.url.searchParams.get('tab'), 'web', tabs));
+	const tab = $derived(resolved.id);
+	$effect(() => {
+		if (resolved.canonical) {
+			const u = new URL(page.url);
+			u.searchParams.set('tab', resolved.canonical);
+			goto(u.pathname + u.search, { replaceState: true, noScroll: true, keepFocus: true });
+		}
+	});
+	const nav = $derived(tabNav(tabs, tab, 'web', (id) => `?tab=${id}`));
 	const stateLabel: Record<string, string> = { running: 'Running', building: 'Building', starting: 'Starting', stopping: 'Stopping', stopped: 'Stopped', failed: 'Failed', unknown: 'Unknown' };
 	const stateTone: Record<string, string | undefined> = { running: 'run', building: 'warn', starting: 'warn', stopping: 'warn', failed: 'fail' };
 
@@ -121,21 +130,20 @@
 		{/if}
 	</div>
 	{#if isApp && app.last_error && app.observed_state === 'failed'}<Notice tone="fail" class="mx-5 mt-3">{app.last_error}</Notice>{/if}
-	<div class="mt-4 px-3"><TabBar {tabs} current={tab} label="Site sections" /></div>
+	<div class="mt-4 px-3"><TabBar tabs={nav.primary} current={nav.active} label="Site sections" /></div>
+	{#if nav.secondary.length}<div class="border-t border-rule-soft px-3 py-2"><TabBar tabs={nav.secondary} current={tab} variant="pill" label="{nav.groupLabel} sections" /></div>{/if}
 	<div class="border-t border-rule-soft p-5">
-		{#if tab === 'deployments'}
+		{#if tab === 'deploy'}
 			<Deploy bot={app} admin={canAdmin} />
-		{:else if tab === 'logs' && isApp}
-			<Console bot={app} />
-		{:else if tab === 'environment'}
+		{:else if tab === 'env'}
 			{#if !isApp}<p class="mb-3 text-small text-muted">A static build only receives public variables (such as <code>VITE_*</code> and <code>PUBLIC_*</code>); they end up in the published files.</p>{/if}
 			<Env bot={app} running={!stopped} />
-		{:else if tab === 'addons' && isApp}
+		{:else if tab === 'addons'}
 			<Addons bot={app} {stopped} onChanged={onChanged} />
 		{:else if tab === 'files'}
 			{#if isApp}<p class="mb-3 text-small text-muted">The checkout of the repository. <code>.rivet-data</code> is the app's <code>/data</code> folder: deployments never touch it and it is backed up with the rest.</p>{/if}
 			<Files botId={app.id} running={!stopped} rootLabel={isApp ? 'app' : 'checkout'} />
-		{:else if tab === 'build' && canEdit}
+		{:else if tab === 'startup'}
 			<form class="grid gap-4 sm:grid-cols-2" onsubmit={save}>
 				<label class="block sm:col-span-2"><span class="label">Build command</span>
 					<textarea class="field font-mono text-small" rows="3" bind:value={form.build} placeholder={isApp ? 'Empty: the runtime default' : 'npm ci && npm run build'}></textarea>
@@ -155,7 +163,8 @@
 				<div class="sm:col-span-2 flex gap-2"><button class="btn btn-primary" disabled={saving}>{saving ? 'Saving…' : 'Save'}</button><button type="button" class="btn btn-quiet" onclick={reset}>Reset</button></div>
 			</form>
 		{:else}
-			<RecentOperations botId={app.id} />
+			{#if isApp}<Console bot={app} />{/if}
+			<div class={isApp ? 'mt-6' : ''}><RecentOperations botId={app.id} /></div>
 		{/if}
 	</div>
 </section>

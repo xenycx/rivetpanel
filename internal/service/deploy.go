@@ -318,8 +318,12 @@ func (d *DeployService) Get(ctx context.Context, actor domain.User, botID string
 // Configure links (or re-links) a bot to a repository, using the acting user's
 // GitHub token, and creates or removes the push webhook according to AutoDeploy.
 func (d *DeployService) Configure(ctx context.Context, actor domain.User, botID string, in ConfigureInput) (RepoView, error) {
-	if _, err := d.Bots.Authorize(ctx, actor, botID, domain.PermFullAdmin); err != nil {
+	b, err := d.Bots.Authorize(ctx, actor, botID, domain.PermFullAdmin)
+	if err != nil {
 		return RepoView{}, err
+	}
+	if b.IsContainer() {
+		return RepoView{}, domain.Invalid("a container app runs its image; change the image under Configuration instead of linking a repository")
 	}
 	return d.configure(ctx, actor, botID, in)
 }

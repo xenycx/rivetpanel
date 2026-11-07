@@ -1,6 +1,11 @@
 package domain
 
-import "slices"
+import (
+	"slices"
+	"strings"
+
+	"github.com/xenycx/rivetpanel/internal/lazyre"
+)
 
 // Panel permissions. A user's role grants a set of these; they are checked by
 // the API (route middleware) and, for bot access, by BotService itself, so a
@@ -96,14 +101,56 @@ var Permissions = []PermissionInfo{
 	{PermAnalyticsView, "administration", "Usage analytics", "Panel-wide usage analytics: accounts, apps, resource use, deployments, backups and top consumers (nodes only with Nodes, tickets only with ticket access)."},
 }
 
-// ValidPermission reports whether p is in the catalog.
+// ValidPermission reports whether p is in the catalog or is the permission
+// of a well-formed extension id (see ExtensionPermission). An extension
+// permission stays valid whether or not that extension is installed, so a
+// stored role never becomes invalid; uninstalling an extension removes its
+// permission from every role (sqlite DeleteExtension).
 func ValidPermission(p string) bool {
 	for _, x := range Permissions {
 		if x.Name == p {
 			return true
 		}
 	}
-	return false
+	_, ok := ExtensionOfPermission(p)
+	return ok
+}
+
+// ExtensionPermPrefix starts the per-extension permissions ("ext:<id>").
+//
+// Holding ext:<id> lets an account see and use the pages and routes that
+// extension marks with "perm": "extension" in its manifest. Extension
+// permissions are resource permissions: they do not open the administration
+// area, do not make an account outrank another one and are not part of the
+// built-in User role's defaults. They are not in the fixed catalog
+// (Permissions); the roles editor lists one per installed extension, under
+// its own "extensions" heading. Built-in administrators hold every one, and a
+// delegated role manager may only grant those they hold, as for any other
+// permission.
+const ExtensionPermPrefix = "ext:"
+
+// PermGroupExtensions is the catalog group of the per-extension permissions
+// the roles editor lists.
+const PermGroupExtensions = "extensions"
+
+var extensionIDRe = lazyre.New(`^[a-z0-9]+(?:[.-][a-z0-9]+)+$`)
+
+// ValidExtensionID reports whether id is a well-formed extension id:
+// reverse-DNS style, lower case, at most 64 characters (dev.example.tool).
+func ValidExtensionID(id string) bool {
+	return len(id) <= 64 && extensionIDRe.MatchString(id)
+}
+
+// ExtensionPermission is the permission to use extension id's pages.
+func ExtensionPermission(id string) string { return ExtensionPermPrefix + id }
+
+// ExtensionOfPermission returns the extension id of an extension permission.
+func ExtensionOfPermission(p string) (string, bool) {
+	id, ok := strings.CutPrefix(p, ExtensionPermPrefix)
+	if !ok || !ValidExtensionID(id) {
+		return "", false
+	}
+	return id, true
 }
 
 // DefaultUserPermissions is the factory default of the built-in User role:
@@ -233,12 +280,21 @@ func (u User) RolePermissions() []string {
 	return u.CustomPermissions
 }
 
-// EffectivePermissions is the sorted list of permissions Can grants.
+// EffectivePermissions is the list of permissions Can grants, in catalog
+// order, followed by the extension permissions the role grants (an
+// administrator's are implied, not listed: they hold every one).
 func (u User) EffectivePermissions() []string {
 	var out []string
 	for _, p := range AllPermissions() {
 		if u.Can(p) {
 			out = append(out, p)
+		}
+	}
+	if u.Role != RoleAdmin {
+		for _, p := range u.RolePermissions() {
+			if _, ok := ExtensionOfPermission(p); ok && u.Can(p) && !slices.Contains(out, p) {
+				out = append(out, p)
+			}
 		}
 	}
 	return out

@@ -223,7 +223,7 @@
 
 {#if loadError}<Notice tone="fail" class="mt-4" live>{loadError}</Notice>{/if}
 {#if info && !info.builds_enabled}
-	<Notice tone="warn" class="mt-4">Building sites from repositories is not available on this panel: GitHub sign-in and the local runner (Docker) must be set up. You can still <a class="link" href="/sites?new=1">create a site and upload files</a>.</Notice>
+	<Notice tone="warn" class="mt-4">Building and running sites from repositories is not available on this panel: it needs the Docker runner, which is not running here. You can still <a class="link" href="/sites?new=1">create a site and upload files</a>.</Notice>
 {:else if !can('sites.create')}
 	<Notice tone="warn" class="mt-4">Your account cannot create sites.</Notice>
 {:else}

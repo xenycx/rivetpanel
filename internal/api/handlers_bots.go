@@ -141,6 +141,9 @@ func (s *panel) viewBot(c fiber.Ctx, b domain.Bot) botDTO {
 		}
 	}
 	d.Phase = phaseOf(b, s.runnerErr(c.Context()), s.bots.Notifier != nil)
+	if d.Tags == nil {
+		d.Tags = []string{} // callers that load tags replace this
+	}
 	return d
 }
 

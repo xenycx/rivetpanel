@@ -1,9 +1,10 @@
 # RivetPanel documentation
 
-RivetPanel is a control plane for Discord bots, Minecraft servers and static
-sites, with an embedded local runner and preview remote execution nodes. The
-current project version is **0.6.1**. Start with
-the guides below.
+RivetPanel is a control plane for Discord bots and other applications,
+Minecraft and Steam game servers, Docker containers and Compose stacks, and
+websites (static files, static builds and running web apps), with an embedded local runner and preview remote
+execution nodes. The authoritative project version is in the root `VERSION`
+file. Start with the guides below.
 
 ## Install and operate
 
@@ -11,6 +12,7 @@ the guides below.
 - [Container deployment](container.md) — GHCR image and Docker Compose
 - [Upgrading from BotPanel 0.4.0](upgrading-from-0.4.md) — clean-break migration and clean-up steps
 - [OAuth setup](oauth.md) — GitHub and Discord sign-in
+- [Single sign-on, passkeys and API clients](auth.md) — OpenID Connect, passkeys, scoped API clients
 - [Email (Mailgun)](email.md) — password reset, invitations, alert emails and security notices
 - [Notifications and support](support.md) — the bell, notification preferences and support tickets
 - [Backups](backup.md) — installation backup, verification, and restore
@@ -21,6 +23,7 @@ the guides below.
 
 - [Features](features.md) — supported behavior and limits
 - [Game servers](game-servers.md) — Minecraft server types, installation, allocations, blueprints and limits
+- [Containers and Compose stacks (preview)](containers.md) — run a Docker image, import a Compose file, the registry policy and what is refused
 - [Workspaces](workspaces.md) — teams, roles, and administrator oversight
 - [Roles, permissions and email verification](permissions.md) — custom account roles, delegated administration, the permission catalog and the unverified-account policy
 - [Bot Sites and static hosting](sites.md) — Page Studio, editable drafts, custom domains, DNS, and TLS through the proxy

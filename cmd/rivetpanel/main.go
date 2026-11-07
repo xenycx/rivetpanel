@@ -622,6 +622,13 @@ func serve(log *slog.Logger, logs *logbuf.Buffer) error {
 	if err != nil {
 		return fmt.Errorf("installation identity: %w", err)
 	}
+	// Container apps: the registry policy is checked when an app is created
+	// and again by the runner at every start.
+	var containerSvc *service.ContainerService
+	containerPolicy := service.ContainerPolicy{Registries: cfg.ContainerRegistries, MaxImageBytes: cfg.ContainerMaxImageBytes}
+	if cfg.Modules.Enabled("containers") {
+		containerSvc = &service.ContainerService{Bots: botSvc, Store: db, Policy: containerPolicy}
+	}
 	var aiDiagnostic service.DiagnosticRunner
 	var addonQueries *runner.AddonQuerier
 	if cfg.RunnerMode == config.RunnerLocal {
@@ -649,11 +656,14 @@ func serve(log *slog.Logger, logs *logbuf.Buffer) error {
 			Providers: gameProviders},
 			runner.Options{NodeID: domain.LocalNodeID, InstallID: installID, User: cfg.ContainerUser, WorkspaceOwner: cfg.WorkspaceOwner, Network: cfg.ContainerNetwork,
 				Workers: cfg.RunnerWorkers, BuildTimeout: cfg.BuildTimeout, MaxBuilds: cfg.MaxBuilds, AddonData: addonData,
-				AppsNetwork: appsNetwork(cfg)})
+				AppsNetwork: appsNetwork(cfg), CheckImage: containerPolicy.Check, MaxImageBytes: containerPolicy.MaxImageBytes})
 		if err != nil {
 			return fmt.Errorf("runner: %w", err)
 		}
 		botSvc.Notifier, botSvc.Purger, botSvc.Killer = rn, rn, rn
+		if containerSvc != nil {
+			containerSvc.Puller = rn
+		}
 		// Allocations and starts skip host ports that any running container
 		// on this Docker host publishes (another panel, any other tool).
 		botSvc.LocalPublished = dk.PublishedPorts
@@ -988,7 +998,7 @@ func serve(log *slog.Logger, logs *logbuf.Buffer) error {
 	app := api.New(api.Deps{Diagnostics: diagnostics, Log: log, Deploy: deploySvc, Backups: backupSvc, Stats: statsSrc, SFTP: sftpInfo, Analytics: analytics, PublicURL: cfg.PublicURL, DB: db, UI: webui.FS(), Auth: authSvc, Bots: botSvc, OAuth: oauthSvc,
 		Catalog: catalog, SecureCookies: cfg.Production, ProxyHeader: cfg.ProxyHeader, MetricsToken: cfg.MetricsToken, Modules: cfg.Modules, Checks: checks, Nodes: db, Files: wsm, MaxUpload: cfg.MaxUploadBytes,
 		Console: consoleSvc, BaseCtx: ctx, RunnerReady: runnerReady, Ops: ops, Audit: audit, Schedules: scheduler,
-		MFA: mfaSvc, Tokens: &service.TokenService{Store: db, Bots: botSvc}, Clients: &service.APIClientService{Store: db, Bots: botSvc}, Passkeys: &service.PasskeyService{Store: db, Auth: authSvc, MFA: mfaSvc, PublicURL: oauthSvc.CurrentPublicURL}, OIDC: &service.OIDCService{Store: db, Auth: authSvc, Keys: keys, PublicURL: oauthSvc.CurrentPublicURL, States: oauthSvc.States, Log: log}, Enrollment: enrollmentSvc, AgentControl: agentControl, GameAddress: gameAddress, Games: gameSvc, Router: router, Health: health,
+		MFA: mfaSvc, Tokens: &service.TokenService{Store: db, Bots: botSvc}, Clients: &service.APIClientService{Store: db, Bots: botSvc}, Passkeys: &service.PasskeyService{Store: db, Auth: authSvc, MFA: mfaSvc, PublicURL: oauthSvc.CurrentPublicURL}, OIDC: &service.OIDCService{Store: db, Auth: authSvc, Keys: keys, PublicURL: oauthSvc.CurrentPublicURL, States: oauthSvc.States, Log: log}, Enrollment: enrollmentSvc, AgentControl: agentControl, GameAddress: gameAddress, Games: gameSvc, Containers: containerSvc, Router: router, Health: health,
 		Settings: settingsSvc, Notifications: notices, Tickets: tickets, KB: kbSvc, Status: statusSvc, Usage: usageSvc, Mail: mailSvc, Resets: resetSvc, Verify: verifySvc, MailPrefs: db, Sites: sitesSvc, AI: aiSvc, Extensions: extSvc, Env: envSvc, Host: monitor, Logs: logs, LogArchive: logArchive, SetupCodeFile: setupCodeFile, OnSetupDone: func() { _ = os.Remove(setupCodeFile) }})
 	ln, err := net.Listen("tcp", cfg.Listen)
 	if err != nil {

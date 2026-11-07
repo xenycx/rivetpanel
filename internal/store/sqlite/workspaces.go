@@ -178,6 +178,10 @@ func (db *DB) DeleteWorkspace(ctx context.Context, id string) error {
 	if bots > 0 || sites > 0 {
 		return domain.Invalid("move or delete this workspace's apps and sites first")
 	}
+	// Empty stacks only group apps; the workspace's apps are gone by now.
+	if _, err := tx.ExecContext(ctx, `DELETE FROM stacks WHERE workspace_id = ?`, id); err != nil {
+		return mapErr(err)
+	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM workspaces WHERE id = ?`, id); err != nil {
 		return mapErr(err)
 	}
@@ -230,6 +234,10 @@ func (db *DB) DeleteWorkspaceCascade(ctx context.Context, id string) error {
 	}
 	if sites > 0 {
 		return domain.Invalid(fmt.Sprintf("%d sites are still being removed (a remote node may be offline); try again in a moment", sites))
+	}
+	// Empty stacks only group apps; the workspace's apps are gone by now.
+	if _, err := tx.ExecContext(ctx, `DELETE FROM stacks WHERE workspace_id = ?`, id); err != nil {
+		return mapErr(err)
 	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM workspaces WHERE id = ?`, id); err != nil {
 		return mapErr(err)
@@ -330,7 +338,11 @@ func (db *DB) ListWorkspaceBots(ctx context.Context, workspaceID string) ([]doma
 		}
 		out = append(out, b)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	rows.Close() // before the next query: the pool may hold one connection
+	return out, db.fillContainers(ctx, out)
 }
 
 // SetWorkspaceNode pins a workspace's new apps to a node; "" clears the pin

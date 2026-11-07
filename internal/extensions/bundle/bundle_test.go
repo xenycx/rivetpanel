@@ -258,6 +258,65 @@ func TestManifestValidation(t *testing.T) {
 	}
 }
 
+func TestExtensionPermission(t *testing.T) {
+	ok := map[string]func(*Manifest){
+		"nav extension": func(m *Manifest) { m.Contributes.Nav = []NavItem{{Label: "Tool", Page: "main", Perm: PermExtension}} },
+		"nav own ext id": func(m *Manifest) {
+			m.Contributes.Nav = []NavItem{{Label: "Tool", Page: "main", Perm: "ext:dev.example.tool"}}
+		},
+		"nav panel perm": func(m *Manifest) {
+			m.Contributes.Nav = []NavItem{{Label: "Tool", Page: "main", Perm: "extensions.manage"}}
+		},
+		"route extension": func(m *Manifest) {
+			m.Routes = append(m.Routes, Route{ID: "u", Method: "GET", Path: "/u", Auth: "user", Perm: PermExtension})
+		},
+		"route own ext id": func(m *Manifest) {
+			m.Routes = append(m.Routes, Route{ID: "u", Method: "GET", Path: "/u", Auth: "user", Perm: "ext:dev.example.tool"})
+		},
+	}
+	for name, edit := range ok {
+		t.Run(name, func(t *testing.T) {
+			m := testManifest()
+			edit(&m)
+			if err := m.Validate(); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+	refused := map[string]func(*Manifest){
+		"nav other extension": func(m *Manifest) {
+			m.Contributes.Nav = []NavItem{{Label: "Tool", Page: "main", Perm: "ext:dev.example.other"}}
+		},
+		"route other extension": func(m *Manifest) {
+			m.Routes = append(m.Routes, Route{ID: "u", Method: "GET", Path: "/u", Auth: "user", Perm: "ext:dev.example.other"})
+		},
+		"malformed ext id": func(m *Manifest) {
+			m.Contributes.Nav = []NavItem{{Label: "Tool", Page: "main", Perm: "ext:Tool"}}
+		},
+		"extension on a bot route": func(m *Manifest) { m.Routes[0].Perm = PermExtension },
+		"extension as bot_perm":    func(m *Manifest) { m.Routes[0].BotPerm = PermExtension },
+	}
+	for name, edit := range refused {
+		t.Run(name, func(t *testing.T) {
+			m := testManifest()
+			edit(&m)
+			if err := m.Validate(); err == nil {
+				t.Fatal("accepted")
+			}
+		})
+	}
+	m := testManifest()
+	if got := m.ResolvePerm(PermExtension); got != "ext:dev.example.tool" {
+		t.Fatalf("resolve extension = %q", got)
+	}
+	if got := m.ResolvePerm("bots.files"); got != "bots.files" {
+		t.Fatalf("resolve panel perm = %q", got)
+	}
+	if got := m.ResolvePerm(""); got != "" {
+		t.Fatalf("resolve empty = %q", got)
+	}
+}
+
 func TestRange(t *testing.T) {
 	r, err := ParseRange(">=0.9.0 <1.0.0")
 	if err != nil {

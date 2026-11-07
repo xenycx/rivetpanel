@@ -16,7 +16,7 @@ import (
 	"github.com/xenycx/rivetpanel/internal/service"
 )
 
-// Automation API: a small, documented surface (docs/openapi.yaml) for scripts
+// Automation API: a small, documented surface (internal/api/openapi.yaml, served at /api/v1/automation/openapi.yaml) for scripts
 // and CI, authenticated by scoped bearer tokens instead of the session cookie.
 // No cookie is read here, so browser CSRF does not apply; every call is also
 // authorized as the token's owner, so a token never exceeds the owner's

@@ -134,17 +134,17 @@
 </script>
 
 <SettingsSection
-	title="Databases"
-	description="Databases that run next to this {noun} in their own containers. They are reachable only from this {noun}, by host name, on a private network without internet access, and start and stop with the {noun}. Their data is kept outside the {noun}'s files and is not part of its backups."
+	title="Services"
+	description="Databases and caches that run next to this {noun} in their own containers. They are reachable only from this {noun}, by host name, on a private network without internet access, and start and stop with the {noun}. Their data is kept outside the {noun}'s files and is not part of its backups."
 >
 	{#if !available}
-		<Notice>This panel runs without Docker, so databases are not available.</Notice>
+		<Notice>This panel runs without Docker, so services are not available.</Notice>
 	{:else if list === null}
 		<Skeleton rows={2} />
 	{:else}
 		{#if error}<Notice tone="fail" class="mb-3" live>{error}</Notice>{/if}
 		{#if list.length === 0}
-			<p class="text-muted">No databases yet.</p>
+			<p class="text-muted">No services yet.</p>
 		{/if}
 		<ul class="grid gap-3">
 			{#each list as a (a.kind)}
@@ -190,8 +190,8 @@
 		</ul>
 
 		{#if admin}
-			<h3 class="mt-6 font-semibold">Add a database</h3>
-			{#if !stopped}<p class="mt-1 text-small text-warn">Stop the {noun} to add or remove databases.</p>{/if}
+			<h3 class="mt-6 font-semibold">Add a service</h3>
+			{#if !stopped}<p class="mt-1 text-small text-warn">Stop the {noun} to add or remove services.</p>{/if}
 			<div class="mt-3 grid gap-3 sm:grid-cols-2">
 				{#each kinds.filter((k) => !attached.has(k.id)) as k (k.id)}
 					<div class="flex flex-col rounded-tile border border-rule-soft bg-panel p-4">

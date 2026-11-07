@@ -109,7 +109,7 @@ type ExtensionService struct {
 	// seen holds signatures of verified public requests until they could no
 	// longer be accepted, so a captured request cannot be replayed.
 	seen map[string]time.Time
-	rate     map[string]*rateWindow
+	rate map[string]*rateWindow
 }
 
 type loadedExt struct {
@@ -1123,8 +1123,8 @@ func (s *ExtensionService) HandleRoute(ctx context.Context, actor *domain.User, 
 		if actor == nil {
 			return RouteResult{}, domain.ErrUnauthorized
 		}
-		if route.Perm != "" && !actor.Can(route.Perm) {
-			return RouteResult{}, &domain.PermissionError{Perm: route.Perm}
+		if p := m.ResolvePerm(route.Perm); p != "" && !actor.Can(p) {
+			return RouteResult{}, domain.Denied(*actor, p)
 		}
 		inv.user = actor
 	case "bot":
@@ -1331,7 +1331,9 @@ func (s *ExtensionService) Contributions(ctx context.Context, actor domain.User)
 			Nav: []bundle.NavItem{}, BotTabs: m.Contributes.BotTabs, BotCards: []ExtensionCardView{},
 			Consent: m.Contributes.UserConsent, Consented: []string{}, BotEnable: m.Contributes.BotEnablement}
 		for _, n := range m.Contributes.Nav {
-			if n.Perm == "" || actor.Can(n.Perm) {
+			if mayUse(actor, m, n.Perm) {
+				// The resolved name ("ext:<id>" for "extension") is what a role grants.
+				n.Perm = m.ResolvePerm(n.Perm)
 				c.Nav = append(c.Nav, n)
 			}
 		}
@@ -1350,6 +1352,30 @@ func (s *ExtensionService) Contributions(ctx context.Context, actor domain.User)
 		}
 		out = append(out, c)
 	}
+	return out, nil
+}
+
+// PermissionCatalog lists the per-extension permissions for the roles
+// editor: one "Use <name>" entry per installed extension (enabled, disabled
+// or failed), sorted by name, so a role can be prepared before the extension
+// is switched on. Only extensions that mark pages or routes with
+// "perm": "extension" make the permission matter; it is offered for every
+// installed one so the list does not depend on manifest details.
+func (s *ExtensionService) PermissionCatalog(ctx context.Context) ([]domain.PermissionInfo, error) {
+	exts, err := s.Store.ListExtensions(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := []domain.PermissionInfo{}
+	for _, e := range exts {
+		name := e.ID
+		if m, err := s.manifestFor(ctx, e.ID); err == nil && strings.TrimSpace(m.Name) != "" {
+			name = m.Name
+		}
+		out = append(out, domain.PermissionInfo{Name: domain.ExtensionPermission(e.ID), Group: domain.PermGroupExtensions,
+			Label: "Use " + name, Description: "See and use the pages of the " + name + " extension."})
+	}
+	sort.SliceStable(out, func(i, j int) bool { return strings.ToLower(out[i].Label) < strings.ToLower(out[j].Label) })
 	return out, nil
 }
 
@@ -1439,8 +1465,47 @@ func (s *ExtensionService) SetBotEnabled(ctx context.Context, actor domain.User,
 	return nil
 }
 
+// mayUse reports whether actor holds a nav item's or user route's declared
+// perm ("" needs nothing; "extension" is the extension's own ext:<id>).
+func mayUse(actor domain.User, m *bundle.Manifest, perm string) bool {
+	p := m.ResolvePerm(perm)
+	return p == "" || actor.Can(p)
+}
+
+// pageDenied applies the nav items' permissions to the page they open. Pages
+// carry no permission of their own: a page that one or more nav items open
+// is served only to an account that may see at least one of them (the same
+// rule Contributions applies to the links). A page a bot tab opens, or one no
+// nav item opens, is served to any signed-in account, as bot tabs are
+// checked per bot by their routes. The returned error names a permission the
+// account lacks, or is nil.
+func pageDenied(actor domain.User, m *bundle.Manifest, page string) error {
+	for _, t := range m.Contributes.BotTabs {
+		if t.Page == page {
+			return nil
+		}
+	}
+	var missing string
+	for _, n := range m.Contributes.Nav {
+		if n.Page != page {
+			continue
+		}
+		if mayUse(actor, m, n.Perm) {
+			return nil
+		}
+		if missing == "" {
+			missing = m.ResolvePerm(n.Perm)
+		}
+	}
+	if missing != "" {
+		return domain.Denied(actor, missing)
+	}
+	return nil
+}
+
 // UIPage returns a custom page with the hashes of its inline scripts, for
-// the sandbox Content-Security-Policy.
+// the sandbox Content-Security-Policy. A page behind a nav item needs that
+// nav item's permission (see pageDenied).
 func (s *ExtensionService) UIPage(ctx context.Context, actor domain.User, id, page string) ([]byte, []string, error) {
 	l, err := s.loadManifestFiles(ctx, id)
 	if err != nil {
@@ -1449,6 +1514,9 @@ func (s *ExtensionService) UIPage(ctx context.Context, actor domain.User, id, pa
 	p, ok := l.man.Page(page)
 	if !ok {
 		return nil, nil, domain.ErrNotFound
+	}
+	if err := pageDenied(actor, &l.man, page); err != nil {
+		return nil, nil, err
 	}
 	html := l.files[p.File]
 	return html, inlineScriptHashes(html), nil

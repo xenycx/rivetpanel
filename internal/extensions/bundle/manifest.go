@@ -183,6 +183,16 @@ type Contributes struct {
 	BotEnablement string `json:"bot_enablement,omitempty"` // the explanation shown on the toggle
 }
 
+// PermExtension, as a nav item's or user route's perm, stands for the
+// extension's own permission, ext:<id> (domain.ExtensionPermission), which a
+// role grants as "Use <extension name>". Built-in administrators always hold
+// it.
+const PermExtension = "extension"
+
+// NavItem is a link in the panel's navigation to one of the extension's UI
+// pages. The page is served only to accounts that may see a nav item opening
+// it (or, if a bot tab opens it too, to any signed-in account; see
+// ExtensionService.UIPage).
 type NavItem struct {
 	Label string `json:"label"`
 	Page  string `json:"page"`
@@ -226,7 +236,6 @@ var Events = map[string]string{
 }
 
 var (
-	idRe      = regexp.MustCompile(`^[a-z0-9]+(?:[.-][a-z0-9]+)+$`)
 	slugRe    = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,39}$`)
 	pathRe    = regexp.MustCompile(`^(/[a-z0-9_-]+)+$|^/$`)
 	hostRe    = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$`)
@@ -258,7 +267,7 @@ func (m *Manifest) Validate() error {
 	if m.ManifestVersion != ManifestVersion {
 		return bad("manifest_version %d is not supported (want %d)", m.ManifestVersion, ManifestVersion)
 	}
-	if len(m.ID) > 64 || !idRe.MatchString(m.ID) {
+	if !domain.ValidExtensionID(m.ID) {
 		return bad("id %q must be reverse-DNS style, lower case, at most 64 characters (e.g. dev.example.tool)", m.ID)
 	}
 	if strings.TrimSpace(m.Name) == "" || len(m.Name) > 60 {
@@ -381,8 +390,8 @@ func (m *Manifest) Validate() error {
 			if r.BotPerm != "" {
 				return bad("route %q: bot_perm needs auth \"bot\"", r.ID)
 			}
-			if r.Perm != "" && !domain.ValidPermission(r.Perm) {
-				return bad("route %q: unknown permission %q", r.ID, r.Perm)
+			if err := m.checkPerm(r.Perm); err != nil {
+				return bad("route %q: %v", r.ID, err)
 			}
 		case "bot":
 			if r.Perm != "" {
@@ -458,8 +467,8 @@ func (m *Manifest) Validate() error {
 		if strings.TrimSpace(n.Label) == "" || len(n.Label) > 30 || !pages[n.Page] {
 			return bad("nav item %q needs a label (at most 30 characters) and a declared ui page", n.Label)
 		}
-		if n.Perm != "" && !domain.ValidPermission(n.Perm) {
-			return bad("nav item %q: unknown permission %q", n.Label, n.Perm)
+		if err := m.checkPerm(n.Perm); err != nil {
+			return bad("nav item %q: %v", n.Label, err)
 		}
 	}
 	tabs := map[string]bool{}
@@ -499,6 +508,36 @@ func (m *Manifest) Validate() error {
 		return bad("bot_enablement explanation is at most 300 characters")
 	}
 	return nil
+}
+
+// checkPerm validates a nav item's or user route's perm: empty (any signed-in
+// account), "extension" or this extension's own ext:<id>, or a panel
+// permission. Another extension's permission is refused, so an extension can
+// never piggyback on access granted for a different one.
+func (m *Manifest) checkPerm(p string) error {
+	if p == "" || p == PermExtension {
+		return nil
+	}
+	if id, ok := domain.ExtensionOfPermission(p); ok {
+		if id != m.ID {
+			return fmt.Errorf("permission %q belongs to another extension; use %q for this extension's own", p, PermExtension)
+		}
+		return nil
+	}
+	if !domain.ValidPermission(p) {
+		return fmt.Errorf("unknown permission %q", p)
+	}
+	return nil
+}
+
+// ResolvePerm turns a declared perm into the permission checked at run time:
+// "extension" becomes ext:<id>; everything else is returned as is ("" means
+// no permission is needed).
+func (m *Manifest) ResolvePerm(p string) string {
+	if p == PermExtension {
+		return domain.ExtensionPermission(m.ID)
+	}
+	return p
 }
 
 var uiFileRe = regexp.MustCompile(`^ui/[a-z0-9][a-z0-9_-]{0,39}\.html$`)

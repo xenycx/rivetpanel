@@ -1,5 +1,6 @@
 import type { Bot } from '$lib/api/types';
 import { fmtBytes } from '$lib/api/client';
+import { resourceHref } from '$lib/api/games';
 
 export type Help = { title: string; body: string; action?: { label: string; href: string } };
 
@@ -44,11 +45,11 @@ export function helpFor(b: Bot, opts: { siteAdmin: boolean; buildMemory?: number
 	if (e.includes('killed: out of memory'))
 		return { title: 'The app used more memory than its limit', body: `It is limited to ${fmtBytes(b.memory_bytes)}. Raise the limit in Settings, or reduce what the app keeps in memory.`, action: settings };
 	if (e.includes('container failed to start') || e.includes('container could not be created'))
-		return { title: 'Docker could not start the container', body: 'Check the start command under Startup. If it looks right, the host may be out of resources.', action: { label: 'Open startup', href: `/bots/${b.id}?tab=startup` } };
+		return { title: 'Docker could not start the container', body: 'Check the start command under Configuration. If it looks right, the host may be out of resources.', action: { label: 'Open configuration', href: resourceHref(b, 'startup') } };
 	if (e.includes('runtime is not available'))
-		return { title: 'The runtime was removed', body: 'Choose another runtime under Startup, or ask the administrator to restore it.' };
+		return { title: 'The runtime was removed', body: 'Choose another runtime under Configuration, or ask the administrator to restore it.' };
 	if (b.phase === 'failed' && b.state_reason === 'gave_up')
-		return { title: 'It keeps crashing', body: 'Open the console to see the last output before each crash, fix the cause, then start it again. The restart budget is set under Startup.', action: { label: 'Open console', href: `/bots/${b.id}?tab=manage` } };
+		return { title: 'It keeps crashing', body: 'Open the console to see the last output before each crash, fix the cause, then start it again. The restart budget is set under Configuration.', action: { label: 'Open console', href: resourceHref(b, 'manage') } };
 	if ((b.phase === 'retrying' || b.phase === 'failed') && /exited with code [1-9]/.test(e))
 		return { title: 'The process crashed', body: `The console shows what it printed before exiting.${b.kind === 'game' || b.kind === 'web' ? '' : ' A wrong or missing token is the most common cause for a new Discord bot.'}`, action: { label: 'Open console', href: `/bots/${b.id}?tab=manage` } };
 	return null;

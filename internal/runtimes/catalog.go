@@ -200,3 +200,19 @@ func (c *Catalog) List() []Runtime {
 	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
 	return out
 }
+
+// ImageRuntimeID is the runtime recorded for container apps: their image is
+// their own (chosen by the person creating them, within the administrator's
+// registry policy) rather than an entry of this catalog.
+const ImageRuntimeID = "image"
+
+// ForImage is the runtime of a container app: its own image, no build stage,
+// no command allowlist (the command belongs to the image) and conservative
+// default limits.
+func ForImage(ref string) Runtime {
+	return Runtime{
+		ID: ImageRuntimeID, DisplayName: "Docker image", Image: ref, BuilderImage: ref,
+		Defaults:       Defaults{MemoryBytes: 512 << 20, NanoCPUs: 1e9, PidsLimit: 256},
+		MinMemoryBytes: 16 << 20,
+	}
+}

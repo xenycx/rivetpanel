@@ -242,7 +242,7 @@
 
 {#if !session.features.console}
 	<EmptyState title="Live output needs the Docker runner">
-		<p>This panel runs without Docker (RIVET_RUNNER_MODE=none), so bots cannot run here and there is no output to show.</p>
+		<p>This panel runs without Docker (RIVET_RUNNER_MODE=none), so apps cannot run here and there is no output to show.</p>
 	</EmptyState>
 {:else}
 	<!-- A terminal window: title bar with the stream's state and tools, the

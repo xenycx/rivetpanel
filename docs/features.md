@@ -15,61 +15,75 @@ twelve accent colours and four corner styles (Square, Subtle, Default,
 Rounded); Square removes rounding everywhere, including badges and avatars.
 These are per-browser preferences.
 
-- **New menu** (top bar, and the primary action of the overview header): everything the account's role and the panel's
-  enabled modules allow it to create, grouped: a Discord bot (GitHub,
-  template, ZIP upload, empty), a game server (Minecraft, Steam, every type),
-  a site, a workspace, a support ticket, API clients and keys, and for
-  administrators an invitation, a node, a server type (egg import), a help
-  article, a status incident and an announcement. The same entries appear as
-  "New …" actions in Go to (Ctrl+K), plus "Site from a template" and one
-  "New site from …" action per site template. The sidebar lists Overview, Game
-  servers, Bots, Sites, Templates, Activity and Support, then Settings and
-  Administration at the bottom; one **Help & resources** menu holds the
-  documentation, the help center, the public status page (when one is
-  published), the Automation API, Diagnostics (with `system.view`), this
-  product overview and the keyboard shortcuts. Notifications open from the
-  bell in the top bar.
+- **New menu** (top bar, and the primary action of the Overview and Apps
+  headers): the kinds of apps the account's role and the panel's enabled
+  modules allow, grouped as **Bot** (GitHub, template, empty), **Game
+  server** (Minecraft, Steam, every type), **Container** (Docker image,
+  Compose stack) and **Website** (upload files, GitHub, template), with a
+  link to **New** (`/new`), which asks "What are you running?" and explains
+  each kind. Account and administration chores (workspace, support ticket,
+  API client, invitation, node, server type, help article, status incident,
+  announcement) are not in the menu; they appear on `/new` under **Also** and
+  as "New …" actions in Go to (Ctrl+K). The sidebar lists Overview, Apps,
+  Activity and Support, then Settings and Administration at the bottom; one
+  **Help & resources** menu holds the documentation, the help center, the
+  public status page (when one is published), the Automation API,
+  Diagnostics (with `system.view`), this product overview and the keyboard
+  shortcuts. Notifications open from the bell in the top bar.
 - **Overview** (`/dashboard`): a page header with one **New** action, four
   capacity numbers with precise bars (administrators: host memory, CPU and
-  disk; everyone else: memory and CPU reserved and bots and servers against
-  the account limits; plus running out of total), then a table of game
-  servers (state, address, players, memory) and a table of Discord bots
-  (state, memory and CPU, restarts), the six most relevant of each, with
-  start/stop and an actions menu per row. Empty tables show a single quiet
-  row with a link to create one.
-- **Bots** (`/bots`): every Discord bot as a table with search, filters for state, runtime and owner, tags and
-  favourites (all kept in the URL), a summary of running / needs attention /
-  in progress / stopped bots, batch Start, Stop or Restart of up to 50 bots
-  with a review step and a result per bot, and a Ctrl+K "Go to" palette that
-  finds pages, administration sections, environment variables, docs, bots (and
-  their sections), sites, people, AI chats and actions. Several words narrow
-  the search; Tab switches scope; `>` lists actions only.
+  disk; everyone else: memory and CPU reserved and apps against the
+  workspace limits; plus running out of total), then the six most relevant
+  bots, game servers (with address and players) and containers, each with
+  start/stop and an actions menu per row, and how many websites are live.
+  Empty tables show a single quiet row with a link to create one.
+- **Apps** (`/apps`): everything the account runs. **All** shows bots, game
+  servers and containers in one table, then stacks and websites; **Bots**,
+  **Game servers**, **Containers** (with their stacks) and **Websites** show
+  one kind with the columns that fit it. The tables have search, filters for
+  state, runtime and owner, tags and favourites (all kept in the URL), a
+  summary of running apps, and batch Start, Stop or Restart of up to 50 apps
+  with a review step and a result per app. The former `/bots`, `/servers`
+  and `/sites` lists redirect here with their filter. A Ctrl+K "Go to"
+  palette finds pages, administration sections, environment variables,
+  docs, apps (and their sections), websites, people, AI chats and actions.
+  Several words narrow the search; Tab switches scope; `>` lists actions
+  only.
 - **New bot** (`/bots/new`): template, GitHub repository or empty bot; required
   values such as the token up front; review of memory, CPU and build memory;
   administrators can place an empty bot on an enabled, non-draining node.
-- **Bot and server page**: a header with the name, the exact lifecycle state
-  and Start, Restart, Stop and Kill; one compact line for a waiting, failing or
-  in-progress state; live CPU, memory, disk and network (plus a game server's
-  address and players) in one strip; and one row of tabs (Manage, Files,
-  Deploy, Startup, Packages, Env, Databases, Network, Page, Health, Backups,
-  Schedules, Access, Settings; game servers add Players, Properties and
-  Plugins or Mods and have no Deploy, Packages, Env, Page or Health tab). Tabs that do not fit the width move into a **More** menu,
-  and the open tab always stays visible. Memory and CPU are changed under
-  **Settings**. **Manage** is the default and holds what used to be Overview:
-  on wide screens a wide column with the console (with a line that goes to
-  standard input), the status, the first-run setup checklist (bots), recent
-  activity and the log history, and a narrow column with the source (for a
-  game server its type and installed version), backups and details. Phones
-  show one column, console first. A failed bot offers **Ask AI why**. Unsaved
-  edits are protected when navigating away; older `?tab=overview`,
-  `?tab=console`, `?tab=ai` and `?tab=analytics` links still work.
+  Containers are created at `/containers/new` and stacks at `/stacks/new`
+  (`containers.md`).
+- **App page** (bots, game servers and containers; a site's web app shows the
+  same tabs inside its site): a header with the name, the exact lifecycle
+  state and Start, Restart, Stop and Kill; one compact line for a waiting,
+  failing or in-progress state; live CPU, memory, disk and network (plus a
+  game server's address and players) in one strip. One tab registry gives
+  every kind the same names for the same things: **Overview** (console,
+  status, setup checklist for bots, recent activity, log history, source,
+  backups and details), **Files**, **Deployments**, **Packages**,
+  **Configuration** (a bot's command, build and restart policy; a game
+  server's type, version and JVM arguments; a container's image, command,
+  volumes and writable paths), **Variables**, **Network**, **Services**
+  (companion databases), **Backups**, **Schedules**, **Health**,
+  **Analytics**, and **Settings** and **Access** behind the gear. Kinds add
+  their own: Players, Properties and Mods or Plugins for game servers,
+  Public page for bots. With more than seven tabs the top row shows the
+  groups Overview, Code (Content for game servers), Configuration,
+  Services, Data and Observability, and the open group's tabs appear as a
+  second row. Memory and CPU are changed under **Settings**. Phones show one
+  column, console first. A failed app offers **Ask AI why**. Unsaved edits
+  are protected when navigating away; older `?tab=` names (`overview`,
+  `console`, `logs`, `deployments`, `configuration`, `variables`,
+  `databases`, `services`, `health`, `access` and others) still open the
+  right tab.
 - **Activity** (`/activity`): work (builds, deployments, backups, restores) and
   changes (who changed what; names only, never values).
-- **Workspace switcher** (sidebar): scopes the overview, Sites and new bots to
+- **Workspace switcher** (sidebar): scopes the Overview, Apps and new apps to
   one workspace or shows all of them (`workspaces.md`).
 - **Public page** (inside each bot): Page Studio for a generated bot site,
   opt-in public widgets, full site files, private insights and a cross-origin
-  preview. **Sites** (`/sites`) remains the workspace-wide inventory for sites,
+  preview. **Apps → Websites** is the workspace-wide inventory for sites,
   releases, rollback and custom domains (`sites.md`).
 - **Settings**: profile; appearance; workspaces and members; connected
   accounts; Security (password, two-step sign-in, sessions); SFTP keys and
@@ -83,7 +97,7 @@ These are per-browser preferences.
 
 ## Game servers (preview)
 
-Game servers → New server (also New → Game server in the top bar) is a
+New → Game server (also Apps → Game servers) is a
 four-step guided flow: pick the game from searchable, grouped cards with game
 icons; choose the version (latest stable by default, pre-releases on request)
 and the game's own settings; set the name, memory (with presets and the
@@ -124,14 +138,15 @@ and a failed creation is removed again through the agent. Modrinth plugins and
 mods for a remote game server are verified completely at the panel (CDN
 allowlist, 256 MiB limit, SHA-512) in a temporary file and only then streamed
 to the node. SFTP works for remote servers through the agent (the panel's disk
-is never used for them), and the Databases tab shows remote database states and
+is never used for them), and the Services tab shows remote database states and
 logs (agent protocol 6). The AI assistant's isolated diagnostics run on the
 server's node with the same sandbox; add-ons chosen at creation are checked
 for the node and their data is managed there; agents report CPU, memory and
 disk for node charts and the live stats strip; the panel refuses to stage a
 restore, deployment, change or large file on a node without enough free disk;
 and a GitHub push that arrives while a node is offline is deployed when it
-reconnects (agent protocol 7). Remote allocation probing is still local-only.
+reconnects (agent protocol 7). Before a game server on a node gets an
+automatic port, the node checks that the port can be bound (agent protocol 8).
 Installation,
 certificate enforcement and the full boundary are in [agents.md](agents.md).
 
@@ -207,9 +222,9 @@ retry time and a reason code. Live CPU, memory and disk gauges relay Docker's
 stats stream over Server-Sent Events. Disk is the size of the bot's workspace
 (there are no per-bot disk quotas) next to free space on the node.
 
-## Startup, runtime and auto-restart
+## Configuration, runtime and auto-restart
 
-**Startup** edits the runtime, the start command and an optional entrypoint.
+**Configuration** edits the runtime, the start command and an optional entrypoint.
 Only programs approved for the runtime (`runtimes/*.yaml`) are accepted, and
 the command runs directly, never through a shell.
 
@@ -310,7 +325,7 @@ also points to matches in the other tabs:
 - **Sites**: the five site templates with a scaled, sandboxed preview (no
   scripts; a larger preview switches between a template's pages), tags and
   **Create site** (`sites.create`), which asks for the name, address and
-  workspace like Sites → New site and publishes the template as the first
+  workspace like Apps → Websites → Upload files and publishes the template as the first
   release.
 
 Seven bot starters are embedded in the binary and copied into a new bot:
@@ -407,7 +422,7 @@ suggested build command before creating the bot**: it runs in the build
 container. Limits: archives up to 512 MiB compressed are read; at most 4,000
 paths and 48 MiB of source are inspected; 60 variables are listed.
 
-## Databases (add-ons)
+## Services (databases)
 
 A bot can run up to four companion databases next to it: **PostgreSQL 17**,
 **Redis 7**, **MongoDB 7** and **MariaDB 11**. Add them while creating a bot

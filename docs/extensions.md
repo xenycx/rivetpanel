@@ -41,10 +41,34 @@ Who may do what:
 | --- | --- |
 | Install, upgrade, switch version, uninstall, grant capabilities, trust or revoke publisher keys | Built-in administrators |
 | Turn installed extensions on and off, change settings, run jobs, view status | The `extensions.manage` permission |
+| See and use an extension's pages that it marks `"perm": "extension"` | Roles holding **Use <extension name>** (`ext:<extension id>`), see below |
 | Turn an extension on for one bot | People who may manage that bot's environment variables |
 | Allow an extension to act for them (ChatOps) | Each person, under **Settings → Extensions** |
 
 API clients cannot reach any of these routes; they are session-only.
+
+### Giving a role access to one extension
+
+Every installed extension has its own permission, `ext:<extension id>` (for
+example `ext:dev.rivetpanel.db-browser`). Administration → Roles lists it
+under **Extensions** as **Use <extension name>**, one entry per installed
+extension, while the extensions module is on. A custom role (or the built-in
+User role) that holds it sees and can use the nav items, pages and routes the
+extension marks with `"perm": "extension"`; nothing else about the extension
+changes (it still acts only with the capabilities an administrator granted and,
+for bots, with the person's own permissions).
+
+* It is a resource permission, not an administration one: it does not open
+  the administration area, does not make an account outrank another one and is
+  not part of the User role's factory defaults. Pages that configure an
+  extension should keep `"perm": "extensions.manage"`.
+* Built-in administrators hold every extension permission. A delegated role
+  manager can only grant the ones it holds itself, like any other permission.
+* Uninstalling an extension removes its permission from every role and API
+  client, so reinstalling it (or a different extension with the same id)
+  starts with nobody holding it. Turning an extension off, or the extensions
+  module, keeps the permission on the roles; it just has nothing to open.
+* An API client needs the permission in its own list too.
 
 ### Uploading extensions
 
@@ -243,11 +267,29 @@ provides a fake host for `go test`.
 | `runtime` | `{"memory_mb": 1–128, "timeout_ms": 100–30000}` |
 | `capabilities` | `[{name, reason, optional?, hosts?}]`; see below |
 | `settings` | `[{key, label, type, description?, required?, options?, default?, inject_hosts?}]`; type is `string`, `number`, `boolean`, `enum` or `secret` |
-| `routes` | `[{id, method, path, auth, perm?, bot_perm?, verify?, max_body?, mutating?}]`; `auth` is `user` (`/api/v1/ext/{id}{path}`), `bot` (`/api/v1/bots/{bot}/ext/{id}{path}`) or `public` (`/api/v1/ext-public/{id}{path}`, POST with `verify`) |
+| `routes` | `[{id, method, path, auth, perm?, bot_perm?, verify?, max_body?, mutating?}]`; `auth` is `user` (`/api/v1/ext/{id}{path}`), `bot` (`/api/v1/bots/{bot}/ext/{id}{path}`) or `public` (`/api/v1/ext-public/{id}{path}`, POST with `verify`). `perm` (user routes only) is described below; `bot_perm` (bot routes) is `view`, `console`, `power`, `files` or `manage_env` |
 | `jobs` | `[{id, every, timeout_ms?}]`; every 5 minutes to 7 days |
 | `events` | `bot.status` (for bots the extension is switched on for) |
-| `contributes` | `nav`, `bot_tabs`, `bot_cards`, `user_consent`, `bot_enablement` |
+| `contributes` | `nav` (`[{label, page, perm?}]`), `bot_tabs` (`[{id, label, page, bot_perm?}]`), `bot_cards`, `user_consent`, `bot_enablement` |
 | `ui` | `[{id, file: "ui/<name>.html"}]`; single-file pages |
+
+`perm` on a nav item or a `user` route is one of:
+
+| Value | Who passes |
+| --- | --- |
+| (absent) | Any signed-in account |
+| `"extension"` | Accounts whose role holds this extension's own permission, `ext:<id>` (**Use <name>** in the roles editor); built-in administrators always |
+| `"ext:<own id>"` | The same, spelled out |
+| A panel permission, e.g. `"extensions.manage"` | Accounts holding that permission |
+
+Another extension's `ext:` permission is refused when the manifest is read.
+The check runs on the server before any extension code: a nav item is only
+listed for accounts that pass it, a route refuses the others with `403`, and
+a page is only served to an account that passes the `perm` of at least one
+nav item opening it. Pages carry no permission of their own: a page that a
+bot tab opens, or that no nav item opens, is served to any signed-in account
+(bot tabs are checked per bot by their routes), so keep data behind routes
+with the right `perm` or `bot_perm`.
 
 ### Capabilities and host calls
 

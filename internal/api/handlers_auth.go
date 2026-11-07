@@ -69,7 +69,7 @@ func (s *panel) me(c fiber.Ctx) error {
 			"runner": s.bots.Notifier != nil, "console": s.console != nil, "stats": s.stats != nil, "files": s.files != nil,
 			"deploy": s.deploy != nil && s.oauth.Enabled("github"), "backups": s.backups != nil, "analytics": s.analytics != nil, "sftp": s.sftp != nil,
 			"operations": s.ops != nil, "oauth": s.oauth.AnyEnabled(), "schedules": s.schedules != nil, "mfa": s.mfa != nil, "automation": s.tokens != nil, "health": s.health != nil,
-			"sites": s.sites.Enabled(), "workspaces": true, "ai": s.ai != nil, "games": s.games != nil, "extensions": s.extensions != nil, "agents": s.enrollment != nil, "mail": s.mail.Enabled(c.Context()),
+			"sites": s.sites.Enabled(), "site_builds": s.sites.AppsEnabled(), "containers": s.containers != nil && s.containers.Policy.Enabled(), "workspaces": true, "ai": s.ai != nil, "games": s.games != nil, "extensions": s.extensions != nil, "agents": s.enrollment != nil, "mail": s.mail.Enabled(c.Context()),
 			// Public repositories deploy without GitHub sign-in; add-ons need the Docker runner.
 			"public_repos": s.deploy != nil, "addons": s.bots.AddonData != nil,
 			"api_clients": s.clients != nil, "passkeys": s.passkeys != nil, "usage": s.usage != nil,

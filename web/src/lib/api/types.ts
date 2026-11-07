@@ -24,12 +24,38 @@ export type Role = {
 	created_at_ms: number;
 	updated_at_ms: number;
 };
-export type PermissionInfo = { name: string; group: 'resources' | 'administration'; label: string; description: string };
+/** One permission of the roles editor's catalog; group "extensions" holds one ext:<id> entry per installed extension. */
+export type PermissionInfo = { name: string; group: 'resources' | 'administration' | 'extensions'; label: string; description: string };
 export type EmailVerification = { verified: boolean; withheld: string[]; available: boolean; pending_email: string; sent_at_ms: number };
 
 export type ModuleState = 'off' | 'preview' | 'stable';
 export type Module = { key: string; label: string; description: string; state: ModuleState; /** The built-in state, before RIVET_MODULES. */ default: ModuleState };
 
+/** A persistent folder of a container app: volumes/<name> in its files, mounted at path. */
+export type Volume = { name: string; path: string };
+/** How a container app's image runs. */
+export type ContainerSettings = {
+	/** "" runs as the panel's container user; otherwise a numeric uid:gid. */
+	user: string;
+	/** Small in-memory folders for images that write outside their volumes. */
+	writable: string[];
+	volumes: Volume[];
+	stack_id?: string;
+	service?: string;
+	depends_on: string[];
+};
+/** A stack of container apps imported from a Compose file. */
+export type Stack = {
+	id: string;
+	workspace_id: string;
+	owner_id: string;
+	name: string;
+	compose?: string;
+	created_at_ms: number;
+	updated_at_ms: number;
+	role: string;
+	services: Bot[];
+};
 export type Bot = {
 	id: string;
 	owner_id: string;
@@ -82,8 +108,10 @@ export type Bot = {
 	last_started_at_ms: number | null;
 	tags: string[];
 	favorite: boolean;
-	/** "bot" (an application such as a Discord bot), "game" (a game server) or "web" (a site's app). */
-	kind: 'bot' | 'game' | 'web';
+	/** "bot" (an application such as a Discord bot), "game" (a game server), "web" (a site's app) or "container" (its own Docker image). */
+	kind: 'bot' | 'game' | 'web' | 'container';
+	/** Container apps: how the image runs (kind "container" only). */
+	container?: ContainerSettings;
 	blueprint_id?: string;
 	blueprint_revision?: number;
 	/** Chosen image label; "" = automatic (decided when installing). */
