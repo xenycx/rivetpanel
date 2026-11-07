@@ -143,12 +143,7 @@ func (s *BackupService) runScheduled(ctx context.Context) {
 		return
 	}
 	// Bots with their own backup schedule are backed up by it, not here.
-	var own map[string]bool
-	if bs, ok := s.store().(interface {
-		BotsWithBackupSchedule(context.Context) (map[string]bool, error)
-	}); ok {
-		own, _ = bs.BotsWithBackupSchedule(ctx)
-	}
+	own := s.ownSchedules(ctx)
 	for _, b := range bots {
 		if ctx.Err() != nil {
 			return
@@ -179,6 +174,18 @@ func (s *BackupService) runScheduled(ctx context.Context) {
 		claim.Release()
 		s.trim(ctx, b.ID)
 	}
+}
+
+// ownSchedules lists bots with an enabled backup schedule of their own.
+func (s *BackupService) ownSchedules(ctx context.Context) map[string]bool {
+	bs, ok := s.store().(interface {
+		BotsWithBackupSchedule(context.Context) (map[string]bool, error)
+	})
+	if !ok {
+		return nil
+	}
+	own, _ := bs.BotsWithBackupSchedule(ctx)
+	return own
 }
 
 func (s *BackupService) trim(ctx context.Context, botID string) {
@@ -921,6 +928,7 @@ type Health struct {
 	IntervalMS      int64 // 0 = scheduled backups are off on this panel
 	Keep            int
 	Enabled         bool // this bot takes part in the schedule
+	OwnSchedule     bool // an enabled backup schedule of its own replaces the panel interval
 	LastSuccessMS   int64
 	LastScheduledMS int64
 	NextDueMS       int64
@@ -955,7 +963,8 @@ func (s *BackupService) Health(ctx context.Context, actor domain.User, botID str
 			h.LastFailure = &f
 		}
 	}
-	if h.IntervalMS > 0 && h.Enabled {
+	h.OwnSchedule = s.ownSchedules(ctx)[botID]
+	if h.IntervalMS > 0 && h.Enabled && !h.OwnSchedule {
 		h.NextDueMS = s.now().UnixMilli()
 		if h.LastScheduledMS > 0 {
 			h.NextDueMS = max(h.NextDueMS, h.LastScheduledMS+h.IntervalMS)

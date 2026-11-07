@@ -6,6 +6,19 @@ authoritative current version.
 
 ## Unreleased
 
+### Changed
+
+- **Automatic backups have a clear on/off switch** on each app's Backups tab.
+  They stay on by default for new and existing apps; turning them off (with a
+  confirmation) stops only the panel's scheduled backups for that app.
+  Existing backups are kept, and manual backups and the app's own backup
+  schedules keep working. The switch replaces the small "Include in scheduled
+  backups" checkbox and still needs app admin access. Panel-wide, setting
+  `RIVET_BACKUP_INTERVAL` to `0` turns automatic backups off for every app.
+- The Backups tab now says when an app's own backup schedule takes the place
+  of the panel's automatic backups, instead of showing a next due time that
+  would never run. The backup health response gains `own_schedule`.
+
 ## 1.0.5 - 2026-11-07
 
 ### Added

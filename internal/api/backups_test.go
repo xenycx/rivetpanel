@@ -10,6 +10,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/google/uuid"
 	"io"
 	"log/slog"
 	"net/http"
@@ -336,6 +337,31 @@ func TestBackupCapAndScheduling(t *testing.T) {
 	json.Unmarshal(owner.mustStatus(200, "GET", "/api/v1/bots/"+other+"/backups", nil), &l)
 	if len(l.Backups) != 0 {
 		t.Fatal("bot with auto_backup off was backed up")
+	}
+	// Automatic backups are on by default; health reports the switch, and an
+	// app's own backup schedule takes the place of the panel interval.
+	type health struct {
+		Enabled     bool  `json:"enabled"`
+		OwnSchedule bool  `json:"own_schedule"`
+		NextDueMS   int64 `json:"next_due_ms"`
+	}
+	healthOf := func(bot string) health {
+		var r struct{ Health health }
+		json.Unmarshal(owner.mustStatus(200, "GET", "/api/v1/bots/"+bot+"/backups", nil), &r)
+		return r.Health
+	}
+	if h := healthOf(id); !h.Enabled || h.OwnSchedule || h.NextDueMS == 0 {
+		t.Fatalf("default health = %+v, want enabled with a next due time", h)
+	}
+	if h := healthOf(other); h.Enabled || h.NextDueMS != 0 {
+		t.Fatalf("switched-off health = %+v, want disabled and nothing due", h)
+	}
+	if err := e.db.InsertSchedule(context.Background(), domain.Schedule{ID: uuid.NewString(), BotID: id,
+		OwnerID: e.userID("own@x.io"), Action: "backup", Spec: "0 3 * * *", Timezone: "UTC", Enabled: true}); err != nil {
+		t.Fatal(err)
+	}
+	if h := healthOf(id); !h.Enabled || !h.OwnSchedule || h.NextDueMS != 0 {
+		t.Fatalf("health with own schedule = %+v, want own_schedule and no panel due time", h)
 	}
 	// Orphaned backup directories of deleted bots are swept.
 	orphan := filepath.Join(dir, "99999999-0000-4000-8000-000000000000")

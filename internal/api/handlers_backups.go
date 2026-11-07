@@ -46,7 +46,7 @@ func (s *panel) listBackups(c fiber.Ctx) error {
 		lf = &d
 	}
 	return c.JSON(fiber.Map{"backups": out, "health": fiber.Map{
-		"interval_ms": h.IntervalMS, "keep": h.Keep, "enabled": h.Enabled, "last_success_ms": h.LastSuccessMS,
+		"interval_ms": h.IntervalMS, "keep": h.Keep, "enabled": h.Enabled, "own_schedule": h.OwnSchedule, "last_success_ms": h.LastSuccessMS,
 		"last_scheduled_ms": h.LastScheduledMS, "next_due_ms": h.NextDueMS, "last_failure": lf,
 		"total_bytes": h.TotalBytes, "count": h.Count, "limit": h.Limit, "manual_limit": h.ManualLimit,
 	}})

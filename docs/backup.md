@@ -35,6 +35,28 @@ point-in-time consistent copy. Container state and Docker logs are not backed
 up. Key rotation: add a new key, set `RIVET_ACTIVE_KEY_ID`, and keep the old
 key files for as long as any stored value uses them.
 
+## Per-app backups
+
+Each app's Backups tab creates, verifies, downloads and restores its own
+archives under `RIVET_BACKUP_DIR`. Three kinds exist:
+
+| Kind | When | Retention |
+| --- | --- | --- |
+| Automatic | Every `RIVET_BACKUP_INTERVAL` (24h by default) | `RIVET_BACKUP_KEEP` newest (7 by default) |
+| Manual | **Create backup**, the API or a schedule's `backup` action | Until deleted (up to the manual limit) |
+| Safety copy | Before every restore | Oldest removed first when the app is full |
+
+Automatic backups are **on by default** for every app. The **Automatic
+backups** switch on the Backups tab (app admins) turns them off for that one
+app: existing backups are kept, and manual backups, safety copies and the app's
+own backup schedules keep working. An app with an enabled backup schedule of
+its own (Schedules tab) is not also backed up on the panel interval. To turn
+automatic backups off for every app, set `RIVET_BACKUP_INTERVAL=0` under
+Admin, Environment and restart the panel. The API equivalent of the switch is
+`PATCH /api/v1/bots/{id}` with `{"auto_backup": false}`.
+
+## Remote nodes
+
 This installation backup only sees workspaces on the panel host. For servers
 assigned to `rivet-agent` nodes, use their manual or scheduled per-server
 backups as well: those archives stream into `RIVET_BACKUP_DIR` on the panel,

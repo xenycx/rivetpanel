@@ -112,7 +112,7 @@ convert databases created by the predecessor product. Start with a new
   later changes, `.gitignore`-aware and never force-pushed
 * Sub-user sharing with granular permissions; embedded SFTP server with API keys
 * Visual package manager (npm, pip, Cargo, Go modules), per-bot backups with
-  restore, bot-to-panel analytics API with discord.js / discord.py snippets,
+  restore (automatic backups on by default, switchable per app), bot-to-panel analytics API with discord.js / discord.py snippets,
   Discord notifications (`docs/features.md`)
 
 Architecture, deployment, API, and feature guides are collected in [`docs/`](docs/README.md).

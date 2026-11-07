@@ -342,6 +342,7 @@ export type BackupHealth = {
 	interval_ms: number;
 	keep: number;
 	enabled: boolean;
+	own_schedule: boolean;
 	last_success_ms: number;
 	last_scheduled_ms: number;
 	next_due_ms: number;

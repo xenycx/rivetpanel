@@ -10,6 +10,7 @@
 	import Menu, { type MenuItem } from '$lib/components/ui/Menu.svelte';
 	import Notice from '$lib/components/ui/Notice.svelte';
 	import Skeleton from '$lib/components/ui/Skeleton.svelte';
+	import Switch from '$lib/components/ui/Switch.svelte';
 
 	let { bot, stopped, admin, onSaved }: { bot: Bot; stopped: boolean; admin: boolean; onSaved: (b: Bot) => void } = $props();
 
@@ -146,15 +147,36 @@
 			toast(msg(e), 'fail');
 		}
 	}
-	async function toggleAuto(e: Event) {
-		const input = e.currentTarget as HTMLInputElement;
-		const on = input.checked;
+	// Automatic backups are on by default; turning them off keeps existing
+	// backups, manual backups and the app's own backup schedules.
+	let autoOn = $state(true);
+	let autoSaving = $state(false);
+	$effect(() => {
+		autoOn = bot.auto_backup;
+	});
+	async function toggleAuto() {
+		const on = autoOn;
+		if (!on) {
+			const ok = await confirmDialog({
+				title: 'Turn off automatic backups?',
+				body: `This ${noun} is no longer backed up on the panel's schedule. Existing backups are kept, and you can still create backups yourself or add a backup schedule.`,
+				confirmLabel: 'Turn off'
+			});
+			if (!ok) {
+				autoOn = true;
+				return;
+			}
+		}
+		autoSaving = true;
 		try {
 			onSaved(await api<Bot>('PATCH', `/bots/${bot.id}`, { auto_backup: on }));
+			toast(on ? 'Automatic backups turned on' : 'Automatic backups turned off', 'success');
 			await load();
 		} catch (err) {
 			toast(msg(err), 'fail');
-			input.checked = !on;
+			autoOn = !on;
+		} finally {
+			autoSaving = false;
 		}
 	}
 
@@ -167,6 +189,16 @@
 	}
 </script>
 
+{#snippet autoDetail()}
+	{#if !health?.enabled}
+		Not backed up on a schedule. Manual backups and backup schedules still work.
+	{:else if health.own_schedule}
+		This {noun}'s backup schedule takes their place.
+	{:else}
+		Every {fmtDuration(health.interval_ms)}, keeps {health.keep}. {health.next_due_ms <= now ? 'Next one is due now.' : `Next at ${fmtWhen(health.next_due_ms)}.`}
+	{/if}
+{/snippet}
+
 <!-- Protection first: when the last good copy was made and when the next one is due. -->
 <section aria-label="Backup health" class="grid gap-3 sm:grid-cols-3">
 	<div class="stat">
@@ -175,17 +207,19 @@
 		{#if health?.last_success_ms}<p class="text-small text-muted">{fmtWhen(health.last_success_ms)}</p>{/if}
 	</div>
 	<div class="stat">
-		<p class="text-small text-muted">Schedule</p>
+		<p class="mb-1 text-small text-muted">Automatic backups</p>
 		{#if !health}
 			<p class="text-muted">…</p>
 		{:else if !health.interval_ms}
 			<p class="font-medium">Off on this panel</p>
-			<p class="text-small text-muted">An administrator can turn on scheduled backups.</p>
-		{:else if !health.enabled}
-			<p class="font-medium">Off for this {noun}</p>
+			<p class="text-small text-muted">An administrator can turn them on with <code>RIVET_BACKUP_INTERVAL</code> under Admin, Environment.</p>
+		{:else if admin}
+			<Switch bind:checked={autoOn} disabled={autoSaving} label={autoOn ? 'On' : 'Off'} onchange={toggleAuto}>
+				{@render autoDetail()}
+			</Switch>
 		{:else}
-			<p class="font-medium">Every {fmtDuration(health.interval_ms)}, keeps {health.keep}</p>
-			<p class="text-small text-muted">{health.next_due_ms <= now ? 'Next one is due now.' : `Next at ${fmtWhen(health.next_due_ms)}`}</p>
+			<p class="font-medium">{health.enabled ? 'On' : 'Off'}</p>
+			<p class="text-small text-muted">{@render autoDetail()}</p>
 		{/if}
 	</div>
 	<div class="stat">
@@ -201,9 +235,6 @@
 
 <div class="mt-4 flex flex-wrap items-center gap-2">
 	<button class="btn btn-primary" onclick={openCreate}><Icon name="plus" />Create backup</button>
-	{#if admin && health?.interval_ms}
-		<label class="ml-1 flex items-center gap-2"><input type="checkbox" checked={bot.auto_backup} onchange={toggleAuto} />Include in scheduled backups</label>
-	{/if}
 	<span class="flex-1"></span>
 	{#if backups?.length}
 		<select class="field w-auto" bind:value={kind} aria-label="Show">
