@@ -759,6 +759,12 @@ func (r *Runner) startContainer(ctx context.Context, bot domain.Bot, id string, 
 			msg, holder := r.startErrorPortMessage(ctx, bot, port)
 			return r.blockPorts(ctx, bot, msg, holder, id)
 		}
+		if errors.Is(err, ErrNoContainer) && ctx.Err() == nil {
+			// The container, or something it references such as a network
+			// that was removed meanwhile, is gone: drop it so the next pass
+			// creates a fresh one instead of failing on the same ID forever.
+			_ = r.docker.Remove(ctx, id)
+		}
 		return r.fail(ctx, bot, "container failed to start", err, st)
 	}
 	info, err := r.docker.Inspect(ctx, id)

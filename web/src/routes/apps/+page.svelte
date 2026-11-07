@@ -6,6 +6,7 @@
 	import GameServerList from '$lib/components/apps/GameServerList.svelte';
 	import SiteList from '$lib/components/apps/SiteList.svelte';
 	import StackList from '$lib/components/apps/StackList.svelte';
+	import AppCatalog from '$lib/components/apps/AppCatalog.svelte';
 	import NewMenu from '$lib/components/NewMenu.svelte';
 
 	// Everything the account runs, in one place: bots, game servers,
@@ -78,6 +79,7 @@
 	{:else if kind === 'container'}
 		<AppList kinds={['container']} noun="containers" />
 		<StackList />
+		<AppCatalog limit={12} />
 	{:else if kind === 'web'}
 		<SiteList />
 	{/if}

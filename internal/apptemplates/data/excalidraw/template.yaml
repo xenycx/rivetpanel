@@ -1,0 +1,10 @@
+id: excalidraw
+name: Excalidraw
+tagline: Virtual whiteboard for sketching diagrams
+description: Sketch hand-drawn style diagrams and whiteboards in the browser; drawings stay in your browser or export to files.
+category: productivity
+website: https://excalidraw.com
+web: {service: app, port: 80, health: /}
+vars: []
+notes:
+  - Open ${APP_URL} and start drawing. Drawings are saved in your browser; export them to keep copies.

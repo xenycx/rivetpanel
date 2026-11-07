@@ -1,0 +1,22 @@
+services:
+  app:
+    image: gitea/gitea:1.27.3-rootless
+    user: "1000:1000"
+    ports: ["${APP_PORT}:3000"]
+    environment:
+      GITEA__security__INSTALL_LOCK: "true"
+      GITEA__security__SECRET_KEY: ${SECRET_KEY}
+      GITEA__security__INTERNAL_TOKEN: ${INTERNAL_TOKEN}
+      GITEA__server__ROOT_URL: ${APP_URL}/
+      GITEA__server__HTTP_PORT: "3000"
+      GITEA__server__DISABLE_SSH: "true"
+      GITEA__server__START_SSH_SERVER: "false"
+      GITEA__database__DB_TYPE: sqlite3
+      GITEA__database__PATH: /var/lib/gitea/data/gitea.db
+      GITEA__service__DISABLE_REGISTRATION: "false"
+      GITEA__openid__ENABLE_OPENID_SIGNIN: "false"
+    volumes: ["data:/var/lib/gitea", "config:/etc/gitea"]
+    mem_limit: 384m
+volumes:
+  data: {}
+  config: {}

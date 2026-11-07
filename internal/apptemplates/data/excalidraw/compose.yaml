@@ -1,0 +1,6 @@
+services:
+  app:
+    image: excalidraw/excalidraw:sha-4bfc5bb
+    ports: ["${APP_PORT}:80"]
+    tmpfs: [/var/cache/nginx, /var/run]
+    mem_limit: 64m

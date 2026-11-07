@@ -1,0 +1,25 @@
+services:
+  app:
+    image: n8nio/n8n:1.123.92
+    user: "1000:1000"
+    ports: ["${APP_PORT}:5678"]
+    environment:
+      N8N_ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+      N8N_SECURE_COOKIE: ${APP_SECURE}
+      N8N_HOST: ${APP_HOST}
+      N8N_PORT: "5678"
+      N8N_PROTOCOL: ${APP_SCHEME}
+      WEBHOOK_URL: ${APP_URL}/
+      N8N_EDITOR_BASE_URL: ${APP_URL}/
+      N8N_DIAGNOSTICS_ENABLED: "false"
+      N8N_VERSION_NOTIFICATIONS_ENABLED: "false"
+      N8N_PERSONALIZATION_ENABLED: "false"
+      N8N_RUNNERS_ENABLED: "true"
+      N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS: "false"
+      DB_SQLITE_POOL_SIZE: "2"
+      GENERIC_TIMEZONE: UTC
+    volumes: ["data:/home/node/.n8n", "cache:/home/node/.cache"]
+    mem_limit: 768m
+volumes:
+  data: {}
+  cache: {}

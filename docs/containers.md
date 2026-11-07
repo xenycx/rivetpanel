@@ -7,6 +7,10 @@ by service name. Both live under **Apps → Containers** next to bots, game
 servers and websites, and use the same console, files, variables, network,
 services, backups, schedules, analytics and access tabs.
 
+**One-click apps** install ready-made self-hosted apps (Ghost, Vaultwarden,
+n8n and more) as stacks with their database and sign-in already set up; see
+[One-click apps](#one-click-apps).
+
 Containers are a preview module (`containers`), on by default. Turn it off
 under Administration → Modules, or allow no registry
 (`RIVET_CONTAINER_REGISTRIES=`), to hide them.
@@ -62,6 +66,10 @@ Container apps run on the panel's own host; remote nodes do not run them
 yet. They count toward a workspace's **Bots** limit and its apps, memory and
 CPU limits. GitHub deployments, packages and build commands do not apply:
 the image is the code.
+
+Variables of a container app may use any name except `RIVET_*`, including
+`PATH` and `LD_*` (reserved for bots, whose runtime limits which commands
+run; a container runs whatever its image does anyway).
 
 ## Import a Compose file
 
@@ -124,6 +132,136 @@ service cannot be moved to another workspace or transferred on its own.
 Deleting the stack deletes every service with its files, volumes and
 backups.
 
+Each stack gets its own private Docker network, which takes a subnet from the
+Docker daemon's address pools. With Docker's defaults there are only about 30
+such subnets on a host (shared with every other Compose project), so a host
+running many stacks should give Docker smaller, more numerous subnets in
+`/etc/docker/daemon.json`, then restart Docker:
+
+```json
+{ "default-address-pools": [{ "base": "10.200.0.0/16", "size": 24 }] }
+```
+
+The panel removes a stack's network when the stack is deleted, and removes
+idle networks of stopped stacks; they are created again on the next start.
+
+## One-click apps
+
+**Apps → Containers** lists the catalog below your containers (also under
+**Templates → Apps** and **New → Container → One-click app**). Search or pick
+a category, choose an app, then:
+
+1. Give it a name and choose **where it opens**: a **web address** (a site of
+   this panel, such as `ghost.sites.example.com`, which can get its own
+   domain later) or **port only** (a free host port of the panel's range,
+   bound to 127.0.0.1 unless `RIVET_PORT_PUBLIC_BIND=1`).
+2. Fill in the few values the app cannot choose itself (usually none, or an
+   admin user name). Passwords, database passwords and secret keys are
+   generated on the server with `crypto/rand`; **More options** lets you set
+   them yourself.
+3. **Install.** The stack page shows the containers starting (the first
+   start pulls the images), then an **Open** button, the sign-in values with
+   a **Show** button (each reveal is audited like any variable reveal) and the
+   app's first steps.
+
+The catalog (25 apps):
+
+| Category | Apps |
+| --- | --- |
+| Publishing | Flarum, Ghost |
+| Productivity | Actual Budget, Excalidraw, Mealie, Memos, n8n, Stirling-PDF, Vikunja, Wiki.js |
+| Developer tools | CyberChef, Gitea, IT-Tools |
+| Monitoring | Gotify, ntfy, Umami, Uptime Kuma |
+| Reading | linkding, Miniflux |
+| Media and files | Navidrome |
+| Security | PrivateBin, SearXNG, Vaultwarden |
+| AI and agents | Herdr, ZeroClaw |
+
+Many apps create their administrator on the first visit (Ghost, Gitea,
+n8n, Uptime Kuma, Wiki.js, Memos and others) and a few start with a published
+default login (Mealie, Umami). With a public web address, open the app and
+finish that step right after installing, before someone else does; the app's
+notes say which step it needs.
+
+How it works and what it guarantees:
+
+* A template is a reviewed Compose file plus the variables it needs, embedded
+  in the panel (`internal/apptemplates/data/<id>/`). Installing it fills the
+  variables in and imports the file through the **same Compose import** as a
+  pasted file, so every container gets the same isolation: non-root user,
+  read-only root filesystem, no capabilities, `no-new-privileges`, memory, CPU
+  and process limits, and only allowed registries. This is enforced by the
+  application (the import refuses everything else) and the container runtime.
+* The stored Compose file keeps `${VAR}` placeholders; values live only in
+  each container's encrypted variables. Change them under the container's
+  Variables (stopped) like any app.
+* Images are pinned to exact versions. Updating an app means changing a
+  container's image under Configuration; read the app's upgrade notes first.
+* Data lives in the containers' volumes (`Files → volumes/…`) and is part of
+  their backups. Deleting the stack deletes the containers, their data and
+  the app's web address.
+* The installer reserves `APP_URL`, `APP_HOST`, `APP_PORT`, `APP_SCHEME`,
+  `APP_SECURE`, `APP_ORIGIN` and `STACK_NAME`; an app that must know its own
+  address (Ghost, Gitea, n8n…) gets it from `APP_URL`. Changing the address
+  after install is not offered yet: install the app again, or change
+  the address variables of its containers by hand.
+* An administrator can hide apps by narrowing `RIVET_CONTAINER_REGISTRIES`:
+  an app whose image comes from a registry that is not allowed is shown as
+  unavailable with the reason.
+
+**Trusted capabilities.** A built-in template may ask that one of its
+services gets back one or more of `CHOWN`, `SETUID`, `SETGID`,
+`DAC_OVERRIDE` and `FOWNER` (for images that cannot run otherwise). Only the
+template installer can grant them: a pasted Compose file still has `cap_add`
+refused, the API has no field for it, the Docker adapter drops any capability
+outside this list, the root filesystem stays read-only, `no-new-privileges`
+stays on and root (`user: 0`) is still refused. Changing such a container's
+image to another repository removes the capabilities. Enforced by the
+application and the container runtime, not by the kernel beyond Docker's own
+capability handling.
+
+### Web addresses for containers
+
+A one-click app installed with a web address is a site (Websites list) in
+**app** mode whose app is the template's web container. The container joins
+the shared apps network (`RIVET_APPS_NETWORK`, `rivetpanel-apps`) under a
+private alias, and the sites listener proxies the address to the container's
+port, with HTTPS, custom domains, the request body limit and the health check
+of any app site. The site does not own the container: deleting the site only
+removes the address (the container leaves the apps network and keeps
+running); deleting the stack deletes its sites. A container on the apps
+network can be reached by other site apps on that network, as for web apps.
+On a server behind a reverse proxy such as Traefik, route the sites domain
+(or each custom domain) to the sites listener as for every site.
+
+### Terminal
+
+Container apps have a **Terminal** tab (owners and administrators of the app,
+`full admin` on shared apps). It opens an interactive terminal (`docker exec`
+with a TTY) inside the running container: the container's own user,
+capabilities, read-only root filesystem and limits, never the host. One-click
+apps used from a terminal (Herdr) start their own command there; **New
+shell** opens `sh`. Every opened terminal is recorded in the audit log as
+`bot.terminal` with the command. Terminals close after 30 minutes without
+input. Changes outside volumes disappear when the container is recreated.
+
+### Testing one-click apps
+
+`tests/apps` installs apps on a running panel through its public API and
+checks each one end to end: every container reaches running and stays
+running, the web interface answers (or the terminal runs a command), it
+survives a stack restart, and the stack is deleted cleanly. Use a disposable
+panel with Docker:
+
+```bash
+RIVET_APPS_PANEL=http://127.0.0.1:8080 RIVET_APPS_EMAIL=admin@example.com \
+RIVET_APPS_PASSWORD=… RIVET_APPS=all go test -tags apps -count=1 -timeout 120m -v ./tests/apps
+```
+
+`RIVET_APPS=miniflux,ntfy` picks apps, `RIVET_APPS_ADDRESS=site` installs with
+a web address (needs site hosting), `RIVET_APPS_KEEP=1` keeps them installed.
+The run ends with a pass/fail table.
+
 ## API
 
 All routes need a signed-in session or an API client with the matching
@@ -139,7 +277,14 @@ permission; creating needs `bots.create`.
 | `GET /api/v1/stacks`, `GET /api/v1/stacks/{id}` | stacks with their services |
 | `PATCH /api/v1/stacks/{id}` | rename |
 | `POST /api/v1/stacks/{id}/start` (`stop`, `restart`) | power for every service |
-| `DELETE /api/v1/stacks/{id}` | delete the stack and its services |
+| `DELETE /api/v1/stacks/{id}` | delete the stack, its services and their web addresses |
+| `GET /api/v1/app-templates` | the one-click app catalog: each app's variables (never generated values), containers, memory, and whether this panel allows it |
+| `POST /api/v1/app-templates/{id}/install` | `name`, `workspace_id`, `values` (by variable name), `address` (`port` or `site`), `slug`, `domain_id`, `dry_run`; returns the plan, the `url` and (201) the stack |
+| `GET /api/v1/bots/{id}/terminal` | WebSocket: an interactive terminal in a running container app (`cmd` as a JSON list, `cols`, `rows`); binary frames carry keystrokes and output, text frames `{"type":"resize","cols":…,"rows":…}` |
+
+Stacks installed from a template also carry `template_id`, `template` (first
+steps, which variables are sign-in values and on which container, the web and
+console containers), `url` and `site_id`.
 
 Everything else (console, files, variables, ports, backups, power) uses the
 same `/api/v1/bots/{id}/…` routes as every app.

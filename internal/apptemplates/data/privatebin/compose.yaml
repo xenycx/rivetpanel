@@ -1,0 +1,9 @@
+services:
+  app:
+    image: privatebin/nginx-fpm-alpine:1.7.6
+    user: "65534:82"
+    ports: ["${APP_PORT}:8080"]
+    volumes: ["data:/srv/data"]
+    mem_limit: 128m
+volumes:
+  data: {}

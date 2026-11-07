@@ -1,0 +1,38 @@
+services:
+  app:
+    # Flarum 2 with PHP and every extension it needs. The image's own init
+    # (s6, nginx, php-fpm) needs root, so start.sh serves the code from the
+    # image with PHP's built-in server as the image's flarum user and keeps
+    # config, uploads and caches in the data volume.
+    image: crazymax/flarum:2.0.2
+    user: "1000:1000"
+    depends_on: [db]
+    entrypoint: ["sh", "/data/start.sh"]
+    ports: ["${APP_PORT}:8080"]
+    environment:
+      FLARUM_URL: ${APP_URL}
+      FLARUM_TITLE: ${FORUM_TITLE}
+      ADMIN_USERNAME: ${ADMIN_USERNAME}
+      ADMIN_EMAIL: ${ADMIN_EMAIL}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      DB_HOST: db
+      DB_NAME: flarum
+      DB_USER: flarum
+      DB_PASSWORD: ${DB_PASSWORD}
+      PHP_CLI_SERVER_WORKERS: "4"
+    volumes: ["data:/data"]
+    mem_limit: 256m
+  db:
+    image: mariadb:11.8.9
+    user: "999:999"
+    command: ["--innodb-buffer-pool-size=64M", "--innodb-log-file-size=32M", "--character-set-server=utf8mb4", "--collation-server=utf8mb4_unicode_ci"]
+    environment:
+      MARIADB_DATABASE: flarum
+      MARIADB_USER: flarum
+      MARIADB_PASSWORD: ${DB_PASSWORD}
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+    volumes: ["db:/var/lib/mysql"]
+    mem_limit: 256m
+volumes:
+  data: {}
+  db: {}

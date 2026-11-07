@@ -1,0 +1,12 @@
+id: linkding
+name: linkding
+tagline: Minimal self-hosted bookmark manager
+description: Save, tag and search your bookmarks, with page archiving and a browser extension.
+category: reading
+website: https://linkding.link
+web: {service: app, port: 9090, health: /health}
+vars:
+  - {name: ADMIN_USERNAME, label: Admin username, default: admin, required: true}
+  - {name: ADMIN_PASSWORD, label: Admin password, secret: true, credential: true, generate: {kind: password, length: 20}}
+notes:
+  - Sign in as ${ADMIN_USERNAME} with the admin password shown above, then save your first bookmark.

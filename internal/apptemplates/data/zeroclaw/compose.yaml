@@ -1,0 +1,17 @@
+services:
+  app:
+    image: ghcr.io/zeroclaw-labs/zeroclaw:v0.8.7
+    user: "65534:65534"
+    command: ["daemon"]
+    ports: ["${APP_PORT}:42617"]
+    environment:
+      # ZEROCLAW_<dotted config path, "__" as separator> overrides
+      # config.toml; only the listener is pinned here, the provider and model
+      # live in config.toml so the dashboard can change them.
+      ZEROCLAW_gateway__host: 0.0.0.0
+      ZEROCLAW_gateway__port: "42617"
+      ZEROCLAW_gateway__allow_public_bind: "true"
+    volumes: ["data:/zeroclaw-data"]
+    mem_limit: 256m
+volumes:
+  data: {}

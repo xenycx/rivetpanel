@@ -133,3 +133,26 @@ func TestConfigMapsEntrypointPortsAndNetwork(t *testing.T) {
 		t.Fatal("network none not applied")
 	}
 }
+
+// Only the trusted allowlist can be added back, whatever reaches the spec.
+func TestHostConfigFiltersCapabilities(t *testing.T) {
+	s := spec()
+	s.CapAdd = []string{"CHOWN", "SYS_ADMIN", "NET_ADMIN", "SETUID"}
+	h := HostConfig(s)
+	if strings.Join(h.CapAdd, ",") != "CHOWN,SETUID" || h.CapDrop[0] != "ALL" || !h.ReadonlyRootfs || h.SecurityOpt[0] != "no-new-privileges" {
+		t.Fatalf("caps %v drop %v", h.CapAdd, h.CapDrop)
+	}
+}
+
+// Extra writable paths are owned by the container's user, not by root.
+func TestHostConfigTmpfsOwnedByUser(t *testing.T) {
+	s := spec()
+	s.ExtraTmpfs = []string{"/var/cache/nginx"}
+	h := HostConfig(s)
+	if v := h.Tmpfs["/var/cache/nginx"]; !strings.Contains(v, "uid=65532,gid=65532") || !strings.Contains(v, "nosuid") {
+		t.Fatalf("tmpfs %q", v)
+	}
+	if strings.Contains(h.Tmpfs["/tmp"], "uid=") {
+		t.Fatalf("/tmp keeps its sticky shared mode: %q", h.Tmpfs["/tmp"])
+	}
+}

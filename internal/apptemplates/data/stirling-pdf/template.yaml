@@ -1,0 +1,11 @@
+id: stirling-pdf
+name: Stirling-PDF
+tagline: Merge, split, convert and edit PDFs
+description: A toolbox of PDF operations that run on your own server, so your documents never leave it.
+category: productivity
+website: https://www.stirlingpdf.com
+web: {service: app, port: 8080, health: /api/v1/info/status}
+vars: []
+notes:
+  - Open Stirling-PDF and pick a tool; it starts without a login, so keep it private or put it behind your own access control.
+  - This is the ultra-lite build; OCR and some conversions need the full image.

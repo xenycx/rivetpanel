@@ -216,7 +216,7 @@
 					<span>No {noun} in {scope?.personal ? 'your personal workspace' : (scope?.name ?? 'this workspace')} yet.</span>
 					<button class="link" onclick={() => selectWorkspace('all')}>Show all workspaces</button>
 				{:else if canDo('bots.create') && kinds.length === 1 && kinds[0] === 'container'}
-					<span>No containers yet. Run an image such as nginx or redis, or import a Compose file as a stack.</span>
+					<span>No containers yet. Pick a one-click app below, run an image such as nginx or redis, or import a Compose file.</span>
 					<a class="link" href="/containers/new">Run an image</a><a class="link" href="/stacks/new">Import a Compose file</a>
 				{:else if canDo('bots.create') && kinds.length === 1}
 					<span>No bots yet. A template comes with a working project and tells you which values to add.</span>

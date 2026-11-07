@@ -1,0 +1,12 @@
+id: ghost
+name: Ghost
+tagline: Publishing platform for blogs and newsletters
+description: Write and publish a professional blog or paid newsletter with the Ghost editor, themes and memberships.
+category: publishing
+website: https://ghost.org
+web: {service: app, port: 2368, health: /ghost/api/admin/site/}
+vars:
+  - {name: DB_PASSWORD, label: Database password, secret: true, advanced: true, generate: {kind: hex, length: 32}}
+notes:
+  - Open ${APP_URL}/ghost and create the owner account; the first visit sets it up.
+  - Your site is served at ${APP_URL}. Set up outgoing mail in Ghost's settings to send newsletters and staff invites.

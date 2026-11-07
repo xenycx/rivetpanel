@@ -88,6 +88,13 @@ type ContainerService struct {
 	Store  ContainerStore
 	Policy ContainerPolicy
 	Puller ImagePuller // nil without a local runner
+	// Sites gives one-click apps a web address (nil without site hosting).
+	Sites *SiteService
+	// PublicHost is the host name people reach published ports on when
+	// ports bind publicly ("" uses 127.0.0.1).
+	PublicHost string
+	// Terminal opens interactive terminals in containers (nil: none).
+	Terminal ContainerTerminal
 }
 
 // ContainerInput is a new container app.
@@ -258,11 +265,19 @@ func (c *ContainerService) create(ctx context.Context, actor domain.User, in Con
 	}
 	cfg, err := checkContainerConfig(domain.ContainerConfig{User: in.User, Writable: in.Writable, Volumes: in.Volumes,
 		StackID: stack.StackID, Service: stack.Service, DependsOn: stack.DependsOn})
+	if err == nil {
+		for _, c := range stack.CapAdd {
+			if !domain.TrustedCapabilities[c] {
+				return domain.Bot{}, domain.Invalid("capability " + c + " is not allowed")
+			}
+		}
+		cfg.CapAdd = stack.CapAdd
+	}
 	if err != nil {
 		return domain.Bot{}, err
 	}
 	for n, v := range in.Env {
-		if err := validateEnvName(n, false); err != nil {
+		if err := validateEnvNameFor(n, false, true); err != nil {
 			return domain.Bot{}, err
 		}
 		if err := validateEnvValue(v); err != nil {
@@ -369,6 +384,11 @@ func (c *ContainerService) Update(ctx context.Context, actor domain.User, id str
 			return domain.Bot{}, err
 		}
 	}
+	if len(cfg.CapAdd) > 0 && imageRepo(image) != imageRepo(b.ImageRef) {
+		// Extra capabilities were granted to the template's image, not to
+		// whatever image replaces it.
+		cfg.CapAdd = nil
+	}
 	if in.User != nil {
 		cfg.User = *in.User
 	}
@@ -461,4 +481,13 @@ func (c *ContainerService) autoPorts(ctx context.Context, in []PortInput) ([]Por
 		out[i].HostPort, used[next] = next, true
 	}
 	return out, nil
+}
+
+// imageRepo is an image reference without its tag or digest.
+func imageRepo(ref string) string {
+	named, err := reference.ParseNormalizedNamed(ref)
+	if err != nil {
+		return ref
+	}
+	return named.Name()
 }

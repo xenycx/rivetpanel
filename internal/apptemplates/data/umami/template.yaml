@@ -1,0 +1,13 @@
+id: umami
+name: Umami
+tagline: Simple, privacy-friendly web analytics
+description: Track visitors to your sites with a lightweight, cookie-free analytics dashboard you control.
+category: monitoring
+website: https://umami.is
+web: {service: app, port: 3000, health: /api/heartbeat}
+vars:
+  - {name: APP_SECRET, label: App secret, secret: true, advanced: true, generate: {kind: hex, length: 64}}
+  - {name: DB_PASSWORD, label: Database password, secret: true, advanced: true, generate: {kind: hex, length: 32}}
+notes:
+  - Sign in with the default login admin / umami, then change the password right away under Settings, Profile.
+  - Add your website under Settings, Websites and paste the tracking script into its pages.

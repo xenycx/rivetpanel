@@ -42,6 +42,7 @@ export function createOptions(): CreateOption[] {
 	}
 	if (session.features.containers && can('bots.create'))
 		out.push(
+			{ key: 'app-template', action: 'Install a one-click app', group: 'Container', label: 'One-click app', hint: 'Ghost, Vaultwarden, n8n, Gitea and more', icon: 'grid', href: '/apps?kind=container#catalog', words: 'one-click app template catalog self-hosted install ghost memos flarum vaultwarden n8n gitea uptime kuma umami miniflux wiki vikunja mealie ntfy searxng navidrome herdr zeroclaw' },
 			{ key: 'container', action: 'New container from an image', group: 'Container', label: 'Docker image', hint: 'Run an image from Docker Hub, GHCR or Quay', icon: 'box', href: '/containers/new', words: 'container docker image run nginx redis postgres ghcr quay' },
 			{ key: 'stack', action: 'Import a Compose file', group: 'Container', label: 'Compose stack', hint: 'Import docker-compose.yml as services', icon: 'layers', href: '/stacks/new', words: 'compose docker-compose stack services yaml import' }
 		);

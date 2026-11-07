@@ -670,7 +670,7 @@ func (s *BackupService) Restore(ctx context.Context, actor domain.User, botID, i
 			return domain.Bot{}, err
 		}
 		if raw, ok := meta["env.json"]; ok {
-			if envRows, err = s.parseEnv(botID, raw); err != nil {
+			if envRows, err = s.parseEnv(botID, raw, b.IsContainer()); err != nil {
 				return domain.Bot{}, err
 			}
 		} else {
@@ -762,7 +762,7 @@ func (s *BackupService) Restore(ctx context.Context, actor domain.User, botID, i
 	return s.store().GetBot(dctx, botID)
 }
 
-func (s *BackupService) parseEnv(botID string, raw []byte) ([]domain.EnvVar, error) {
+func (s *BackupService) parseEnv(botID string, raw []byte, container bool) ([]domain.EnvVar, error) {
 	var snap envSnapshot
 	if err := json.Unmarshal(raw, &snap); err != nil || snap.Version != 1 || snap.BotID != botID {
 		return nil, domain.Invalid("the backup's environment data does not belong to this app")
@@ -772,7 +772,7 @@ func (s *BackupService) parseEnv(botID string, raw []byte) ([]domain.EnvVar, err
 	}
 	out := make([]domain.EnvVar, 0, len(snap.Vars))
 	for _, v := range snap.Vars {
-		if err := validateEnvName(v.Name, false); err != nil {
+		if err := validateEnvNameFor(v.Name, false, container); err != nil {
 			return nil, domain.Invalid("the backup's environment data is invalid")
 		}
 		ct, e1 := base64.StdEncoding.DecodeString(v.Ciphertext)

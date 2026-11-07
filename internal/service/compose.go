@@ -37,6 +37,13 @@ type ComposeImport struct {
 	DryRun bool
 	// Start starts every service once the stack is created.
 	Start bool
+
+	// Set only by the app template installer (never from a request): its
+	// resolved variables, the template id and trusted extra capabilities
+	// per service.
+	vars       map[string]string
+	templateID string
+	capAdd     map[string][]string
 }
 
 // ComposeNote is one warning or error, for a service ("" = the whole file).
@@ -373,6 +380,9 @@ func (c *ContainerService) PlanCompose(ctx context.Context, actor domain.User, i
 		return plan, domain.Invalid("the Compose file must be a mapping with a services: section")
 	}
 	vars := parseDotEnv(in.Env)
+	for k, v := range in.vars {
+		vars[k] = v
+	}
 	missing := map[string]bool{}
 	interpolateNode(&doc, vars, missing)
 	root := doc.Content[0]
@@ -573,7 +583,7 @@ func (c *ContainerService) PlanCompose(ctx context.Context, actor domain.User, i
 			}
 		}
 		for k, v := range sp.env {
-			if err := validateEnvName(k, false); err != nil {
+			if err := validateEnvNameFor(k, false, true); err != nil {
 				plan.fail(name, "%s", err.Error())
 				continue
 			}
@@ -945,7 +955,7 @@ func (c *ContainerService) ImportCompose(ctx context.Context, actor domain.User,
 	}
 	now := s.now()
 	st := domain.Stack{ID: uuid.NewString(), WorkspaceID: wsID, OwnerID: actor.ID, Name: plan.Name, ComposeYAML: in.Compose,
-		CreatedAtMS: now, UpdatedAtMS: now}
+		TemplateID: in.templateID, CreatedAtMS: now, UpdatedAtMS: now}
 	if err := c.Store.CreateStack(ctx, st); err != nil {
 		return plan, err
 	}
@@ -965,7 +975,7 @@ func (c *ContainerService) ImportCompose(ctx context.Context, actor domain.User,
 		b, err := c.create(ctx, actor, ContainerInput{Name: sp.Name, WorkspaceID: wsID, Image: sp.Image, Command: sp.Command,
 			Entrypoint: sp.Entrypoint, User: sp.User, Writable: sp.Writable, Volumes: sp.Volumes, Ports: ports, Env: sp.env,
 			MemoryBytes: sp.MemoryBytes, NanoCPUs: sp.NanoCPUs, NetworkDisabled: sp.Offline, RestartNever: sp.Restart == domain.RestartNever},
-			domain.ContainerConfig{StackID: st.ID, Service: sp.Service, DependsOn: sp.DependsOn}, &yes)
+			domain.ContainerConfig{StackID: st.ID, Service: sp.Service, DependsOn: sp.DependsOn, CapAdd: in.capAdd[sp.Service]}, &yes)
 		if err != nil {
 			undo()
 			return plan, fmt.Errorf("service %s: %w", sp.Service, err)
@@ -1104,6 +1114,12 @@ func (c *ContainerService) DeleteStack(ctx context.Context, actor domain.User, i
 	ids, err := c.Store.StackMembers(ctx, id)
 	if err != nil {
 		return err
+	}
+	if c.Sites != nil {
+		// Web addresses first: they would otherwise outlive their app.
+		if err := c.Sites.deleteContainerSites(ctx, ids); err != nil {
+			return err
+		}
 	}
 	for _, bid := range ids {
 		if err := c.Bots.Delete(ctx, actor, bid); err != nil && !errors.Is(err, domain.ErrNotFound) {

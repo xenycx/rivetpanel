@@ -1,0 +1,12 @@
+id: mealie
+name: Mealie
+tagline: Recipe manager and meal planner
+description: Collect recipes from any website, plan your meals and build shopping lists.
+category: productivity
+website: https://mealie.io
+web: {service: app, port: 9000, health: /api/app/about}
+vars: []
+notes:
+  - "Sign in with the built-in admin account: changeme@example.com / MyPassword. Mealie cannot set these from the environment."
+  - Change that email and password right away under your profile (User menu, Profile), before exposing the app to anyone else.
+  - Sign-ups are closed; invite other people from Settings, then Users.

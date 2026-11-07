@@ -55,8 +55,9 @@ func specHash(role Role, imageRef string, argv []string, s ContainerSpec) string
 		KeepEntry   bool                `json:",omitempty"`
 		Tmpfs       []string            `json:",omitempty"`
 		JoinAliases map[string][]string `json:",omitempty"`
+		CapAdd      []string            `json:",omitempty"`
 	}{role, imageRef, argv, s.User, s.Network, s.WorkspaceHostPath, s.MemoryBytes, s.NanoCPUs, s.PidsLimit, s.TmpfsBytes, s.OpenStdin,
-		s.Entrypoint, s.Ports, s.Networks, s.Mounts, s.NetworkAliases, s.KeepImageEntrypoint, s.ExtraTmpfs, s.JoinAliases})
+		s.Entrypoint, s.Ports, s.Networks, s.Mounts, s.NetworkAliases, s.KeepImageEntrypoint, s.ExtraTmpfs, s.JoinAliases, s.CapAdd})
 	h := sha256.Sum256(b)
 	return hex.EncodeToString(h[:16])
 }

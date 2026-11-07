@@ -1,0 +1,12 @@
+services:
+  app:
+    image: actualbudget/actual-server:26.11.0-alpine
+    user: "1000:1000"
+    ports: ["${APP_PORT}:5006"]
+    environment:
+      ACTUAL_PORT: "5006"
+      ACTUAL_DATA_DIR: /data
+    volumes: ["data:/data"]
+    mem_limit: 256m
+volumes:
+  data: {}

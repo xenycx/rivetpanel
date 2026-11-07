@@ -1,0 +1,10 @@
+id: it-tools
+name: IT-Tools
+tagline: Handy online tools for developers
+description: Dozens of small utilities for developers and admins, such as converters, generators and encoders, that run in your browser.
+category: dev
+website: https://it-tools.tech
+web: {service: app, port: 80, health: /}
+vars: []
+notes:
+  - Open IT-Tools and search for a tool; everything runs in your browser and nothing is stored.

@@ -56,6 +56,7 @@ export const tabDefs: readonly TabDef[] = [
 	{ id: 'manage', label: 'Overview', icon: 'overview', group: 'overview', kinds: ['bot', 'game', 'web', 'container'], words: 'console status summary start stop restart logs output terminal activity source details' },
 	{ id: 'players', label: 'Players', icon: 'users', group: 'overview', kinds: ['game'], when: (c) => has(c, 'minecraft-players'), words: 'online whitelist ops ban kick' },
 	{ id: 'page', label: 'Public page', icon: 'globe', group: 'overview', kinds: ['bot'], perm: Perm.console, words: 'site studio widgets sdk' },
+	{ id: 'terminal', label: 'Terminal', icon: 'terminal', group: 'overview', kinds: ['container'], perm: Perm.admin, feature: 'terminal', words: 'shell exec tty bash sh command line herdr' },
 
 	{ id: 'files', label: 'Files', icon: 'folder', group: 'code', kinds: ['bot', 'game', 'web', 'container'], perm: Perm.files, feature: 'files', words: 'editor upload code data' },
 	{ id: 'deploy', label: 'Deployments', icon: 'rocket', group: 'code', kinds: ['bot', 'web'], perm: Perm.files, words: 'github push webhook release build rollback publish' },
@@ -72,7 +73,7 @@ export const tabDefs: readonly TabDef[] = [
 	// Companion database containers. A static site has nothing to connect them to.
 	{ id: 'addons', label: 'Services', icon: 'layers', group: 'services', kinds: ['bot', 'game', 'web', 'container'], when: (c) => c.kind !== 'web' || c.site?.mode === 'app', needsStop: true, words: 'postgres postgresql redis mongodb mariadb mysql database cache' },
 
-	{ id: 'backups', label: 'Backups', icon: 'archive', group: 'data', kinds: apps, perm: Perm.files, feature: 'backups', words: 'restore snapshot download' },
+	{ id: 'backups', label: 'Backups', icon: 'archive', group: 'data', kinds: [...apps, 'web'], perm: Perm.files, feature: 'backups', words: 'restore snapshot download automatic' },
 	{ id: 'schedules', label: 'Schedules', icon: 'clock', group: 'data', kinds: apps, feature: 'schedules', words: 'cron restart timer' },
 
 	// Game servers have no SDK heartbeat or probe: their health is the process

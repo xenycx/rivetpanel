@@ -1,0 +1,31 @@
+services:
+  app:
+    image: ghost:6.75.0-alpine
+    user: "1000:1000"
+    depends_on: [db]
+    ports: ["${APP_PORT}:2368"]
+    environment:
+      url: ${APP_URL}
+      NODE_ENV: production
+      database__client: mysql
+      database__connection__host: db
+      database__connection__user: ghost
+      database__connection__password: ${DB_PASSWORD}
+      database__connection__database: ghost
+    volumes: ["content:/var/lib/ghost/content"]
+    tmpfs: [/tmp]
+    mem_limit: 512m
+  db:
+    image: mysql:8.4.13
+    user: "999:999"
+    command: [mysqld, --performance-schema=OFF, --innodb-buffer-pool-size=96M, --innodb-log-buffer-size=8M, --max-connections=40]
+    environment:
+      MYSQL_DATABASE: ghost
+      MYSQL_USER: ghost
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+      MYSQL_RANDOM_ROOT_PASSWORD: "yes"
+    volumes: ["db:/var/lib/mysql"]
+    mem_limit: 512m
+volumes:
+  content: {}
+  db: {}

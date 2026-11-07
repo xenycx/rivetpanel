@@ -1,0 +1,11 @@
+id: uptime-kuma
+name: Uptime Kuma
+tagline: Self-hosted uptime monitoring
+description: Watch websites, ports and services and get alerted when they go down, with status pages you can share.
+category: monitoring
+website: https://uptime.kuma.pet
+web: {service: app, port: 3001, health: /}
+vars: []
+notes:
+  - Open Uptime Kuma and create the admin account on first visit.
+  - Add a monitor and a notification channel to get alerts.

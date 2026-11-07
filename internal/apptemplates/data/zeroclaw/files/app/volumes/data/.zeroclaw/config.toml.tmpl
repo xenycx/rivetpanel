@@ -1,0 +1,19 @@
+# ZeroClaw configuration, written once at install. Change the provider,
+# model and key later in the dashboard's settings; ZeroClaw keeps this file.
+schema_version = 3
+
+[gateway]
+host = "0.0.0.0"
+port = 42617
+allow_public_bind = true
+require_pairing = true
+
+[providers.models.${LLM_PROVIDER}.default]
+api_key = "${LLM_API_KEY}"
+model = "${LLM_MODEL}"
+
+[agents.default]
+model_provider = "${LLM_PROVIDER}.default"
+
+[tools]
+optional = ["*"]

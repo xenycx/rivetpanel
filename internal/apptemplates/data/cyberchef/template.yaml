@@ -1,0 +1,10 @@
+id: cyberchef
+name: CyberChef
+tagline: The cyber Swiss Army knife for data
+description: Encode, decode, hash, compress and analyse data in the browser with a drag-and-drop recipe builder.
+category: dev
+website: https://gchq.github.io/CyberChef
+web: {service: app, port: 8080}
+vars: []
+notes:
+  - Open the address; everything runs in your browser, so no data is sent to the server.

@@ -1,0 +1,12 @@
+id: gotify
+name: Gotify
+tagline: Self-hosted push notification server
+description: Send notifications from scripts and apps through a simple REST API and receive them in the web UI or Android app.
+category: monitoring
+website: https://gotify.net
+web: {service: app, port: 8080}
+vars:
+  - {name: ADMIN_PASSWORD, label: Admin password, secret: true, credential: true, generate: {kind: password, length: 20}}
+notes:
+  - Sign in as admin with the admin password shown above, then create an application to get a token.
+  - "Send a message with: curl \"${APP_URL}/message?token=APP_TOKEN\" -F title=Hi -F message=Hello"

@@ -1,8 +1,13 @@
 # Memory footprint
 
-**Target:** under 50 MB aggregate idle RSS for the panel and local runner. In
-this deployment profile the local runner runs **inside** the panel process, so
-that aggregate is one process. Each remote node adds its own `rivet-agent`
+**No memory target or ceiling.** The panel used to aim for under 50 MB of idle
+RSS and set a soft 48 MiB Go heap limit to stay there. Both are gone: the
+panel sets no memory limit of its own, so features such as one-click apps are
+not held back by a fixed budget. The measurements below are kept as a record of
+what the panel and local runner use when idle. Operators who want a ceiling can
+still set `GOMEMLIMIT` (a Go garbage-collector hint) or a systemd `MemoryMax`
+themselves. In this deployment profile the local runner runs **inside** the panel process, so
+panel and runner are one process. Each remote node adds its own `rivet-agent`
 process on that host and is measured separately.
 
 ## Method
@@ -87,8 +92,8 @@ verified by re-measurement:
    (`HASH_WORKERS`; login is also rate limited to 10/min/IP).
 2. When the last in-flight hash finishes, the hasher calls
    `debug.FreeOSMemory()`. RSS returns to about 25 MB (was 105 MB).
-3. A soft `debug.SetMemoryLimit(48 MiB)` (or `GOMEMLIMIT`) is applied when
-   unset. It is a GC pacing hint, not a cap.
+3. (Removed since.) A soft `debug.SetMemoryLimit(48 MiB)` used to be applied
+   when `GOMEMLIMIT` was unset; the panel no longer sets one.
 
 The remaining **transient** peak during a login is about 45 MB (one 19 MiB hash
 on top of the baseline). A deployment that must never exceed 50 MB at any
@@ -194,7 +199,7 @@ decompressor for each of thousands of entries.
    8 MiB of allocations in total.
 
 Not changed: `GOGC` (a lower value made no measurable difference to idle RSS),
-the 48 MiB soft memory limit, the SQLite pool size and the Argon2id
+the 48 MiB soft memory limit (removed later), the SQLite pool size and the Argon2id
 parameters.
 
 ### Results

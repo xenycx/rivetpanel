@@ -374,7 +374,8 @@ memory, CPU and process limits). An app:
 * must listen on `$PORT` (the site's port) on all interfaces; `$HOST` is
   `0.0.0.0`;
 * keeps persistent files in **`/data`** (`$DATA_DIR`): the folder survives
-  deployments and restarts, is included in backups, and can be browsed under
+  deployments and restarts, is included in the site's backups (Backups tab,
+  with an Automatic backups on/off switch), and can be browsed under
   Files as `.rivet-data`. Repositories can never write into it. Everything
   else in the checkout is replaced on each deployment;
 * can have a **release command** that runs before every start with the app's

@@ -1,0 +1,14 @@
+services:
+  app:
+    image: vaultwarden/server:1.37.5-alpine
+    ports: ["${APP_PORT}:8080"]
+    environment:
+      ROCKET_PORT: "8080"
+      DOMAIN: ${APP_URL}
+      ADMIN_TOKEN: ${ADMIN_TOKEN}
+      SIGNUPS_ALLOWED: "true"
+      WEBSOCKET_ENABLED: "true"
+    volumes: ["data:/data"]
+    mem_limit: 128m
+volumes:
+  data: {}

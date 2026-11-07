@@ -12,6 +12,7 @@
 	import Notice from '$lib/components/ui/Notice.svelte';
 	import TabBar from '$lib/components/ui/TabBar.svelte';
 	import Addons from '$lib/components/Addons.svelte';
+	import Backups from '$lib/components/Backups.svelte';
 	import Console from '$lib/components/Console.svelte';
 	import Deploy from '$lib/components/Deploy.svelte';
 	import Env from '$lib/components/Env.svelte';
@@ -140,6 +141,9 @@
 			<Env bot={app} running={!stopped} />
 		{:else if tab === 'addons'}
 			<Addons bot={app} {stopped} onChanged={onChanged} />
+		{:else if tab === 'backups'}
+			<p class="mb-3 text-small text-muted">Backups hold the {isApp ? "app's files, including its /data folder," : 'checkout of the repository'} and, if you choose, its variables. {isApp ? '' : 'Published releases are kept separately under Releases.'}</p>
+			<Backups bot={app} {stopped} admin={canAdmin} onSaved={() => onChanged()} />
 		{:else if tab === 'files'}
 			{#if isApp}<p class="mb-3 text-small text-muted">The checkout of the repository. <code>.rivet-data</code> is the app's <code>/data</code> folder: deployments never touch it and it is backed up with the rest.</p>{/if}
 			<Files botId={app.id} running={!stopped} rootLabel={isApp ? 'app' : 'checkout'} />

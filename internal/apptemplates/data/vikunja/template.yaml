@@ -1,0 +1,12 @@
+id: vikunja
+name: Vikunja
+tagline: To-do lists and projects for teams
+description: Plan tasks in lists, kanban boards and Gantt charts, and share them with your team.
+category: productivity
+website: https://vikunja.io
+web: {service: app, port: 3456, health: /api/v1/info}
+vars:
+  - {name: JWT_SECRET, label: Session signing secret, secret: true, advanced: true, generate: {kind: hex, length: 48}}
+notes:
+  - Open Vikunja and use Register to create your account; registration is open, so the first person to sign up becomes the first user.
+  - Once your team has accounts, disable sign-ups by setting VIKUNJA_SERVICE_ENABLEREGISTRATION to false in the app's environment and restarting.

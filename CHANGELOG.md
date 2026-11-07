@@ -6,8 +6,87 @@ authoritative current version.
 
 ## Unreleased
 
+## 1.1.0 - 2026-11-08
+
+### Added
+
+- **Backups for every site.** Sites built or run from GitHub have a Backups
+  tab on the site page (Data → Backups) with the same **Automatic backups**
+  on/off switch, manual backups, verify, download and restore as other apps;
+  they were already backed up on the panel's schedule. Sites made from
+  uploaded or edited files now get backups too: a **Backups** card archives
+  the published files on the panel's backup schedule (`RIVET_BACKUP_INTERVAL`,
+  only when the site changed, keeping `RIVET_BACKUP_KEEP`) or on demand (up to
+  10 manual backups), with its own on/off switch for site admins, download as
+  `.tar.gz`, and restore as a new release (the current one stays for
+  rollback). Archives live under `RIVET_BACKUP_DIR/sites/` and are removed with
+  the site. Migration `0063` adds `sites.auto_backup` and `site_backups`; API:
+  `GET`/`POST /api/v1/sites/{id}/backups`, `PUT /api/v1/sites/{id}/auto-backup`,
+  `GET …/backups/{backup}/download`, `POST …/backups/{backup}/restore` and
+  `DELETE …/backups/{backup}`.
+- **One-click apps**: Apps → Containers (also Templates → Apps and New →
+  Container → One-click app) has a searchable catalog of self-hosted apps: 25
+  apps, Actual Budget, CyberChef, Excalidraw, Flarum, Ghost, Gitea, Gotify,
+  Herdr, IT-Tools, linkding, Mealie, Memos, Miniflux, n8n, Navidrome, ntfy,
+  PrivateBin, SearXNG, Stirling-PDF, Umami, Uptime Kuma, Vaultwarden, Vikunja,
+  Wiki.js and ZeroClaw. Choose an app, give it a name and a web address (or a
+  port), and install: its database, admin account, passwords and secret keys
+  are set up on the server, and the app page shows an Open button, the sign-in
+  values behind Show and the first steps. Apps are reviewed Compose templates
+  installed through the normal Compose import, so they run under the same
+  container isolation; images are pinned to exact versions. Each app was
+  installed, opened, restarted and removed on a test panel before release.
+  Migration `0062` adds `stacks.template_id` and the `routable` and
+  `cap_add_json` columns of `bot_containers`.
+- **Web addresses for containers**: a one-click app installed with a web
+  address is a site that forwards to its web container, with the site's
+  HTTPS, custom domains and health check. Deleting the site keeps the app;
+  deleting the app removes its addresses.
+- **Terminal tab** for container apps: an interactive shell (or the app's own
+  command, such as Herdr) inside the running container, as the container's
+  own user. Owners and app administrators only; every opened terminal is in
+  the audit log as `bot.terminal`.
+- API: `GET /api/v1/app-templates`, `POST /api/v1/app-templates/{id}/install`
+  and the WebSocket `GET /api/v1/bots/{id}/terminal`; stacks gain
+  `template_id`, `template`, `url` and `site_id`.
+
+### Security
+
+- Built-in app templates may give a container back a few Linux capabilities
+  (only CHOWN, SETUID, SETGID, DAC_OVERRIDE and FOWNER). Pasted Compose files
+  and the API still cannot add any; the Docker adapter drops anything outside
+  that list, `no-new-privileges` and the read-only root filesystem stay, and
+  changing the image to another repository removes them.
+
+### Fixed
+
+- Deleting a stack no longer leaves its Docker network behind. Leaked
+  networks used up Docker's address pools (about 30 on a default daemon),
+  after which no new stack could start ("all predefined address pools have
+  been fully subnetted"). The runner now also removes idle stack networks it
+  created; `docs/containers.md` explains how to allow more networks.
+- A container whose start fails because Docker no longer finds it (or a
+  network it uses) is now recreated on the next attempt instead of failing
+  with "no such container" on every retry.
+- A container's in-memory writable paths are now owned by the container's
+  user, so a non-root image (nginx's cache folders, for example) can write to
+  them whatever the owner of that folder in the image.
+
+### Removed
+
+- The panel no longer sets a 48 MiB soft memory limit for itself, and the
+  "under 50 MB idle" target is gone from the README, the welcome page, the
+  social preview image, the systemd unit (`GOMEMLIMIT=48MiB`) and
+  `docs/footprint.md`. Operators who want a ceiling can still set
+  `GOMEMLIMIT` or a systemd `MemoryMax`.
+
 ### Changed
 
+- Container apps may now set `PATH` and `LD_*` variables (for example
+  linkding's `LD_SUPERUSER_NAME`). They stay reserved for bots and other
+  language-runtime apps, where they could get around the runtime's command
+  allowlist; a container already runs the image and command its owner chose.
+  `RIVET_*` stays reserved everywhere.
 - **Automatic backups have a clear on/off switch** on each app's Backups tab.
   They stay on by default for new and existing apps; turning them off (with a
   confirmation) stops only the panel's scheduled backups for that app.

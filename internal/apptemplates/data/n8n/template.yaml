@@ -1,0 +1,12 @@
+id: n8n
+name: n8n
+tagline: Workflow automation with a visual editor
+description: Connect apps and APIs with visual workflows, webhooks and schedules, hosted on your own server.
+category: productivity
+website: https://n8n.io
+web: {service: app, port: 5678, health: /healthz}
+vars:
+  - {name: ENCRYPTION_KEY, label: Encryption key, secret: true, advanced: true, generate: {kind: hex, length: 48}}
+notes:
+  - Open n8n and create the owner account on first visit.
+  - Webhook URLs use ${APP_URL}/; keep the encryption key safe, saved credentials cannot be read without it.

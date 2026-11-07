@@ -1,0 +1,17 @@
+id: flarum
+name: Flarum
+tagline: Fast, simple forum for your community
+description: Run a modern discussion forum with tags, mentions, likes and moderation tools, ready on first visit.
+category: publishing
+website: https://flarum.org
+web: {service: app, port: 8080, health: /}
+vars:
+  - {name: FORUM_TITLE, label: Forum title, default: My Forum, required: true}
+  - {name: ADMIN_USERNAME, label: Admin username, description: "Letters, digits, dashes and underscores.", default: admin, required: true}
+  - {name: ADMIN_EMAIL, label: Admin email, default: admin@example.com, required: true}
+  - {name: ADMIN_PASSWORD, label: Admin password, secret: true, credential: true, generate: {kind: password, length: 20}}
+  - {name: DB_PASSWORD, label: Database password, secret: true, advanced: true, generate: {kind: hex, length: 32}}
+  - {name: DB_ROOT_PASSWORD, label: Database root password, secret: true, advanced: true, generate: {kind: hex, length: 32}}
+notes:
+  - The first start installs the forum, which takes about a minute. Then sign in as ${ADMIN_USERNAME} with the admin password shown above.
+  - Set up outgoing email under Administration → Email so people can confirm their accounts and reset passwords.

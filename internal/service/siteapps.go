@@ -315,6 +315,9 @@ func (s *SiteService) DeployLatest(ctx context.Context, actor domain.User, id, s
 		}
 		return s.Deploy(ctx, actor, id)
 	}
+	if _, ok := s.containerBacked(ctx, st); ok {
+		return domain.Invalid("this site is the web address of a container app; update the app's image instead")
+	}
 	if s.Deploys == nil {
 		return domain.Invalid("deployments are not available on this panel")
 	}

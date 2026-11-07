@@ -19,9 +19,6 @@ RestartSec=3
 # Graceful shutdown finishes in-flight requests; bot containers keep running.
 TimeoutStopSec=20
 
-# Footprint: a soft Go heap ceiling (see docs/footprint.md). Not a hard cap.
-Environment=GOMEMLIMIT=48MiB
-
 # Sandboxing
 NoNewPrivileges=true
 ProtectSystem=strict

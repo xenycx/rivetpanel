@@ -862,7 +862,7 @@ func (s *BotService) putEnv(ctx context.Context, b domain.Bot, vars map[string]s
 	}
 	names := make([]string, 0, len(vars))
 	for n, v := range vars {
-		if err := validateEnvName(n, system); err != nil {
+		if err := validateEnvNameFor(n, system, b.IsContainer()); err != nil {
 			return err
 		}
 		if err := validateEnvValue(v); err != nil {
@@ -1076,6 +1076,23 @@ func (s *BotService) RevealEnv(ctx context.Context, actor domain.User, id, name 
 	if err != nil {
 		return "", err
 	}
+	rows, err := s.Store.ListEnv(ctx, b.ID)
+	if err != nil {
+		return "", err
+	}
+	for _, r := range rows {
+		if r.Name == name {
+			pt, err := s.Keys.Open(b.ID, r.Name, secrets.Sealed{Ciphertext: r.Ciphertext, Nonce: r.Nonce, KeyID: r.KeyID})
+			return string(pt), err
+		}
+	}
+	return "", domain.ErrNotFound
+}
+
+// envValue returns one variable's plaintext for the panel's own use (never
+// sent to a client unless the caller checked the env permission or the value
+// is a plain setting).
+func (s *BotService) envValue(ctx context.Context, b domain.Bot, name string) (string, error) {
 	rows, err := s.Store.ListEnv(ctx, b.ID)
 	if err != nil {
 		return "", err

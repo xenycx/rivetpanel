@@ -1,0 +1,11 @@
+id: navidrome
+name: Navidrome
+tagline: Your music collection, streamed anywhere
+description: Stream your own music library from the browser or any Subsonic-compatible app.
+category: media
+website: https://www.navidrome.org
+web: {service: app, port: 4533, health: /ping}
+vars: []
+notes:
+  - The first visit asks you to create the admin account.
+  - Upload music in this app's Files tab under volumes/music; Navidrome rescans automatically.

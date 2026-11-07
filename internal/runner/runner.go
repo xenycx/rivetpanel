@@ -484,6 +484,7 @@ func (r *Runner) resync(ctx context.Context) error {
 	}
 	_ = r.store.TouchNode(rctx, r.opts.NodeID, r.now().UnixMilli())
 	r.sweepDiagnostics(rctx)
+	r.sweepStackNetworks(rctx)
 
 	has := map[string]bool{}
 	for _, c := range conts {
@@ -622,8 +623,13 @@ func (r *Runner) Purge(ctx context.Context, botID string) error {
 	l := r.lockFor(botID)
 	l.Lock()
 	defer l.Unlock()
+	bot, loadErr := r.store.GetBot(ctx, botID)
 	if err := r.teardown(ctx, botID); err != nil {
 		return err
+	}
+	if loadErr == nil {
+		// The last service of a stack takes the stack's network with it.
+		r.removeStackNetwork(ctx, bot)
 	}
 	r.forget(botID)
 	return nil

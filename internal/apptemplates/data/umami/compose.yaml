@@ -1,0 +1,22 @@
+services:
+  app:
+    image: ghcr.io/umami-software/umami:3.4.1
+    depends_on: [db]
+    ports: ["${APP_PORT}:3000"]
+    environment:
+      DATABASE_URL: postgresql://umami:${DB_PASSWORD}@db:5432/umami
+      APP_SECRET: ${APP_SECRET}
+      DISABLE_TELEMETRY: "1"
+    mem_limit: 512m
+  db:
+    image: postgres:16.15-alpine
+    user: "70:70"
+    environment:
+      POSTGRES_USER: umami
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: umami
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes: ["db:/var/lib/postgresql/data"]
+    mem_limit: 256m
+volumes:
+  db: {}

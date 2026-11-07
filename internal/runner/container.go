@@ -59,6 +59,13 @@ func (r *Runner) applyContainer(bot domain.Bot, s *ContainerSpec, host string, p
 		}
 	}
 	s.ExtraTmpfs = append([]string(nil), c.Writable...)
+	s.CapAdd = trustedCaps(c.CapAdd)
+	if c.Routable && r.opts.AppsNetwork != "" && s.Network != "none" {
+		// A web address proxies to it: join the routable apps network under
+		// the alias the sites listener resolves.
+		s.Networks = append(s.Networks, r.opts.AppsNetwork)
+		s.JoinAliases = map[string][]string{r.opts.AppsNetwork: {AppNetworkAlias(bot.ID)}}
+	}
 	if c.StackID == "" {
 		return
 	}
@@ -70,7 +77,23 @@ func (r *Runner) applyContainer(bot domain.Bot, s *ContainerSpec, host string, p
 		return
 	}
 	s.Networks = append(s.Networks, stack)
-	s.JoinAliases = map[string][]string{stack: {c.Service}}
+	if s.JoinAliases == nil {
+		s.JoinAliases = map[string][]string{}
+	}
+	s.JoinAliases[stack] = []string{c.Service}
+}
+
+// trustedCaps keeps the capabilities of the trusted allowlist, in a stable
+// order (the list is part of the container's spec hash).
+func trustedCaps(in []string) []string {
+	var out []string
+	for _, c := range in {
+		if domain.TrustedCapabilities[c] {
+			out = append(out, c)
+		}
+	}
+	sort.Strings(out)
+	return out
 }
 
 // prepareContainer checks a container app's image against the panel's
@@ -91,6 +114,13 @@ func (r *Runner) prepareContainer(ctx context.Context, bot domain.Bot) (string, 
 		for _, v := range c.Volumes {
 			if err := dm.EnsureDir(bot.ID, filepath.Join(VolumesDir, v.Name)); err != nil {
 				return "a volume folder could not be created", err
+			}
+		}
+	}
+	if c.Routable && r.opts.AppsNetwork != "" && !bot.NetworkDisabled {
+		if an, ok := r.docker.(AppsNetworker); ok {
+			if err := an.EnsureAppsNetwork(ctx, r.opts.AppsNetwork); err != nil {
+				return "the apps network could not be created", err
 			}
 		}
 	}
@@ -172,6 +202,11 @@ func waitingMessage(deps []string) string {
 	return "waiting for " + strings.Join(deps, ", ") + " to run"
 }
 
+// StacksInUse is the optional store view the stack network sweep needs.
+type StacksInUse interface {
+	StacksInUse(ctx context.Context) (map[string]bool, error)
+}
+
 // StackStates is the optional store view stack ordering needs.
 type StackStates interface {
 	StackServiceStates(ctx context.Context, stackID string) (map[string]string, error)
@@ -188,6 +223,48 @@ func (r *Runner) removeStackNetwork(ctx context.Context, bot domain.Bot) {
 	}
 	if nw, err := r.networker(); err == nil {
 		_ = nw.RemoveNetwork(ctx, StackNetwork(bot.Container.StackID))
+	}
+}
+
+// sweepStackNetworks removes this installation's stack networks that no
+// container uses and whose stack has no service meant to run. Each network
+// takes a subnet from the daemon's limited address pools, so networks left
+// by deleted (or stopped) stacks must not pile up; a stopped stack's network
+// is created again when a service starts.
+func (r *Runner) sweepStackNetworks(ctx context.Context) {
+	if r.opts.InstallID == "" {
+		return // without an installation label the networks may be another panel's
+	}
+	in, ok := r.docker.(IdleNetworker)
+	if !ok {
+		return
+	}
+	nw, err := r.networker()
+	if err != nil {
+		return
+	}
+	// Which stacks are in use comes from the store, not from the resync's
+	// bot list (that list carries no container settings).
+	su, ok := r.store.(StacksInUse)
+	if !ok {
+		return
+	}
+	busy, err := su.StacksInUse(ctx)
+	if err != nil {
+		return
+	}
+	idle, err := in.IdleNetworks(ctx, map[string]string{LabelManaged: "true", LabelNetwork: "stack", LabelInstall: r.opts.InstallID})
+	if err != nil {
+		return
+	}
+	for _, name := range idle {
+		id, ok := strings.CutPrefix(name, "rivetpanel-stack-")
+		if !ok || busy[id] {
+			continue
+		}
+		if err := nw.RemoveNetwork(ctx, name); err != nil {
+			r.log.Debug("remove idle stack network", "network", name, "err", err)
+		}
 	}
 }
 

@@ -9,6 +9,7 @@
 	import { can, session } from '$lib/session.svelte';
 	import { loadWorkspaces } from '$lib/workspaces.svelte';
 	import NewSiteDialog from '$lib/components/NewSiteDialog.svelte';
+	import AppCatalog from '$lib/components/apps/AppCatalog.svelte';
 	import Dialog from '$lib/components/ui/Dialog.svelte';
 	import GameIcon from '$lib/components/ui/GameIcon.svelte';
 	import Icon, { type IconName } from '$lib/components/ui/Icon.svelte';
@@ -19,7 +20,7 @@
 	// Every starting point in one place: bot templates, game server types
 	// (built-in and imported eggs) and site templates. Each kind keeps its own
 	// loading and error state so one failing source does not hide the others.
-	type Kind = 'bots' | 'games' | 'sites';
+	type Kind = 'bots' | 'games' | 'apps' | 'sites';
 	type Load<T> = { list: T[] | null; error: string };
 
 	let bots = $state<Load<Template>>({ list: null, error: '' });
@@ -40,6 +41,7 @@
 	const tabs = $derived<{ id: Kind; label: string; icon: IconName; href: string }[]>([
 		{ id: 'bots', label: 'Bots', icon: 'terminal', href: '/templates' },
 		...(gamesOn ? [{ id: 'games' as Kind, label: 'Game servers', icon: 'gamepad' as IconName, href: '/templates?tab=games' }] : []),
+		...(session.features.containers ? [{ id: 'apps' as Kind, label: 'Apps', icon: 'box' as IconName, href: '/templates?tab=apps' }] : []),
 		...(sitesOn ? [{ id: 'sites' as Kind, label: 'Websites', icon: 'globe' as IconName, href: '/templates?tab=sites' }] : [])
 	]);
 	const tab = $derived.by<Kind>(() => {
@@ -180,7 +182,7 @@
 <header class="page-head">
 	<div class="min-w-0">
 		<h1 class="font-semibold">Templates</h1>
-		<p class="text-small text-muted">Start a bot, a game server or a website from a setup that already works. For your own image or Compose file, see <a class="link" href="/new">everything you can create</a>.</p>
+		<p class="text-small text-muted">Start a bot, a game server, a self-hosted app or a website from a setup that already works. For your own image or Compose file, see <a class="link" href="/new">everything you can create</a>.</p>
 	</div>
 	<label class="relative ml-auto w-full min-w-0 sm:w-72">
 		<span class="sr-only">Search templates</span>
@@ -299,6 +301,8 @@
 				{/each}
 			</ul>
 		{/if}
+	{:else if tab === 'apps'}
+		<AppCatalog heading={false} query={q} />
 	{:else if tab === 'sites'}
 		{#if sites.error}{@render retry(sites.error, loadSites)}{/if}
 		{#if sites.list === null}

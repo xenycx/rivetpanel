@@ -1,0 +1,23 @@
+services:
+  app:
+    image: ghcr.io/stirling-tools/stirling-pdf:3.3.0-ultra-lite
+    user: "1000:1000"
+    # The image's init script assumes root (it symlinks helpers into /usr/local/bin),
+    # which a read-only, non-root container cannot do, so start the app directly.
+    entrypoint: ["java", "-Xmx512m", "-XX:+ExitOnOutOfMemoryError", "-Djava.awt.headless=true", "-Dfile.encoding=UTF-8", "-Djava.io.tmpdir=/tmp", "-jar", "/app.jar"]
+    ports: ["${APP_PORT}:8080"]
+    environment:
+      DISABLE_ADDITIONAL_FEATURES: "true"
+      SECURITY_ENABLELOGIN: "false"
+      LANGS: en_GB
+      STIRLING_TEMPFILES_DIRECTORY: /tmp
+      TMPDIR: /tmp
+      TEMP: /tmp
+      TMP: /tmp
+    volumes: ["configs:/configs", "logs:/logs", "custom:/customFiles", "pipeline:/pipeline"]
+    mem_limit: 1g
+volumes:
+  configs: {}
+  logs: {}
+  custom: {}
+  pipeline: {}

@@ -1,0 +1,11 @@
+id: wikijs
+name: Wiki.js
+tagline: Modern, powerful wiki
+description: Write documentation and team knowledge in a fast wiki with Markdown, a visual editor, search and access rules.
+category: productivity
+website: https://js.wiki
+web: {service: app, port: 3000, health: /healthz}
+vars:
+  - {name: DB_PASSWORD, label: Database password, secret: true, advanced: true, generate: {kind: hex, length: 32}}
+notes:
+  - Open ${APP_URL} and finish the setup screen; the first visit creates the administrator account.

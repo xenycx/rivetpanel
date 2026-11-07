@@ -1,0 +1,28 @@
+services:
+  app:
+    image: ghcr.io/requarks/wiki:2.5.312
+    user: "1000:1000"
+    depends_on: [db]
+    ports: ["${APP_PORT}:3000"]
+    environment:
+      DB_TYPE: postgres
+      DB_HOST: db
+      DB_PORT: "5432"
+      DB_USER: wiki
+      DB_PASS: ${DB_PASSWORD}
+      DB_NAME: wiki
+    volumes: ["data:/wiki/data"]
+    mem_limit: 384m
+  db:
+    image: postgres:16.15-alpine
+    user: "70:70"
+    environment:
+      POSTGRES_USER: wiki
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: wiki
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes: ["db:/var/lib/postgresql/data"]
+    mem_limit: 256m
+volumes:
+  data: {}
+  db: {}

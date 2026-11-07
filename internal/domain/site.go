@@ -30,6 +30,9 @@ type Site struct {
 	CreatedAtMS     int64
 	UpdatedAtMS     int64
 	LogoUpdatedMS   int64 // when a custom logo was set (0 = none)
+	// AutoBackupOff stops scheduled backups of a files site (sites with an
+	// app unit use the unit's own switch).
+	AutoBackupOff bool
 
 	// AppID is the web unit (a bots row of KindWeb) that builds the site from
 	// its repository and, for app sites, runs it. Nil for uploaded sites.
@@ -159,3 +162,22 @@ type PublicSitePage struct {
 	WidgetsPublic                                             bool
 	Widgets                                                   []BotWidget
 }
+
+// SiteBackup is an archive of a files site's serving release.
+type SiteBackup struct {
+	ID          string
+	SiteID      string
+	Kind        string // auto | manual
+	ReleaseID   string
+	Label       *string
+	Files       int
+	Bytes       int64
+	SHA256      string
+	CreatedBy   *string
+	CreatedAtMS int64
+}
+
+// BacksUpFiles reports whether a site's backups are archives of its releases
+// (an uploaded or edited files site). Sites with an app unit are backed up
+// as that app; generated bot pages have nothing of their own to back up.
+func (s Site) BacksUpFiles() bool { return s.Mode == SiteModeFiles && s.AppID == nil }

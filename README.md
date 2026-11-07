@@ -34,6 +34,11 @@ convert databases created by the predecessor product. Start with a new
   capabilities, host namespaces, devices, the Docker socket and builds;
   containers run as a non-root user with a read-only root filesystem
   (`docs/containers.md`)
+* **One-click apps**: a catalog of self-hosted apps (Ghost, Vaultwarden, n8n,
+  Gitea, Uptime Kuma, Miniflux and more) installed as stacks with their
+  database and admin account set up, at a web address of the panel or a
+  port, plus an in-browser **Terminal** for container apps
+  (`docs/containers.md#one-click-apps`)
 * **Steam game servers** (preview): Valheim, Rust and Project Zomboid
   installed with an anonymous SteamCMD login, Steam A2S player status, and a
   Pterodactyl egg importer that turns eggs into reviewable blueprint drafts
@@ -186,7 +191,7 @@ Start at the [documentation index](docs/README.md). The project home is
 | **Every template built and run through the panel binary in real containers**, with an invalid token | discord.js (`TokenInvalid`), discord.py (`LoginFailure`), DiscordGo (`4004 Authentication failed`), JDA (Maven downloaded and verified, `InvalidTokenException`), Poise (`Sent invalid authentication`): each reached Discord's login |
 | Real browser (Playwright, headless Chromium), 30 checks | pass: OAuth buttons on the login page, template gallery, every bot tab, env reveal/hide/import, package search and add, startup/network/backup saves, telemetry key and SDK snippet, connected accounts, SFTP page and API key, no horizontal scroll at phone width, no unexpected console errors |
 | Real OpenSSH `sftp` client against the production binary | list, put, mkdir, rename, get, rm, rmdir work; root mkdir, deleting a bot folder and `../..` traversal are refused; a wrong password is rejected; `ssh host cmd` is refused |
-| Idle RSS, panel + in-process runner, default modules | **36.6–38.6 MiB** over three starts (target < 50 MB; 14.4–16.4 MiB anonymous, the rest binary pages); 39.5 MiB with one running bot; peak about 55 MiB during an Argon2id login; `docs/footprint.md` |
+| Idle RSS, panel + in-process runner, default modules | **36.6–38.6 MiB** over three starts (14.4–16.4 MiB anonymous, the rest binary pages); 39.5 MiB with one running bot; peak about 55 MiB during an Argon2id login; `docs/footprint.md` |
 
 **Not verified against the real services** (no credentials or accounts were
 available): the live GitHub and Discord OAuth exchanges, GitHub's webhook

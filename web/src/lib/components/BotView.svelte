@@ -227,6 +227,8 @@
 				{#snippet side()}{#if session.features.extensions}<ExtensionCards bot={bot!} />{/if}{/snippet}
 				{#snippet bottom()}{#if can(bot!, Perm.console)}<LogDays path="/bots/{bot!.id}/logs/days" filename="server-{bot!.id.slice(0, 8)}" label="Log history" empty="No day files yet. Console output is copied every few minutes while the {noun} runs." />{/if}{/snippet}
 			</Overview>
+		{:else if tab === 'terminal'}
+			{#await import('$lib/components/ContainerTerminal.svelte')}{@render tabLoading()}{:then { default: ContainerTerminal }}<ContainerTerminal bot={bot} />{:catch}{@render tabFailed()}{/await}
 		{:else if tab === 'page'}
 			{#await import('$lib/components/PageStudio.svelte')}{@render tabLoading()}{:then { default: PageStudio }}<PageStudio botId={id} botName={bot.name} canEdit={can(bot, Perm.files)} canAdmin={admin} {stopped} />{:catch}{@render tabFailed()}{/await}
 		{:else if tab === 'players'}

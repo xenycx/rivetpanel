@@ -1,0 +1,15 @@
+id: zeroclaw
+name: ZeroClaw
+tagline: Small, fast self-hosted AI assistant
+description: Chat with an AI agent that has memory, tools, schedules and chat-app channels, from a web dashboard backed by the model provider you choose.
+category: ai
+website: https://github.com/zeroclaw-labs/zeroclaw
+web: {service: app, port: 42617, health: /health}
+console: {service: app, command: [zeroclaw, gateway, get-paircode, --new]}
+vars:
+  - {name: LLM_PROVIDER, label: Model provider, description: "ZeroClaw's provider name, such as openrouter, anthropic, openai or ollama.", default: openrouter, required: true}
+  - {name: LLM_MODEL, label: Model, description: "A model of that provider, for example anthropic/claude-sonnet-4.5 on OpenRouter or claude-sonnet-4-5 on Anthropic.", default: anthropic/claude-sonnet-4.5, required: true}
+  - {name: LLM_API_KEY, label: Provider API key, description: Optional now; it can be added later in the dashboard., secret: true}
+notes:
+  - Open the address and pair the dashboard with the one-time code from the container's Logs, or open the terminal for a fresh code.
+  - Change the provider, model or API key later in the dashboard's configuration.

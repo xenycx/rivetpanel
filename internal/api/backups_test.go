@@ -508,3 +508,37 @@ func TestBackupLabelsVerificationAndReservedSlots(t *testing.T) {
 		}
 	}
 }
+
+// A site's app unit (kind web: a site built or run from GitHub) has the same
+// automatic backups and the same switch as every other app.
+func TestSiteAppAutomaticBackupSwitch(t *testing.T) {
+	e, bs, _ := backupEnv(t)
+	owner := e.user("site@x.io", domain.RoleUser)
+	id := owner.createBot("site-app")
+	if _, err := e.db.ExecContext(context.Background(), `UPDATE bots SET kind = 'web' WHERE id = ?`, id); err != nil {
+		t.Fatal(err)
+	}
+	base := "/api/v1/bots/" + id
+	var b botDTO
+	json.Unmarshal(owner.mustStatus(200, "PATCH", base, map[string]any{"auto_backup": false}), &b)
+	if b.Kind != "web" || b.AutoBackup {
+		t.Fatalf("after switching off: kind %q auto_backup %v", b.Kind, b.AutoBackup)
+	}
+	bs.RunScheduledForTest(context.Background())
+	var l struct {
+		Backups []backupDTO
+		Health  struct {
+			Enabled bool `json:"enabled"`
+		}
+	}
+	json.Unmarshal(owner.mustStatus(200, "GET", base+"/backups", nil), &l)
+	if len(l.Backups) != 0 || l.Health.Enabled {
+		t.Fatalf("switched-off site app: %d backups, enabled %v", len(l.Backups), l.Health.Enabled)
+	}
+	owner.mustStatus(200, "PATCH", base, map[string]any{"auto_backup": true})
+	bs.RunScheduledForTest(context.Background())
+	json.Unmarshal(owner.mustStatus(200, "GET", base+"/backups", nil), &l)
+	if len(l.Backups) != 1 || l.Backups[0].Kind != "auto" || !l.Health.Enabled {
+		t.Fatalf("switched-on site app: %+v enabled %v", l.Backups, l.Health.Enabled)
+	}
+}

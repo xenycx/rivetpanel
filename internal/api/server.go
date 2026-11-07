@@ -604,6 +604,7 @@ func (s *panel) routes(v1 fiber.Router) {
 		authed.Post("/sites/:sid/files/publish", s.publishSiteFiles)
 		authed.Post("/sites/:sid/deploy", s.deploySite)
 		authed.Post("/sites/:sid/releases/:rid/activate", s.activateRelease)
+		s.siteBackupRoutes(authed)
 		authed.Post("/sites/:sid/domains", s.addSiteDomain)
 		authed.Post("/sites/:sid/domains/:domain/verify", s.verifySiteDomain)
 		authed.Delete("/sites/:sid/domains/:domain", s.removeSiteDomain)

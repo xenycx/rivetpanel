@@ -1,0 +1,11 @@
+id: herdr
+name: Herdr
+tagline: Terminal workspace for AI coding agents
+description: Run Claude Code, Codex, OpenCode and other coding agents side by side in persistent terminal panes that keep working after you close the browser.
+category: ai
+website: https://herdr.dev
+console: {service: app, command: [herdr]}
+vars: []
+notes:
+  - Open the terminal to start Herdr; Ctrl+B Q detaches and the panes keep running. Opening the terminal again reattaches.
+  - "Install agents into your home folder from a Herdr pane, for example: npm install -g @openai/codex (Node.js and npm are included)."

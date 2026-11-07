@@ -1,0 +1,13 @@
+id: gitea
+name: Gitea
+tagline: Lightweight self-hosted Git service
+description: Host Git repositories with issues, pull requests and a package registry in a fast, single-binary forge.
+category: dev
+website: https://about.gitea.com
+web: {service: app, port: 3000, health: /api/healthz}
+vars:
+  - {name: SECRET_KEY, label: Secret key, secret: true, advanced: true, generate: {kind: hex, length: 64}}
+  - {name: INTERNAL_TOKEN, label: Internal token, secret: true, advanced: true, generate: {kind: base64url, length: 64}}
+notes:
+  - Open Gitea and choose Register; the first account you register becomes the administrator.
+  - SSH access is turned off, so clone and push over HTTP(S) at ${APP_URL}/.

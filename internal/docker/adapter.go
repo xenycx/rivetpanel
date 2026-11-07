@@ -518,10 +518,26 @@ func HostConfig(s runner.ContainerSpec) *container.HostConfig {
 		bind(m.Source, m.Target)
 	}
 	tmpfs := map[string]string{"/tmp": fmt.Sprintf("rw,nosuid,nodev,size=%d", s.TmpfsBytes)}
+	// Writable paths belong to the container's user: a tmpfs otherwise takes
+	// the owner and mode of the image's directory (often root, 0755), which
+	// a non-root process cannot write to.
+	owner := ""
+	if uid, gid, ok := strings.Cut(s.User, ":"); ok && isDigits(uid) && isDigits(gid) {
+		owner = fmt.Sprintf(",uid=%s,gid=%s", uid, gid)
+	}
 	for _, p := range s.ExtraTmpfs {
-		tmpfs[p] = fmt.Sprintf("rw,nosuid,nodev,size=%d", min(s.TmpfsBytes, 16<<20))
+		tmpfs[p] = fmt.Sprintf("rw,nosuid,nodev,size=%d%s", min(s.TmpfsBytes, 16<<20), owner)
+	}
+	// Only the trusted allowlist can be added back, whatever the spec says;
+	// no-new-privileges and the read-only root stay.
+	var capAdd []string
+	for _, c := range s.CapAdd {
+		if domain.TrustedCapabilities[c] {
+			capAdd = append(capAdd, c)
+		}
 	}
 	return &container.HostConfig{
+		CapAdd:         capAdd,
 		PortBindings:   bindings,
 		Mounts:         mounts,
 		NetworkMode:    container.NetworkMode(s.Network),
@@ -613,7 +629,36 @@ func (a *Adapter) RemoveNetwork(ctx context.Context, name string) error {
 	return err
 }
 
-var _ runner.Networker = (*Adapter)(nil)
+// IdleNetworks returns the networks carrying every label that no container
+// is attached to.
+func (a *Adapter) IdleNetworks(ctx context.Context, labels map[string]string) ([]string, error) {
+	ctx, cancel := within(ctx, opTimeout)
+	defer cancel()
+	f := filters.NewArgs()
+	for k, v := range labels {
+		f.Add("label", k+"="+v)
+	}
+	list, err := a.cli.NetworkList(ctx, network.ListOptions{Filters: f})
+	if err != nil {
+		return nil, err
+	}
+	var out []string
+	for _, n := range list {
+		info, err := a.cli.NetworkInspect(ctx, n.ID, network.InspectOptions{})
+		if err != nil {
+			continue
+		}
+		if len(info.Containers) == 0 {
+			out = append(out, info.Name)
+		}
+	}
+	return out, nil
+}
+
+var (
+	_ runner.Networker     = (*Adapter)(nil)
+	_ runner.IdleNetworker = (*Adapter)(nil)
+)
 
 // Logs follows a container's output as Docker's multiplexed stream, with
 // timestamps. The container must have Tty=false (the runner guarantees it).
@@ -725,4 +770,16 @@ func (a *Adapter) StreamStats(ctx context.Context, id string, fn func(domain.Res
 			return nil
 		}
 	}
+}
+
+func isDigits(s string) bool {
+	if s == "" {
+		return false
+	}
+	for _, r := range s {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
 }

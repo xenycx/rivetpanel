@@ -1,0 +1,17 @@
+services:
+  app:
+    image: vikunja/vikunja:2.8.0
+    user: "1000:1000"
+    ports: ["${APP_PORT}:3456"]
+    environment:
+      VIKUNJA_SERVICE_PUBLICURL: ${APP_URL}/
+      VIKUNJA_SERVICE_JWTSECRET: ${JWT_SECRET}
+      VIKUNJA_SERVICE_ENABLEREGISTRATION: "true"
+      VIKUNJA_DATABASE_TYPE: sqlite
+      VIKUNJA_DATABASE_PATH: /db/vikunja.db
+      VIKUNJA_FILES_BASEPATH: /files
+    volumes: ["db:/db", "files:/files"]
+    mem_limit: 256m
+volumes:
+  db: {}
+  files: {}

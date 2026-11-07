@@ -120,6 +120,9 @@ type ContainerSpec struct {
 	// service's name on its stack network).
 	JoinAliases map[string][]string
 	Health      []string // health-check command (exec form)
+	// CapAdd are capabilities added back after dropping all (built-in app
+	// templates only; the Docker adapter filters them again).
+	CapAdd []string
 }
 
 // Mount is a bind mount of a host directory.
@@ -214,6 +217,15 @@ type Networker interface {
 	RemoveNetwork(ctx context.Context, name string) error
 }
 
+// IdleNetworker lists managed networks that no container is attached to. It
+// is optional; without it idle stack networks are only removed when a stack
+// service is deleted.
+type IdleNetworker interface {
+	// IdleNetworks returns the names of networks carrying every given label
+	// that have no attached container.
+	IdleNetworks(ctx context.Context, labels map[string]string) ([]string, error)
+}
+
 // AliasConnector attaches a container to a network under host names. It is
 // optional; without it a stack service is reachable only by address.
 type AliasConnector interface {
@@ -234,4 +246,12 @@ type BuildRecorder interface {
 	BuildStage(ctx context.Context, id, stage string)
 	BuildOutput(id string) io.WriteCloser // nil when output is not retained
 	BuildFinished(ctx context.Context, id, status, code, msg string)
+}
+
+// TerminalSession is an interactive terminal (a TTY exec) in a container.
+type TerminalSession interface {
+	Read(p []byte) (int, error)
+	Write(p []byte) (int, error)
+	Close() error
+	Resize(cols, rows uint) error
 }

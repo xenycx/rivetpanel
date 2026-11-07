@@ -1,0 +1,10 @@
+services:
+  app:
+    image: neosmemo/memos:26.11.0
+    ports: ["${APP_PORT}:5230"]
+    environment:
+      MEMOS_DATA: /var/opt/memos
+    volumes: ["data:/var/opt/memos"]
+    mem_limit: 128m
+volumes:
+  data: {}

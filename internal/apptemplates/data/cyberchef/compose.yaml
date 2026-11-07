@@ -1,0 +1,6 @@
+services:
+  app:
+    image: ghcr.io/gchq/cyberchef:11.5.0
+    user: "101:101"
+    ports: ["${APP_PORT}:8080"]
+    mem_limit: 64m

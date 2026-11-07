@@ -55,7 +55,56 @@ export type Stack = {
 	updated_at_ms: number;
 	role: string;
 	services: Bot[];
+	/** The one-click app the stack was installed from ('' for a pasted Compose file). */
+	template_id: string;
+	template?: StackTemplate;
+	/** Where the app's web interface is reached (a web address or a published port). */
+	url?: string;
+	site_id?: string;
 };
+/** What a one-click app stack shows: first steps, sign-in values and where to open it. */
+export type StackTemplate = {
+	id: string;
+	name: string;
+	website: string;
+	notes: string[];
+	credentials: { label: string; bot_id: string; name: string }[];
+	web?: { service: string; port: number; health?: string; path?: string };
+	console?: { service: string; command?: string[] };
+	console_bot_id?: string;
+	web_bot_id?: string;
+};
+/** A value a one-click app asks for (or generates). */
+export type AppTemplateVar = {
+	name: string;
+	label: string;
+	description?: string;
+	default?: string;
+	required: boolean;
+	secret: boolean;
+	generate?: { kind: string; length: number };
+	credential?: boolean;
+	advanced?: boolean;
+};
+/** A one-click app of the catalog. */
+export type AppTemplate = {
+	id: string;
+	name: string;
+	tagline: string;
+	description: string;
+	category: string;
+	website: string;
+	web?: { service: string; port: number; health?: string; path?: string };
+	console?: { service: string; command?: string[] };
+	vars: AppTemplateVar[];
+	notes: string[];
+	services: number;
+	memory_bytes: number;
+	images: string[];
+	available: boolean;
+	reason?: string;
+};
+export type AppCatalog = { templates: AppTemplate[]; categories: string[]; sites: boolean; public_ports: boolean };
 export type Bot = {
 	id: string;
 	owner_id: string;
@@ -523,7 +572,27 @@ export const roleHelp: Record<WorkspaceRole, string> = {
 	viewer: 'Read-only: status and console output'
 };
 
+/** An archive of a files site's published files. */
+export type SiteBackup = { id: string; kind: 'auto' | 'manual'; release_id: string; label: string | null; files: number; bytes: number; sha256: string; created_at_ms: number };
+export type SiteBackupHealth = {
+	available: boolean;
+	reason?: string;
+	/** 0: automatic backups are off on this panel. */
+	interval_ms: number;
+	keep: number;
+	manual_limit: number;
+	/** This site takes part in the schedule. */
+	enabled: boolean;
+	/** The serving release is already backed up. */
+	up_to_date: boolean;
+	last_success_ms: number;
+	next_due_ms: number;
+	count: number;
+	total_bytes: number;
+};
 export type Site = {
+	/** Scheduled backups of a files site (an app site uses its app's switch). */
+	auto_backup: boolean;
 	id: string;
 	workspace_id: string;
 	workspace_name: string;

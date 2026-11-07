@@ -1,0 +1,11 @@
+services:
+  app:
+    image: louislam/uptime-kuma:2.5.9-slim-rootless
+    user: "1000:1000"
+    ports: ["${APP_PORT}:3001"]
+    environment:
+      UPTIME_KUMA_DB_TYPE: sqlite
+    volumes: ["data:/app/data"]
+    mem_limit: 384m
+volumes:
+  data: {}

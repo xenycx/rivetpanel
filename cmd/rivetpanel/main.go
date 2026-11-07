@@ -463,12 +463,6 @@ func serve(log *slog.Logger, logs *logbuf.Buffer) error {
 	// Before the heap grows: keep it out of transparent huge pages (see
 	// memory_linux.go).
 	thpOff := disableTransparentHugePages()
-	// A soft ceiling makes the collector work harder near the footprint target.
-	// It is not a hard cap (stacks, cgo-free runtime overhead and mapped files
-	// are outside it); an explicit GOMEMLIMIT always wins.
-	if os.Getenv("GOMEMLIMIT") == "" {
-		debug.SetMemoryLimit(48 << 20)
-	}
 	cfg, err := config.LoadEnv()
 	if err != nil {
 		return fmt.Errorf("configuration: %w", err)
@@ -628,6 +622,9 @@ func serve(log *slog.Logger, logs *logbuf.Buffer) error {
 	containerPolicy := service.ContainerPolicy{Registries: cfg.ContainerRegistries, MaxImageBytes: cfg.ContainerMaxImageBytes}
 	if cfg.Modules.Enabled("containers") {
 		containerSvc = &service.ContainerService{Bots: botSvc, Store: db, Policy: containerPolicy}
+		if u, err := url.Parse(cfg.PublicURL); err == nil {
+			containerSvc.PublicHost = u.Hostname()
+		}
 	}
 	var aiDiagnostic service.DiagnosticRunner
 	var addonQueries *runner.AddonQuerier
@@ -663,6 +660,7 @@ func serve(log *slog.Logger, logs *logbuf.Buffer) error {
 		botSvc.Notifier, botSvc.Purger, botSvc.Killer = rn, rn, rn
 		if containerSvc != nil {
 			containerSvc.Puller = rn
+			containerSvc.Terminal = dk
 		}
 		// Allocations and starts skip host ports that any running container
 		// on this Docker host publishes (another panel, any other tool).
@@ -776,7 +774,9 @@ func serve(log *slog.Logger, logs *logbuf.Buffer) error {
 		}
 		sitesSvc = &service.SiteService{Store: db, Bots: botSvc, OAuth: oauthSvc, GH: &github.Client{}, Dir: cfg.SitesDir,
 			BaseURL: cfg.SitesBaseURL, ExtraDomains: cfg.SitesDomains, DNSTarget: cfg.SitesDNSTarget, PanelHost: panelHost, PanelURL: cfg.PublicURL, MaxBytes: cfg.SiteMaxBytes,
-			Log: log, Deploys: deploySvc, Health: health}
+			Log: log, Deploys: deploySvc, Health: health,
+			// Files sites are archived on the same schedule as apps.
+			BackupDir: cfg.BackupDir, BackupInterval: cfg.BackupInterval, BackupKeep: cfg.BackupKeep, MinFreeDisk: cfg.MinFreeDisk}
 		if rn != nil {
 			// Sites are built and run by the panel's own runner.
 			sitesSvc.Builder = rn
@@ -784,6 +784,10 @@ func serve(log *slog.Logger, logs *logbuf.Buffer) error {
 		}
 		if err := sitesSvc.Start(ctx); err != nil {
 			return err
+		}
+		if containerSvc != nil {
+			// One-click apps can get a web address.
+			containerSvc.Sites = sitesSvc
 		}
 		sln, err := net.Listen("tcp", cfg.SitesListen)
 		if err != nil {

@@ -36,7 +36,11 @@
 	const kindLabel = { manual: 'Manual', auto: 'Scheduled', pre_restore: 'Safety copy before a restore' } as const;
 	const running = $derived(bot.desired_state === 'running');
 	const isGame = $derived(bot.kind === 'game');
-	const noun = $derived(isGame ? 'server' : 'bot');
+	// A site's app unit (built or run from GitHub) is shown as the site.
+	const isSite = $derived(bot.kind === 'web');
+	const noun = $derived(isGame ? 'server' : isSite ? 'site' : bot.kind === 'container' ? 'container' : 'bot');
+	// Sites have no Schedules tab, so no backup schedule of their own.
+	const extraWays = $derived(isSite ? 'you can still create backups yourself' : 'you can still create backups yourself or add a backup schedule');
 	// A game server's startup variables are stored as its environment.
 	const varsWord = $derived(isGame ? 'server settings' : 'environment variables');
 
@@ -159,7 +163,7 @@
 		if (!on) {
 			const ok = await confirmDialog({
 				title: 'Turn off automatic backups?',
-				body: `This ${noun} is no longer backed up on the panel's schedule. Existing backups are kept, and you can still create backups yourself or add a backup schedule.`,
+				body: `This ${noun} is no longer backed up on the panel's schedule. Existing backups are kept, and ${extraWays}.`,
 				confirmLabel: 'Turn off'
 			});
 			if (!ok) {
@@ -191,7 +195,7 @@
 
 {#snippet autoDetail()}
 	{#if !health?.enabled}
-		Not backed up on a schedule. Manual backups and backup schedules still work.
+		Not backed up on a schedule. {isSite ? 'Manual backups still work.' : 'Manual backups and backup schedules still work.'}
 	{:else if health.own_schedule}
 		This {noun}'s backup schedule takes their place.
 	{:else}
@@ -281,7 +285,7 @@
 {#if isGame}
 	<p class="mt-4 max-w-prose text-small text-muted">A backup holds the server's files (worlds, configuration, mods and plugins) and optionally its server settings (the startup variables such as the version), sealed with this panel's key and this server's ID. A downloaded archive does not expose the settings, and they can only be restored to this server on this panel.</p>
 {:else}
-	<p class="mt-4 max-w-prose text-small text-muted">A backup holds the bot's files without rebuildable folders such as <code>node_modules</code>, and optionally its environment variables, sealed with this server's key and this bot's ID. A downloaded archive does not expose them, and they can only be restored to this bot on this server.</p>
+	<p class="mt-4 max-w-prose text-small text-muted">A backup holds the {noun}'s files without rebuildable folders such as <code>node_modules</code>, and optionally its environment variables, sealed with this panel's key and this {noun}'s ID. A downloaded archive does not expose them, and they can only be restored to this {noun} on this panel.</p>
 {/if}
 
 <Dialog bind:open={createOpen} title="Create a backup" size="sm">

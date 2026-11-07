@@ -1,0 +1,12 @@
+id: vaultwarden
+name: Vaultwarden
+tagline: Self-hosted password manager
+description: A lightweight Bitwarden-compatible server for your passwords, notes and passkeys.
+category: security
+website: https://github.com/dani-garcia/vaultwarden
+web: {service: app, port: 8080, health: /alive}
+vars:
+  - {name: ADMIN_TOKEN, label: Admin page token, secret: true, credential: true, generate: {kind: password, length: 32}}
+notes:
+  - The web vault only works over HTTPS (or localhost), so give this app a web address with HTTPS in production.
+  - Open the app and create your account (sign-ups are on), then turn them off under ${APP_URL}/admin, which asks for the admin token shown above.

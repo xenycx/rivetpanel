@@ -1,0 +1,11 @@
+id: searxng
+name: SearXNG
+tagline: Private metasearch engine, no tracking
+description: Search many engines at once without ads, tracking or profiling, from an instance you control.
+category: security
+website: https://docs.searxng.org
+web: {service: app, port: 8080, health: /healthz}
+vars:
+  - {name: SECRET_KEY, label: Server secret key, secret: true, advanced: true, generate: {kind: hex, length: 48}}
+notes:
+  - Open the address and search; no account is needed. Add it as a search engine in your browser with ${APP_URL}/search?q=%s.

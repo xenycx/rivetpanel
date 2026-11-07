@@ -1,0 +1,11 @@
+id: ntfy
+name: ntfy
+tagline: Push notifications to your phone or desktop
+description: Send notifications from scripts and apps with a simple HTTP request and receive them in the ntfy app or browser.
+category: monitoring
+website: https://ntfy.sh
+web: {service: app, port: 8080, health: /v1/health}
+vars: []
+notes:
+  - "Publish a message with: curl -d \"Hello\" ${APP_URL}/mytopic"
+  - Subscribe to the same topic in the ntfy phone app by adding this server's address.

@@ -1,0 +1,21 @@
+services:
+  app:
+    # Herdr ships as a single static binary on GitHub, not as an image. The
+    # first start downloads the pinned release into the home volume, checks
+    # its SHA-256 and runs the headless server; the terminal attaches to it.
+    # Node.js and npm come with the image so coding agents can be installed
+    # into the home volume.
+    image: node:24.21.0-alpine3.24
+    user: "1000:1000"
+    entrypoint: ["sh", "/home/node/.rivet/start.sh"]
+    environment:
+      HOME: /home/node
+      SHELL: /bin/sh
+      TERM: xterm-256color
+      # Herdr and npm-installed agents live in the home volume.
+      PATH: /home/node/.local/bin:/home/node/.npm-global/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+      NPM_CONFIG_PREFIX: /home/node/.npm-global
+    volumes: ["home:/home/node"]
+    mem_limit: 512m
+volumes:
+  home: {}

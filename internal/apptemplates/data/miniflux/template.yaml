@@ -1,0 +1,13 @@
+id: miniflux
+name: Miniflux
+tagline: Minimalist, fast feed reader
+description: Read RSS and Atom feeds in a clean, keyboard-friendly reader with no tracking.
+category: reading
+website: https://miniflux.app
+web: {service: app, port: 8080, health: /healthcheck}
+vars:
+  - {name: ADMIN_USERNAME, label: Admin username, default: admin, required: true}
+  - {name: ADMIN_PASSWORD, label: Admin password, secret: true, credential: true, generate: {kind: password, length: 20}}
+  - {name: DB_PASSWORD, label: Database password, secret: true, advanced: true, generate: {kind: hex, length: 32}}
+notes:
+  - Sign in as ${ADMIN_USERNAME} with the admin password shown above, then add your first feed.

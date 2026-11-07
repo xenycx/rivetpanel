@@ -119,6 +119,23 @@ func (l Limits) validateResources(rt runtimes.Runtime, mem, cpus, pids int64) er
 	return nil
 }
 
+// validateEnvNameFor checks a variable of an app. Container apps choose
+// their own image and command, so PATH and the dynamic loader's LD_* names
+// (reserved elsewhere because they could slip past a runtime's command
+// allowlist) are theirs to set; RIVET_* stays reserved for the panel.
+func validateEnvNameFor(name string, system, container bool) error {
+	if !container {
+		return validateEnvName(name, system)
+	}
+	if len(name) == 0 || len(name) > maxEnvNameLen || !envNameRe.MatchString(name) {
+		return domain.Invalid(fmt.Sprintf("invalid environment variable name %q", name))
+	}
+	if !system && strings.HasPrefix(strings.ToUpper(name), "RIVET_") {
+		return domain.Invalid(fmt.Sprintf("environment variable %q is reserved", name))
+	}
+	return nil
+}
+
 func validateEnvName(name string, system bool) error {
 	if len(name) == 0 || len(name) > maxEnvNameLen || !envNameRe.MatchString(name) {
 		return domain.Invalid(fmt.Sprintf("invalid environment variable name %q", name))

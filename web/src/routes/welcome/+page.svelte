@@ -158,7 +158,7 @@
 						<a href="#self-host" class="btn h-10 px-4"><Icon name="download" size={15} />Install it</a>
 					</div>
 					<dl class="mt-10 grid max-w-lg grid-cols-3 gap-4">
-						<div><dt class="eyebrow">Idle memory</dt><dd class="mt-1 font-mono text-section font-medium">&lt; 50 MB</dd></div>
+						<div><dt class="eyebrow">One-click apps</dt><dd class="mt-1 font-mono text-section font-medium">25</dd></div>
 						<div><dt class="eyebrow">Server types</dt><dd class="mt-1 font-mono text-section font-medium">11 games</dd></div>
 						<div><dt class="eyebrow">Services</dt><dd class="mt-1 font-mono text-section font-medium">1 binary</dd></div>
 					</dl>

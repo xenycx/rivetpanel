@@ -1,0 +1,10 @@
+id: privatebin
+name: PrivateBin
+tagline: Encrypted pastebin where the server knows nothing
+description: Share text and files that are encrypted in the browser; pastes can expire or burn after reading.
+category: security
+website: https://privatebin.info
+web: {service: app, port: 8080}
+vars: []
+notes:
+  - Open the address, paste text and choose when it expires. Only people with the full link can read it.

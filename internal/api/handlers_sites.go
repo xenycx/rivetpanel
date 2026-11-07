@@ -52,6 +52,9 @@ type siteDTO struct {
 	// mode "app", runs) the site, its state and settings.
 	AppID          *string `json:"app_id"`
 	AppState       string  `json:"app_state"`
+	// AutoBackup: scheduled backups of a files site (sites with an app unit
+	// use the unit's auto_backup).
+	AutoBackup bool `json:"auto_backup"`
 	Framework      string  `json:"framework"`
 	BuildOutputDir string  `json:"build_output_dir"`
 	AppPort        int     `json:"app_port"`
@@ -68,7 +71,7 @@ func (s *panel) toSite(st domain.Site) siteDTO {
 		RepoRoot: st.RepoRoot, CreatedAtMS: st.CreatedAtMS, UpdatedAtMS: st.UpdatedAtMS, CustomLogo: st.LogoUpdatedMS > 0,
 		IconURL: fmt.Sprintf("/api/v1/sites/%s/icon?v=%d-%s", st.ID, st.LogoUpdatedMS, strOr(st.CurrentRelease)),
 		AppID:   st.AppID, AppState: st.AppState, Framework: st.Framework, BuildOutputDir: st.BuildOutputDir, AppPort: st.Port(),
-		HealthPath: st.HealthPath, MaxBodyBytes: st.MaxBodyBytes}
+		HealthPath: st.HealthPath, MaxBodyBytes: st.MaxBodyBytes, AutoBackup: !st.AutoBackupOff}
 }
 
 func strOr(p *string) string {

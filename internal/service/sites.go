@@ -104,6 +104,14 @@ type SiteService struct {
 	PanelHost    string         // the panel's own host name, never assignable to a site
 	PanelURL     string         // the panel's public URL, for site templates that link to its status page
 	MaxBytes     int64          // largest release
+
+	// Backups of files sites (see sitebackups.go): archives go under
+	// BackupDir/sites; BackupInterval 0 turns the schedule off.
+	BackupDir      string
+	BackupInterval time.Duration
+	BackupKeep     int
+	MinFreeDisk    int64
+	backupMu       sync.Mutex
 	Resolver     TXTResolver    // nil: net.DefaultResolver
 	// Building and running sites (all nil: only uploaded static sites).
 	Deploys *DeployService
@@ -205,6 +213,22 @@ func (s *SiteService) Start(ctx context.Context) error {
 			}
 		}
 	}()
+	if s.BackupDir != "" && s.BackupInterval > 0 {
+		s.wg.Add(1)
+		go func() {
+			defer s.wg.Done()
+			t := time.NewTicker(siteBackupTick)
+			defer t.Stop()
+			for {
+				s.RunScheduledBackups(ctx)
+				select {
+				case <-ctx.Done():
+					return
+				case <-t.C:
+				}
+			}
+		}()
+	}
 	return nil
 }
 
@@ -915,10 +939,14 @@ func (s *SiteService) Update(ctx context.Context, actor domain.User, id string, 
 				if err != nil {
 					return domain.Site{}, err
 				}
-				if err := s.Bots.putEnv(ctx, b, map[string]string{"PORT": strconv.Itoa(*in.AppPort)}, true); errors.Is(err, domain.ErrNotStopped) {
-					return domain.Site{}, domain.Invalid("stop the app before changing its port")
-				} else if err != nil {
-					return domain.Site{}, err
+				// A container app listens where its image does: the site only
+				// changes where it sends traffic.
+				if !b.IsContainer() {
+					if err := s.Bots.putEnv(ctx, b, map[string]string{"PORT": strconv.Itoa(*in.AppPort)}, true); errors.Is(err, domain.ErrNotStopped) {
+						return domain.Site{}, domain.Invalid("stop the app before changing its port")
+					} else if err != nil {
+						return domain.Site{}, err
+					}
 				}
 				probeChanged = true
 			}
@@ -986,6 +1014,9 @@ func (s *SiteService) Update(ctx context.Context, actor domain.User, id string, 
 	if in.WorkspaceID != nil && *in.WorkspaceID != st.WorkspaceID {
 		if domain.WorkspaceRoleRank(role) < domain.WorkspaceRoleRank(domain.WorkspaceAdmin) {
 			return domain.Site{}, domain.ErrForbidden
+		}
+		if _, ok := s.containerBacked(ctx, st); ok {
+			return domain.Site{}, domain.Invalid("this site is the web address of a container app; it stays in the app's workspace")
 		}
 		if st.WorkspaceID, err = s.Bots.creatableWorkspace(ctx, actor, *in.WorkspaceID); err != nil {
 			return domain.Site{}, err
@@ -1099,7 +1130,11 @@ func (s *SiteService) Delete(ctx context.Context, actor domain.User, id string) 
 // app unit of a built site.
 func (s *SiteService) deleteSite(ctx context.Context, st domain.Site) error {
 	id := st.ID
-	if st.AppID != nil {
+	if b, ok := s.containerBacked(ctx, st); ok {
+		// A container app is not owned by its web address: it keeps running
+		// and only leaves the apps network.
+		s.detachContainer(ctx, b)
+	} else if st.AppID != nil {
 		// The app (container, checkout, add-ons, webhook) goes first: a
 		// failure leaves the site in place to try again.
 		b, err := s.Bots.Store.GetBot(ctx, *st.AppID)
@@ -1113,6 +1148,7 @@ func (s *SiteService) deleteSite(ctx context.Context, st domain.Site) error {
 	if err := s.Store.DeleteSite(ctx, id); err != nil {
 		return err
 	}
+	s.removeSiteBackups(id)
 	s.reloadSoon()
 	if err := s.root.Remove(id); err != nil {
 		s.warn("remove site files", err)

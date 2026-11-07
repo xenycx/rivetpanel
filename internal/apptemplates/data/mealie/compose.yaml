@@ -1,0 +1,14 @@
+services:
+  app:
+    image: ghcr.io/mealie-recipes/mealie:v3.30.0
+    user: "1000:1000"
+    ports: ["${APP_PORT}:9000"]
+    environment:
+      BASE_URL: ${APP_URL}
+      ALLOW_SIGNUP: "false"
+      DB_ENGINE: sqlite
+      TZ: UTC
+    volumes: ["data:/app/data"]
+    mem_limit: 512m
+volumes:
+  data: {}

@@ -1,0 +1,15 @@
+App icons in this folder come from Dashboard Icons by Homarr Labs
+(https://dashboardicons.com, https://github.com/homarr-labs/dashboard-icons),
+licensed under the Apache License, Version 2.0 (see LICENSE in this folder).
+Fetched 2026-11-08 from the main branch.
+
+SVG files are the upstream svg/<name>.svg, unchanged; <name>-light.svg
+files are the upstream light variants for dark backgrounds. memos.webp and
+wikijs.webp were rendered from svg/memos.svg and svg/wikijs.svg at 160 px and
+encoded as WebP (the originals embed large bitmaps); ghost.webp and
+ghost-light.webp are webp/ghost.webp and webp/ghost-light.webp resized to
+160 px.
+
+Upstream notice: all product names, trademarks and registered trademarks are
+the property of their respective owners. The icons are used for
+identification only and do not imply endorsement.

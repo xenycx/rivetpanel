@@ -1,0 +1,16 @@
+services:
+  app:
+    image: ghcr.io/navidrome/navidrome:0.64.2
+    ports: ["${APP_PORT}:4533"]
+    environment:
+      ND_DATAFOLDER: /data
+      ND_MUSICFOLDER: /music
+      ND_SCANNER_SCHEDULE: "@every 15m"
+      ND_LOGLEVEL: info
+    volumes:
+      - data:/data
+      - music:/music
+    mem_limit: 256m
+volumes:
+  data: {}
+  music: {}

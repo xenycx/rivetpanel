@@ -14,6 +14,7 @@
 	import Skeleton from '$lib/components/ui/Skeleton.svelte';
 	import LogoEditor from '$lib/components/LogoEditor.svelte';
 	import SiteApp from '$lib/components/SiteApp.svelte';
+	import SiteBackups from '$lib/components/SiteBackups.svelte';
 	import { publishTarget } from '$lib/ai/context.svelte';
 
 	type Detail = { site: Site; role: WorkspaceRole; domains: SiteDomain[]; releases: SiteRelease[]; deploy: { running: boolean; last_error: string; finished_at_ms: number }; app?: Bot };
@@ -230,7 +231,9 @@
 	async function destroy() {
 		const ok = await confirmDialog({
 			title: `Delete ${d?.site.name}?`,
-			body: d?.app
+			body: d?.app?.kind === 'container'
+				? 'The address stops working immediately and its custom domains are removed. The container app keeps running and keeps its data.'
+				: d?.app
 				? `The app, its files and /data, its add-ons and their data, every release and custom domain are removed, and the address stops working immediately. This cannot be undone.`
 				: 'Every release and custom domain is removed and the address stops working immediately. This cannot be undone.',
 			confirmLabel: 'Delete site',
@@ -271,7 +274,15 @@
 
 	<div class="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,24rem)]">
 		<div class="grid min-w-0 content-start gap-6">
-			{#if d.app}
+			{#if d.app && d.app.kind === 'container'}
+				<!-- The web address of a container app (a one-click app): the site
+				     only forwards to it; the app is managed with its stack. -->
+				<section class="card p-5" aria-labelledby="ctr-h">
+					<h2 id="ctr-h" class="text-title font-semibold">Container app</h2>
+					<p class="mt-1 text-small text-muted">This address forwards to port <code class="text-ink">{d.site.app_port}</code> of <a class="link" href="/containers/{d.app.id}">{d.app.name}</a>{#if d.app.container?.stack_id}, part of <a class="link" href="/stacks/{d.app.container.stack_id}">its app</a>{/if}. Start, stop, update and back it up there; deleting this site only removes the address.</p>
+					<p class="mt-3"><span class="pill" data-tone={d.app.observed_state === 'running' ? 'run' : undefined}>{d.app.observed_state === 'running' ? 'Running' : d.app.observed_state}</span></p>
+				</section>
+			{:else if d.app}
 				<SiteApp site={d.site} app={d.app} {canEdit} {canAdmin} onChanged={load} />
 			{:else}
 			<!-- Publishing -->
@@ -334,6 +345,7 @@
 					<h2 id="rel-h" class="text-title font-semibold">Releases</h2>
 					<span class="text-small text-muted">The newest five are kept</span>
 				</div>
+
 				{#if d.releases.length}
 					<ul class="divide-y divide-rule-soft border-t border-rule-soft">
 						{#each d.releases as r (r.id)}
@@ -351,6 +363,9 @@
 					<p class="border-t border-rule-soft px-5 py-4 text-small text-muted">Nothing published yet. Visitors see a “nothing published” page until the first release.</p>
 				{/if}
 			</section>
+			{#if !d.app && d.site.mode === 'files'}
+				<SiteBackups site={d.site} {canEdit} {canAdmin} onChanged={load} />
+			{/if}
 			{/if}
 		</div>
 
@@ -440,7 +455,7 @@
 					</form>
 					{#if canAdmin}
 						<div class="mt-5 flex flex-wrap items-center gap-3 border-t border-rule-soft pt-4">
-							<p class="min-w-0 flex-1 text-small text-muted">Deleting removes every release and domain{isApp ? ', and the app with its data' : d.app ? ', and the build checkout' : ''}.</p>
+							<p class="min-w-0 flex-1 text-small text-muted">Deleting removes every release and domain{d.app?.kind === 'container' ? '; the container app stays' : isApp ? ', and the app with its data' : d.app ? ', and the build checkout' : ''}.</p>
 							<button class="btn btn-sm btn-danger" onclick={destroy}>Delete site</button>
 						</div>
 					{/if}

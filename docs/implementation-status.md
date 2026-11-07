@@ -1164,6 +1164,8 @@ Migrations added since 0.2.0 (the schema-version assertion in
 | `0059_workspace_node.sql` | Additive: nullable `workspaces.node_id` (`nodes`, `ON DELETE SET NULL`) with index `workspaces_node_idx`; NULL means the panel default node |
 | `0060_extensions.sql` | Additive: `extension_publishers` (trusted Ed25519 keys, revocation time), `extensions` (installed extension, active version, state, granted capabilities, last error), `extension_versions` (stored bundles with SHA-256 and manifest; the application keeps three plus the active one), `extension_settings` (sealed secrets, namespace `ext:<id>`, included in reseal), `extension_kv`, `extension_bot_enablements` (`bots` `ON DELETE CASCADE`), `extension_user_consents` (`users` `ON DELETE CASCADE`), `extension_jobs`; everything but versions and publishers cascades from `extensions` |
 | `0061_containers.sql` | Rebuilds `bots` (SQLite cannot change a CHECK in place; every column is copied by name and foreign keys are checked before commit): `kind` gains `container`, `runtime` gains `image`, and `argv_json` may be empty for container apps (the image's own command). Additive: `stacks` (workspace, owner, name, the imported Compose file up to 256 KiB) and `bot_containers` (`bots` `ON DELETE CASCADE`: run user, writable paths, volumes, `stack_id` `ON DELETE SET NULL`, service name unique per stack, dependencies). Covered by `TestMigrateIdempotentAndSchema` and the populated-database upgrade in `sites_migration_test.go` |
+| `0062_app_templates.sql` | Additive: `stacks.template_id` (the one-click app template, `''` for a pasted Compose file), `bot_containers.routable` (joins the apps network so a site can proxy to the container) and `bot_containers.cap_add_json` (trusted extra capabilities from a built-in template, JSON array). Covered by `TestMigrateIdempotentAndSchema` (63 versions) |
+| `0063_site_backups.sql` | Additive: `sites.auto_backup` (scheduled backups of a files site, on by default) and `site_backups` (`sites` `ON DELETE CASCADE`: kind auto/manual, the archived release, label, files, bytes, SHA-256, creator `ON DELETE SET NULL`). Archive files live under `RIVET_BACKUP_DIR/sites/<site>/`. Covered by `TestMigrateIdempotentAndSchema` (64 versions) |
 | `0054_web_apps.sql` | Rebuilds `bots` (kind gains `web`, runtime gains `php`, new `release_command`) and `sites` (mode gains `app`; `app_id`, `framework`, `build_output_dir`, `app_port`, `health_path`, `max_body_bytes`) with explicit column lists and foreign keys off (checked with `PRAGMA foreign_key_check`; all indexes recreated); additive `site_releases.source_ref` and `bot_health_probes.target` (`host`/`app`). Covered by `apps_migration_test.go` |
 | `0030_ai_global_chat.sql` | Rebuilds `ai_conversations` so a chat may have no target; `ai_runs.bot_id`/`site_id`, `ai_messages.context_json` (the conversation subtree is stashed and restored, rows preserved) |
 
@@ -1327,9 +1329,8 @@ network, filesystem, or container-runtime mechanism.
   the pull; non-root user, read-only root filesystem, dropped capabilities,
   limits and tmpfs/bind mounts by the container runtime through the shared
   `HostConfig`. Remaining: remote nodes (container apps run on the panel's
-  host only), private registries (no credentials are stored), Dockerfile
-  builds, and a sites address for a container (a site web app still needs
-  GitHub).
+  host only), private registries (no credentials are stored) and Dockerfile
+  builds. A container can now get a web address (see one-click apps below).
 - [x] Compose import into stacks (`stacks` table, migration `0061`): a
   previewed, all-or-nothing translation of a fixed set of Compose keys into
   container apps on a per-stack internal network with service-name aliases;
@@ -1339,6 +1340,46 @@ network, filesystem, or container-runtime mechanism.
   `secrets` and `configs` are refused by the application. Named volumes
   shared between services are copied per service, not shared; health check
   conditions are treated as started.
+- [x] One-click apps (migration `0062`; `internal/apptemplates`,
+  `docs/containers.md`): a catalog of reviewed Compose templates installed
+  through the same Compose import, with variables resolved and secrets
+  generated server-side (`crypto/rand`), stored only as sealed variables;
+  `stacks.template_id` records the template. Every catalog app was installed,
+  checked over HTTP (or the terminal), restarted and deleted on a local
+  production-like panel (container deployment, Docker 29) with `tests/apps`;
+  the VPS was not touched. Enforcement: isolation is the same as any
+  container (application + container runtime). Trusted capabilities
+  (`bot_containers.cap_add_json`) are limited to CHOWN, SETUID, SETGID,
+  DAC_OVERRIDE and FOWNER, can only be set by the template installer
+  (application), are filtered again by the Docker adapter (runtime
+  configuration) and are cleared when the image repository changes;
+  `no-new-privileges`, the read-only root and the non-root user stay.
+  Remaining: changing an installed app's address, template updates (images
+  are pinned; updating means changing the image per container), and remote
+  nodes.
+- [x] Web addresses for container apps: an app-mode site whose app is a
+  container (`bot_containers.routable`); the runner joins the container to the
+  apps network under a private alias and the sites listener proxies to it.
+  Enforced by the application (only workspace admins attach; the site never
+  owns the container; deleting the stack deletes its sites) and by Docker
+  networking (the apps network is shared with other site apps).
+- [x] Container terminal: admin-only (`full admin` on the app) TTY exec into
+  a running container over a WebSocket, as the container's own user with its
+  capabilities and read-only root (container runtime); every open is audited
+  as `bot.terminal` (application); 30-minute idle timeout. Not a host shell.
+- [x] Stack networks no longer leak: deleting a stack's services removes the
+  stack network, and the runner's resync removes idle stack networks of this
+  installation whose stack has no service meant to run. Each network takes a
+  subnet from the Docker daemon's address pools (about 30 with Docker's
+  defaults); see `docs/containers.md` for raising `default-address-pools`.
+- [x] Site backups (migration `0063`; `docs/backup.md`): sites with an app
+  unit use the app Backups tab and its switch; files sites get archives of the
+  serving release on the panel schedule (only when it changed) or on demand,
+  a per-site switch, download, and restore as a new release. Enforced by the
+  application (roles: viewer lists, developer creates, downloads and
+  restores, admin switches and deletes; SHA-256 checked before a restore;
+  archives restored with the release size and entry limits). Not covered: the
+  installation backup still does not copy `RIVET_SITES_DIR`.
 - [x] One workload model in the interface: **Apps** (`/apps`) lists bots,
   game servers, containers (with stacks) and websites with kind filters;
   `/bots`, `/servers` and `/sites` redirect into it; **New** (`/new`) asks

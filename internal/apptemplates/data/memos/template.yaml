@@ -1,0 +1,10 @@
+id: memos
+name: Memos
+tagline: Lightweight notes and microblog
+description: Capture quick notes, links and thoughts in a private timeline with Markdown, tags and attachments.
+category: productivity
+website: https://usememos.com
+web: {service: app, port: 5230, health: /healthz}
+vars: []
+notes:
+  - Open ${APP_URL} and sign up; the first account you create becomes the administrator.

@@ -1,0 +1,11 @@
+services:
+  app:
+    image: sissbruecker/linkding:1.47.0
+    ports: ["${APP_PORT}:9090"]
+    environment:
+      LD_SUPERUSER_NAME: ${ADMIN_USERNAME}
+      LD_SUPERUSER_PASSWORD: ${ADMIN_PASSWORD}
+    volumes: ["data:/etc/linkding/data"]
+    mem_limit: 256m
+volumes:
+  data: {}

@@ -1,0 +1,11 @@
+id: actual
+name: Actual Budget
+tagline: Private envelope budgeting
+description: Track spending and plan a budget with a fast local-first app that syncs across your devices.
+category: productivity
+website: https://actualbudget.org
+web: {service: app, port: 5006, health: /health}
+vars: []
+notes:
+  - On the first visit Actual asks you to choose a server password; pick one and keep it safe.
+  - Actual needs HTTPS (or localhost) in the browser; use a domain with HTTPS rather than a plain IP address.
