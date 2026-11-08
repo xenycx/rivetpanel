@@ -42,3 +42,12 @@ export function avatarUri(kind: AvatarKind, seed: string): string {
 	cache.set(key, uri);
 	return uri;
 }
+
+/**
+ * The seed of an item's generated logo. Variant 0 (the default) is the item's
+ * ID, so pictures drawn before "New picture" existed stay the same; each
+ * request for a new picture advances the stored variant.
+ */
+export function logoSeed(id: string, variant?: number | null): string {
+	return variant ? `${id}:${variant}` : id;
+}

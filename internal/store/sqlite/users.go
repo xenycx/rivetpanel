@@ -26,7 +26,7 @@ func userSelect(a string) string {
 		p + `created_at_ms, ` + p + `updated_at_ms, ` + p + `email_verified, ` + p + `email_verified_at_ms, ` + p + `role_id,
 		(SELECT r.name FROM roles r WHERE r.id = ` + p + `role_id),
 		(SELECT r.permissions_json FROM roles r WHERE r.id = COALESCE(` + p + `role_id, ` + p + `role)),
-		(SELECT ps.value FROM panel_settings ps WHERE ps.key = '` + UnverifiedPolicyKey + `')`
+		(SELECT ps.value FROM panel_settings ps WHERE ps.key = '` + UnverifiedPolicyKey + `'), ` + p + `logo_variant`
 }
 
 // userScanDest returns the scan destinations matching userSelect and a
@@ -35,7 +35,7 @@ func userScanDest(u *domain.User) ([]any, func()) {
 	var dis, verified int
 	var roleID, roleName, perms, policy sql.NullString
 	dest := []any{&u.ID, &u.Email, &u.DisplayName, &u.AvatarJPEG, &u.PasswordHash, &u.Role, &dis, &u.CreatedAtMS, &u.UpdatedAtMS,
-		&verified, &u.EmailVerifiedAtMS, &roleID, &roleName, &perms, &policy}
+		&verified, &u.EmailVerifiedAtMS, &roleID, &roleName, &perms, &policy, &u.LogoVariant}
 	return dest, func() {
 		u.Disabled = dis == 1
 		u.EmailVerified = verified == 1

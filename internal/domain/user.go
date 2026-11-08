@@ -7,10 +7,13 @@ const (
 
 // User is a panel account. PasswordHash is never serialized to clients.
 type User struct {
-	ID           string
-	Email        string
-	DisplayName  string
-	AvatarJPEG   []byte
+	ID          string
+	Email       string
+	DisplayName string
+	AvatarJPEG  []byte
+	// LogoVariant picks the generated picture shown without an uploaded
+	// avatar (0 = the original, seeded by the id).
+	LogoVariant  int64
 	PasswordHash string
 	Role         string
 	Disabled     bool

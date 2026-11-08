@@ -115,6 +115,16 @@ func (s *AuthService) UpdateProfile(ctx context.Context, actor domain.User, name
 	return s.Store.GetUserByID(ctx, actor.ID)
 }
 
+// ShuffleAvatar picks another generated picture for an account (shown while
+// it has no uploaded profile picture) and returns the new choice. Accounts
+// change their own; users.manage changes anyone's.
+func (s *AuthService) ShuffleAvatar(ctx context.Context, actor domain.User, userID string) (int64, error) {
+	if userID != actor.ID && !actor.IsAdmin() && !actor.Can(domain.PermUsersManage) {
+		return 0, domain.Denied(actor, domain.PermUsersManage)
+	}
+	return s.Store.NextLogoVariant(ctx, "users", userID)
+}
+
 func accountInviteHash(token string) ([]byte, error) {
 	if !strings.HasPrefix(token, accountInvitePrefix) || len(token) > 80 {
 		return nil, domain.Invalid("invitation link is not valid")

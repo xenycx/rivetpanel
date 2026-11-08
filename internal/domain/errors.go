@@ -35,13 +35,14 @@ func (e *BusyError) Error() string {
 	return e.What + " is working on this bot right now. Try again when it finishes."
 }
 
-// CapacityError refuses work that would exceed a configured budget.
+// CapacityError refuses a start that would exceed the node budget
+// (RIVET_NODE_MEMORY_BYTES).
 type CapacityError struct {
 	Need, Free, Budget int64
 }
 
 func (e *CapacityError) Error() string {
-	return fmt.Sprintf("not enough reserved memory on this server: the bot needs %s, %s of the %s budget is free; stop another bot or lower this bot's memory",
+	return fmt.Sprintf("not enough room in this node's memory budget: the app needs %s and %s of the %s node budget is free; stop another app on this node or lower this app's memory",
 		mib(e.Need), mib(e.Free), mib(e.Budget))
 }
 

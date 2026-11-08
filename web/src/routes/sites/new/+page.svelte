@@ -5,7 +5,8 @@
 	import { api, ApiError, MiB } from '$lib/api/client';
 	import type { AddonKind, Capacity, Connection, GitHubRepo, RepoLookup, Site, SitesInfo, WebAnalysis, WebKind, WebPlan } from '$lib/api/types';
 	import { joinArgs, splitArgs } from '$lib/args';
-	import { capLimits, room } from '$lib/room';
+	import { boundText, capLimits, countBlock, room } from '$lib/room';
+	import CreatingIn from '$lib/components/CreatingIn.svelte';
 	import { can } from '$lib/session.svelte';
 	import { creatable, loadWorkspaces, workspaces, wsName } from '$lib/workspaces.svelte';
 	import Icon from '$lib/components/ui/Icon.svelte';
@@ -55,9 +56,9 @@
 	// Room under the workspace's limits: sites, and apps for a site that runs one.
 	let cap = $state<Capacity | null>(null);
 	const rm = $derived(room(cap));
-	const wsLabel = $derived(cap?.workspace ? wsName(cap.workspace) : 'Personal');
 	const noRoom = $derived(rm.sites === 0 || (kind === 'app' && (rm.apps === 0 || rm.web_apps === 0)));
-	const sitesLeft = $derived(rm.sites == null ? '' : `${rm.sites} of ${capLimits(cap).sites} ${capLimits(cap).sites === 1 ? 'site' : 'sites'} left in this workspace`);
+	const sitesLeft = $derived(rm.sites == null ? '' : `Workspace allowance: ${rm.sites} of ${capLimits(cap).sites} ${capLimits(cap).sites === 1 ? 'site' : 'sites'} left`);
+	const blocked = $derived(countBlock(cap, kind === 'app' ? ['sites', 'apps', 'web_apps'] : ['sites'], { sites: 'sites', apps: 'apps in total', web_apps: 'web apps' }));
 	$effect(() => {
 		const ws = workspaceId;
 		let live = true;
@@ -219,6 +220,7 @@
 <header class="page-head">
 	<h1 class="font-semibold">New site from GitHub</h1>
 	<p class="text-small text-muted">Static files, a static build, or a running app. Every push can deploy automatically.</p>
+	<CreatingIn workspace={cap?.workspace} class="mt-1.5" />
 </header>
 
 {#if loadError}<Notice tone="fail" class="mt-4" live>{loadError}</Notice>{/if}
@@ -289,8 +291,8 @@
 						<label class="block"><span class="label">Port</span><input class="field font-mono" type="number" min="1" max="65535" bind:value={port} /></label>
 						<label class="block"><span class="label">Health check path</span><input class="field font-mono" bind:value={healthPath} placeholder="/" /><span class="help">Requested every 30 s; three failures restart the app.</span></label>
 						<label class="block sm:col-span-2"><span class="label">Release command <span class="font-normal text-muted">(optional)</span></span><input class="field font-mono" bind:value={releaseCommand} placeholder="npx prisma migrate deploy" /><span class="help">Runs before every start with the app's variables and add-ons, for database migrations. A failure stops the start.</span></label>
-						<label class="block"><span class="label">Memory (MiB)</span><input class="field font-mono" type="number" min="64" step="64" bind:value={memoryMiB} placeholder="runtime default" /></label>
-						<label class="block"><span class="label">Request body limit (MiB)</span><input class="field font-mono" type="number" min="1" bind:value={bodyMiB} placeholder="panel default" /><span class="help">Raise it for large uploads.</span></label>
+						<label class="block"><span class="label">Memory (MiB)</span><input class="field font-mono" type="number" min="64" step="64" bind:value={memoryMiB} placeholder="Not set" /><span class="help">Empty: the runtime's default.{#if boundText('memory', cap, 0, '')}<span class="block">{boundText('memory', cap, 0, '')}</span>{/if}</span></label>
+						<label class="block"><span class="label">Request body limit (MiB)</span><input class="field font-mono" type="number" min="1" bind:value={bodyMiB} placeholder="Not set" /><span class="help">Empty: the panel default (RIVET_SITES_MAX_BODY_BYTES, 100 MiB unless set). Raise it for large uploads.</span></label>
 					{/if}
 				</div>
 				{#if kind === 'app'}
@@ -350,9 +352,7 @@
 			</section>
 
 			{#if noRoom}
-				<Notice tone="warn" title={rm.sites === 0 ? 'No room for another site' : 'No room for another app'}>
-					The workspace {wsLabel} has reached its limit of {rm.sites === 0 ? `${capLimits(cap).sites} ${capLimits(cap).sites === 1 ? 'site' : 'sites'}` : rm.web_apps === 0 ? `${capLimits(cap).web_apps} web ${capLimits(cap).web_apps === 1 ? 'app' : 'apps'}` : `${capLimits(cap).apps} ${capLimits(cap).apps === 1 ? 'app' : 'apps'}`}. Delete one, or ask an administrator to raise the limit.
-				</Notice>
+				<Notice tone="warn" title={rm.sites === 0 ? 'No room for another site' : 'No room for another app'}>{blocked}</Notice>
 			{/if}
 			{#if submitError}<Notice tone="fail" live>{submitError}</Notice>{/if}
 			<div class="flex flex-wrap gap-2">

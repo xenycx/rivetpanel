@@ -92,7 +92,7 @@
 	let opened = $state<Record<string, boolean>>({});
 	const isOpen = (g: { name: string; vars: EnvVar[] }) =>
 		opened[g.name] ?? (common.has(g.name) || find.trim() !== '' || show !== 'all' || g.vars.some((v) => v.override || v.pending || changed(v) || flash === v.name));
-	const managedPage: Record<string, string> = { '/admin/settings': 'Panel settings', '/admin/settings#limits': 'Panel settings → Default limits', '/admin/logs': 'Logs and retention' };
+	const managedPage: Record<string, string> = { '/admin/settings': 'Panel settings', '/admin/settings#limits': 'Panel settings → Default allowance', '/admin/logs': 'Logs and retention' };
 
 	async function save() {
 		if (!dirty.length) return;
@@ -147,7 +147,7 @@
 	function shownValue(v: EnvVar, val: string): string {
 		if (v.secret) return val ? 'set' : 'not set';
 		if (val === '') return v.default ? `${v.default} (default)` : 'not set';
-		if (v.kind === 'bytes' && /^\d+$/.test(val)) return val === '0' ? '0 (unlimited)' : fmtBytes(Number(val));
+		if (v.kind === 'bytes' && /^\d+$/.test(val)) return val === '0' ? '0' : fmtBytes(Number(val));
 		return val;
 	}
 </script>
@@ -226,7 +226,7 @@
 									<p class="help">Stored encrypted and never shown again.</p>
 								{:else if v.kind === 'bytes'}
 									<BytesField id="f-{v.name}" value={resetting ? v.env_value : val} placeholder={v.default} disabled={resetting} onchange={(x) => edit(v, x)} />
-									<p class="help">{val === '' ? (v.default ? `Default: ${v.default}` : 'Not set') : val === '0' ? 'Unlimited' : `${Number(val).toLocaleString()} bytes`}</p>
+									<p class="help">{val === '' ? (v.default ? `Default: ${v.default}` : 'Not set') : val === '0' ? '0: see the description for what it means here' : `${Number(val).toLocaleString()} bytes`}</p>
 								{:else if v.kind === 'bool'}
 									<select id="f-{v.name}" class="field" value={resetting ? '' : val} onchange={(e) => edit(v, e.currentTarget.value)} disabled={resetting}>
 										<option value="">Default ({v.default === '1' ? 'on' : 'off'})</option><option value="1">On (1)</option><option value="0">Off (0)</option>

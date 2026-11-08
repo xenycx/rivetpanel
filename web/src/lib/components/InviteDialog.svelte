@@ -4,6 +4,7 @@
 	import { roleHelp, roleText, type AccountInvite, type NodeInfo, type Role, type Workspace, type WorkspaceQuota } from '$lib/api/types';
 	import { fmtWhen } from '$lib/args';
 	import { inviteRoleName, limitsText } from '$lib/invites';
+	import { countFields, LIMITS_HELP } from '$lib/limits';
 	import { can, canGrantRole, session } from '$lib/session.svelte';
 	import { toast } from '$lib/ui/toast.svelte';
 	import { wsName } from '$lib/workspaces.svelte';
@@ -20,13 +21,7 @@
 
 	type CountKey = 'max_apps' | 'max_bots' | 'max_games' | 'max_web_apps' | 'max_sites';
 	type MemberRole = 'admin' | 'developer' | 'viewer';
-	const fields: { key: CountKey; label: string }[] = [
-		{ key: 'max_bots', label: 'Bots' },
-		{ key: 'max_games', label: 'Game servers' },
-		{ key: 'max_web_apps', label: 'Web apps' },
-		{ key: 'max_apps', label: 'Apps in total' },
-		{ key: 'max_sites', label: 'Sites' }
-	];
+	const fields: { key: CountKey; label: string }[] = countFields.map((f) => ({ key: f.quota as CountKey, label: f.label }));
 	const memberRoles: MemberRole[] = ['admin', 'developer', 'viewer'];
 	const expiries = [1, 3, 7, 14, 30];
 	const emptyCounts = (): Record<CountKey, string> => ({ max_apps: '', max_bots: '', max_games: '', max_web_apps: '', max_sites: '' });
@@ -123,7 +118,7 @@
 	function quotaBody(): WorkspaceQuota | null | string {
 		if (!isAdmin || !setLimits) return null;
 		const q = Object.fromEntries(fields.map((f) => [f.key, num(counts[f.key])])) as Record<CountKey, number | null>;
-		if (Object.values(q).some((n) => n != null && (!Number.isInteger(n) || n < 0))) return 'Limits must be whole numbers of 0 or more; leave a field empty for the panel default.';
+		if (Object.values(q).some((n) => n != null && (!Number.isInteger(n) || n < 0))) return 'Use whole numbers of 0 or more, or leave a field empty to inherit the default allowance.';
 		const full: WorkspaceQuota = { ...q, memory_bytes: memory, nano_cpus: cpu };
 		return Object.values(full).every((n) => n == null) ? null : full;
 	}
@@ -177,7 +172,7 @@
 		return [
 			{ label: 'Who', value: v.email || 'Anyone with the link (single use)' },
 			{ label: 'Role', value: inviteRoleName(v) },
-			{ label: 'Limits', value: limits ? `${limits} for their personal workspace` : 'Panel defaults' },
+			{ label: 'Allowance', value: limits ? `${limits} for their personal workspace` : 'Default allowance' },
 			...(session.features.agents ? [{ label: 'Node', value: v.node_id ? v.node_name || 'A pinned node' : 'Panel default' }] : []),
 			{ label: 'Team workspace', value: v.workspace_id ? `${v.workspace_name || 'A team workspace'} as ${v.workspace_role ? roleText[v.workspace_role] : 'member'}` : 'None' },
 			{ label: 'Expires', value: fmtWhen(v.expires_at_ms) }
@@ -246,24 +241,24 @@
 
 			{#if isAdmin}
 				<fieldset class="grid gap-4">
-					<legend class="mb-2 font-semibold">Limits for their personal workspace</legend>
-					<Switch label="Set limits" bind:checked={setLimits}>Off: the panel's <a class="link" href="/admin/settings#limits">default limits</a> apply. On: leave a field empty for the default; 0 allows none.</Switch>
+					<legend class="mb-2 font-semibold">Allowance for their personal workspace</legend>
+					<Switch label="Set an allowance" bind:checked={setLimits}>Off: the workspace inherits the <a class="link" href="/admin/settings#limits">default allowance</a>. On: an empty field still inherits it; 0 allows none. <a class="link" href={LIMITS_HELP}>How limits work</a></Switch>
 					{#if setLimits}
 						<div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
 							{#each fields as f (f.key)}
 								<label class="block">
 									<span class="label">{f.label}</span>
-									<input class="field font-mono" type="number" min="0" step="1" placeholder="Default" bind:value={counts[f.key]} />
+									<input class="field font-mono" type="number" min="0" step="1" placeholder="Inherit" bind:value={counts[f.key]} />
 								</label>
 							{/each}
 						</div>
 						<div>
 							<span class="label" id="invite-memory-l">Memory</span>
-							<ResourcePicker kind="memory" id="invite-memory" labelledby="invite-memory-l" allowEmpty emptyLabel="Panel default" value={memory} onchange={(x) => (memory = x)} />
+							<ResourcePicker kind="memory" id="invite-memory" labelledby="invite-memory-l" allowEmpty emptyLabel="Inherit" value={memory} onchange={(x) => (memory = x)} />
 						</div>
 						<div>
 							<span class="label" id="invite-cpu-l">CPU</span>
-							<ResourcePicker kind="cpu" id="invite-cpu" labelledby="invite-cpu-l" allowEmpty emptyLabel="Panel default" value={cpu} onchange={(x) => (cpu = x)} />
+							<ResourcePicker kind="cpu" id="invite-cpu" labelledby="invite-cpu-l" allowEmpty emptyLabel="Inherit" value={cpu} onchange={(x) => (cpu = x)} />
 						</div>
 					{/if}
 				</fieldset>

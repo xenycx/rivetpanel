@@ -144,6 +144,9 @@ type Config struct {
 	SitesDir        string // releases, one directory per site
 	SiteMaxBytes    int64  // largest release (uncompressed)
 	MaxSitesPerUser int    // fallback sites-per-workspace limit (0 = unlimited)
+	// MaxSitesPerUserSet reports that RIVET_MAX_SITES_PER_USER was set, so
+	// the panel can tell the built-in 10 from an environment value.
+	MaxSitesPerUserSet bool
 	// SitesDNSTarget is the host name custom domains should CNAME to (shown in
 	// the domain instructions); defaults to the host of SitesBaseURL.
 	SitesDNSTarget string
@@ -480,7 +483,7 @@ func LoadLookup(look Lookup) (Config, error) {
 		if err != nil {
 			return Config{}, fmt.Errorf("RIVET_MAX_SITES_PER_USER: %w", err)
 		}
-		c.MaxSitesPerUser = n
+		c.MaxSitesPerUser, c.MaxSitesPerUserSet = n, true
 	}
 	c.SFTPListen = strings.TrimSpace(getenv("RIVET_SFTP_LISTEN"))
 	c.SFTPHostKey = strings.TrimSpace(getenv("RIVET_SFTP_HOST_KEY"))

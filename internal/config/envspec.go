@@ -141,15 +141,15 @@ var Vars = []VarSpec{
 
 	// Capacity
 	{Name: "RIVET_MAX_BOT_MEMORY_BYTES", Group: GroupCapacity, Kind: KindBytes, Default: "the node's memory",
-		Description: "Largest memory limit a single app may be given. Always capped by the memory of the node it runs on; 0 or unset uses the node's memory alone."},
+		Description: "Node maximum: the largest memory size one app may be given. Always capped by the memory of the node it runs on; 0 or unset uses the node's memory alone."},
 	{Name: "RIVET_MAX_BOT_NANO_CPUS", Group: GroupCapacity, Kind: KindInt, Default: "the node's CPUs", Example: "4000000000",
-		Description: "Largest CPU limit a single app may be given, in billionths of a CPU (1000000000 is one CPU). Always capped by the CPU count of the node it runs on; 0 or unset uses the node's CPUs alone."},
-	{Name: "RIVET_NODE_MEMORY_BYTES", Group: GroupCapacity, Kind: KindBytes, Default: "unlimited",
-		Description: "Admission budget: the sum of memory limits of apps wanted running on this host. A start that would exceed it is refused. Bookkeeping, not a kernel limit; 0 is unlimited."},
-	{Name: "RIVET_USER_MEMORY_BYTES", Group: GroupCapacity, Kind: KindBytes, Managed: "/admin/settings#limits", Default: "unlimited",
-		Description: "Default memory (sum of app memory limits, add-ons included) for each workspace, used when Panel settings → Default limits sets none. Built-in administrators are never refused (other members are bounded even in a workspace an administrator owns); 0 is unlimited. A workspace's own limits (Administration → Workspaces) replace it."},
-	{Name: "RIVET_MAX_BOTS_PER_USER", Group: GroupCapacity, Kind: KindInt, Managed: "/admin/settings#limits", Default: "unlimited",
-		Description: "Default number of apps (bots, game servers and web apps together) for each workspace, used when Panel settings → Default limits sets none. Built-in administrators are never refused (other members are bounded even in a workspace an administrator owns); 0 is unlimited. A workspace's own limits (Administration → Workspaces) replace it."},
+		Description: "Node maximum: the largest CPU size one app may be given, in billionths of a core (1000000000 is one core). Always capped by the core count of the node it runs on; 0 or unset uses the node's cores alone."},
+	{Name: "RIVET_NODE_MEMORY_BYTES", Group: GroupCapacity, Kind: KindBytes, Default: "No limit",
+		Description: "Node budget: the sum of the memory sizes of apps wanted running on each node, add-ons included. The panel refuses a start that would exceed it; creating an app is not refused. Bookkeeping, not a kernel limit; 0 or unset is no limit."},
+	{Name: "RIVET_USER_MEMORY_BYTES", Group: GroupCapacity, Kind: KindBytes, Managed: "/admin/settings#limits", Default: "No limit",
+		Description: "Fallback for the default workspace allowance of memory (the memory sizes of all apps in a workspace, add-ons included), used when Panel settings → Default allowance sets none. 0 or unset is no limit. A workspace's own allowance (Administration → Workspaces) replaces it."},
+	{Name: "RIVET_MAX_BOTS_PER_USER", Group: GroupCapacity, Kind: KindInt, Managed: "/admin/settings#limits", Default: "No limit",
+		Description: "Fallback for the default workspace allowance of apps in total (bots and containers, game servers and web apps together), used when Panel settings → Default allowance sets none. 0 or unset is no limit. A workspace's own allowance (Administration → Workspaces) replaces it."},
 	{Name: "RIVET_MIN_FREE_DISK_BYTES", Group: GroupCapacity, Kind: KindBytes, Default: "1 GiB",
 		Description: "Free space backups, restores and deployments need before they start; 0 turns the check off."},
 
@@ -161,7 +161,7 @@ var Vars = []VarSpec{
 	{Name: "RIVET_BACKUP_KEEP", Group: GroupBackups, Kind: KindInt, Default: "7", Example: "7",
 		Description: "Scheduled backups kept per app (1 to 45); older ones are deleted."},
 	{Name: "RIVET_BACKUP_MAX_BYTES", Group: GroupBackups, Kind: KindBytes, Default: "2 GiB",
-		Description: "Largest workspace a backup will include."},
+		Description: "Largest total size of one app's files that a backup will archive; a larger app cannot be backed up."},
 
 	// Ports
 	{Name: "RIVET_PORT_RANGE", Group: GroupPorts, Kind: KindText, Default: "20000-29999", Example: "20000-29999",
@@ -182,7 +182,7 @@ var Vars = []VarSpec{
 	{Name: "RIVET_SITE_MAX_BYTES", Group: GroupSites, Kind: KindBytes, Default: "100 MiB",
 		Description: "Largest site release, uncompressed (1 MiB to 4 GiB)."},
 	{Name: "RIVET_MAX_SITES_PER_USER", Group: GroupSites, Kind: KindInt, Managed: "/admin/settings#limits", Default: "10",
-		Description: "Default number of sites for each workspace, used when Panel settings → Default limits sets none. Built-in administrators are never refused (other members are bounded even in a workspace an administrator owns); 0 is unlimited. A workspace's own limits (Administration → Workspaces) replace it."},
+		Description: "Fallback for the default workspace allowance of sites, used when Panel settings → Default allowance sets none. Unset is the built-in 10; 0 is no limit. A workspace's own allowance (Administration → Workspaces) replaces it."},
 	{Name: "RIVET_SITES_DNS_TARGET", Group: GroupSites, Kind: KindText, Example: "sites.example.com",
 		Description: "Host name custom domains should point a CNAME at. Defaults to the host of the sites base URL."},
 	{Name: "RIVET_APPS_NETWORK", Group: GroupSites, Kind: KindText, Boot: true, Default: "rivetpanel-apps",

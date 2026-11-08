@@ -10,6 +10,8 @@ export type User = {
 	role_id: string;
 	role_name: string;
 	email_verified: boolean;
+	/** Which generated picture is shown without an uploaded avatar (0 = the original). */
+	logo_variant: number;
 };
 
 export type Role = {
@@ -140,6 +142,8 @@ export type Bot = {
 	/** Custom logo, else the Discord avatar ("" = neither). */
 	logo_url: string;
 	custom_logo: boolean;
+	/** Which generated picture is shown without a logo (0 = the original). */
+	logo_variant: number;
 	/** Custom build script; "" = the runtime's default build. */
 	build_command: string;
 	/** Site apps: a command run before each start (database migrations). */
@@ -489,11 +493,15 @@ export type Capacity = {
 	max_bots: number;
 	memory_bytes: number;
 	max_memory_bytes: number;
+	/** The caller is a built-in administrator: the allowance is reported but never refuses them. */
 	exempt: boolean;
 	build_memory_bytes: number;
-	node?: { running: number; reserved_bytes: number; budget_bytes: number };
+	/** Administrators only: the local node's budget, node maximum and measured memory (0 = unknown). */
+	node?: { running: number; reserved_bytes: number; budget_bytes: number; max_app_memory_bytes?: number; max_app_nano_cpus?: number; memory_bytes?: number };
+	/** The node budget left on the node asked about (?node=); absent when no budget is set. */
+	node_budget?: { node_id: string; budget_bytes: number; free_bytes: number };
 	usage?: QuotaUsage;
-	/** Limits that apply to the workspace; null is unlimited. */
+	/** The workspace allowance, also when the caller is exempt; null is no limit. */
 	limits?: QuotaLimits;
 	/** The workspace reported (the caller's personal one unless ?workspace= names another). */
 	workspace?: { id: string; name: string; personal: boolean };
@@ -513,8 +521,12 @@ export type WorkspaceQuotaView = {
 	limits: QuotaLimits;
 	/** Administrator view only. */
 	defaults?: LimitDefaults;
-	/** Owned by an administrator: no limits apply. */
-	exempt: boolean;
+	/** Where each allowance value comes from. */
+	sources?: Partial<Record<keyof QuotaLimits, 'builtin' | 'env' | 'panel' | 'workspace'>>;
+	/** Administrator view only: where each default allowance value comes from. */
+	default_sources?: Partial<Record<keyof LimitDefaults, 'builtin' | 'env' | 'panel'>>;
+	/** No longer sent: exemption belongs to the acting account (Capacity.exempt), never to a workspace. */
+	exempt?: undefined;
 	updated_at_ms?: number;
 };
 
@@ -535,6 +547,9 @@ export type Workspace = {
 	sites: number;
 	last_active_at_ms: number;
 	created_at_ms: number;
+	/** Custom logo ("" = none: the generated picture chosen by logo_variant). */
+	logo_url: string;
+	logo_variant: number;
 	/** The workspace's own limits (administrator list only; absent = panel defaults). */
 	quota?: WorkspaceQuota;
 };
@@ -559,7 +574,7 @@ export type AccountInvite = {
 	workspace_name: string;
 	workspace_role: WorkspaceRole | '';
 };
-export type WorkspaceMember = { user_id: string; email: string; display_name: string; role: WorkspaceRole; created_at_ms: number };
+export type WorkspaceMember = { user_id: string; email: string; display_name: string; role: WorkspaceRole; created_at_ms: number; logo_variant: number };
 export const roleRank: Record<WorkspaceRole | '', number> = { '': 0, viewer: 1, developer: 2, admin: 3, owner: 4 };
 export const roleText: Record<WorkspaceRole, string> = {
 	owner: 'Owner',
@@ -569,8 +584,8 @@ export const roleText: Record<WorkspaceRole, string> = {
 };
 export const roleHelp: Record<WorkspaceRole, string> = {
 	owner: 'Everything, including deleting the workspace',
-	admin: 'Manage members and every bot and site',
-	developer: 'Create, deploy and operate bots and sites; no deleting or resource changes',
+	admin: 'Manage members and every app and site',
+	developer: 'Create, deploy and operate apps and sites; no deleting or resource changes',
 	viewer: 'Read-only: status and console output'
 };
 
@@ -628,6 +643,8 @@ export type Site = {
 	/** Custom logo, release favicon or bot logo; 404 when none. */
 	icon_url: string;
 	custom_logo: boolean;
+	/** Which generated picture is shown without an icon (0 = the original). */
+	logo_variant: number;
 	/** Sites deployed from a repository: the unit that builds (and for apps, runs) the site. */
 	app_id: string | null;
 	app_state: string;

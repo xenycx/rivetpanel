@@ -5,7 +5,7 @@
 	import { api, ApiError, fmtBytes, fmtCpu } from '$lib/api/client';
 	import type { AddonKind, Analysis, Bot, Capacity, Connection, GitHubRepo, Limits, LocationInfo, NodeInfo, Placement, Plan, Recipe, RepoLookup, RuntimeInfo, Template, TemplateEnv } from '$lib/api/types';
 	import { joinArgs, splitArgs } from '$lib/args';
-	import { capLimits, clampMax, room, roomText } from '$lib/room';
+	import { boundText, budgetWarning, clampMax, countBlock, room } from '$lib/room';
 	import { toast } from '$lib/ui/toast.svelte';
 	import { can, session } from '$lib/session.svelte';
 	import Icon from '$lib/components/ui/Icon.svelte';
@@ -14,6 +14,7 @@
 	import NodePickerCard from '$lib/components/NodePickerCard.svelte';
 	import PlacementNotice from '$lib/components/PlacementNotice.svelte';
 	import ResourcePicker from '$lib/components/ResourcePicker.svelte';
+	import CreatingIn from '$lib/components/CreatingIn.svelte';
 	import { creatable, loadWorkspaces, workspaces, wsName } from '$lib/workspaces.svelte';
 
 	type Source = 'template' | 'github' | 'blank';
@@ -92,7 +93,15 @@
 				if (!nodeTouched) nodeId = p.node.id;
 			})
 			.catch(() => {});
-		api<Capacity>('GET', `/me/capacity?workspace=${encodeURIComponent(ws)}`)
+		return () => {
+			live = false;
+		};
+	});
+	// The workspace's allowance and the node budget left on the chosen node.
+	$effect(() => {
+		const q = `workspace=${encodeURIComponent(workspaceId)}&node=${encodeURIComponent(nodeId)}`;
+		let live = true;
+		api<Capacity>('GET', `/me/capacity?${q}`)
 			.then((c) => {
 				if (live) cap = c;
 			})
@@ -171,10 +180,9 @@
 	const minMem = $derived(Math.max(limits?.min_memory_bytes ?? 0, rt?.min_memory_bytes ?? 0));
 	const minCpu = $derived(limits?.min_nano_cpus ?? 0);
 	const wsLabel = $derived(cap?.workspace ? wsName(cap.workspace) : 'Personal');
-	const memRoomText = $derived(roomText('memory', roomMem, capLimits(cap).memory_bytes));
-	const cpuRoomText = $derived(roomText('cpu', rm.cpu, capLimits(cap).nano_cpus));
 	// No room for one more app: the form says so instead of letting the server refuse.
 	const noRoom = $derived(rm.apps === 0 || rm.bots === 0);
+	const blocked = $derived(countBlock(cap, ['apps', 'bots'], { apps: 'apps in total', bots: 'bots and containers' }));
 	const nodeOffline = $derived(picksNode ? !!chosenNode && chosenNode.transport !== 'local' && !chosenNode.agent?.connected : placement ? !placement.node.online : false);
 	const nodeName = $derived(chosenNode?.name ?? placement?.node.name ?? 'This host');
 
@@ -327,10 +335,10 @@
 			// or the node's own maximum.
 			if (effMemory < minMem) p.memory = `Choose at least ${fmtBytes(minMem)}.`;
 			else if (maxMem != null && effMemory > maxMem)
-				p.memory = roomMem != null && roomMem < nodeMaxMem ? `The workspace ${wsLabel} has only ${fmtBytes(roomMem)} of memory left.` : `Choose up to ${fmtBytes(nodeMaxMem)} on this node.`;
+				p.memory = roomMem != null && roomMem < nodeMaxMem ? `The workspace ${wsLabel} has only ${fmtBytes(roomMem)} of its memory allowance left.` : `Choose up to ${fmtBytes(nodeMaxMem)}, the node maximum on ${nodeName}.`;
 			if (effCpu < minCpu) p.cpu = `Choose at least ${fmtCpu(minCpu)}.`;
 			else if (maxCpu != null && effCpu > maxCpu)
-				p.cpu = rm.cpu != null && rm.cpu < nodeMaxCpu ? `The workspace ${wsLabel} has only ${fmtCpu(rm.cpu)} left.` : `Choose up to ${fmtCpu(nodeMaxCpu)} on this node.`;
+				p.cpu = rm.cpu != null && rm.cpu < nodeMaxCpu ? `The workspace ${wsLabel} has only ${fmtCpu(rm.cpu)} of its CPU allowance left.` : `Choose up to ${fmtCpu(nodeMaxCpu)}, the node maximum on ${nodeName}.`;
 		}
 		problems = p;
 		return Object.keys(p).length === 0;
@@ -403,6 +411,7 @@
 <div class="mx-auto max-w-3xl">
 	<a href="/bots" class="inline-flex items-center gap-1 text-muted hover:text-ink"><Icon name="chevronLeft" size={14} />Bots</a>
 	<h1 class="mt-1 text-page">New bot</h1>
+	<CreatingIn workspace={cap?.workspace} class="mt-1.5" />
 
 	<ol class="mt-5 hidden grid-cols-4 gap-2 sm:grid" aria-label="Steps">
 		{#each steps as s, i (s)}
@@ -427,10 +436,8 @@
 		</h2>
 
 		{#if loadError}<Notice tone="fail" class="mt-3">{loadError}</Notice>{/if}
-		{#if noRoom}
-			<Notice tone="warn" class="mt-3" title="No room for another bot">
-				The workspace {wsLabel} has reached its limit of {rm.bots === 0 ? `${capLimits(cap).bots} ${capLimits(cap).bots === 1 ? 'bot' : 'bots'}` : `${capLimits(cap).apps} ${capLimits(cap).apps === 1 ? 'app' : 'apps'}`}. Delete one, or ask an administrator to raise the limit.
-			</Notice>
+		{#if noRoom && blocked}
+			<Notice tone="warn" class="mt-3" title="No room for another bot">{blocked}</Notice>
 		{/if}
 
 		{#if step === 0}
@@ -738,17 +745,18 @@
 				<div>
 					<span class="label" id="memory-label">Memory limit</span>
 					<ResourcePicker kind="memory" id="memory" labelledby="memory-label" value={memoryBytes} onchange={(v) => (memoryBytes = v)} min={minMem} max={maxMem} allowEmpty emptyLabel={rt ? `Default (${fmtBytes(rt.default_memory_bytes)})` : 'Default'} invalid={!!problems.memory} />
-					<span class="help {problems.memory ? 'text-fail!' : ''}" data-problem={problems.memory ? '' : undefined}>{problems.memory || `The process is stopped if it uses more.${nodeMaxMem ? ` Up to ${fmtBytes(nodeMaxMem)} on ${nodeName}.` : ''}`}{#if memRoomText}<span class="block">Workspace room: {memRoomText}</span>{/if}</span>
+					<span class="help {problems.memory ? 'text-fail!' : ''}" data-problem={problems.memory ? '' : undefined}>{problems.memory || 'The process is stopped if it uses more.'}<span class="block">{boundText('memory', cap, nodeMaxMem, nodeName, { extra: addonMemory })}</span></span>
 				</div>
 				<div>
 					<span class="label" id="cpu-label">CPU limit</span>
 					<ResourcePicker kind="cpu" id="cpu" labelledby="cpu-label" value={nanoCpus} onchange={(v) => (nanoCpus = v)} min={minCpu} max={maxCpu} allowEmpty emptyLabel={rt ? `Default (${fmtCpu(rt.default_nano_cpus)})` : 'Default'} invalid={!!problems.cpu} />
-					<span class="help {problems.cpu ? 'text-fail!' : ''}" data-problem={problems.cpu ? '' : undefined}>{problems.cpu || `A limit, not a reservation.${nodeMaxCpu ? ` Up to ${fmtCpu(nodeMaxCpu)} on ${nodeName}.` : ''}`}{#if cpuRoomText}<span class="block">Workspace room: {cpuRoomText}</span>{/if}</span>
+					<span class="help {problems.cpu ? 'text-fail!' : ''}" data-problem={problems.cpu ? '' : undefined}>{problems.cpu || 'A limit, not a reservation.'}<span class="block">{boundText('cpu', cap, nodeMaxCpu, nodeName)}</span></span>
 				</div>
 			</div>
 			{#if addonMemory > 0}
 				<p class="mt-3 text-small text-muted">Total reserved with databases: {fmtBytes(effMemory + addonMemory)}.</p>
 			{/if}
+			{#if budgetWarning(cap, effMemory + addonMemory)}<Notice tone="warn" class="mt-4" title="Over the node budget">{budgetWarning(cap, effMemory + addonMemory)}</Notice>{/if}
 			{#if buildMemory > 0}
 				<Notice class="mt-4" title="Build memory is separate">
 					The build runs in its own container that can use up to {fmtBytes(buildMemory)} of memory{#if buildMemory > effMemory}, more than the {fmtBytes(effMemory)} the bot itself gets{/if}. {source === 'template' ? (tpl?.first_start ?? '') : ''}

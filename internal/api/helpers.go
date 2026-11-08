@@ -51,6 +51,8 @@ type userDTO struct {
 	RoleID        string `json:"role_id"`
 	RoleName      string `json:"role_name"`
 	EmailVerified bool   `json:"email_verified"`
+	// LogoVariant picks the generated picture shown without an avatar.
+	LogoVariant int64 `json:"logo_variant"`
 }
 
 func toUser(u domain.User) userDTO {
@@ -58,7 +60,7 @@ func toUser(u domain.User) userDTO {
 	if len(u.AvatarJPEG) > 0 {
 		avatar = "/api/v1/users/" + u.ID + "/avatar?v=" + strconv.FormatInt(u.UpdatedAtMS, 10)
 	}
-	return userDTO{u.ID, u.Email, u.DisplayName, avatar, u.Role, u.Disabled, u.CreatedAtMS, u.RoleID, u.RoleName, u.EmailVerified}
+	return userDTO{u.ID, u.Email, u.DisplayName, avatar, u.Role, u.Disabled, u.CreatedAtMS, u.RoleID, u.RoleName, u.EmailVerified, u.LogoVariant}
 }
 
 type botDTO struct {
@@ -102,9 +104,11 @@ type botDTO struct {
 	BuildCommand   string    `json:"build_command"`
 	ReleaseCommand string    `json:"release_command"`
 	// LogoURL is the custom logo, else the Discord avatar ("" = neither).
-	LogoURL    string   `json:"logo_url"`
-	CustomLogo bool     `json:"custom_logo"`
-	Addons     []string `json:"addons"` // attached add-on kinds (bot detail only)
+	LogoURL    string `json:"logo_url"`
+	CustomLogo bool   `json:"custom_logo"`
+	// LogoVariant picks the generated picture shown without a logo.
+	LogoVariant int64    `json:"logo_variant"`
+	Addons      []string `json:"addons"` // attached add-on kinds (bot detail only)
 
 	RestartPolicy           string `json:"restart_policy"`
 	RestartMaxAttempts      int64  `json:"restart_max_attempts"`
@@ -290,7 +294,7 @@ func toBotBase(b domain.Bot) botDTO {
 		DiscordUserID: b.DiscordUserID, DiscordUsername: b.DiscordUsername, DiscordAvatarURL: b.DiscordAvatarURL,
 		Permissions: domain.PermAll,
 		Phase:       phaseOf(b, nil, true), StateReason: b.StateReason, RestartCount: b.RestartCount, NextRetryAtMS: b.NextRetryAtMS,
-		LastStartedAtMS: b.LastStartedAtMS, LogoURL: logoURL(b), CustomLogo: b.LogoUpdatedMS > 0,
+		LastStartedAtMS: b.LastStartedAtMS, LogoURL: logoURL(b), CustomLogo: b.LogoUpdatedMS > 0, LogoVariant: b.LogoVariant,
 		Kind: kindOf(b), BlueprintID: b.BlueprintID, BlueprintRevision: b.BlueprintRevision, ImageChoice: b.ImageChoice,
 		InstallState: installStateOf(b), InstalledVersion: b.InstalledVersion, Container: toContainer(b),
 	}

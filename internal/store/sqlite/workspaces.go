@@ -42,12 +42,13 @@ func (db *DB) CreateWorkspace(ctx context.Context, w domain.Workspace) error {
 	return tx.Commit()
 }
 
-const workspaceCols = `w.id, w.name, w.owner_id, w.personal, COALESCE(w.node_id, ''), w.created_at_ms, w.updated_at_ms`
+const workspaceCols = `w.id, w.name, w.owner_id, w.personal, COALESCE(w.node_id, ''), w.created_at_ms, w.updated_at_ms,
+	COALESCE(w.logo_updated_at_ms, 0), w.logo_variant`
 
 func scanWorkspace(row interface{ Scan(...any) error }, extra ...any) (domain.Workspace, error) {
 	var w domain.Workspace
 	var personal int
-	err := row.Scan(append([]any{&w.ID, &w.Name, &w.OwnerID, &personal, &w.NodeID, &w.CreatedAtMS, &w.UpdatedAtMS}, extra...)...)
+	err := row.Scan(append([]any{&w.ID, &w.Name, &w.OwnerID, &personal, &w.NodeID, &w.CreatedAtMS, &w.UpdatedAtMS, &w.LogoUpdatedMS, &w.LogoVariant}, extra...)...)
 	w.Personal = personal == 1
 	return w, mapErr(err)
 }
@@ -269,7 +270,7 @@ func (db *DB) BotWorkspaceRole(ctx context.Context, botID, userID string) (strin
 
 // ListWorkspaceMembers lists a workspace's members, owner first.
 func (db *DB) ListWorkspaceMembers(ctx context.Context, workspaceID string) ([]domain.WorkspaceMember, error) {
-	rows, err := db.QueryContext(ctx, `SELECT m.workspace_id, m.user_id, u.email, u.display_name, m.role, m.added_by, m.created_at_ms, m.updated_at_ms
+	rows, err := db.QueryContext(ctx, `SELECT m.workspace_id, m.user_id, u.email, u.display_name, m.role, m.added_by, m.created_at_ms, m.updated_at_ms, u.logo_variant
 		FROM workspace_members m JOIN users u ON u.id = m.user_id WHERE m.workspace_id = ?
 		ORDER BY CASE m.role WHEN 'owner' THEN 0 WHEN 'admin' THEN 1 WHEN 'developer' THEN 2 ELSE 3 END, u.email LIMIT 500`, workspaceID)
 	if err != nil {
@@ -279,7 +280,7 @@ func (db *DB) ListWorkspaceMembers(ctx context.Context, workspaceID string) ([]d
 	var out []domain.WorkspaceMember
 	for rows.Next() {
 		var m domain.WorkspaceMember
-		if err := rows.Scan(&m.WorkspaceID, &m.UserID, &m.Email, &m.DisplayName, &m.Role, &m.AddedBy, &m.CreatedAtMS, &m.UpdatedAtMS); err != nil {
+		if err := rows.Scan(&m.WorkspaceID, &m.UserID, &m.Email, &m.DisplayName, &m.Role, &m.AddedBy, &m.CreatedAtMS, &m.UpdatedAtMS, &m.LogoVariant); err != nil {
 			return nil, err
 		}
 		out = append(out, m)

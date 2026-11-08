@@ -30,6 +30,7 @@ type Site struct {
 	CreatedAtMS     int64
 	UpdatedAtMS     int64
 	LogoUpdatedMS   int64 // when a custom logo was set (0 = none)
+	LogoVariant     int64 // which generated picture is shown without a logo (0 = the original)
 	// AutoBackupOff stops scheduled backups of a files site (sites with an
 	// app unit use the unit's own switch).
 	AutoBackupOff bool

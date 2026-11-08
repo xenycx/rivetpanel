@@ -843,6 +843,19 @@ items state exactly what remains.
   the browser from the item's ID by `@dicebear/core`; uploaded logos, profile
   pictures, Discord avatars and favicons always take priority. No server
   change or migration.
+- [x] Workspace logos and "New picture" for generated logos (Unreleased;
+  migration `0066`). Workspaces store a custom PNG/JPEG logo like bots and
+  sites (`GET`/`PUT`/`DELETE /workspaces/{id}/logo`); bots, sites, workspaces
+  and accounts store a `logo_variant` that reseeds their generated picture
+  (`POST …/logo/shuffle`, `POST /me/avatar/shuffle`,
+  `POST /users/{id}/avatar/shuffle`). Enforcement: application level — setting
+  a workspace logo or variant needs the workspace admin role plus
+  `workspaces.rename` (or `workspaces.manage`/administrator), reading needs
+  membership; bot and site variants reuse the logo permission (Full admin,
+  site developer); account variants are self-service or `users.manage`.
+  Images are validated (PNG/JPEG, 16–512 px, 256 KiB) and served sandboxed
+  with `nosniff`. Every change is audited. The generated picture itself is
+  drawn in the browser.
 
 - [x] Email through Mailgun (Unreleased): password reset by emailed link,
   invitation emails, bot alerts by email, and security notices; configured in
@@ -889,7 +902,10 @@ items state exactly what remains.
 - [x] Team workspaces with owner/admin/developer/viewer roles, a personal
   workspace per account, moving bots between workspaces, and a sidebar
   switcher. Enforcement: application level, on every bot, site, operation,
-  activity, SFTP and automation request (`docs/workspaces.md`).
+  activity, SFTP and automation request (`docs/workspaces.md`). The
+  switcher's choice is a per-browser view filter in the web UI only (Overview
+  list and numbers, Apps, default create target), not an access boundary;
+  Activity is not filtered by it and says so.
 - [x] Administrator oversight of every workspace and account: members, bots
   with owners and state, sites, and the latest 40 operations (deployments,
   builds, backups, restores, GitHub pushes).
@@ -1003,6 +1019,25 @@ items state exactly what remains.
   stays the only enforcement. Memory and CPU in the limits forms come from
   presets or a custom value; the "One bot only" button was removed. Not
   implemented: disk totals.
+- [x] One limits model (no migration): the interface, API help, refusals and
+  guides name four limits and their enforcement layer. **App size** (memory,
+  CPU, processes of one app) is enforced by the container runtime (Docker
+  cgroups). **Workspace allowance** (the former workspace limits; the
+  panel-wide value is the default allowance) is enforced by the application
+  on create, resize, move and transfer. **Node budget**
+  (`RIVET_NODE_MEMORY_BYTES`) is enforced by the application at start only;
+  the create forms now also warn when a new app would not fit the budget
+  left on its node (`node_budget` in `GET /me/capacity?node=`), but that
+  warning is advisory and creation is never refused for it. **Node maximum**
+  is enforced by the application on create and resize (and Docker refuses a
+  CPU limit above the host's cores). Allowance values report their source
+  (`builtin`, `env`, `panel`, `workspace`); the built-in 10 sites is no
+  longer reported as an environment value (`RIVET_MAX_SITES_PER_USER` set or
+  not is now recorded at load). Host → Capacity shows effective values with
+  sources. Containers and Compose services still share the bots count, now
+  labelled "Bots and containers"; a separate container count would need a
+  migration and is not done. `GET /me/capacity` reports the workspace
+  allowance to exempt administrators too (display only; they stay exempt).
 - [x] Editable built-in User role (migration `0057`, data only): the `user`
   role row's permission list is stored (every resource permission plus
   `workspaces.rename`) and is what accounts with that role, invitees and
@@ -1186,6 +1221,7 @@ Migrations added since 0.2.0 (the schema-version assertion in
 | `0063_site_backups.sql` | Additive: `sites.auto_backup` (scheduled backups of a files site, on by default) and `site_backups` (`sites` `ON DELETE CASCADE`: kind auto/manual, the archived release, label, files, bytes, SHA-256, creator `ON DELETE SET NULL`). Archive files live under `RIVET_BACKUP_DIR/sites/<site>/`. Covered by `TestMigrateIdempotentAndSchema` (64 versions) |
 | `0064_configure_permission.sql` | Additive: the built-in User role's stored permissions gain `bots.configure` after `bots.env` (catalog order); custom roles are unchanged. Covered by `TestMigration0064AddsConfigureToUserRole` and `TestMigrateIdempotentAndSchema` (65 versions) |
 | `0065_configure_share.sql` | Rebuild (foreign keys off, checked after): `bot_subusers` and `bot_invites` widen `permissions` from 1..31 to 1..63 so a share or invitation can hold the Configuration bit (32); every column copied by name, indexes recreated, existing grants unchanged. Covered by `TestMigration0065WidensSharePermissions` and `TestMigrateIdempotentAndSchema` (66 versions) |
+| `0066_workspace_logos.sql` | Additive: `workspaces` gains `logo` (BLOB ≤ 256 KiB), `logo_type` (`image/png`/`image/jpeg`) and `logo_updated_at_ms`; `workspaces`, `bots`, `sites` and `users` gain `logo_variant INTEGER NOT NULL DEFAULT 0` (≥ 0), so existing generated pictures are unchanged. Covered by `TestMigration0066WorkspaceLogosAndVariants` and `TestMigrateIdempotentAndSchema` (67 versions) |
 | `0054_web_apps.sql` | Rebuilds `bots` (kind gains `web`, runtime gains `php`, new `release_command`) and `sites` (mode gains `app`; `app_id`, `framework`, `build_output_dir`, `app_port`, `health_path`, `max_body_bytes`) with explicit column lists and foreign keys off (checked with `PRAGMA foreign_key_check`; all indexes recreated); additive `site_releases.source_ref` and `bot_health_probes.target` (`host`/`app`). Covered by `apps_migration_test.go` |
 | `0030_ai_global_chat.sql` | Rebuilds `ai_conversations` so a chat may have no target; `ai_runs.bot_id`/`site_id`, `ai_messages.context_json` (the conversation subtree is stashed and restored, rows preserved) |
 

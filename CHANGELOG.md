@@ -6,6 +6,123 @@ authoritative current version.
 
 ## Unreleased
 
+## 1.4.0 - 2026-11-08
+
+### Added
+
+- **Workspace logos.** A workspace can have its own logo like bots and sites:
+  click the picture beside its name on Settings → Workspaces (or
+  Administration → Workspaces) to upload, replace or remove it. Whoever may
+  rename the workspace may change it; every member sees it in the switcher
+  and the workspace lists. API:
+  `GET`/`PUT`/`DELETE /api/v1/workspaces/{id}/logo`; workspace objects carry
+  `logo_url`. Changes are audited (`workspace.logo_set`,
+  `workspace.logo_remove`).
+- **New picture for generated logos.** Bots, containers, game servers, sites,
+  workspaces and accounts without an image of their own can draw a different
+  generated picture with **New picture** (bot and site Settings, a workspace's
+  logo menu, Settings → Profile, and an account's page in Administration →
+  Users). The choice is stored and seen by everyone; it needs the same right as
+  changing that item's logo, people change their own picture and `users.manage`
+  anyone's, and each request is audited. Existing pictures do not change.
+  Migration `0066` adds the workspace logo columns and a `logo_variant` to
+  bots, sites, workspaces and accounts.
+- **How limits work.** One vocabulary everywhere: **app size** (one app's
+  memory, CPU and processes, enforced by Docker), **workspace allowance**
+  (what one workspace may hold, enforced by the panel on create, resize and
+  move; the panel-wide value is the **default allowance**), **node budget**
+  (`RIVET_NODE_MEMORY_BYTES`, enforced by the panel at start) and **node
+  maximum** (the largest app size a node accepts). A four-row legend sits on
+  Panel settings → Default allowance and in the in-product guide; other limit
+  surfaces link to it.
+- Every allowance value now shows its source: Built-in, Environment, Panel
+  default or This workspace (`source` on `GET /api/v1/admin/limits` now
+  includes `builtin`; workspace allowance views add `sources` and, for
+  administrators, `default_sources`). Empty fields say what they inherit
+  ("Inherits 10 · Built-in") instead of showing a grey value.
+- Create forms (bot, game server, container, Compose, site) name the
+  workspace they create in, name the bound that limits memory and CPU
+  ("Limited by the workspace memory allowance: 1.8 of 2 GiB used" or the node
+  maximum), and warn when the new app would not fit in the node budget left
+  on its node: it is still created, but its start is refused.
+  `GET /api/v1/me/capacity` takes `?node=` and reports `node_budget` to every
+  member; for administrators the `node` block adds the node maximum and the
+  node's measured memory.
+- **Run an image** has a CPU field, and its memory and CPU pickers are capped
+  by the workspace allowance and node maximum like the other create forms.
+
+### Changed
+
+- **Administration → Workspaces → a workspace** now lists its apps, members and
+  sites before the allowance and placement forms, counts "Apps running" and
+  "Memory assigned" instead of "Bots running" and "Memory", and links back to
+  "Workspaces" so the link no longer reads like the switcher's "All workspaces".
+- **Workspace switcher.** Each workspace row shows its logo and your role
+  ("Owner" rather than "owner"); the current choice is marked with a check and
+  announced as the selected option, and with All workspaces selected the button
+  shows the first two workspace logos, also in the collapsed sidebar. Screen
+  readers now hear the current workspace ("Workspace: Acme") on the button.
+  Its All workspaces row shows the same two logos, typing a letter in the open
+  menu (and in every other menu) jumps to the next row starting with it, and
+  with a single workspace the switcher shows that workspace instead of
+  offering All workspaces.
+- **Workspace scope is stated.** Overview and Apps name the chosen workspace
+  beside their title with **Show all workspaces**; Activity, which is not
+  filtered, says "Showing all workspaces" while one is chosen.
+- **Go to (Ctrl+K) switches workspaces.** Workspaces have their own group and
+  scope: **Switch to …** changes the workspace (opening the Overview from
+  pages that do not follow it), **Show all workspaces** returns to all, and
+  "… settings" opens the workspace's settings.
+- **Administration → Workspaces table fits the page.** The name takes the
+  spare width (full name on hover) with kind and owner on a muted second line
+  instead of an Owner column; numbers and "Active" stay on one line; Limits
+  and Node share one column shown on wide screens, and Members and Sites hide
+  on narrow ones, so nothing scrolls sideways at common widths.
+- **Settings → Workspaces cards** say who a workspace belongs to once ("Your
+  personal workspace", "Team · you own it") instead of repeating "Personal" or
+  "Owner · owned by you", show Memory (formerly "RAM") and last activity on
+  every card, and keep their actions on one row aligned to the card bottom.
+  "Selected" and the owner's role use the accent colour instead of the green
+  running colour. The workspace page's back link reads **Your workspaces**,
+  and its texts say apps rather than bots.
+- Containers and Compose services count toward the allowance labelled
+  **Bots and containers** (formerly "Bots") everywhere: forms, meters,
+  invitations, refusals and the guide. Counting is unchanged.
+- Built-in administrators now see their workspace's allowance and room in
+  the create forms, marked "(you are exempt as an administrator)", instead of
+  nothing; they are still never refused. `GET /api/v1/me/capacity` reports
+  the workspace's allowance for them as well (`exempt` stays true). The
+  always-false `exempt` field is gone from workspace allowance views.
+- Administration → Host → Capacity lists every limit with the value in
+  effect now and its source, including the built-in 10 sites, 1 GiB minimum
+  free disk, one concurrent build and the node maximum as capped by the
+  node's memory. Panel settings → Default allowance states the per-account
+  ceiling next to Team workspaces per account.
+- CPU reads in cores everywhere ("2 cores", not "2 CPU"); "No limit" is the
+  one wording for unlimited; memory figures say what they count ("Memory
+  assigned to all apps" versus "reserved by running apps").
+- Log retention sizes are labelled MiB (they always were mebibytes) and the
+  archive limit is shown in GiB correctly.
+- Limit refusals use the new names and say how to recover; the node budget
+  refusal reads "not enough room in this node's memory budget".
+
+### Fixed
+
+- The command palette lists a personal workspace without a stored name as
+  "Personal" instead of a blank entry.
+- With a workspace chosen, every Overview number follows it: Running,
+  Memory reserved, CPU reserved and Apps counted every workspace before
+  (administrators saw host usage). With all of several workspaces shown,
+  reservations are summed without a meter instead of being measured against
+  the personal workspace's allowance.
+- When the workspace list cannot be loaded, the switcher says so and offers
+  **Try again** instead of showing "All workspaces" over an empty list.
+- The built-in default of 10 sites per workspace is no longer labelled as
+  coming from the environment, and Host → Capacity no longer shows unset or
+  0 values as "unlimited" where the effective value differs.
+- `RIVET_BACKUP_MAX_BYTES` is described as the largest app a backup will
+  archive, not a "workspace".
+
 ## 1.3.0 - 2026-11-08
 
 ### Added

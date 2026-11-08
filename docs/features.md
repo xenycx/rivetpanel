@@ -46,8 +46,9 @@ These are per-browser preferences.
   with a review step and a result per app. The former `/bots`, `/servers`
   and `/sites` lists redirect here with their filter. A Ctrl+K "Go to"
   palette finds pages, administration sections, environment variables,
-  docs, apps (and their sections), websites, people, AI chats and actions.
-  Several words narrow the search; Tab switches scope; `>` lists actions
+  docs, apps (and their sections), websites, workspaces (**Switch to …** and
+  their settings), people, AI chats and actions. Several words narrow the
+  search; Tab switches scope; `>` lists actions
   only.
 - **New bot** (`/bots/new`): template, GitHub repository or empty bot; required
   values such as the token up front; review of memory, CPU and build memory;
@@ -79,8 +80,10 @@ These are per-browser preferences.
   right tab.
 - **Activity** (`/activity`): work (builds, deployments, backups, restores) and
   changes (who changed what; names only, never values).
-- **Workspace switcher** (sidebar): scopes the Overview, Apps and new apps to
-  one workspace or shows all of them (`workspaces.md`).
+- **Workspace switcher** (sidebar): scopes the Overview (list and numbers),
+  Apps and new apps to one workspace or shows all of them; those pages name
+  the workspace beside their title, and Activity notes that it shows every
+  workspace (`workspaces.md`).
 - **Public page** (inside each bot): Page Studio for a generated bot site,
   opt-in public widgets, full site files, private insights and a cross-origin
   preview. **Apps → Websites** is the workspace-wide inventory for sites,
@@ -480,16 +483,18 @@ for browsing and querying add-on databases (`docs/extensions.md`).
 
 ## Logos
 
-Bots and sites can have a **custom logo** (PNG or JPEG, resized in the browser
-to at most 256×256, stored up to 256 KiB). A bot shows its custom logo, else
+Bots, sites and workspaces can have a **custom logo** (PNG or JPEG, resized in
+the browser to at most 256×256, stored up to 256 KiB). A bot shows its custom logo, else
 its Discord avatar. The avatar arrives through the telemetry SDK, or
 **Get avatar from Discord** (bot Settings) asks Discord's API for the bot user
 with the token found in the bot's variables (`DISCORD_TOKEN`, `BOT_TOKEN`,
 `TOKEN`, `RED_TOKEN`, `YAGPDB_BOTTOKEN`, ... or any value shaped like a bot
 token); the token is only sent to Discord. A site shows its custom logo, else
 the favicon of its active release (the `<link rel="icon">` in `index.html`, or
-`favicon.ico`/`.png`/`.svg`), else its bot's logo. Logos are served to signed-in
-people with access only, sandboxed and without content sniffing.
+`favicon.ico`/`.png`/`.svg`), else its bot's logo. A workspace's logo is set
+from the picture beside its name (Settings → Workspaces, or Administration →
+Workspaces) by whoever may rename it (`workspaces.md`). Logos are served to
+signed-in people with access only, sandboxed and without content sniffing.
 
 Anything without an image of its own gets a generated
 [DiceBear](https://www.dicebear.com) logo instead: robots (Bottts Neutral, by
@@ -500,6 +505,21 @@ survives a rename and no request leaves the panel for it. Game servers without
 a custom logo keep their game's icon. An uploaded logo or profile picture, a
 Discord avatar or a favicon always takes priority, and if one of them fails to
 load the generated logo is shown in its place.
+
+**New picture** (the shuffle button next to a logo: bot and site Settings, the
+logo menu of a workspace, Settings → Profile, and an account's page under
+Administration → Users) draws a different generated picture while no image
+overrides it. The choice is stored per item (`logo_variant`, migration `0066`)
+and seen by everyone: the picture is seeded with the ID while the variant is 0,
+so existing pictures did not change, and with `<id>:<variant>` after that. It
+needs the same right as changing that item's logo (Full admin on a bot,
+developer on a site, renaming rights on a workspace); people change their own
+picture and `users.manage` changes anyone's. Each request is audited
+(`bot.logo_shuffle`, `site.logo_shuffle`, `workspace.logo_shuffle`,
+`account.avatar_shuffle`, `admin.user_avatar_shuffle`). Routes:
+`POST /bots/{id}/logo/shuffle`, `POST /sites/{id}/logo/shuffle`,
+`POST /workspaces/{id}/logo/shuffle`, `POST /me/avatar/shuffle` and
+`POST /users/{id}/avatar/shuffle`, each answering `{logo_variant}`.
 
 ### Publishing a bot to GitHub
 
@@ -726,9 +746,9 @@ Not editable here: variables read before the database opens (`RIVET_ENV`,
 the host (`_DOCKER_HOST`, `_CONTAINER_USER`, `_WORKSPACE_OWNER`,
 `_ALLOW_ROOT_CONTAINER_USER`, `_CONTAINER_NETWORK`, `_PROXY_HEADER`), and the
 variables another page manages, marked **Managed**: sign-in and address
-(Panel settings, where the environment file wins), the default limits
-`_MAX_BOTS_PER_USER`, `_MAX_SITES_PER_USER` and `_USER_MEMORY_BYTES` (Panel
-settings → Default limits) and `_TELEMETRY_RETENTION` (Logs and retention),
+(Panel settings, where the environment file wins), the default allowance
+fallbacks `_MAX_BOTS_PER_USER`, `_MAX_SITES_PER_USER` and `_USER_MEMORY_BYTES`
+(Panel settings → Default allowance) and `_TELEMETRY_RETENTION` (Logs and retention),
 where the panel's value wins and the environment file is the fallback. Less
 common groups start collapsed. Every save is checked
 as a whole configuration first; if a saved set ever stops validating, the panel
@@ -745,83 +765,120 @@ env reset [NAME…]` drops them.
 
 ## Capacity and admission
 
-Administrators can set budgets in the environment file or on the Environment
-page (0 = unlimited):
+Four kinds of limit apply, each enforced in one place. The in-product guide
+(`/docs#workspace-limits`, "How limits work") and Administration → Panel
+settings → Default allowance show the same table:
+
+| Limit | Bounds | Enforced by |
+| --- | --- | --- |
+| **App size** | memory, CPU and processes of one app | Docker (cgroups), while the app runs |
+| **Workspace allowance** | what one workspace may hold in total: app and site counts, memory, CPU | the panel, when an app or site is created, resized or moved |
+| **Node budget** | the sum of app sizes wanted running on one node (`RIVET_NODE_MEMORY_BYTES`) | the panel, when an app starts |
+| **Node maximum** | the largest app size one node accepts | the panel, when an app is created or resized |
+
+The panel-wide workspace allowance is the **default allowance**. Retention
+and other caps (log archive size, backups kept, upload sizes) keep their own
+names. Disk is not counted; there are no disk quotas.
+
+Host and node values are set in the environment file or on the Environment
+page and apply after a restart:
 
 | Setting | Effect |
 | --- | --- |
-| `RIVET_MAX_BOT_MEMORY_BYTES`, `RIVET_MAX_BOT_NANO_CPUS` | largest memory / CPU limit of one bot or game server; always capped by the node's own memory and CPU count, which alone apply when unset |
-| `RIVET_NODE_MEMORY_BYTES` | sum of memory limits of apps wanted running; a start that would exceed it is refused (409) with the numbers |
-| `RIVET_USER_MEMORY_BYTES`, `RIVET_MAX_BOTS_PER_USER`, `RIVET_MAX_SITES_PER_USER` | fallback default limits for each workspace, used where Panel settings → Default limits sets none (see below) |
-| `RIVET_MAX_BUILDS` | concurrent build containers (default 1); waiting builds say so |
-| `RIVET_MIN_FREE_DISK_BYTES` | free space backups, restores and deployments need (default 1 GiB) |
+| `RIVET_MAX_BOT_MEMORY_BYTES`, `RIVET_MAX_BOT_NANO_CPUS` | node maximum: largest memory / CPU size of one app; always capped by the node's own memory and core count, which alone apply when unset or 0 |
+| `RIVET_NODE_MEMORY_BYTES` | node budget: sum of the memory sizes (add-ons included) of apps wanted running on a node; a start that would exceed it is refused (409) with the numbers. Creating an app is not refused, but the create forms warn when it would not fit. Unset or 0 is no limit |
+| `RIVET_USER_MEMORY_BYTES`, `RIVET_MAX_BOTS_PER_USER`, `RIVET_MAX_SITES_PER_USER` | fallback for the default allowance, used where Panel settings → Default allowance sets none (see below) |
+| `RIVET_MAX_BUILDS` | concurrent build containers (built-in 1); waiting builds say so |
+| `RIVET_MIN_FREE_DISK_BYTES` | free space backups, restores and deployments need (built-in 1 GiB; 0 turns the check off) |
 
 The node check and the start are one database transaction, so simultaneous
 starts cannot overcommit. These are admission rules, not kernel limits:
-containers still have their own hard memory and CPU limits, and there are no
-disk quotas.
+containers still have their own hard memory and CPU limits.
+**Administration → Host → Capacity** lists every one of these limits with
+the value in effect now (the node maximum as capped by the node's memory,
+the default allowance as Panel settings resolve it) and its source:
+Built-in, Environment, Environment page or Panel default.
 
-### Workspace limits
+### Workspace allowance
 
-Limits belong to workspaces. Every member's apps and sites in a workspace
-count together, whoever created them. Each workspace gets the **default
-limits** from Administration → Panel settings → Default limits (`GET`/`PUT
-/api/v1/admin/limits`, audited as `admin.limits`). They apply at once, with
-no restart. Where a default is empty, the environment variable applies
-(`RIVET_MAX_BOTS_PER_USER` for apps in total, `RIVET_MAX_SITES_PER_USER` for
-sites, `RIVET_USER_MEMORY_BYTES` for memory); with neither, there is no limit.
+Allowances belong to workspaces, not accounts. Every member's apps and sites
+in a workspace count together, whoever created them. Each workspace inherits
+the **default allowance** from Administration → Panel settings → Default
+allowance (`GET`/`PUT /api/v1/admin/limits`, audited as `admin.limits`). It
+applies at once, with no restart. Where a field is empty there, the
+environment variable applies (`RIVET_MAX_BOTS_PER_USER` for apps in total,
+`RIVET_MAX_SITES_PER_USER` for sites, `RIVET_USER_MEMORY_BYTES` for memory),
+else the built-in value: 10 sites, no limit for everything else. In the
+environment 0 means no limit; in Panel settings and a workspace's own
+allowance 0 allows none. `GET /api/v1/admin/limits` reports each value's
+`source` as `panel`, `env` or `builtin`.
 
-An administrator can give one workspace its own limits under Administration
-→ Workspaces → the workspace → Limits (`GET`/`PUT`/`DELETE
-/api/v1/admin/workspaces/{id}/quota`; reading needs View workspaces, changing
-needs the built-in administrator role). Each field replaces the default for
-that workspace only; an empty field keeps the default, and 0 allows none:
+An administrator can give one workspace its own allowance under
+Administration → Workspaces → the workspace → Workspace allowance
+(`GET`/`PUT`/`DELETE /api/v1/admin/workspaces/{id}/quota`; reading needs View
+workspaces, changing needs the built-in administrator role). Each field
+replaces the default for that workspace only; an empty field inherits the
+default, and 0 allows none. Every value is shown with its source (Built-in,
+Environment, Panel default or This workspace; `sources` in the API):
 
 | Field | Counts |
 | --- | --- |
-| Bots, Game servers, Web apps | apps of one kind |
-| Apps in total | bots, game servers and web app units together |
+| Apps in total | bots and containers, game servers and web apps together |
+| Bots and containers | bots, container apps and each Compose service |
+| Game servers, Web apps | apps of one kind |
 | Sites | sites, including bot public pages and sites from GitHub |
-| Memory | memory limits of all apps, add-ons included |
-| CPU cores | CPU limits of all apps |
+| Memory | memory sizes of all apps, add-ons included |
+| CPU cores | CPU sizes of all apps |
 
-Every limit that applies must pass. For example, Bots 1 with Game servers,
-Web apps and Sites 0 lets a workspace hold a single bot and nothing else. The
-limits forms pick memory (256 MiB, 512 MiB, 1 to 32 GiB) and CPU (0.5 to 8
-cores) from presets, or take a custom value with a unit. Apps count until
-they are deleted, running or
-stopped, so starting an app never needs a check. Creating a bot, game server,
-web app or site and the limit check run in one database transaction, so
-simultaneous requests cannot both take the last place. Memory and CPU
-increases (resizing, add-ons), moving an app or a site (with its app) into
-another workspace, and ownership transfers (the app moves into the
-recipient's personal workspace) are checked just before they are stored.
-A refusal names the workspace. Lowering a limit below what a workspace holds
-never stops or deletes anything; it only refuses growth. Every change is in
-the activity log (`admin.workspace_quota_set`, `admin.workspace_quota_clear`).
+Containers and Compose services have no count of their own: they count as
+**Bots and containers** (and toward Apps in total). Every value that
+applies must pass. For example, Bots and containers 1 with Game servers, Web
+apps and Sites 0 lets a workspace hold a single bot or container and nothing
+else. The forms pick memory (256 MiB, 512 MiB, 1 to 32 GiB) and CPU (0.5 to
+8 cores) from presets, or take a custom value with a unit. Apps count until
+they are deleted, running or stopped, so starting an app never needs an
+allowance check. Creating a bot, game server, container, web app or site and
+the check run in one database transaction, so simultaneous requests cannot
+both take the last place. Memory and CPU increases (resizing, add-ons),
+moving an app or a site (with its app) into another workspace, and ownership
+transfers (the app moves into the recipient's personal workspace) are checked
+just before they are stored. A refusal names the workspace. Lowering an
+allowance below what a workspace holds never stops or deletes anything; it
+only refuses growth. Every change is in the activity log
+(`admin.workspace_quota_set`, `admin.workspace_quota_clear`).
 
-**Who is exempt.** The exemption belongs to the account acting, not to the
-workspace: a built-in administrator is never refused by a limit, wherever
-they create, resize, move or transfer. Every other member is bounded, even in
-a workspace an administrator owns. `GET /api/v1/me/capacity` reports `exempt`
-for the calling account; the limits views never do.
+**Who is exempt.** The exemption belongs to the account acting, never to a
+workspace: a built-in administrator is never refused by a workspace
+allowance, wherever they create, resize, move or transfer. Every other member
+is bounded, even in a workspace an administrator owns. The node budget and
+node maximum apply to everyone. `GET /api/v1/me/capacity` reports `exempt`
+for the calling account together with the workspace's allowance; the
+allowance views report no exemption.
 
-**Room in the forms.** The bot, game server, site and new-site forms and an
-app's resource settings show what is left of the selected workspace's limits
-(the dashboard's capacity follows the selected workspace too). Memory and CPU
-pickers stop at the smaller of the node's per-app maximum and that room, and
-creating is disabled when no room is left. The forms only make the limits
-visible beforehand; the server decides.
+**Room in the forms.** The bot, game server, container, Compose, site and
+new-site forms and an app's resource settings name the workspace they create
+in and show what is left of its allowance. Memory and CPU pickers stop at
+the smaller of the node maximum and that room, and the help names the bound
+that applies ("Limited by the workspace memory allowance: 1.8 of 2 GiB used"
+or "Limited by the node maximum"). An administrator sees the same room with
+"(you are exempt as an administrator)" and is bounded by the node maximum
+only. Creating is disabled when no room is left. When the new app's memory
+would not fit in the node budget left on its node (`node_budget` in
+`GET /api/v1/me/capacity?node={id}`), the form warns: the app is created,
+but its start is refused until other apps stop. The forms only make the
+limits visible beforehand; the server decides.
 
-Since every workspace gets the defaults, an account that owns several team
-workspaces can hold more than one workspace's worth. **Team workspaces per
-account** (also under Default limits; 20 when unset, 0 stops users from
-creating team workspaces) bounds that.
+Since every workspace inherits the default allowance, an account that owns
+several team workspaces can hold more than one workspace's worth. **Team
+workspaces per account** (also under Default allowance; built-in 20, 0 stops
+users from creating team workspaces) bounds that: one account can hold up to
+that many plus one (its personal workspace) times the default allowance, and
+the form states that ceiling.
 
-Members see their workspace's usage and limits under Settings → Workspaces →
-the workspace, and `GET /api/v1/me/capacity?workspace={id}` reports them
-(the caller's personal workspace without `workspace`). Enforcement is in the
-application; disk is not counted.
+Members see their workspace's usage and allowance under Settings →
+Workspaces → the workspace, and `GET /api/v1/me/capacity?workspace={id}`
+reports them (the caller's personal workspace without `workspace`).
+Enforcement is in the application.
 
 ### Node placement
 

@@ -128,14 +128,14 @@ await step('sign in and see the empty overview with ways to start', async () => 
 	await page.getByRole('button', { name: 'Sign in' }).click();
 	await page.waitForURL(base + '/dashboard');
 	await page.getByRole('heading', { level: 1, name: 'Overview' }).waitFor();
-	const bots = page.getByRole('region', { name: 'Discord bots' });
+	const bots = page.getByRole('region', { name: 'Bots', exact: true });
 	await bots.getByText(/No bots .*yet/).waitFor();
 	await bots.getByRole('link', { name: 'Start from a template' }).waitFor();
 });
 
 await step('the public home and panel dashboard have distinct routes', async () => {
 	await page.goto('/');
-	await page.getByRole('heading', { level: 1, name: /^Run every bot/ }).waitFor();
+	await page.getByRole('heading', { level: 1, name: /^Everything you run/ }).waitFor();
 	expect((await page.getByRole('link', { name: 'Open panel', exact: true }).getAttribute('href')) === '/dashboard', 'Open panel does not target the dashboard');
 	await page.goto('/dashboard');
 });
@@ -194,10 +194,14 @@ await step('overview explains the state without a runner', async () => {
 });
 
 await step('grouped section navigation keeps deep links and history', async () => {
-	await page.getByRole('link', { name: 'Env', exact: true }).click();
+	// More than seven sections: the first row names the groups, the open group's sections form a second row.
+	const sections = page.getByRole('navigation', { name: 'Bot sections' });
+	await sections.getByRole('link', { name: 'Configuration', exact: true }).click();
+	await page.waitForURL(/tab=startup/);
+	await page.getByRole('navigation', { name: 'Configuration sections' }).getByRole('link', { name: 'Variables', exact: true }).click();
 	await page.waitForURL(/tab=env/);
 	await page.getByText('DISCORD_TOKEN').first().waitFor();
-	await page.getByRole('link', { name: 'Files' }).click();
+	await sections.getByRole('link', { name: 'Code', exact: true }).click();
 	await page.waitForURL(/tab=files/);
 	await page.goBack();
 	await page.waitForURL(/tab=env/);
@@ -210,11 +214,11 @@ await step('unsaved edits are protected when leaving the section', async () => {
 	await page.locator('.cm-content').click();
 	await page.keyboard.type('// edited\n');
 	await page.getByText('unsaved changes').waitFor();
-	await page.getByRole('link', { name: 'Startup' }).click();
+	await page.getByRole('navigation', { name: 'Bot sections' }).getByRole('link', { name: 'Configuration', exact: true }).click();
 	await page.getByRole('heading', { name: 'Unsaved changes' }).waitFor();
 	await page.getByRole('button', { name: 'Keep editing' }).click();
 	expect(page.url().includes('tab=files'), 'navigated away despite Keep editing');
-	await page.getByRole('link', { name: 'Startup' }).click();
+	await page.getByRole('navigation', { name: 'Bot sections' }).getByRole('link', { name: 'Configuration', exact: true }).click();
 	await page.getByRole('button', { name: 'Discard changes' }).click();
 	await page.waitForURL(/tab=startup/);
 });
@@ -300,7 +304,7 @@ await step('a shared console-only user sees output but no power or input control
 	const p = await newPage();
 	await signIn(p, 'viewer@e2e.test', userPw);
 	await p.goto(`/bots/${botId}?tab=console`);
-	await p.getByRole('link', { name: 'Manage', exact: true }).waitFor(); // viewing is allowed
+	await p.getByRole('navigation', { name: 'Bot sections' }).getByRole('link', { name: 'Overview', exact: true }).waitFor(); // viewing is allowed
 	await p.getByText(/Live output needs the Docker runner|Bot output/).first().waitFor();
 	expect((await p.getByRole('group', { name: 'Power controls' }).count()) === 0, 'power controls shown');
 	expect((await p.getByLabel('Send a line to the bot').count()) === 0, 'stdin input shown');
@@ -347,11 +351,14 @@ await step('the Changes view lists who changed what, without values', async () =
 await step('the workspace switcher scopes the bot list', async () => {
 	const ws = await admin('POST', '/workspaces', { name: 'E2E team' });
 	await page.goto('/bots');
-	await page.getByRole('button', { name: 'Switch workspace' }).first().click();
-	await page.getByRole('menuitem', { name: /E2E team/ }).click();
-	await page.getByRole('region', { name: 'Bot list' }).getByText(/No bots in E2E team yet/).waitFor();
+	await page.getByRole('button', { name: 'Workspace: All workspaces' }).first().click();
+	await page.getByRole('menuitemradio', { name: /E2E team/ }).click();
+	await page.getByRole('button', { name: 'Workspace: E2E team' }).first().waitFor();
+	await page.getByRole('region', { name: 'Bots', exact: true }).getByText(/No bots in E2E team yet/).waitFor();
 	expect((await page.evaluate(() => localStorage.getItem('rivetpanel.workspace'))) === ws.workspace.id, 'the selection was not remembered');
-	await page.getByRole('button', { name: 'Show all workspaces' }).click();
+	// The header names the workspace with a way back; the empty list offers one too.
+	await page.getByRole('button', { name: 'Show all workspaces' }).first().click();
+	await page.getByRole('button', { name: 'Workspace: All workspaces' }).first().waitFor();
 });
 
 await step('tags filter the fleet and favorites come first', async () => {
@@ -365,7 +372,7 @@ await step('tags filter the fleet and favorites come first', async () => {
 	await page.getByRole('button', { name: 'Actions for zz second' }).click();
 	await page.getByRole('menuitem', { name: 'Add to favorites' }).click();
 	await page.reload();
-	const list = page.getByRole('region', { name: 'Bot list' });
+	const list = page.getByRole('region', { name: 'Bots', exact: true });
 	await list.getByRole('link', { name: 'zz second' }).waitFor();
 	const first = await list.getByRole('link').first().textContent();
 	expect(first?.includes('zz second'), 'the favorite is not listed first');

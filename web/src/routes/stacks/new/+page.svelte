@@ -2,7 +2,9 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { api, ApiError, fmtBytes, fmtCpu } from '$lib/api/client';
-	import type { Stack } from '$lib/api/types';
+	import type { Capacity, Stack } from '$lib/api/types';
+	import { allowanceRoom, budgetWarning, capLimits } from '$lib/room';
+	import CreatingIn from '$lib/components/CreatingIn.svelte';
 	import { session } from '$lib/session.svelte';
 	import { creatable, loadWorkspaces, workspaces, wsName } from '$lib/workspaces.svelte';
 	import Icon from '$lib/components/ui/Icon.svelte';
@@ -40,9 +42,40 @@
 	let fileInput: HTMLInputElement | undefined = $state();
 
 	onMount(() => {
-		loadWorkspaces();
-		const sel = workspaces.selected;
-		if (sel && sel !== 'all') workspaceId = creatable().some((w) => w.id === sel && !w.personal) ? sel : '';
+		// The workspace selected in the sidebar, once the list is known.
+		loadWorkspaces().then(() => {
+			const sel = workspaces.selected;
+			if (sel && sel !== 'all') workspaceId = creatable().some((w) => w.id === sel && !w.personal) ? sel : '';
+		});
+	});
+	// The workspace's allowance and this host's node budget (stacks run here).
+	let capacity = $state<Capacity | null>(null);
+	$effect(() => {
+		const ws = workspaceId;
+		let live = true;
+		api<Capacity>('GET', `/me/capacity?workspace=${encodeURIComponent(ws)}`)
+			.then((c) => {
+				if (live) capacity = c;
+			})
+			.catch(() => {
+				if (live) capacity = null;
+			});
+		return () => {
+			live = false;
+		};
+	});
+	// "2 of 5 bots and containers left" for the counts the stack uses.
+	const allowanceLeft = $derived.by(() => {
+		if (!capacity) return '';
+		const r = allowanceRoom(capacity);
+		const l = capLimits(capacity);
+		const parts: string[] = [];
+		if (r.bots != null) parts.push(`${r.bots} of ${l.bots} bots and containers`);
+		if (r.apps != null) parts.push(`${r.apps} of ${l.apps} apps in total`);
+		if (r.memory != null) parts.push(`${fmtBytes(r.memory)} of ${fmtBytes(l.memory_bytes ?? 0)} memory`);
+		if (r.cpu != null) parts.push(`${fmtCpu(r.cpu)} of ${fmtCpu(l.nano_cpus ?? 0)}`);
+		if (!parts.length) return '';
+		return `Workspace allowance left: ${parts.join(', ')}.${capacity.exempt ? ' You are exempt as an administrator.' : ''}`;
 	});
 	const input = $derived(JSON.stringify([name, compose, envText, workspaceId]));
 	const stale = $derived(!!plan && previewed !== input);
@@ -85,6 +118,7 @@
 <header class="page-head">
 	<h1 class="font-semibold">Import a Compose file</h1>
 	<p class="text-small text-muted">Each service becomes a container app; together they form a stack whose services reach each other by name. Nothing is created until you confirm the preview.</p>
+	<CreatingIn workspace={capacity?.workspace} class="mt-1.5" />
 </header>
 
 {#if !session.features.containers}
@@ -138,8 +172,10 @@
 					</Notice>
 				{/if}
 				<p class="mt-2 text-small text-muted">
-					Stack <strong class="font-medium text-ink">{plan.name}</strong>: {plan.services.length} {plan.services.length === 1 ? 'service' : 'services'}, {fmtBytes(plan.memory_bytes)} memory, {fmtCpu(plan.nano_cpus)} in total.
+					Stack <strong class="font-medium text-ink">{plan.name}</strong>: {plan.services.length} {plan.services.length === 1 ? 'service' : 'services'}, {fmtBytes(plan.memory_bytes)} memory, {fmtCpu(plan.nano_cpus)} in total. Each service counts as one of the workspace's bots and containers.
+					{#if allowanceLeft}<span class="block">{allowanceLeft}</span>{/if}
 				</p>
+				{#if start && budgetWarning(capacity, plan.memory_bytes)}<Notice tone="warn" class="mt-3" title="Over the node budget">{budgetWarning(capacity, plan.memory_bytes).replace('This app needs', 'The stack needs').replace('refuses to start it', 'refuses to start what does not fit')}</Notice>{/if}
 				{#if fileNotes.length}
 					<ul class="mt-3 grid gap-1 text-small">{#each fileNotes as n, i (i)}<li class="flex gap-2"><Icon name="info" size={14} class="mt-0.5 shrink-0 text-muted" /><span>{cap(n.message)}</span></li>{/each}</ul>
 				{/if}

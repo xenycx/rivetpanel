@@ -9,6 +9,7 @@
 	import EmptyState from '$lib/components/ui/EmptyState.svelte';
 	import Icon from '$lib/components/ui/Icon.svelte';
 	import Logo from '$lib/components/ui/Logo.svelte';
+	import { logoSeed } from '$lib/avatar';
 	import Notice from '$lib/components/ui/Notice.svelte';
 	import Skeleton from '$lib/components/ui/Skeleton.svelte';
 
@@ -128,7 +129,7 @@
 					{@const st = status(s)}
 					<div class="row-link grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-x-4 px-4 py-2.5 md:grid-cols-[minmax(0,1.4fr)_7rem_minmax(0,1.4fr)_5rem_4.5rem_7rem_2.25rem]" role="row">
 						<div class="flex min-w-0 items-center gap-3" role="cell">
-							<Logo src={s.icon_url} kind="site" seed={s.id} class="size-8 rounded-control" />
+							<Logo src={s.icon_url} kind="site" seed={logoSeed(s.id, s.logo_variant)} class="size-8 rounded-control" />
 							<div class="min-w-0">
 								<a href="/sites/{s.id}" class="block truncate font-medium hover:underline">{s.name}</a>
 								<p class="truncate text-small text-muted">{kindLabel(s)}{multi && workspaceName(s.workspace_id) ? `, ${workspaceName(s.workspace_id)}` : ''}</p>

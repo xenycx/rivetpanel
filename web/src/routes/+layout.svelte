@@ -14,6 +14,7 @@
 	import ToastRegion from '$lib/components/ui/ToastRegion.svelte';
 	import Icon, { type IconName } from '$lib/components/ui/Icon.svelte';
 	import Logo from '$lib/components/ui/Logo.svelte';
+	import { logoSeed } from '$lib/avatar';
 	import Menu, { type MenuItem } from '$lib/components/ui/Menu.svelte';
 	import OperationShelf from '$lib/components/OperationShelf.svelte';
 	import CommandPalette from '$lib/components/CommandPalette.svelte';
@@ -246,7 +247,7 @@
 					{@const d = describe(b)}
 					<li>
 						<a href={resourceHref(b)} class="side-link {compact ? 'justify-center px-0' : ''}" data-active={path === resourceHref(b)} aria-label={compact ? b.name : undefined} title={compact ? b.name : undefined}>
-							{#if b.kind === 'game' && !b.logo_url}<span class="side-dot" data-tone={d.tone}></span>{:else}<Logo src={b.logo_url} kind={b.kind === 'container' ? 'container' : 'bot'} seed={b.id} class="size-5 rounded-pill" />{/if}{#if !compact}<span class="truncate">{b.name}</span>{/if}
+							{#if b.kind === 'game' && !b.logo_url}<span class="side-dot" data-tone={d.tone}></span>{:else}<Logo src={b.logo_url} kind={b.kind === 'container' ? 'container' : 'bot'} seed={logoSeed(b.id, b.logo_variant)} class="size-5 rounded-pill" />{/if}{#if !compact}<span class="truncate">{b.name}</span>{/if}
 						</a>
 					</li>
 				{/each}
@@ -292,7 +293,7 @@
 						</button>
 						{#if path !== '/dashboard' && path !== '/apps'}<NewMenu />{/if}
 						<Menu label="Account" items={accountItems}>
-							{#snippet trigger()}<Logo src={session.user?.avatar_url} kind="user" seed={session.user?.id ?? who} class="avatar" /><Icon name="chevronDown" size={14} class="text-muted" />{/snippet}
+							{#snippet trigger()}<Logo src={session.user?.avatar_url} kind="user" seed={logoSeed(session.user?.id ?? who, session.user?.logo_variant)} class="avatar" /><Icon name="chevronDown" size={14} class="text-muted" />{/snippet}
 						</Menu>
 					</div>
 				</div>

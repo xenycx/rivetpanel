@@ -113,7 +113,10 @@ on the smallest VPS you have.
 
 ### 👥 Teams and sign-in
 - Workspaces with owner, admin, developer and viewer roles, custom account
-  roles built from named permissions, per-app sharing and workspace limits.
+  roles built from named permissions, per-app sharing and a workspace
+  allowance (apps, sites, memory and CPU per workspace, with its source shown).
+  Bots, sites and workspaces take an uploaded logo; anything without one gets
+  a generated picture you can re-roll with **New picture**.
 - Sign in with **GitHub, Discord, any OpenID Connect provider or a passkey**,
   with two-step codes and scoped **API clients** for automation.
 - Support tickets, a Markdown **help center** at `/help` and a public **status
@@ -178,8 +181,11 @@ We would rather you know the limits up front than find them in production.
   Its systemd sandbox limits the blast radius but does not remove that
   privilege. Run it as root via systemd in production
   ([why](docs/deployment.md)).
-- **Egress and disk quotas are not enforced** by RivetPanel, and workspace and
-  node limits are admission rules in the application, not kernel limits. Read
+- **Egress and disk quotas are not enforced** by RivetPanel. Of the four
+  limits, only an app's size (memory, CPU, processes) is a kernel limit, set
+  by Docker; the workspace allowance, node budget and node maximum are
+  admission rules in the application
+  ([how limits work](docs/features.md#capacity-and-admission)). Read
   [docs/isolation.md](docs/isolation.md) before hosting people you don't trust.
 - **Remote placement is manual.** You choose the node (or a default); there is
   no capacity-based scheduler, live migration or high availability. Panel and

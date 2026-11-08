@@ -50,3 +50,28 @@ func (db *DB) SetSiteLogo(ctx context.Context, siteID string, l *domain.Logo, no
 func (db *DB) GetSiteLogo(ctx context.Context, siteID string) (domain.Logo, error) {
 	return db.getLogo(ctx, "sites", siteID)
 }
+
+// SetWorkspaceLogo stores (nil: removes) a workspace's custom logo.
+func (db *DB) SetWorkspaceLogo(ctx context.Context, workspaceID string, l *domain.Logo, nowMS int64) error {
+	return db.setLogo(ctx, "workspaces", workspaceID, l, nowMS)
+}
+
+// GetWorkspaceLogo returns a workspace's custom logo (domain.ErrNotFound when none).
+func (db *DB) GetWorkspaceLogo(ctx context.Context, workspaceID string) (domain.Logo, error) {
+	return db.getLogo(ctx, "workspaces", workspaceID)
+}
+
+// logoVariantTables are the tables whose rows carry a generated-picture
+// choice (migration 0066).
+var logoVariantTables = map[string]bool{"bots": true, "sites": true, "workspaces": true, "users": true}
+
+// NextLogoVariant advances the generated-picture choice of one bot, site,
+// workspace or account and returns the new value.
+func (db *DB) NextLogoVariant(ctx context.Context, table, id string) (int64, error) {
+	if !logoVariantTables[table] {
+		return 0, domain.Invalid("unknown item type")
+	}
+	var v int64
+	err := db.QueryRowContext(ctx, `UPDATE `+table+` SET logo_variant = logo_variant + 1 WHERE id = ? RETURNING logo_variant`, id).Scan(&v)
+	return v, mapErr(err)
+}

@@ -19,6 +19,10 @@ type Workspace struct {
 	NodeID      string
 	CreatedAtMS int64
 	UpdatedAtMS int64
+	// LogoUpdatedMS is when a custom logo was set (0 = none); LogoVariant
+	// picks the generated picture shown without one (0 = the original).
+	LogoUpdatedMS int64
+	LogoVariant   int64
 }
 
 // WorkspaceSummary is a workspace with the caller's role and usage figures.
@@ -44,6 +48,8 @@ type WorkspaceMember struct {
 	AddedBy     *string
 	CreatedAtMS int64
 	UpdatedAtMS int64
+	// LogoVariant is the member account's generated-picture choice.
+	LogoVariant int64
 }
 
 // ValidWorkspaceRole reports whether r is a role that can be assigned to a

@@ -117,3 +117,72 @@ func (s *panel) siteLogo(c fiber.Ctx, data []byte) error {
 	}
 	return c.JSON(s.toSite(d.Site))
 }
+
+// ---- workspace logos ----
+
+func (s *panel) getWorkspaceLogo(c fiber.Ctx) error {
+	l, err := s.bots.WorkspaceLogo(c.Context(), currentUser(c), strings.Clone(c.Params("wid")))
+	if err != nil {
+		return err
+	}
+	return sendImage(c, l.Data, l.ContentType)
+}
+
+func (s *panel) putWorkspaceLogo(c fiber.Ctx) error {
+	var in logoIn
+	if err := decode(c, &in); err != nil {
+		return err
+	}
+	data, err := in.bytes()
+	if err != nil {
+		return err
+	}
+	return s.workspaceLogo(c, data)
+}
+
+func (s *panel) deleteWorkspaceLogo(c fiber.Ctx) error { return s.workspaceLogo(c, nil) }
+
+func (s *panel) workspaceLogo(c fiber.Ctx, data []byte) error {
+	if err := s.bots.SetWorkspaceLogo(c.Context(), currentUser(c), strings.Clone(c.Params("wid")), data); err != nil {
+		return err
+	}
+	return s.getWorkspace(c)
+}
+
+// ---- generated pictures ----
+//
+// Each answers {"logo_variant": n}: the browser seeds the generated picture
+// with "<id>:<n>" (just the id while n is 0).
+
+func sendVariant(c fiber.Ctx, v int64, err error) error {
+	if err != nil {
+		return err
+	}
+	return c.JSON(fiber.Map{"logo_variant": v})
+}
+
+func (s *panel) shuffleBotLogo(c fiber.Ctx) error {
+	v, err := s.bots.ShuffleLogo(c.Context(), currentUser(c), strings.Clone(c.Params("id")))
+	return sendVariant(c, v, err)
+}
+
+func (s *panel) shuffleSiteLogo(c fiber.Ctx) error {
+	v, err := s.sites.ShuffleLogo(c.Context(), currentUser(c), strings.Clone(c.Params("sid")))
+	return sendVariant(c, v, err)
+}
+
+func (s *panel) shuffleWorkspaceLogo(c fiber.Ctx) error {
+	v, err := s.bots.ShuffleWorkspaceLogo(c.Context(), currentUser(c), strings.Clone(c.Params("wid")))
+	return sendVariant(c, v, err)
+}
+
+func (s *panel) shuffleMyAvatar(c fiber.Ctx) error {
+	u := currentUser(c)
+	v, err := s.auth.ShuffleAvatar(c.Context(), u, u.ID)
+	return sendVariant(c, v, err)
+}
+
+func (s *panel) shuffleUserAvatar(c fiber.Ctx) error {
+	v, err := s.auth.ShuffleAvatar(c.Context(), currentUser(c), strings.Clone(c.Params("id")))
+	return sendVariant(c, v, err)
+}

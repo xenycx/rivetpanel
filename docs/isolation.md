@@ -54,9 +54,9 @@ as unable to enforce limits.
 ## Not provided (do not assume otherwise)
 
 * **Admission limits are application rules, not kernel limits.** The panel
-  refuses to create apps or sites past a workspace's limits (count, memory,
-  CPU) and refuses starts past `RIVET_NODE_MEMORY_BYTES` (`features.md`,
-  `workspaces.md`). These are enforced by the application at creation and
+  refuses to create apps or sites past a workspace allowance (count, memory,
+  CPU), refuses app sizes past the node maximum, and refuses starts past the
+  node budget, `RIVET_NODE_MEMORY_BYTES` (`features.md`, `workspaces.md`). These are enforced by the application at creation and
   start, not by the kernel; disk usage and inodes are not counted at all.
 * **No disk quota.** Workspaces and Docker logs consume host disk (logs are
   rotated; workspaces are not capped beyond upload limits).

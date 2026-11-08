@@ -2,21 +2,14 @@
 // by the invitation dialog's result view and the pending invitations list.
 import { fmtBytes, fmtCpu } from '$lib/api/client';
 import { roleText, type AccountInvite, type WorkspaceQuota } from '$lib/api/types';
+import { countFields } from '$lib/limits';
 
-const counts: { key: 'max_bots' | 'max_games' | 'max_web_apps' | 'max_apps' | 'max_sites'; one: string; many: string }[] = [
-	{ key: 'max_bots', one: 'bot', many: 'bots' },
-	{ key: 'max_games', one: 'game server', many: 'game servers' },
-	{ key: 'max_web_apps', one: 'web app', many: 'web apps' },
-	{ key: 'max_apps', one: 'app in total', many: 'apps in total' },
-	{ key: 'max_sites', one: 'site', many: 'sites' }
-];
-
-/** "1 bot · 2 sites · 1 GiB · 0.5 CPU"; "" when every limit is the panel default. */
+/** "3 apps in total · 1 bot or container · 2 sites · 1 GiB memory · 0.5 cores"; "" when every value inherits the default allowance. */
 export function limitsText(q: WorkspaceQuota | null | undefined): string {
 	if (!q) return '';
 	const parts: string[] = [];
-	for (const c of counts) {
-		const n = q[c.key];
+	for (const c of countFields) {
+		const n = q[c.quota];
 		if (n == null) continue;
 		parts.push(n === 0 ? `no ${c.many}` : `${n} ${n === 1 ? c.one : c.many}`);
 	}

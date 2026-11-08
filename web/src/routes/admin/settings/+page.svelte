@@ -10,6 +10,7 @@
 	import ProviderSetup from '$lib/components/ProviderSetup.svelte';
 	import AISettings from '$lib/components/AISettings.svelte';
 	import DefaultLimitsForm from '$lib/components/DefaultLimitsForm.svelte';
+	import LimitsLegend from '$lib/components/LimitsLegend.svelte';
 
 	type View = {
 		public_url: string;
@@ -154,9 +155,9 @@
 
 {#if manageSettings}
 <h2 class="text-section">Panel settings</h2>
-<p class="mt-1 max-w-3xl text-muted">Applied immediately, without a restart. Address, sign-in and email values set in the environment file are shown read-only and replace what is set here. Default limits work the other way: a value set here wins, and the environment file is the fallback.</p>
+<p class="mt-1 max-w-3xl text-muted">Applied immediately, without a restart. Address, sign-in and email values set in the environment file are shown read-only and replace what is set here. The default allowance works the other way: a value set here wins, and the environment file is only the fallback.</p>
 <nav class="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-small" aria-label="Settings sections">
-	{#each [['general', 'General'], ['sign-in', 'Sign-in'], ['email', 'Email'], ['limits', 'Limits'], ['ai', 'AI']] as [id, label] (id)}<a class="link" href="#{id}">{label}</a>{/each}
+	{#each [['general', 'General'], ['sign-in', 'Sign-in'], ['email', 'Email'], ['limits', 'Default allowance'], ['ai', 'AI']] as [id, label] (id)}<a class="link" href="#{id}">{label}</a>{/each}
 </nav>
 {#if warning}<Notice tone="warn" class="mt-3" title="Setup finished, but some settings were not saved">{warning}</Notice>{/if}
 {#if error}<Notice tone="fail" class="mt-3" live>{error}</Notice>{/if}
@@ -296,9 +297,12 @@
 	</form>
 
 	<section class="mt-10 scroll-mt-24 border-t border-rule-soft pt-8" id="limits" aria-labelledby="limits-h">
-		<p class="eyebrow">Limits</p>
-		<h2 id="limits-h" class="mt-1 text-section">Default limits</h2>
-		<p class="mt-1 max-w-3xl text-muted">What every workspace may hold unless it has its own limits (Administration → Workspaces). Every member's apps and sites in a workspace count together; stopped apps count until deleted. Administrators are never refused by a limit; everyone else in a workspace is bounded by it. An empty field falls back to the environment file, else no limit; 0 allows none. Changes apply to the next app or site created and never stop anything.</p>
+		<h2 id="limits-h" class="text-section">Default allowance</h2>
+		<p class="mt-1 max-w-3xl text-muted">What every workspace may hold in total unless it has its own allowance (<a class="link" href="/admin/workspaces">Administration → Workspaces</a>). Every member's apps and sites in a workspace count together. Changes apply to the next app or site created and never stop anything.</p>
+		<details class="mt-4 max-w-4xl" open>
+			<summary class="cursor-pointer text-small font-medium">How limits work</summary>
+			<LimitsLegend class="mt-2" />
+		</details>
 		<div class="card mt-4 p-5 sm:p-6"><DefaultLimitsForm /></div>
 	</section>
 {/if}

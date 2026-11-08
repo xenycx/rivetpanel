@@ -38,7 +38,7 @@
 	const cpuPresets = [0.5, 1, 2, 4, 8].map((c) => c * 1e9);
 
 	const presets = $derived((kind === 'memory' ? memoryPresets : cpuPresets).filter((p) => p >= min && (max == null || p <= max)));
-	const label = (p: number) => (kind === 'memory' ? fmtBytes(p).replace('.0 ', ' ') : fmtCpu(p).replace(' CPU', p === 1e9 ? ' core' : ' cores'));
+	const label = (p: number) => (kind === 'memory' ? fmtBytes(p).replace('.0 ', ' ') : fmtCpu(p));
 
 	// Custom stays open once chosen, and while the value matches no preset.
 	let customOpen = $state(false);

@@ -11,6 +11,7 @@
 	import { session } from '$lib/session.svelte';
 	import Icon, { type IconName } from '$lib/components/ui/Icon.svelte';
 	import Logo from '$lib/components/ui/Logo.svelte';
+	import { logoSeed } from '$lib/avatar';
 	import GameIcon from '$lib/components/ui/GameIcon.svelte';
 	import Notice from '$lib/components/ui/Notice.svelte';
 	import Skeleton from '$lib/components/ui/Skeleton.svelte';
@@ -180,7 +181,7 @@
 			{#if isGame && !bot.logo_url}
 				<span class="grid shrink-0" data-vt-icon={bot.id}><GameIcon type={game?.blueprint} size={40} /></span>
 			{:else}
-				<Logo src={bot.logo_url} kind={isContainer ? 'container' : 'bot'} seed={bot.id} class="size-10 rounded-tile" data-vt-icon={bot.id} />
+				<Logo src={bot.logo_url} kind={isContainer ? 'container' : 'bot'} seed={logoSeed(bot.id, bot.logo_variant)} class="size-10 rounded-tile" data-vt-icon={bot.id} />
 			{/if}
 			<div class="min-w-0 flex-1 basis-48">
 				<div class="flex min-w-0 items-center gap-2.5">

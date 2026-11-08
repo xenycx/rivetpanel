@@ -5,6 +5,7 @@
 	import type { OpPage, Operation, Bot } from '$lib/api/types';
 	import OperationRow from '$lib/components/OperationRow.svelte';
 	import ChangeList from '$lib/components/ChangeList.svelte';
+	import WorkspaceScope from '$lib/components/WorkspaceScope.svelte';
 	import type { AuditEvent, AuditPage } from '$lib/audit';
 	import EmptyState from '$lib/components/ui/EmptyState.svelte';
 	import Notice from '$lib/components/ui/Notice.svelte';
@@ -96,6 +97,7 @@
 
 <h1 class="text-page">Activity</h1>
 <p class="mt-0.5 max-w-prose text-muted">What happened on the apps you can see: long-running work, and who changed what.</p>
+<WorkspaceScope follows={false} class="mt-1" />
 
 <div class="mt-5 flex flex-wrap items-center gap-2">
 	<div class="seg" role="group" aria-label="Show">

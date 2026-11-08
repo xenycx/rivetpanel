@@ -2,7 +2,7 @@
 	import { goto } from '$app/navigation';
 	import { api, ApiError } from '$lib/api/client';
 	import type { Capacity, Site, SitesInfo, SiteTemplate } from '$lib/api/types';
-	import { capLimits, room } from '$lib/room';
+	import { capLimits, countBlock, room } from '$lib/room';
 	import { creatable, workspaces, wsName } from '$lib/workspaces.svelte';
 	import Dialog from '$lib/components/ui/Dialog.svelte';
 	import Notice from '$lib/components/ui/Notice.svelte';
@@ -32,7 +32,7 @@
 	let cap = $state<Capacity | null>(null);
 	const rm = $derived(room(cap));
 	const noRoom = $derived(rm.sites === 0);
-	const sitesLeft = $derived(rm.sites == null ? '' : `${rm.sites} of ${capLimits(cap).sites} ${capLimits(cap).sites === 1 ? 'site' : 'sites'} left in this workspace`);
+	const sitesLeft = $derived(rm.sites == null ? '' : `Workspace allowance: ${rm.sites} of ${capLimits(cap).sites} ${capLimits(cap).sites === 1 ? 'site' : 'sites'} left`);
 	$effect(() => {
 		if (!open) return;
 		const ws = form.workspace_id;
@@ -115,7 +115,7 @@
 			<p class="text-small text-muted">{sitesLeft}.</p>
 		{/if}
 		{#if noRoom}
-			<Notice tone="warn" title="No room for another site">The workspace {cap?.workspace ? wsName(cap.workspace) : 'Personal'} has reached its limit of {capLimits(cap).sites} {capLimits(cap).sites === 1 ? 'site' : 'sites'}. Delete one, or ask an administrator to raise the limit.</Notice>
+			<Notice tone="warn" title="No room for another site">{countBlock(cap, ['sites'], { sites: 'sites' })}</Notice>
 		{/if}
 		{#if info.builds_enabled && !form.template_id}<p class="text-small text-muted">Building with npm, or running Node.js, PHP, Python, Go or Rust? <a class="link" href="/sites/new" onclick={() => (open = false)}>Deploy from a GitHub repository</a> instead.</p>{/if}
 		<label class="flex items-start gap-2.5"><input type="checkbox" class="mt-0.5" bind:checked={form.spa} /><span>Single-page application<span class="help mt-0">Unknown paths serve <code>index.html</code>, for React, Vue or Svelte apps with client-side routing.</span></span></label>

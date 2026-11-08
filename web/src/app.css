@@ -918,6 +918,11 @@
 		background: color-mix(in srgb, var(--color-fail) var(--tint-state), transparent);
 		color: var(--color-fail);
 	}
+	/* Emphasis that is not a status: an owner, the chosen workspace. */
+	.pill[data-tone='action'] {
+		background: color-mix(in srgb, var(--color-action) var(--tint-state), transparent);
+		color: var(--color-action);
+	}
 
 	/* Hero: the top block of a page. In dark mode it carries a soft ember glow. */
 	.hero {

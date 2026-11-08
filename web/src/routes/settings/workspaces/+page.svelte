@@ -8,6 +8,7 @@
 	import { loadWorkspaces, selectWorkspace, workspaces, wsName } from '$lib/workspaces.svelte';
 	import Icon from '$lib/components/ui/Icon.svelte';
 	import Logo from '$lib/components/ui/Logo.svelte';
+	import { logoSeed } from '$lib/avatar';
 	import Notice from '$lib/components/ui/Notice.svelte';
 	import Skeleton from '$lib/components/ui/Skeleton.svelte';
 	import SettingsSection from '$lib/components/ui/SettingsSection.svelte';
@@ -47,6 +48,13 @@
 		selectWorkspace(w.id);
 		goto('/dashboard');
 	}
+	// Who the workspace belongs to and your part in it, said once.
+	function about(w: Workspace): string {
+		const mine = w.owner_id === session.user?.id;
+		if (w.personal) return mine ? 'Your personal workspace' : `Personal workspace of ${w.owner_email}`;
+		if (mine) return 'Team · you own it';
+		return `Team · ${w.role ? roleText[w.role] : 'administrator view'} · owned by ${w.owner_email}`;
+	}
 </script>
 
 <svelte:head><title>Workspaces · RivetPanel</title></svelte:head>
@@ -59,24 +67,23 @@
 			{#each workspaces.list as w (w.id)}
 				<li class="card flex flex-col p-4">
 					<div class="flex items-start gap-3">
-						<Logo kind="workspace" seed={w.id} class="size-10 rounded-tile" />
+						<Logo src={w.logo_url} kind="workspace" seed={logoSeed(w.id, w.logo_variant)} class="size-10 rounded-tile" />
 						<div class="min-w-0 flex-1">
-							<a href="/settings/workspaces/{w.id}" class="block truncate font-semibold hover:underline">{wsName(w)}</a>
-							<p class="text-small text-muted">{w.role ? roleText[w.role] : 'Administrator view'}{w.personal ? '' : ` · owned by ${w.owner_id === session.user?.id ? 'you' : w.owner_email}`}</p>
+							<a href="/settings/workspaces/{w.id}" class="block truncate font-semibold hover:underline" title={wsName(w)}>{wsName(w)}</a>
+							<p class="truncate text-small text-muted" title={about(w)}>{about(w)}</p>
 						</div>
-						{#if w.personal}<span class="pill">Personal</span>{/if}
-						{#if workspaces.selected === w.id}<span class="pill" data-tone="run">Selected</span>{/if}
+						{#if workspaces.selected === w.id && workspaces.list.length > 1}<span class="pill" data-tone="action" title="The workspace the overview and Apps show">Selected</span>{/if}
 					</div>
-					<dl class="mt-4 flex flex-wrap gap-x-5 gap-y-2 border-t border-rule-soft pt-3 text-small whitespace-nowrap">
-						<div><dt class="eyebrow">Apps</dt><dd class="font-mono font-medium">{w.running_bots}/{w.bots}</dd></div>
-						<div><dt class="eyebrow">Sites</dt><dd class="font-mono font-medium">{w.sites}</dd></div>
-						<div><dt class="eyebrow">Members</dt><dd class="font-mono font-medium">{w.members}</dd></div>
-						<div><dt class="eyebrow">RAM</dt><dd class="font-mono font-medium">{fmtBytes(w.memory_bytes)}</dd></div>
+					<dl class="mt-4 grid grid-cols-2 gap-x-4 gap-y-2 border-t border-rule-soft pt-3 text-small whitespace-nowrap sm:grid-cols-4 xl:grid-cols-2">
+						<div><dt class="eyebrow">Apps</dt><dd class="font-mono font-medium tabular-nums" title="{w.running_bots} running of {w.bots}">{w.running_bots}/{w.bots}</dd></div>
+						<div><dt class="eyebrow">Sites</dt><dd class="font-mono font-medium tabular-nums">{w.sites}</dd></div>
+						<div><dt class="eyebrow">Members</dt><dd class="font-mono font-medium tabular-nums">{w.members}</dd></div>
+						<div><dt class="eyebrow">Memory</dt><dd class="font-mono font-medium tabular-nums">{fmtBytes(w.memory_bytes)}</dd></div>
 					</dl>
-					<div class="mt-4 flex flex-wrap items-center gap-2">
+					<p class="mt-2 text-small text-muted">{w.last_active_at_ms ? `Last active ${fmtAgo(w.last_active_at_ms)}` : 'No activity yet'}</p>
+					<div class="mt-auto flex items-center gap-2 pt-4">
 						<button class="btn btn-sm" onclick={() => open(w)}><Icon name="home" size={14} />Open overview</button>
-						<a class="btn btn-sm btn-quiet" href="/settings/workspaces/{w.id}"><Icon name="users" size={14} />Members and settings</a>
-						{#if w.last_active_at_ms}<span class="ml-auto text-small text-muted">Active {fmtAgo(w.last_active_at_ms)}</span>{/if}
+						<a class="btn btn-sm btn-quiet" href="/settings/workspaces/{w.id}"><Icon name="gear" size={14} />Settings</a>
 					</div>
 				</li>
 			{/each}

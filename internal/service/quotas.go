@@ -10,11 +10,12 @@ import (
 	"github.com/xenycx/rivetpanel/internal/domain"
 )
 
-// Workspace limits. Every workspace gets the panel's default limits (Panel
-// settings → Default limits, else RIVET_MAX_BOTS_PER_USER,
-// RIVET_MAX_SITES_PER_USER and RIVET_USER_MEMORY_BYTES; unlimited where
-// neither sets one). An administrator can give one workspace its own limits
-// (workspace_quotas) that replace a default field by field. Every member's
+// Workspace allowance: what one workspace may hold in total. Every workspace
+// gets the panel's default allowance (Panel settings → Default allowance,
+// else RIVET_MAX_BOTS_PER_USER, RIVET_MAX_SITES_PER_USER and
+// RIVET_USER_MEMORY_BYTES, else the built-in value: 10 sites, no limit for
+// the rest). An administrator can give one workspace its own allowance
+// (workspace_quotas) that replaces the default field by field. Every member's
 // apps and sites in a workspace count together. No workspace is exempt: a
 // built-in administrator is never refused by a limit, whatever workspace
 // they act in, while every other member of that workspace is bounded, even
@@ -26,7 +27,7 @@ import (
 // growth is refused; a limit lowered below what a workspace already holds
 // leaves its apps and sites alone.
 
-// Default limit settings (Panel settings → Default limits). An absent or
+// Default allowance settings (Panel settings → Default allowance). An absent or
 // empty value falls back to the environment, then to no limit; a number is
 // the limit and 0 allows none.
 const (
@@ -83,9 +84,16 @@ func (l WorkspaceLimits) unlimited() bool {
 	return true
 }
 
-// LimitDefaults are the panel's default limits for every workspace (-1 =
-// none) and where each comes from: "panel" (Panel settings), "env" (the
-// environment file) or "" (no default).
+// Where a default allowance value comes from.
+const (
+	SourcePanel   = "panel"   // Panel settings → Default allowance
+	SourceEnv     = "env"     // the environment file
+	SourceBuiltin = "builtin" // nothing set: the built-in value
+)
+
+// LimitDefaults are the panel's default allowance for every workspace (-1 =
+// no limit) and where each value comes from (SourcePanel, SourceEnv or
+// SourceBuiltin).
 type LimitDefaults struct {
 	Apps, Bots, Games, Web, Sites, Memory, CPU int64
 	TeamWorkspaces                             int64 // team workspaces one account may own
@@ -100,29 +108,37 @@ func (s *BotService) LimitDefaults(ctx context.Context) (LimitDefaults, error) {
 		return LimitDefaults{}, err
 	}
 	d := LimitDefaults{Source: map[string]string{}}
-	pick := func(dst *int64, key string, env int64) {
+	// A panel value wins; an environment value of 0 means no limit there,
+	// unlike a panel value of 0, which allows none.
+	pick := func(dst *int64, key string, env int64, fromEnv bool, builtin int64) {
 		if st, ok := stored[key]; ok && st.Value != "" {
 			if v, err := strconv.ParseInt(st.Value, 10, 64); err == nil && v >= 0 {
-				*dst, d.Source[key] = v, "panel"
+				*dst, d.Source[key] = v, SourcePanel
 				return
 			}
 		}
-		if env > 0 {
-			*dst, d.Source[key] = env, "env"
-			return
+		switch {
+		case fromEnv && env > 0:
+			*dst, d.Source[key] = env, SourceEnv
+		case fromEnv:
+			*dst, d.Source[key] = -1, SourceEnv
+		default:
+			*dst, d.Source[key] = builtin, SourceBuiltin
 		}
-		*dst = -1
 	}
-	pick(&d.Apps, SetLimitApps, int64(s.Limits.MaxBotsPerUser))
-	pick(&d.Bots, SetLimitBots, 0)
-	pick(&d.Games, SetLimitGames, 0)
-	pick(&d.Web, SetLimitWeb, 0)
-	pick(&d.Sites, SetLimitSites, int64(s.Limits.MaxSitesPerUser))
-	pick(&d.Memory, SetLimitMemory, s.Limits.UserMemoryBytes)
-	pick(&d.CPU, SetLimitCPU, 0)
-	if pick(&d.TeamWorkspaces, SetLimitTeamWorkspaces, 0); d.TeamWorkspaces < 0 {
-		d.TeamWorkspaces = MaxOwnedWorkspaces
+	l := s.Limits
+	pick(&d.Apps, SetLimitApps, int64(l.MaxBotsPerUser), l.MaxBotsPerUser > 0, -1)
+	pick(&d.Bots, SetLimitBots, 0, false, -1)
+	pick(&d.Games, SetLimitGames, 0, false, -1)
+	pick(&d.Web, SetLimitWeb, 0, false, -1)
+	sites := int64(l.MaxSitesPerUser)
+	if sites <= 0 {
+		sites = -1
 	}
+	pick(&d.Sites, SetLimitSites, int64(l.MaxSitesPerUser), l.SitesLimitFromEnv, sites)
+	pick(&d.Memory, SetLimitMemory, l.UserMemoryBytes, l.UserMemoryBytes > 0, -1)
+	pick(&d.CPU, SetLimitCPU, 0, false, -1)
+	pick(&d.TeamWorkspaces, SetLimitTeamWorkspaces, 0, false, MaxOwnedWorkspaces)
 	return d, nil
 }
 
@@ -176,8 +192,8 @@ func (l WorkspaceLimits) allows(after, added domain.WorkspaceUsage) error {
 		after, added int64
 		what         string
 	}{
-		{l.Apps, after.Apps, added.Apps, "apps (bots, game servers and web apps together)"},
-		{l.Bots, after.Bots, added.Bots, "bots"},
+		{l.Apps, after.Apps, added.Apps, "apps (bots and containers, game servers and web apps together)"},
+		{l.Bots, after.Bots, added.Bots, "bots and containers"},
 		{l.Games, after.Games, added.Games, "game servers"},
 		{l.Web, after.Web, added.Web, "web apps"},
 		{l.Sites, after.Sites, added.Sites, "sites"},
@@ -186,17 +202,17 @@ func (l WorkspaceLimits) allows(after, added domain.WorkspaceUsage) error {
 			continue
 		}
 		if c.lim.Max == 0 {
-			return domain.Invalid(fmt.Sprintf("%s does not allow %s; ask an administrator", ws, c.what))
+			return domain.Invalid(fmt.Sprintf("%s does not allow %s; ask an administrator to raise its allowance", ws, c.what))
 		}
-		return domain.Invalid(fmt.Sprintf("%s allows at most %d %s and %d already exist; delete one first or ask an administrator for a higher limit",
+		return domain.Invalid(fmt.Sprintf("%s allows at most %d %s and %d already exist; delete one first or ask an administrator to raise its allowance",
 			ws, c.lim.Max, c.what, c.after-c.added))
 	}
 	if l.Memory.over(after.Memory, added.Memory) {
-		return domain.Invalid(fmt.Sprintf("%s may use at most %d MiB of memory; %d MiB is already assigned and this change needs %d MiB more",
+		return domain.Invalid(fmt.Sprintf("%s may use at most %d MiB of memory; %d MiB is already assigned and this change needs %d MiB more. Choose less memory or ask an administrator to raise its allowance",
 			ws, l.Memory.Max>>20, (after.Memory-added.Memory)>>20, added.Memory>>20))
 	}
 	if l.CPU.over(after.CPU, added.CPU) {
-		return domain.Invalid(fmt.Sprintf("%s may use at most %s CPU cores; %s are already assigned and this change needs %s more",
+		return domain.Invalid(fmt.Sprintf("%s may use at most %s CPU cores; %s are already assigned and this change needs %s more. Choose fewer cores or ask an administrator to raise its allowance",
 			ws, cores(l.CPU.Max), cores(after.CPU-added.CPU), cores(added.CPU)))
 	}
 	return nil
@@ -208,6 +224,8 @@ func plusUsage(a, b domain.WorkspaceUsage) domain.WorkspaceUsage {
 }
 
 // newApp is the usage one new app of kind with mem of memory and cpu adds.
+// Containers and Compose services count with bots ("Bots and containers"):
+// the per-kind count has no column of its own for them.
 func newApp(kind string, mem, cpu int64) domain.WorkspaceUsage {
 	u := domain.WorkspaceUsage{Apps: 1, Memory: mem, CPU: cpu}
 	switch kind {
@@ -368,16 +386,16 @@ func validateQuota(in QuotaInput) error {
 	for _, c := range []struct {
 		v    *int64
 		what string
-	}{{in.MaxApps, "apps"}, {in.MaxBots, "bots"}, {in.MaxGames, "game servers"}, {in.MaxWebApps, "web apps"}, {in.MaxSites, "sites"}} {
+	}{{in.MaxApps, "apps"}, {in.MaxBots, "bots and containers"}, {in.MaxGames, "game servers"}, {in.MaxWebApps, "web apps"}, {in.MaxSites, "sites"}} {
 		if c.v != nil && (*c.v < 0 || *c.v > maxQuotaCount) {
-			return domain.Invalid(fmt.Sprintf("the %s limit must be between 0 and %d", c.what, maxQuotaCount))
+			return domain.Invalid(fmt.Sprintf("the %s allowance must be between 0 and %d", c.what, maxQuotaCount))
 		}
 	}
 	if in.MemoryBytes != nil && (*in.MemoryBytes < 0 || *in.MemoryBytes > 1<<50) {
-		return domain.Invalid("the memory limit must be between 0 and 1 PiB")
+		return domain.Invalid("the memory allowance must be between 0 and 1 PiB")
 	}
 	if in.NanoCPUs != nil && (*in.NanoCPUs < 0 || *in.NanoCPUs > 100000*1e9) {
-		return domain.Invalid("the CPU limit must be between 0 and 100000 cores")
+		return domain.Invalid("the CPU allowance must be between 0 and 100000 cores")
 	}
 	return nil
 }

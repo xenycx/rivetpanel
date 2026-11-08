@@ -48,18 +48,20 @@ type siteDTO struct {
 	// (404 when there is none); the version changes when any of them may have.
 	IconURL    string `json:"icon_url"`
 	CustomLogo bool   `json:"custom_logo"`
+	// LogoVariant picks the generated picture shown without an icon.
+	LogoVariant int64 `json:"logo_variant"`
 	// Sites deployed from a repository: the web unit that builds (and for
 	// mode "app", runs) the site, its state and settings.
-	AppID          *string `json:"app_id"`
-	AppState       string  `json:"app_state"`
+	AppID    *string `json:"app_id"`
+	AppState string  `json:"app_state"`
 	// AutoBackup: scheduled backups of a files site (sites with an app unit
 	// use the unit's auto_backup).
-	AutoBackup bool `json:"auto_backup"`
-	Framework      string  `json:"framework"`
-	BuildOutputDir string  `json:"build_output_dir"`
-	AppPort        int     `json:"app_port"`
-	HealthPath     string  `json:"health_path"`
-	MaxBodyBytes   int64   `json:"max_body_bytes"`
+	AutoBackup     bool   `json:"auto_backup"`
+	Framework      string `json:"framework"`
+	BuildOutputDir string `json:"build_output_dir"`
+	AppPort        int    `json:"app_port"`
+	HealthPath     string `json:"health_path"`
+	MaxBodyBytes   int64  `json:"max_body_bytes"`
 }
 
 func (s *panel) toSite(st domain.Site) siteDTO {
@@ -68,7 +70,7 @@ func (s *panel) toSite(st domain.Site) siteDTO {
 		Mode: st.Mode, PageTitle: st.PageTitle, PageDescription: st.PageDescription, PageTheme: st.PageTheme, PageAccent: st.PageAccent,
 		PageHTML: st.PageHTML, PageCSS: st.PageCSS, WidgetsPublic: st.WidgetsPublic, CurrentRelease: st.CurrentRelease,
 		ReleaseBytes: st.ReleaseBytes, Disabled: st.Disabled, Domains: st.Domains, RepoFullName: st.RepoFullName, RepoBranch: st.RepoBranch,
-		RepoRoot: st.RepoRoot, CreatedAtMS: st.CreatedAtMS, UpdatedAtMS: st.UpdatedAtMS, CustomLogo: st.LogoUpdatedMS > 0,
+		RepoRoot: st.RepoRoot, CreatedAtMS: st.CreatedAtMS, UpdatedAtMS: st.UpdatedAtMS, CustomLogo: st.LogoUpdatedMS > 0, LogoVariant: st.LogoVariant,
 		IconURL: fmt.Sprintf("/api/v1/sites/%s/icon?v=%d-%s", st.ID, st.LogoUpdatedMS, strOr(st.CurrentRelease)),
 		AppID:   st.AppID, AppState: st.AppState, Framework: st.Framework, BuildOutputDir: st.BuildOutputDir, AppPort: st.Port(),
 		HealthPath: st.HealthPath, MaxBodyBytes: st.MaxBodyBytes, AutoBackup: !st.AutoBackupOff}

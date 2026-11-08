@@ -12,6 +12,7 @@
 	import Dialog from '$lib/components/ui/Dialog.svelte';
 	import Icon from '$lib/components/ui/Icon.svelte';
 	import Logo from '$lib/components/ui/Logo.svelte';
+	import { logoSeed } from '$lib/avatar';
 	import Menu, { type MenuItem } from '$lib/components/ui/Menu.svelte';
 	import Notice from '$lib/components/ui/Notice.svelte';
 	import Skeleton from '$lib/components/ui/Skeleton.svelte';
@@ -211,7 +212,7 @@
 		<ul class="card overflow-hidden [&>li+li]:border-t [&>li+li]:border-rule-soft">
 			{#each shown as u (u.id)}
 				<li class="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-3 {u.disabled ? 'opacity-70' : ''}">
-					<Logo src={u.avatar_url} kind="user" seed={u.id} class="size-9 rounded-pill" />
+					<Logo src={u.avatar_url} kind="user" seed={logoSeed(u.id, u.logo_variant)} class="size-9 rounded-pill" />
 					<div class="min-w-0 flex-1 basis-60">
 						<p class="font-medium break-all"><a class="hover:underline" href="/admin/users/{u.id}">{u.display_name || u.email}</a>{#if u.id === session.user?.id}<span class="ml-2 text-small font-normal text-muted">You</span>{/if}<span class="pill ml-2 align-middle" data-tone={u.email_verified ? 'run' : 'warn'} title={u.email_verified ? 'Email address verified' : 'Email address not verified'}>{u.email_verified ? 'Verified' : 'Unverified'}</span></p>
 						<p class="text-small text-muted">

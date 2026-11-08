@@ -81,7 +81,7 @@
 		<label class="block max-w-xs">
 			<span class="label">Bandwidth limit</span>
 			<span class="flex items-center gap-2"><input class="field" type="number" min="0" step="any" bind:value={bandwidth} placeholder="0" /><span class="shrink-0 text-muted">kbit/s</span></span>
-			<span class="help">0 means unlimited. Recorded for this bot, but <strong>not enforced yet</strong>: Docker has no built-in bandwidth cap, so it needs traffic shaping on the host.</span>
+			<span class="help">0 or empty: no limit. Recorded for this bot, but <strong>not enforced yet</strong>: Docker has no built-in bandwidth cap, so it needs traffic shaping on the host.</span>
 		</label>
 	</fieldset>
 

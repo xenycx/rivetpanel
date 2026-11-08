@@ -36,6 +36,7 @@ import (
 type SiteStore interface {
 	SetSiteLogo(ctx context.Context, siteID string, l *domain.Logo, nowMS int64) error
 	GetSiteLogo(ctx context.Context, siteID string) (domain.Logo, error)
+	NextLogoVariant(ctx context.Context, table, id string) (int64, error)
 	CreateSite(ctx context.Context, s domain.Site) error
 	CreateSiteChecked(ctx context.Context, s domain.Site, check func(domain.WorkspaceUsage) error) error
 	GetSite(ctx context.Context, id string) (domain.Site, error)
@@ -112,7 +113,7 @@ type SiteService struct {
 	BackupKeep     int
 	MinFreeDisk    int64
 	backupMu       sync.Mutex
-	Resolver     TXTResolver    // nil: net.DefaultResolver
+	Resolver       TXTResolver // nil: net.DefaultResolver
 	// Building and running sites (all nil: only uploaded static sites).
 	Deploys *DeployService
 	Builder SiteBuilder

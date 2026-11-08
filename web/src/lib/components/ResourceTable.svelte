@@ -12,6 +12,7 @@
 	import GameIcon from '$lib/components/ui/GameIcon.svelte';
 	import Icon from '$lib/components/ui/Icon.svelte';
 	import Logo from '$lib/components/ui/Logo.svelte';
+	import { logoSeed } from '$lib/avatar';
 	import Menu, { type MenuItem } from '$lib/components/ui/Menu.svelte';
 	import type { Snippet } from 'svelte';
 
@@ -144,7 +145,7 @@
 				{#if b.kind === 'game' && !b.logo_url}
 					<span class="grid shrink-0" data-vt-icon={b.id}><GameIcon type={blueprints[b.blueprint_id ?? '']} size={32} /></span>
 				{:else}
-					<Logo src={b.logo_url} kind={b.kind === 'container' ? 'container' : 'bot'} seed={b.id} class="size-8 rounded-control" data-vt-icon={b.id} />
+					<Logo src={b.logo_url} kind={b.kind === 'container' ? 'container' : 'bot'} seed={logoSeed(b.id, b.logo_variant)} class="size-8 rounded-control" data-vt-icon={b.id} />
 				{/if}
 				<div class="min-w-0">
 					<p class="flex min-w-0 items-center gap-1.5">

@@ -98,7 +98,7 @@ that merely shares a parent with the panel (panel `panel.example.com`, sites
 | `RIVET_SITES_DOMAINS` | none | further sites domains, comma-separated (e.g. `pages.example.net,example-sites.org`), trusted without a DNS record |
 | `RIVET_SITES_DIR` | `/var/lib/rivetpanel/sites` | releases, one directory per site |
 | `RIVET_SITE_MAX_BYTES` | 104857600 (100 MiB) | largest release, uncompressed (1 MiB–4 GiB) |
-| `RIVET_MAX_SITES_PER_USER` | 10 | fallback limit on sites per workspace, used where Panel settings → Default limits and the workspace's own limits set none; 0 = unlimited; built-in administrators are never refused |
+| `RIVET_MAX_SITES_PER_USER` | 10 (built-in) | fallback for the default allowance of sites per workspace, used where Panel settings → Default allowance and the workspace's own allowance set none; 0 is no limit |
 | `RIVET_SITES_DNS_TARGET` | the site's default host | host name shown as the CNAME target for custom domains |
 | `RIVET_APPS_NETWORK` | `rivetpanel-apps` | Docker network app sites run on; the sites listener reaches them over it (a containerised panel joins it at start) |
 | `RIVET_SITES_TRUSTED_PROXIES` | none (loopback only) | comma-separated addresses or CIDR ranges of the proxy in front of the sites listener; only their `X-Forwarded-*` and client-address headers reach apps |

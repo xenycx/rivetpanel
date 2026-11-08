@@ -87,7 +87,7 @@ func TestWorkspaceQuotaOneBotAndNothingElse(t *testing.T) {
 	}
 
 	u.mustStatus(201, "POST", "/api/v1/bots", map[string]any{"name": "discord", "runtime": "nodejs"})
-	expect400(t, u, "POST", "/api/v1/bots", map[string]any{"name": "second", "runtime": "python"}, `workspace \"Personal\" allows at most 1 bots`)
+	expect400(t, u, "POST", "/api/v1/bots", map[string]any{"name": "second", "runtime": "python"}, `workspace \"Personal\" allows at most 1 bots and containers`)
 	expect400(t, u, "POST", "/api/v1/games", newGame("Survival"), "does not allow game servers")
 	expect400(t, u, "POST", "/api/v1/sites", map[string]string{"name": "Docs"}, "does not allow sites")
 
@@ -158,7 +158,7 @@ func TestWorkspaceQuotaOverridesPanelDefaults(t *testing.T) {
 
 	plain.mustStatus(201, "POST", "/api/v1/bots", bot("a"))
 	plain.mustStatus(201, "POST", "/api/v1/bots", bot("b"))
-	expect400(t, plain, "POST", "/api/v1/bots", bot("c"), "allows at most 2 apps (bots, game servers and web apps together) and 2 already exist")
+	expect400(t, plain, "POST", "/api/v1/bots", bot("c"), "allows at most 2 apps (bots and containers, game servers and web apps together) and 2 already exist")
 
 	admin.mustStatus(200, "PUT", quotaPath(personalWS(t, e, "more@x.io")), map[string]any{"max_apps": 4, "memory_bytes": 2 << 30})
 	for i := range 4 {
@@ -218,10 +218,10 @@ func TestAdminOwnedWorkspaceMembersAreBounded(t *testing.T) {
 		return map[string]any{"name": n, "runtime": "nodejs", "workspace_id": ws}
 	}
 	u.mustStatus(201, "POST", "/api/v1/bots", app("first"))
-	expect400(t, u, "POST", "/api/v1/bots", app("second"), `workspace \"Ops\" allows at most 1 bots and 1 already exist`)
+	expect400(t, u, "POST", "/api/v1/bots", app("second"), `workspace \"Ops\" allows at most 1 bots and containers and 1 already exist`)
 	admin.mustStatus(201, "POST", "/api/v1/bots", app("admins"))
 	// Still bounded afterwards: the administrator's app counts too.
-	expect400(t, u, "POST", "/api/v1/bots", app("third"), `workspace \"Ops\" allows at most 1 bots and 2 already exist`)
+	expect400(t, u, "POST", "/api/v1/bots", app("third"), `workspace \"Ops\" allows at most 1 bots and containers and 2 already exist`)
 	if use, _ := e.db.WorkspaceUsage(t.Context(), ws); use.Bots != 2 {
 		t.Fatalf("usage %+v", use)
 	}
@@ -247,7 +247,9 @@ func TestCapacityExemptIsActorBased(t *testing.T) {
 		t.Fatalf("member capacity %+v", cp)
 	}
 	json.Unmarshal(admin.mustStatus(200, "GET", "/api/v1/me/capacity?workspace="+ws, nil), &cp)
-	if !cp.Exempt || cp.Limits["bots"] != nil {
+	// The administrator is exempt, but still sees the workspace's allowance
+	// so the forms can show the room.
+	if !cp.Exempt || cp.Limits["bots"] == nil || *cp.Limits["bots"] != 1 {
 		t.Fatalf("admin capacity %+v", cp)
 	}
 	// The administrator's own personal workspace is exempt for them too.
@@ -260,10 +262,64 @@ func TestCapacityExemptIsActorBased(t *testing.T) {
 		who  *client
 		path string
 	}{{admin, "/api/v1/workspaces/" + ws + "/limits"}, {u, "/api/v1/workspaces/" + ws + "/limits"}, {admin, quotaPath(ws)}} {
+		cp.Exempt, cp.Limits = false, nil
 		json.Unmarshal(c.who.mustStatus(200, "GET", c.path, nil), &cp)
 		if cp.Exempt || cp.Limits["bots"] == nil || *cp.Limits["bots"] != 1 {
 			t.Fatalf("%s: %+v", c.path, cp)
 		}
+	}
+}
+
+// Every allowance value names its source: the built-in value, the
+// environment, the panel default or the workspace's own allowance.
+func TestAllowanceSources(t *testing.T) {
+	r := newQuotaRig(t)
+	e := r.e
+	e.bots.Limits.MaxSitesPerUser, e.bots.Limits.SitesLimitFromEnv = 10, false
+	e.bots.Limits.UserMemoryBytes = 1 << 30
+	e.bots.Limits.NodeMemoryBytes = 2 << 30
+	admin := e.user("root@x.io", domain.RoleAdmin)
+	member := e.user("member@x.io", domain.RoleUser)
+	var d struct {
+		Limits map[string]*int64 `json:"limits"`
+		Source map[string]string `json:"source"`
+	}
+	json.Unmarshal(admin.mustStatus(200, "PUT", "/api/v1/admin/limits", map[string]any{"max_apps": 4}), &d)
+	if d.Source["max_sites"] != "builtin" || *d.Limits["max_sites"] != 10 || d.Source["memory_bytes"] != "env" ||
+		d.Source["max_apps"] != "panel" || d.Source["nano_cpus"] != "builtin" || d.Limits["nano_cpus"] != nil || d.Source["team_workspaces"] != "builtin" {
+		t.Fatalf("defaults %+v", d)
+	}
+	e.bots.Limits.SitesLimitFromEnv = true
+	json.Unmarshal(admin.mustStatus(200, "GET", "/api/v1/admin/limits", nil), &d)
+	if d.Source["max_sites"] != "env" {
+		t.Fatalf("sites from the environment %+v", d)
+	}
+
+	ws := personalWS(t, e, "member@x.io")
+	var v struct {
+		Sources map[string]string `json:"sources"`
+	}
+	json.Unmarshal(admin.mustStatus(200, "PUT", quotaPath(ws), map[string]any{"max_bots": 2}), &v)
+	if v.Sources["bots"] != "workspace" || v.Sources["apps"] != "panel" || v.Sources["memory_bytes"] != "env" || v.Sources["sites"] != "env" {
+		t.Fatalf("sources %+v", v.Sources)
+	}
+
+	// The node budget left is reported to every member; the node block only
+	// to administrators.
+	var cp struct {
+		NodeBudget *struct {
+			Budget int64 `json:"budget_bytes"`
+			Free   int64 `json:"free_bytes"`
+		} `json:"node_budget"`
+		Node map[string]any `json:"node"`
+	}
+	json.Unmarshal(member.mustStatus(200, "GET", "/api/v1/me/capacity", nil), &cp)
+	if cp.NodeBudget == nil || cp.NodeBudget.Budget != 2<<30 || cp.NodeBudget.Free != 2<<30 || cp.Node != nil {
+		t.Fatalf("member capacity %+v", cp)
+	}
+	json.Unmarshal(admin.mustStatus(200, "GET", "/api/v1/me/capacity", nil), &cp)
+	if cp.Node == nil || cp.Node["max_app_memory_bytes"] == nil {
+		t.Fatalf("admin capacity %+v", cp)
 	}
 }
 
@@ -336,7 +392,7 @@ func TestWorkspaceQuotaLoweredBelowUsage(t *testing.T) {
 	if use, _ := e.db.WorkspaceUsage(t.Context(), ws); use.Bots != 3 {
 		t.Fatalf("usage %+v", use)
 	}
-	expect400(t, u, "POST", "/api/v1/bots", map[string]any{"name": "more", "runtime": "nodejs"}, "at most 1 bots and 3 already exist")
+	expect400(t, u, "POST", "/api/v1/bots", map[string]any{"name": "more", "runtime": "nodejs"}, "at most 1 bots and containers and 3 already exist")
 	expect400(t, u, "PATCH", "/api/v1/bots/"+ids[1], map[string]any{"memory_bytes": 512 << 20}, "may use at most 256 MiB of memory")
 	u.mustStatus(200, "PATCH", "/api/v1/bots/"+ids[1], map[string]any{"memory_bytes": 128 << 20})
 	u.mustStatus(204, "DELETE", "/api/v1/bots/"+ids[2], nil)

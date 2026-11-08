@@ -69,8 +69,10 @@ export function fmtBytes(n: number): string {
 	if (n >= 1024) return Math.round(n / 1024) + ' KiB';
 	return n + ' B';
 }
+/** CPU in cores: "1 core", "0.5 cores", "2 cores". */
 export function fmtCpu(nano: number): string {
-	return (nano / 1e9).toFixed(2).replace(/\.?0+$/, '') + ' CPU';
+	const n = (nano / 1e9).toFixed(2).replace(/\.?0+$/, '');
+	return n + (n === '1' ? ' core' : ' cores');
 }
 
 /** Reads a file as text together with its revision (ETag). */

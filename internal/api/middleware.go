@@ -117,7 +117,7 @@ func (s *panel) requireAnyPerm(ps ...string) fiber.Handler {
 // or wider credentials, lock the owner out or change who the account is.
 var clientSessionOnly = []string{
 	"/auth/logout", "/me/password", "/me/mfa", "/me/tokens", "/me/api-keys", "/me/api-clients",
-	"/me/sessions", "/me/connections", "/me/profile", "/me/email", "/me/email-alerts", "/me/email-news",
+	"/me/sessions", "/me/connections", "/me/profile", "/me/avatar", "/me/email", "/me/email-alerts", "/me/email-news",
 	"/me/passkeys", "/me/identities", "/invites/accept", "/admin/api-clients",
 	// The notification inbox carries ticket replies and alerts about every
 	// resource of the account; preferences could silence them.

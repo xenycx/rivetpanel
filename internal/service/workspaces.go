@@ -174,11 +174,8 @@ func (s *BotService) CreateWorkspace(ctx context.Context, actor domain.User, nam
 // permission; built-in administrators and workspaces.manage rename any
 // workspace. Personal workspaces are renamed like team ones (1-64 characters).
 func (s *BotService) RenameWorkspace(ctx context.Context, actor domain.User, id, name string) error {
-	if _, err := s.requireWorkspaceRole(ctx, actor, id, domain.WorkspaceAdmin); err != nil {
+	if err := s.requireWorkspaceIdentity(ctx, actor, id); err != nil {
 		return err
-	}
-	if !managesWorkspaces(actor) && !actor.Can(domain.PermWorkspacesRename) {
-		return domain.Denied(actor, domain.PermWorkspacesRename)
 	}
 	name, err := validateName(name)
 	if err != nil {

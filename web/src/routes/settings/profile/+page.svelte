@@ -5,6 +5,7 @@
 	import { toast } from '$lib/ui/toast.svelte';
 	import Icon from '$lib/components/ui/Icon.svelte';
 	import Logo from '$lib/components/ui/Logo.svelte';
+	import { logoSeed } from '$lib/avatar';
 	import Notice from '$lib/components/ui/Notice.svelte';
 	import SettingsSection from '$lib/components/ui/SettingsSection.svelte';
 	import Switch from '$lib/components/ui/Switch.svelte';
@@ -42,6 +43,15 @@
 		finally { saving = false; }
 	}
 	function remove() { avatar = ''; preview = ''; }
+	let shuffling = $state(false);
+	async function shuffle() {
+		shuffling = true;
+		try {
+			const r = await api<{ logo_variant: number }>('POST', '/me/avatar/shuffle');
+			if (session.user) session.user = { ...session.user, logo_variant: r.logo_variant };
+		} catch (e) { error = e instanceof ApiError ? e.message : 'A new picture could not be drawn.'; }
+		finally { shuffling = false; }
+	}
 
 	// Email address: verification and changes (the address changes only
 	// after the link sent to the new one is used).
@@ -97,13 +107,14 @@
 	{#if error}<Notice tone="fail" class="mb-4">{error}</Notice>{/if}
 	<form class="card grid gap-6 p-5 @container" onsubmit={save}>
 		<div class="flex flex-col gap-5 sm:flex-row sm:items-center">
-			<Logo src={preview} kind="user" seed={session.user?.id ?? ''} class="size-20 rounded-pill border border-rule" />
+			<Logo src={preview} kind="user" seed={logoSeed(session.user?.id ?? '', session.user?.logo_variant)} class="size-20 rounded-pill border border-rule" />
 			<div>
 				<div class="flex flex-wrap gap-2">
 					<label class="btn cursor-pointer"><Icon name="upload" size={14} />Choose picture<input class="sr-only" type="file" accept="image/jpeg,image/png,image/webp" onchange={choose} /></label>
-					{#if preview}<button type="button" class="btn btn-quiet" onclick={remove}>Remove</button>{/if}
+					{#if preview}<button type="button" class="btn btn-quiet" onclick={remove}>Remove</button>
+					{:else}<button type="button" class="btn" disabled={shuffling} onclick={shuffle}><Icon name="shuffle" size={14} />New picture</button>{/if}
 				</div>
-				<p class="mt-2 text-small text-muted">Cropped to a square and compressed to 128 × 128 pixels before upload.</p>
+				<p class="mt-2 text-small text-muted">Cropped to a square and compressed to 128 × 128 pixels before upload. Without a picture the panel draws one{preview ? '' : '; New picture draws another right away'}.</p>
 			</div>
 		</div>
 		<div class="grid gap-4 @xl:grid-cols-2">

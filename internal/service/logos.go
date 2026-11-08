@@ -65,6 +65,64 @@ func (s *BotService) Logo(ctx context.Context, actor domain.User, botID string) 
 	return s.Store.GetBotLogo(ctx, b.ID)
 }
 
+// ShuffleLogo picks another generated picture for a bot (who may change its
+// logo may change this) and returns the new choice.
+func (s *BotService) ShuffleLogo(ctx context.Context, actor domain.User, botID string) (int64, error) {
+	b, err := s.loadPerm(ctx, actor, botID, domain.PermFullAdmin, false)
+	if err != nil {
+		return 0, err
+	}
+	return s.Store.NextLogoVariant(ctx, "bots", b.ID)
+}
+
+// ---- workspaces ----
+
+// requireWorkspaceIdentity allows changing a workspace's name and logo: the
+// workspace admin role plus workspaces.rename; built-in administrators and
+// workspaces.manage change any workspace.
+func (s *BotService) requireWorkspaceIdentity(ctx context.Context, actor domain.User, id string) error {
+	if _, err := s.requireWorkspaceRole(ctx, actor, id, domain.WorkspaceAdmin); err != nil {
+		return err
+	}
+	if !managesWorkspaces(actor) && !actor.Can(domain.PermWorkspacesRename) {
+		return domain.Denied(actor, domain.PermWorkspacesRename)
+	}
+	return nil
+}
+
+// SetWorkspaceLogo stores a workspace's custom logo; nil data removes it.
+// Whoever may rename the workspace may change its logo.
+func (s *BotService) SetWorkspaceLogo(ctx context.Context, actor domain.User, id string, data []byte) error {
+	if err := s.requireWorkspaceIdentity(ctx, actor, id); err != nil {
+		return err
+	}
+	if data == nil {
+		return s.Store.SetWorkspaceLogo(ctx, id, nil, s.now())
+	}
+	ct, err := validateLogo(data)
+	if err != nil {
+		return err
+	}
+	return s.Store.SetWorkspaceLogo(ctx, id, &domain.Logo{Data: data, ContentType: ct}, s.now())
+}
+
+// WorkspaceLogo returns a workspace's custom logo to any member
+// (domain.ErrNotFound when none).
+func (s *BotService) WorkspaceLogo(ctx context.Context, actor domain.User, id string) (domain.Logo, error) {
+	if _, err := s.workspaceRole(ctx, actor, id); err != nil {
+		return domain.Logo{}, err
+	}
+	return s.Store.GetWorkspaceLogo(ctx, id)
+}
+
+// ShuffleWorkspaceLogo picks another generated picture for a workspace.
+func (s *BotService) ShuffleWorkspaceLogo(ctx context.Context, actor domain.User, id string) (int64, error) {
+	if err := s.requireWorkspaceIdentity(ctx, actor, id); err != nil {
+		return 0, err
+	}
+	return s.Store.NextLogoVariant(ctx, "workspaces", id)
+}
+
 var avatarHashRe = lazyre.New(`^(a_)?[0-9a-f]{32}$`)
 
 var discordTokenRe = lazyre.New(`^[A-Za-z0-9_-]{18,}\.[A-Za-z0-9_-]{4,}\.[A-Za-z0-9_-]{20,}$`)
@@ -168,6 +226,16 @@ func (s *SiteService) SetLogo(ctx context.Context, actor domain.User, id string,
 		return err
 	}
 	return s.Store.SetSiteLogo(ctx, st.ID, &domain.Logo{Data: data, ContentType: ct}, s.now().UnixMilli())
+}
+
+// ShuffleLogo picks another generated picture for a site (who may change its
+// logo may change this) and returns the new choice.
+func (s *SiteService) ShuffleLogo(ctx context.Context, actor domain.User, id string) (int64, error) {
+	st, _, err := s.requireSite(ctx, actor, id, domain.WorkspaceDeveloper)
+	if err != nil {
+		return 0, err
+	}
+	return s.Store.NextLogoVariant(ctx, "sites", st.ID)
 }
 
 // SiteIcon is an image to show for a site.

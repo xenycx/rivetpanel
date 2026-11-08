@@ -7,6 +7,7 @@
 	import { fmtAgo } from '$lib/args';
 	import Icon from '$lib/components/ui/Icon.svelte';
 	import Logo from '$lib/components/ui/Logo.svelte';
+	import { logoSeed } from '$lib/avatar';
 	import Notice from '$lib/components/ui/Notice.svelte';
 	import Skeleton from '$lib/components/ui/Skeleton.svelte';
 
@@ -95,34 +96,39 @@
 		<select class="field w-auto" bind:value={sort} aria-label="Sort"><option value="activity">Recently active</option><option value="bots">Most apps</option><option value="memory">Most memory</option><option value="name">Name</option></select>
 	</div>
 
+	<!-- The name takes the spare width; the numbers keep to one line. Limits
+	     and node share a column, shown from xl up; Members and Sites from lg. -->
 	<div class="card mt-3 overflow-x-auto">
-		<table class="w-full min-w-[50rem] text-left">
+		<table class="w-full text-left">
 			<thead class="border-b border-rule-soft">
-				<tr class="[&>th]:px-4 [&>th]:py-2.5 [&>th]:font-normal">
-					<th class="eyebrow">Workspace</th><th class="eyebrow">Owner</th><th class="eyebrow text-right">Members</th><th class="eyebrow text-right">Apps</th><th class="eyebrow text-right">Sites</th><th class="eyebrow text-right">Memory</th><th class="eyebrow">Limits</th><th class="eyebrow">Node</th><th class="eyebrow text-right">Active</th>
+				<tr class="[&>th]:px-4 [&>th]:py-2.5 [&>th]:font-normal [&>th]:whitespace-nowrap">
+					<th class="eyebrow w-full">Workspace</th><th class="eyebrow hidden text-right lg:table-cell">Members</th><th class="eyebrow text-right">Apps</th><th class="eyebrow hidden text-right lg:table-cell">Sites</th><th class="eyebrow text-right">Memory</th><th class="eyebrow hidden xl:table-cell">Limits · node</th><th class="eyebrow text-right">Active</th>
 				</tr>
 			</thead>
 			<tbody class="divide-y divide-rule-soft">
 				{#each shown as w (w.id)}
 					<tr class="[&>td]:px-4 [&>td]:py-2.5 hover:bg-paper/40">
-						<td class="max-w-64">
-							<a class="flex items-center gap-2 font-medium hover:underline" href="/admin/workspaces/{w.id}">
-								<Logo kind="workspace" seed={w.id} class="size-7 rounded-control" />
-								<span class="truncate">{wsName(w)}</span>
-								{#if w.personal}<span class="pill shrink-0">Personal</span>{/if}
-							</a>
+						<td class="w-full max-w-0">
+							<div class="flex min-w-0 items-center gap-2.5">
+								<Logo src={w.logo_url} kind="workspace" seed={logoSeed(w.id, w.logo_variant)} class="size-8 rounded-control" />
+								<div class="min-w-0">
+									<a class="block truncate font-medium hover:underline" href="/admin/workspaces/{w.id}" title={wsName(w)}>{wsName(w)}</a>
+									<p class="truncate text-small text-muted">{w.personal ? (wsName(w) === 'Personal' ? '' : 'Personal · ') : 'Team · '}<a class="hover:text-ink hover:underline" href="/admin/users/{w.owner_id}" title="Owner: {w.owner_email}">{w.owner_email}</a></p>
+								</div>
+							</div>
 						</td>
-						<td class="max-w-56 truncate text-small"><a class="hover:underline" href="/admin/users/{w.owner_id}">{w.owner_email}</a></td>
-						<td class="text-right font-mono text-small">{w.members}</td>
-						<td class="text-right font-mono text-small"><span class={w.running_bots ? 'text-run' : ''}>{w.running_bots}</span>/{w.bots}</td>
-						<td class="text-right font-mono text-small">{w.sites}</td>
-						<td class="text-right font-mono text-small">{fmtBytes(w.memory_bytes)}</td>
-						<td class="text-small">{#if w.quota}<span class="pill" title="This workspace has its own limits">{limitText(w.quota)}</span>{:else}<span class="text-muted">Default</span>{/if}</td>
-						<td class="max-w-40 truncate text-small">{#if w.node_id}<span title={can('nodes.manage') ? 'New apps in this workspace go to this node' : 'New apps in this workspace go to a pinned node'}>{nodeText(w)}</span>{:else}<span class="text-muted">Default</span>{/if}</td>
-						<td class="text-right text-small text-muted">{w.last_active_at_ms ? fmtAgo(w.last_active_at_ms) : '—'}</td>
+						<td class="hidden text-right font-mono text-small whitespace-nowrap tabular-nums lg:table-cell">{w.members}</td>
+						<td class="text-right font-mono text-small whitespace-nowrap tabular-nums" title="{w.running_bots} running of {w.bots}"><span class={w.running_bots ? 'text-run' : ''}>{w.running_bots}</span>/{w.bots}</td>
+						<td class="hidden text-right font-mono text-small whitespace-nowrap tabular-nums lg:table-cell">{w.sites}</td>
+						<td class="text-right font-mono text-small whitespace-nowrap tabular-nums">{fmtBytes(w.memory_bytes)}</td>
+						<td class="hidden max-w-56 text-small text-muted xl:table-cell">
+							<span class="block truncate {w.quota ? 'text-ink' : ''}" title={w.quota ? `Own limits: ${limitText(w.quota)}` : 'Panel default limits'}>{w.quota ? limitText(w.quota) : 'Default limits'}</span>
+							{#if w.node_id}<span class="block truncate" title={can('nodes.manage') ? 'New apps in this workspace go to this node' : 'New apps in this workspace go to a pinned node'}>Node: {nodeText(w)}</span>{/if}
+						</td>
+						<td class="text-right text-small whitespace-nowrap text-muted tabular-nums">{w.last_active_at_ms ? fmtAgo(w.last_active_at_ms) : '—'}</td>
 					</tr>
 				{:else}
-					<tr><td colspan="9" class="px-4 py-4 text-small text-muted">No workspaces match.</td></tr>
+					<tr><td colspan="7" class="px-4 py-4 text-small text-muted">No workspaces match.</td></tr>
 				{/each}
 			</tbody>
 		</table>

@@ -173,7 +173,7 @@
 		const ok = await confirmDialog({
 			title: 'Run the log archive now?',
 			body: 'Copies the newest console output, compresses every ended day into the archive folder, and then deletes archives beyond the retention and size limit. The current day stays live.',
-			details: v ? [['Keep archives', `${v.settings.retention_days} days`], ['Size limit', v.settings.max_archive_mb ? `${v.settings.max_archive_mb.toLocaleString()} MB` : 'none']] : undefined,
+			details: v ? [['Keep archives', `${v.settings.retention_days} days`], ['Size limit', v.settings.max_archive_mb ? `${v.settings.max_archive_mb.toLocaleString()} MiB` : 'No limit']] : undefined,
 			confirmLabel: 'Run now'
 		});
 		if (!ok) return;
@@ -215,7 +215,7 @@
 	<!-- Disk use and the last job. -->
 	<dl class="mt-5 grid grid-cols-2 gap-3 xl:grid-cols-4">
 		<div class="stat"><dt class="eyebrow">Live day files</dt><dd class="mt-1 font-mono text-section font-semibold">{fmtBytes(v.usage.live_bytes)}<span class="ml-2 text-small font-normal text-muted">{v.usage.live_files} file{v.usage.live_files === 1 ? '' : 's'}</span></dd></div>
-		<div class="stat"><dt class="eyebrow">Archived</dt><dd class="mt-1 font-mono text-section font-semibold">{fmtBytes(v.usage.archived_bytes)}<span class="ml-2 text-small font-normal text-muted">{v.usage.archived_files} file{v.usage.archived_files === 1 ? '' : 's'}{v.settings.max_archive_mb ? ` of ${v.settings.max_archive_mb.toLocaleString()} MB` : ''}</span></dd></div>
+		<div class="stat"><dt class="eyebrow">Archived</dt><dd class="mt-1 font-mono text-section font-semibold">{fmtBytes(v.usage.archived_bytes)}<span class="ml-2 text-small font-normal text-muted">{v.usage.archived_files} file{v.usage.archived_files === 1 ? '' : 's'}{v.settings.max_archive_mb ? ` of ${v.settings.max_archive_mb.toLocaleString()} MiB` : ''}</span></dd></div>
 		<div class="stat"><dt class="eyebrow">Oldest archive</dt><dd class="mt-1 font-mono text-section font-semibold">{v.usage.oldest_archive || '—'}</dd></div>
 		<div class="stat"><dt class="eyebrow">Build and backup output</dt><dd class="mt-1 font-mono text-section font-semibold">{fmtBytes(v.usage.operation_log_bytes)}<span class="ml-2 text-small font-normal text-muted">{v.usage.operation_log_files} file{v.usage.operation_log_files === 1 ? '' : 's'}, not archived</span></dd></div>
 	</dl>
@@ -269,13 +269,13 @@
 					</label>
 					<label class="block">
 						<span class="label">Log size limit</span>
-						<span class="flex items-center gap-2"><input class="field max-w-36 font-mono" type="number" min="0" max={v.bounds.max_archive_mb?.max} step="1" bind:value={f.max_archive_mb} aria-invalid={!!fieldError('max_archive_mb')} /><span class="text-small text-muted">MB</span></span>
-						<span class="help {fieldError('max_archive_mb') ? '!text-fail' : ''}">{fieldError('max_archive_mb') || (f.max_archive_mb ? `When archives and today's live files together exceed ${(f.max_archive_mb / 1024).toFixed(f.max_archive_mb >= 10240 ? 0 : 1)} GB, the oldest archives are deleted first.` : '0 means no limit: only the retention days apply.')}</span>
+						<span class="flex items-center gap-2"><input class="field max-w-36 font-mono" type="number" min="0" max={v.bounds.max_archive_mb?.max} step="1" bind:value={f.max_archive_mb} aria-invalid={!!fieldError('max_archive_mb')} /><span class="text-small text-muted">MiB</span></span>
+						<span class="help {fieldError('max_archive_mb') ? '!text-fail' : ''}">{fieldError('max_archive_mb') || (f.max_archive_mb ? `When archives and today's live files together exceed ${f.max_archive_mb >= 1024 ? `${(f.max_archive_mb / 1024).toFixed(f.max_archive_mb >= 10240 ? 0 : 1)} GiB` : `${f.max_archive_mb} MiB`}, the oldest archives are deleted first. 0 is no limit.` : '0: no limit, only the retention days apply.')}</span>
 					</label>
 					<label class="block">
 						<span class="label">Daily file limit</span>
-						<span class="flex items-center gap-2"><input class="field max-w-36 font-mono" type="number" min={v.bounds.max_day_mb?.min} max={v.bounds.max_day_mb?.max} step="1" bind:value={f.max_day_mb} aria-invalid={!!fieldError('max_day_mb')} /><span class="text-small text-muted">MB</span></span>
-						<span class="help {fieldError('max_day_mb') ? '!text-fail' : ''}">{fieldError('max_day_mb') || `Per server and for the panel log, per day; default ${v.defaults.max_day_mb} MB. When a day's file reaches it, one "log capped" line is written and the rest of that day is not stored. Nothing is written while free disk space is below the panel's minimum (RIVET_MIN_FREE_DISK_BYTES).`}</span>
+						<span class="flex items-center gap-2"><input class="field max-w-36 font-mono" type="number" min={v.bounds.max_day_mb?.min} max={v.bounds.max_day_mb?.max} step="1" bind:value={f.max_day_mb} aria-invalid={!!fieldError('max_day_mb')} /><span class="text-small text-muted">MiB</span></span>
+						<span class="help {fieldError('max_day_mb') ? '!text-fail' : ''}">{fieldError('max_day_mb') || `Per server and for the panel log, per day; default ${v.defaults.max_day_mb} MiB. When a day's file reaches it, one "log capped" line is written and the rest of that day is not stored. Nothing is written while free disk space is below the panel's minimum (RIVET_MIN_FREE_DISK_BYTES).`}</span>
 					</label>
 				</div>
 			</SettingsSection>

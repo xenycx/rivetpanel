@@ -10,10 +10,13 @@
 	import { loadWorkspaces, selectWorkspace, wsName } from '$lib/workspaces.svelte';
 	import Icon from '$lib/components/ui/Icon.svelte';
 	import Logo from '$lib/components/ui/Logo.svelte';
+	import LogoEditor from '$lib/components/LogoEditor.svelte';
+	import { logoSeed } from '$lib/avatar';
 	import Notice from '$lib/components/ui/Notice.svelte';
 	import Skeleton from '$lib/components/ui/Skeleton.svelte';
 	import SettingsSection from '$lib/components/ui/SettingsSection.svelte';
 	import WorkspaceUsage from '$lib/components/WorkspaceUsage.svelte';
+	import { LIMITS_HELP } from '$lib/limits';
 	import type { WorkspaceQuotaView } from '$lib/api/types';
 
 	const id = $derived(page.params.id ?? '');
@@ -57,6 +60,26 @@
 			toast(msg(err), 'fail');
 		}
 	}
+	// The logo: whoever may rename the workspace may change it.
+	let logoBusy = $state(false);
+	async function logo(method: 'PUT' | 'DELETE' | 'POST', body?: unknown) {
+		logoBusy = true;
+		try {
+			if (method === 'POST') {
+				const r = await api<{ logo_variant: number }>('POST', `/workspaces/${id}/logo/shuffle`);
+				if (ws) ws = { ...ws, logo_variant: r.logo_variant };
+			} else {
+				const r = await api<{ workspace: Workspace; members: WorkspaceMember[] }>(method, `/workspaces/${id}/logo`, body);
+				ws = r.workspace;
+				toast(method === 'PUT' ? 'Logo saved' : 'Custom logo removed', 'success');
+			}
+			await loadWorkspaces();
+		} catch (err) {
+			toast(msg(err), 'fail');
+		} finally {
+			logoBusy = false;
+		}
+	}
 	async function add(e: SubmitEvent) {
 		e.preventDefault();
 		busy = true;
@@ -85,7 +108,7 @@
 		const self = m.user_id === session.user?.id;
 		const ok = await confirmDialog({
 			title: self ? `Leave ${ws?.name}?` : `Remove ${m.email}?`,
-			body: self ? 'You lose access to its bots and sites unless they are shared with you directly.' : 'They lose access to this workspace’s bots and sites unless shared with them directly. Bots they created stay in the workspace.',
+			body: self ? 'You lose access to its apps and sites unless they are shared with you directly.' : 'They lose access to this workspace’s apps and sites unless shared with them directly. Apps they created stay in the workspace.',
 			confirmLabel: self ? 'Leave workspace' : 'Remove member',
 			tone: 'danger'
 		});
@@ -127,20 +150,26 @@
 
 <svelte:head><title>{title} · RivetPanel</title></svelte:head>
 
-<a href="/settings/workspaces" class="mb-4 inline-flex items-center gap-1 text-small text-muted hover:text-ink"><Icon name="chevronLeft" size={14} />All workspaces</a>
+<a href="/settings/workspaces" class="mb-4 inline-flex items-center gap-1 text-small text-muted hover:text-ink"><Icon name="chevronLeft" size={14} />Your workspaces</a>
 {#if error}<Notice tone="fail" live>{error}</Notice>{/if}
 {#if !ws && !error}
 	<Skeleton rows={4} />
 {:else if ws}
 	<div class="mb-2 flex flex-wrap items-center gap-3">
+		{#if canRename}
+			<LogoEditor compact name={title} src={ws.logo_url} custom={!!ws.logo_url} kind="workspace" seed={logoSeed(ws.id, ws.logo_variant)} busy={logoBusy}
+				onUpload={(image) => logo('PUT', { image })} onRemove={() => logo('DELETE')} onShuffle={() => logo('POST')} />
+		{:else}
+			<Logo src={ws.logo_url} kind="workspace" seed={logoSeed(ws.id, ws.logo_variant)} class="size-10 rounded-tile border border-rule-soft" />
+		{/if}
 		<h2 class="text-section">{title}</h2>
-		{#if ws.personal}<span class="pill">Personal</span>{/if}
+		{#if ws.personal && title !== 'Personal'}<span class="pill">Personal</span>{/if}
 		{#if ws.role}<span class="pill">{roleText[ws.role]}</span>{/if}
 		<button class="btn btn-sm ml-auto" onclick={() => { selectWorkspace(ws!.id); goto('/dashboard'); }}><Icon name="home" size={14} />Open overview</button>
 	</div>
 
 	{#if canRename}
-		<SettingsSection title="Name" description="Shown in the workspace switcher and to every member.">
+		<SettingsSection title="Name" description="Shown in the workspace switcher and to every member. Change the logo from the picture beside the title.">
 			<form class="card flex flex-wrap items-end gap-3 p-5" onsubmit={rename}>
 				<label class="block min-w-0 flex-1 basis-60"><span class="label">Workspace name</span><input class="field" required maxlength="64" bind:value={name} /></label>
 				<button class="btn" disabled={name.trim() === ws.name || !name.trim()}>Rename</button>
@@ -149,23 +178,24 @@
 	{/if}
 
 	{#if limits}
-		<SettingsSection title="Usage and limits" description="Every member's apps and sites here count together. Stopped apps count until they are deleted. Only panel administrators change limits.">
-			<WorkspaceUsage usage={limits.usage} limits={limits.limits} exempt={limits.exempt} />
+		<SettingsSection title="Usage and allowance" description="What this workspace may hold in total. Every member's apps and sites here count together, and stopped apps count until they are deleted. Only panel administrators change the allowance.">
+			<WorkspaceUsage usage={limits.usage} limits={limits.limits} sources={limits.sources} />
+			<p class="mt-2 text-small"><a class="link" href={LIMITS_HELP}>How limits work</a></p>
 		</SettingsSection>
 	{/if}
 
-	<SettingsSection title="Members" description="Roles apply to every bot{session.features.sites ? ' and site' : ''} in the workspace. Sharing a single bot (on its Users tab) adds access on top.">
+	<SettingsSection title="Members" description="Roles apply to every app{session.features.sites ? ' and site' : ''} in the workspace. Sharing a single app (on its Users tab) adds access on top.">
 		<div class="card overflow-hidden">
 			<ul class="divide-y divide-rule-soft">
 				{#each members as m (m.user_id)}
 					<li class="flex flex-wrap items-center gap-3 px-4 py-3">
-						<Logo kind="user" seed={m.user_id} class="size-9 rounded-pill" />
+						<Logo kind="user" seed={logoSeed(m.user_id, m.logo_variant)} class="size-9 rounded-pill" />
 						<div class="min-w-0 flex-1 basis-48">
 							<p class="truncate font-medium">{m.display_name || m.email}{#if m.user_id === session.user?.id}<span class="ml-2 text-small font-normal text-muted">you</span>{/if}</p>
 							<p class="truncate text-small text-muted">{m.display_name ? `${m.email} · ` : ''}added {fmtWhen(m.created_at_ms)}</p>
 						</div>
 						{#if m.role === 'owner' || !manage}
-							<span class="pill" data-tone={m.role === 'owner' ? 'run' : undefined}>{roleText[m.role]}</span>
+							<span class="pill" data-tone={m.role === 'owner' ? 'action' : undefined}>{roleText[m.role]}</span>
 						{:else}
 							<select class="field w-auto" aria-label="Role of {m.email}" value={m.role} onchange={(e) => setRole(m, e.currentTarget.value as WorkspaceRole)}>
 								{#each ['admin', 'developer', 'viewer'] as const as r (r)}<option value={r}>{roleText[r]}</option>{/each}
@@ -200,7 +230,7 @@
 	{#if !ws.personal && myRank >= roleRank.owner}
 		<SettingsSection title="Delete workspace" description="Only an empty workspace can be deleted here. Administrators can delete a workspace with everything in it from Administration → Workspaces.">
 			<div class="card flex flex-wrap items-center gap-4 border-fail/30 p-5">
-				<p class="min-w-0 flex-1 basis-60 text-small text-muted">{ws.bots} bot{ws.bots === 1 ? '' : 's'} and {ws.sites} site{ws.sites === 1 ? '' : 's'} are in this workspace.</p>
+				<p class="min-w-0 flex-1 basis-60 text-small text-muted">{ws.bots} app{ws.bots === 1 ? '' : 's'} and {ws.sites} site{ws.sites === 1 ? '' : 's'} are in this workspace.</p>
 				<button class="btn btn-danger" onclick={destroy} disabled={ws.bots > 0 || ws.sites > 0}>Delete workspace</button>
 			</div>
 		</SettingsSection>

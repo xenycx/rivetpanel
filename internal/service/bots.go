@@ -1158,25 +1158,43 @@ func (s *BotService) StopOwnedBy(ctx context.Context, actor domain.User, ownerID
 	return n, nil
 }
 
-// Capacity is a workspace's usage against the limits that apply to it.
+// Capacity is a workspace's usage against its allowance.
 type Capacity struct {
 	Workspace                domain.Workspace
 	Bots, MaxBots            int
 	Memory, MaxMemory        int64
 	NodeRunning              int   // admins only
 	NodeReserved, NodeBudget int64 // admins only
-	Exempt                   bool  // the actor is a built-in administrator; nothing refuses them
-	// Usage by kind and the resolved limits (Max < 0 = unlimited). MaxBots
-	// and MaxMemory above are the same limits with 0 for unlimited.
+	// NodeMaxMemory and NodeMaxCPUs are the node maximum on the local node
+	// (the largest app size it accepts); admins only.
+	NodeMaxMemory, NodeMaxCPUs int64
+	// NodeHardwareMemory is the local node's measured memory (0 = unknown).
+	NodeHardwareMemory int64
+	// Budget is the node budget on the node asked about (the local node
+	// unless one is named): Free of Budget bytes left for apps wanted
+	// running. Budget 0 is no budget. A start past it is refused, and that
+	// refusal names the same numbers, so every member may see them.
+	Budget BudgetRoom
+	Exempt bool // the actor is a built-in administrator; nothing refuses them
+	// Usage by kind and the workspace's allowance (Max < 0 = unlimited),
+	// reported even when the actor is exempt so forms can show the room.
+	// MaxBots and MaxMemory above are the same limits with 0 for unlimited.
 	Usage  domain.WorkspaceUsage
 	Limits WorkspaceLimits
 }
 
-// Capacity reports a workspace's usage and the limits that apply to the
-// actor there (the actor's personal workspace when workspaceID is empty)
-// and, for administrators, the node's. A built-in administrator is exempt
-// wherever they act, so their forms are never clamped.
-func (s *BotService) Capacity(ctx context.Context, actor domain.User, workspaceID string) (Capacity, error) {
+// BudgetRoom is what is left of the node budget on one node.
+type BudgetRoom struct {
+	NodeID       string
+	Budget, Free int64
+}
+
+// Capacity reports a workspace's usage and allowance (the actor's personal
+// workspace when workspaceID is empty), the node budget left on nodeID (the
+// local node when empty) and, for administrators, the local node's figures.
+// A built-in administrator is exempt wherever they act: Exempt is set and
+// the forms show the room without enforcing it.
+func (s *BotService) Capacity(ctx context.Context, actor domain.User, workspaceID, nodeID string) (Capacity, error) {
 	var w domain.Workspace
 	var err error
 	if workspaceID == "" {
@@ -1191,15 +1209,31 @@ func (s *BotService) Capacity(ctx context.Context, actor domain.User, workspaceI
 	if err != nil {
 		return Capacity{}, err
 	}
-	lim, err := s.limitsFor(ctx, actor, w)
+	lim, err := s.resolveLimits(ctx, w)
 	if err != nil {
 		return Capacity{}, err
 	}
+	lim.Exempt = actor.IsAdmin()
 	c := Capacity{Workspace: w, Bots: int(u.Apps), Memory: u.Memory, Exempt: lim.Exempt, Usage: u, Limits: lim,
 		MaxBots: int(max(lim.Apps.Max, 0)), MaxMemory: max(lim.Memory.Max, 0)}
+	if nodeID == "" {
+		nodeID = s.LocalNode
+	}
+	if budget := s.Limits.NodeMemoryBytes; budget > 0 {
+		_, reserved, err := s.Store.NodeReserved(ctx, nodeID)
+		if err != nil {
+			return Capacity{}, err
+		}
+		c.Budget = BudgetRoom{NodeID: nodeID, Budget: budget, Free: max(budget-reserved, 0)}
+	}
 	if actor.IsAdmin() {
 		c.NodeRunning, c.NodeReserved, err = s.Store.NodeReserved(ctx, s.LocalNode)
 		c.NodeBudget = s.Limits.NodeMemoryBytes
+		nl := s.LimitsFor(ctx, s.LocalNode)
+		c.NodeMaxMemory, c.NodeMaxCPUs = nl.MaxMemoryBytes, nl.MaxNanoCPUs
+		if s.NodeCapacity != nil {
+			c.NodeHardwareMemory = s.NodeCapacity(ctx, s.LocalNode).MemoryBytes
+		}
 	}
 	return c, err
 }

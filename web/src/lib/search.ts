@@ -4,14 +4,16 @@
 
 import { tabDefs, type AppKind } from '$lib/tabs';
 import type { IconName } from '$lib/components/ui/Icon.svelte';
+import type { AvatarKind } from '$lib/avatar';
 
-export type Scope = 'all' | 'actions' | 'pages' | 'bots' | 'sites' | 'admin' | 'people' | 'chats';
+export type Scope = 'all' | 'actions' | 'pages' | 'bots' | 'sites' | 'workspaces' | 'admin' | 'people' | 'chats';
 export const scopes: { id: Scope; label: string }[] = [
 	{ id: 'all', label: 'All' },
 	{ id: 'actions', label: 'Actions' },
 	{ id: 'pages', label: 'Pages' },
 	{ id: 'bots', label: 'Bots & servers' },
 	{ id: 'sites', label: 'Sites' },
+	{ id: 'workspaces', label: 'Workspaces' },
 	{ id: 'admin', label: 'Admin' },
 	{ id: 'people', label: 'People' },
 	{ id: 'chats', label: 'AI chats' }
@@ -23,11 +25,12 @@ export const groups: { id: string; label: string; scope: Scope }[] = [
 	{ id: 'bot', label: 'Apps', scope: 'bots' },
 	{ id: 'bot-tab', label: 'App sections', scope: 'bots' },
 	{ id: 'site', label: 'Websites', scope: 'sites' },
+	{ id: 'workspace', label: 'Workspaces', scope: 'workspaces' },
 	{ id: 'page', label: 'Pages', scope: 'pages' },
 	{ id: 'settings', label: 'Your settings', scope: 'pages' },
 	{ id: 'admin', label: 'Administration', scope: 'admin' },
 	{ id: 'env', label: 'Environment variables', scope: 'admin' },
-	{ id: 'person', label: 'Users and workspaces', scope: 'people' },
+	{ id: 'person', label: 'Users', scope: 'people' },
 	{ id: 'chat', label: 'AI chats', scope: 'chats' },
 	{ id: 'docs', label: 'Documentation', scope: 'pages' }
 ];
@@ -38,6 +41,8 @@ export type Entry = {
 	label: string;
 	hint: string;
 	icon: IconName;
+	/** A logo shown instead of the icon (workspaces). */
+	logo?: { src?: string | null; kind: AvatarKind; seed: string };
 	/** Extra words that find it (synonyms, what is on the page). */
 	words?: string;
 	href?: string;

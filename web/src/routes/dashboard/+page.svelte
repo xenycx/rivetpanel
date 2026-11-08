@@ -10,7 +10,8 @@
 	import NewMenu from '$lib/components/NewMenu.svelte';
 	import ResourceTable from '$lib/components/ResourceTable.svelte';
 	import Roll from '$lib/components/ui/Roll.svelte';
-	import { currentWorkspace, workspaceName, workspaces, wsName } from '$lib/workspaces.svelte';
+	import WorkspaceScope from '$lib/components/WorkspaceScope.svelte';
+	import { currentWorkspace, workspaceName, workspaces } from '$lib/workspaces.svelte';
 	import type { Blueprint, GameStatus } from '$lib/api/games';
 
 	// The overview: four numbers about capacity, then the bots, game servers,
@@ -21,7 +22,7 @@
 	let runtimes = $state<RuntimeInfo[]>([]);
 	let players = $state<Record<string, GameStatus>>({});
 	let cap = $state<Capacity | null>(null);
-	// Administrators see the host's real usage.
+	// Administrators see the host's real usage while every workspace is shown.
 	let host = $state<{ cpu: number; cpus: number; mem: number; memTotal: number; disk: number; diskTotal: number } | null>(null);
 	let error = $state('');
 	let now = $state(Date.now());
@@ -121,29 +122,42 @@
 
 	type Kpi = { label: string; value: string; of?: string; pct?: number; hint?: string };
 	const pct = (a: number, b: number) => (b > 0 ? Math.min(100, (a / b) * 100) : undefined);
+	// Every number follows the workspace in view. The host's usage belongs to
+	// no workspace, so a chosen workspace shows its own reservations instead.
+	// With several workspaces in view there is no single limit to measure
+	// against: the reservations are summed, without a meter.
+	const wide = $derived(workspaces.selected === 'all' && workspaces.list.length > 1);
 	const kpis = $derived.by<Kpi[]>(() => {
-		const list = all ?? [];
+		const list = scoped;
 		const up = running(list);
 		const runningKpi: Kpi = { label: 'Running', value: String(up), of: `of ${list.length}`, pct: pct(up, list.length) };
-		if (host)
+		if (host && !scope)
 			return [
 				{ label: 'Memory', value: fmtBytes(host.mem), of: `of ${fmtBytes(host.memTotal)}`, pct: pct(host.mem, host.memTotal) },
 				{ label: 'CPU', value: `${host.cpu.toFixed(1)}%`, of: `${host.cpus} cores`, pct: Math.min(100, host.cpu) },
 				{ label: 'Disk', value: fmtBytes(host.disk), of: `of ${fmtBytes(host.diskTotal)}`, pct: pct(host.disk, host.diskTotal) },
 				runningKpi
 			];
-		// Without host access: what this account reserves against its limits.
+		// Otherwise: what the workspace in view reserves against its limits.
 		const reservedMem = list.filter((b) => b.desired_state === 'running').reduce((n, b) => n + b.memory_bytes, 0);
 		const reservedCpu = list.filter((b) => b.desired_state === 'running').reduce((n, b) => n + b.nano_cpus, 0) / 1e9;
-		const limited = !!cap && !cap.exempt;
-		const memMax = limited && cap!.max_memory_bytes ? cap!.max_memory_bytes : 0;
-		const appMax = limited && cap!.max_bots ? cap!.max_bots : 0;
-		// The apps limit counts the bots, game servers and web apps the account
-		// owns. /bots leaves web apps out, so the count comes from /me/capacity.
-		const apps = cap ? (cap.usage?.apps ?? cap.bots) : list.length;
+		const cpuKpi: Kpi = { label: 'CPU reserved', value: `${reservedCpu.toFixed(2).replace(/\.?0+$/, '')}`, of: reservedCpu === 1 ? 'core' : 'cores' };
+		if (wide) {
+			const across = `in ${workspaces.list.length} workspaces`;
+			return [{ label: 'Memory reserved', value: fmtBytes(reservedMem), of: across }, cpuKpi, { label: 'Apps', value: String(list.length), of: across }, runningKpi];
+		}
+		// The capacity answer only counts once it describes this workspace (it
+		// lags a switch by one request).
+		const c = cap && (!scope || cap.workspace?.id === scope.id) ? cap : null;
+		const limited = !!c && !c.exempt;
+		const memMax = limited && c!.max_memory_bytes ? c!.max_memory_bytes : 0;
+		const appMax = limited && c!.max_bots ? c!.max_bots : 0;
+		// The apps limit counts the bots, game servers and web apps in the
+		// workspace. /bots leaves web apps out, so the count comes from /me/capacity.
+		const apps = c ? (c.usage?.apps ?? c.bots) : list.length;
 		return [
-			{ label: 'Memory reserved', value: fmtBytes(limited && memMax ? cap!.memory_bytes : reservedMem), of: memMax ? `of ${fmtBytes(memMax)}` : 'no limit', pct: memMax ? pct(cap!.memory_bytes, memMax) : undefined },
-			{ label: 'CPU reserved', value: `${reservedCpu.toFixed(2).replace(/\.?0+$/, '')}`, of: reservedCpu === 1 ? 'core' : 'cores' },
+			{ label: 'Memory reserved', value: fmtBytes(limited && memMax ? c!.memory_bytes : reservedMem), of: memMax ? `of ${fmtBytes(memMax)}` : 'no limit', pct: memMax ? pct(c!.memory_bytes, memMax) : undefined },
+			cpuKpi,
 			{ label: 'Apps', value: String(apps), of: appMax ? `of ${appMax}` : 'no limit', pct: appMax ? pct(apps, appMax) : undefined },
 			runningKpi
 		];
@@ -155,7 +169,7 @@
 
 <header class="page-head">
 	<h1 class="font-semibold">Overview</h1>
-	{#if scope}<p class="text-small text-muted">{wsName(scope)}</p>{/if}
+	<WorkspaceScope />
 	<div class="ml-auto"><NewMenu primary /></div>
 </header>
 
@@ -165,7 +179,7 @@
 	{#each kpis as k (k.label)}
 		<div class="kpi">
 			<p class="eyebrow flex items-center justify-between gap-2">{k.label}{#if k.label === 'Memory' && isAdmin}<a href="/admin/host" class="font-normal hover:text-ink">Host details</a>{/if}</p>
-			<p class="kpi-value"><Roll value={all || host ? String(k.value) : '–'} />{#if k.of}<small>{k.of}</small>{/if}</p>
+			<p class="kpi-value"><Roll value={all || (host && !scope) ? String(k.value) : '–'} />{#if k.of}<small>{k.of}</small>{/if}</p>
 			<div class="meter mt-2" data-level={level(k.pct)} data-open={k.pct === undefined} role={k.pct === undefined ? undefined : 'meter'} aria-label={k.pct === undefined ? undefined : `${k.label} used`} aria-valuemin={k.pct === undefined ? undefined : 0} aria-valuemax={k.pct === undefined ? undefined : 100} aria-valuenow={k.pct === undefined ? undefined : Math.round(k.pct)}>
 				<i style="width: {k.pct ?? 0}%"></i>
 			</div>

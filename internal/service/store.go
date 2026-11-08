@@ -146,5 +146,10 @@ type Store interface {
 
 	SetBotLogo(ctx context.Context, botID string, l *domain.Logo, nowMS int64) error
 	GetBotLogo(ctx context.Context, botID string) (domain.Logo, error)
+	SetWorkspaceLogo(ctx context.Context, workspaceID string, l *domain.Logo, nowMS int64) error
+	GetWorkspaceLogo(ctx context.Context, workspaceID string) (domain.Logo, error)
+	// NextLogoVariant advances the generated-picture choice of a row of
+	// "bots", "sites", "workspaces" or "users" and returns the new value.
+	NextLogoVariant(ctx context.Context, table, id string) (int64, error)
 	SetBotDiscordIdentity(ctx context.Context, botID, userID, username, avatarURL string, nowMS int64) error
 }

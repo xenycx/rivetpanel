@@ -8,6 +8,7 @@
 	import StackList from '$lib/components/apps/StackList.svelte';
 	import AppCatalog from '$lib/components/apps/AppCatalog.svelte';
 	import NewMenu from '$lib/components/NewMenu.svelte';
+	import WorkspaceScope from '$lib/components/WorkspaceScope.svelte';
 
 	// Everything the account runs, in one place: bots, game servers,
 	// containers (and their stacks) and websites. ?kind= narrows the list and
@@ -44,6 +45,7 @@
 
 <header class="page-head">
 	<h1 class="font-semibold">Apps</h1>
+	<WorkspaceScope />
 	<div class="ml-auto"><NewMenu primary /></div>
 </header>
 

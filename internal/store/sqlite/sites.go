@@ -15,7 +15,7 @@ const siteCols = `s.id, s.workspace_id, s.owner_id, s.name, s.slug, s.spa, s.cle
 	(SELECT count(*) FROM site_domains d WHERE d.site_id = s.id),
 	COALESCE((SELECT r.bytes FROM site_releases r WHERE r.id = s.current_release), 0), COALESCE(s.logo_updated_at_ms, 0),
 	s.app_id, s.framework, s.build_output_dir, COALESCE(s.app_port, 0), s.health_path, s.max_body_bytes, COALESCE(ab.observed_state, ''),
-	s.auto_backup`
+	s.auto_backup, s.logo_variant`
 
 const siteFrom = ` FROM sites s LEFT JOIN users u ON u.id = s.owner_id LEFT JOIN workspaces w ON w.id = s.workspace_id
 	LEFT JOIN site_base_domains bd ON bd.id = s.domain_id LEFT JOIN bots ab ON ab.id = s.app_id`
@@ -27,7 +27,7 @@ func scanSite(row interface{ Scan(...any) error }) (domain.Site, error) {
 		&s.RepoFullName, &s.RepoBranch, &s.RepoRoot, &s.RepoTokenUser, &s.CreatedAtMS, &s.UpdatedAtMS,
 		&s.BotID, &s.Mode, &s.PageTitle, &s.PageDescription, &s.PageTheme, &s.PageAccent, &s.PageHTML, &s.PageCSS, &widgetsPublic,
 		&s.DomainID, &s.BaseDomain, &s.OwnerEmail, &s.WorkspaceName, &s.Domains, &s.ReleaseBytes, &s.LogoUpdatedMS,
-		&s.AppID, &s.Framework, &s.BuildOutputDir, &s.AppPort, &s.HealthPath, &s.MaxBodyBytes, &s.AppState, &autoBackup)
+		&s.AppID, &s.Framework, &s.BuildOutputDir, &s.AppPort, &s.HealthPath, &s.MaxBodyBytes, &s.AppState, &autoBackup, &s.LogoVariant)
 	s.SPA, s.CleanURLs, s.Disabled, s.WidgetsPublic = spa == 1, clean == 1, disabled == 1, widgetsPublic == 1
 	s.AutoBackupOff = autoBackup == 0
 	return s, mapErr(err)

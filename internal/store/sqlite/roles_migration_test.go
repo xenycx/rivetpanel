@@ -2,6 +2,7 @@ package sqlite
 
 import (
 	"context"
+	"errors"
 	"io/fs"
 	"path/filepath"
 	"slices"
@@ -265,5 +266,49 @@ func TestMigration0065WidensSharePermissions(t *testing.T) {
 	}
 	if _, err := db.ExecContext(ctx, `UPDATE bot_subusers SET permissions = 64`); err == nil {
 		t.Fatal("unknown bits must stay refused")
+	}
+}
+
+// 0066 adds workspace logos and the generated-picture choice; existing rows
+// keep variant 0 (their current picture) and have no workspace logo.
+func TestMigration0066WorkspaceLogosAndVariants(t *testing.T) {
+	ctx := context.Background()
+	db, err := Open(ctx, filepath.Join(t.TempDir(), "t.db"), 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { db.Close() })
+	if err := db.Migrate(ctx, upTo(t, 65)); err != nil {
+		t.Fatal(err)
+	}
+	for _, q := range []string{
+		`INSERT INTO users (id,email,password_hash,role,created_at_ms,updated_at_ms) VALUES ('o','o@x.io','h','user',1,1)`,
+		`INSERT INTO workspaces (id,name,owner_id,personal,created_at_ms,updated_at_ms) VALUES ('w','Team','o',0,1,1)`,
+	} {
+		if _, err := db.ExecContext(ctx, q); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := db.Migrate(ctx, migrations.FS); err != nil {
+		t.Fatal(err)
+	}
+	w, err := db.GetWorkspace(ctx, "w")
+	if err != nil || w.LogoVariant != 0 || w.LogoUpdatedMS != 0 {
+		t.Fatalf("workspace after 0066: %+v %v", w, err)
+	}
+	if _, err := db.GetWorkspaceLogo(ctx, "w"); !errors.Is(err, domain.ErrNotFound) {
+		t.Fatalf("logo: %v", err)
+	}
+	for _, table := range []string{"workspaces", "users"} {
+		id := map[string]string{"workspaces": "w", "users": "o"}[table]
+		if v, err := db.NextLogoVariant(ctx, table, id); err != nil || v != 1 {
+			t.Fatalf("%s: %d %v", table, v, err)
+		}
+	}
+	if _, err := db.NextLogoVariant(ctx, "sessions", "x"); err == nil {
+		t.Fatal("only item tables have a picture choice")
+	}
+	if _, err := db.ExecContext(ctx, `UPDATE users SET logo_variant = -1`); err == nil {
+		t.Fatal("negative variants must be refused")
 	}
 }

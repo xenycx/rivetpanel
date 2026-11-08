@@ -90,21 +90,26 @@ func (s *panel) putHealthProbe(c fiber.Ctx) error {
 	return c.JSON(toHealthProbe(p))
 }
 
-// capacity reports the usage and limits that apply to the caller in a
-// workspace. exempt means the caller is a built-in administrator; nothing
-// refuses them. Any other member of the same workspace is bounded, whoever
-// owns it.
+// capacity reports a workspace's usage and allowance for the caller, and
+// what is left of the node budget on ?node= (the local node by default).
+// exempt means the caller is a built-in administrator: the allowance is
+// still reported, but nothing refuses them. Any other member of the same
+// workspace is bounded, whoever owns it.
 func (s *panel) capacity(c fiber.Ctx) error {
 	u := currentUser(c)
-	cp, err := s.bots.Capacity(c.Context(), u, strings.Clone(c.Query("workspace")))
+	cp, err := s.bots.Capacity(c.Context(), u, strings.Clone(c.Query("workspace")), strings.Clone(c.Query("node")))
 	if err != nil {
 		return err
 	}
 	out := fiber.Map{"bots": cp.Bots, "max_bots": cp.MaxBots, "memory_bytes": cp.Memory, "max_memory_bytes": cp.MaxMemory,
 		"exempt": cp.Exempt, "build_memory_bytes": s.buildMemory, "usage": toUsage(cp.Usage), "limits": capacityLimits(cp.Limits),
 		"workspace": fiber.Map{"id": cp.Workspace.ID, "name": cp.Workspace.Name, "personal": cp.Workspace.Personal}}
+	if cp.Budget.Budget > 0 {
+		out["node_budget"] = fiber.Map{"node_id": cp.Budget.NodeID, "budget_bytes": cp.Budget.Budget, "free_bytes": cp.Budget.Free}
+	}
 	if u.IsAdmin() {
-		out["node"] = fiber.Map{"running": cp.NodeRunning, "reserved_bytes": cp.NodeReserved, "budget_bytes": cp.NodeBudget}
+		out["node"] = fiber.Map{"running": cp.NodeRunning, "reserved_bytes": cp.NodeReserved, "budget_bytes": cp.NodeBudget,
+			"max_app_memory_bytes": cp.NodeMaxMemory, "max_app_nano_cpus": cp.NodeMaxCPUs, "memory_bytes": cp.NodeHardwareMemory}
 	}
 	return c.JSON(out)
 }

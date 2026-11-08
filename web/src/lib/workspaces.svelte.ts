@@ -1,6 +1,7 @@
 // The caller's workspaces and the one the overview is scoped to. The choice
-// is a per-browser convenience ("all" shows every workspace at once).
-import { api } from '$lib/api/client';
+// is a per-browser convenience ("all" shows every workspace at once). With a
+// single workspace there is nothing to choose: the scope stays "all".
+import { api, ApiError } from '$lib/api/client';
 import type { Workspace } from '$lib/api/types';
 
 const KEY = 'rivetpanel.workspace';
@@ -13,7 +14,7 @@ function readSelected(): string {
 	}
 }
 
-export const workspaces = $state<{ list: Workspace[]; loaded: boolean; selected: string }>({ list: [], loaded: false, selected: readSelected() });
+export const workspaces = $state<{ list: Workspace[]; loaded: boolean; selected: string; error: string }>({ list: [], loaded: false, selected: readSelected(), error: '' });
 
 let inflight: Promise<void> | null = null;
 
@@ -23,10 +24,12 @@ export function loadWorkspaces(): Promise<void> {
 		.then((r) => {
 			workspaces.list = r.workspaces;
 			workspaces.loaded = true;
-			if (workspaces.selected !== 'all' && !r.workspaces.some((w) => w.id === workspaces.selected)) selectWorkspace('all');
+			workspaces.error = '';
+			if (workspaces.selected !== 'all' && (r.workspaces.length < 2 || !r.workspaces.some((w) => w.id === workspaces.selected))) selectWorkspace('all');
 		})
-		.catch(() => {
-			/* the switcher is a convenience; pages report their own errors */
+		.catch((e) => {
+			// The switcher shows this with a retry; pages report their own errors.
+			workspaces.error = e instanceof ApiError ? e.message : 'Workspaces could not be loaded.';
 		})
 		.finally(() => (inflight = null));
 	return inflight;

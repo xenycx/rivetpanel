@@ -15,7 +15,7 @@ const botCols = `id, owner_id, node_id, name, runtime, image_ref, argv_json, mem
 	restart_count, next_retry_at_ms, state_reason, last_started_at_ms,
 	discord_user_id, discord_username, discord_avatar_url, COALESCE(workspace_id, ''), COALESCE(build_command, ''),
 	COALESCE(logo_updated_at_ms, 0), kind, COALESCE(blueprint_id, ''), COALESCE(blueprint_revision, 0), image_choice, install_state, installed_version,
-	jvm_args, jvm_args_updated_at_ms, jvm_args_generation, COALESCE(release_command, '')`
+	jvm_args, jvm_args_updated_at_ms, jvm_args_generation, COALESCE(release_command, ''), logo_variant`
 
 func scanBot(row interface{ Scan(...any) error }) (domain.Bot, error) {
 	var b domain.Bot
@@ -30,7 +30,7 @@ func scanBot(row interface{ Scan(...any) error }) (domain.Bot, error) {
 		&b.RestartCount, &b.NextRetryAtMS, &b.StateReason, &b.LastStartedAtMS,
 		&b.DiscordUserID, &b.DiscordUsername, &b.DiscordAvatarURL, &b.WorkspaceID, &b.BuildCommand,
 		&b.LogoUpdatedMS, &b.Kind, &b.BlueprintID, &b.BlueprintRevision, &b.ImageChoice, &b.InstallState, &b.InstalledVersion,
-		&b.JVMArgs, &b.JVMArgsUpdatedMS, &b.JVMArgsGeneration, &b.ReleaseCommand)
+		&b.JVMArgs, &b.JVMArgsUpdatedMS, &b.JVMArgsGeneration, &b.ReleaseCommand, &b.LogoVariant)
 	if err != nil {
 		return b, mapErr(err)
 	}

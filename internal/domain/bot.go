@@ -107,6 +107,9 @@ type Bot struct {
 
 	// LogoUpdatedMS is when a custom logo was set (0 = none).
 	LogoUpdatedMS int64
+	// LogoVariant picks the generated picture shown without a logo (0 = the
+	// original one, seeded by the id).
+	LogoVariant int64
 
 	// Restart policy. "" behaves as RestartOnFailure with runner defaults.
 	RestartPolicy           string

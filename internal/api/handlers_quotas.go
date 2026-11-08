@@ -51,13 +51,43 @@ func defaultLimits(d service.LimitDefaults) fiber.Map {
 		"nano_cpus": unlimited(d.CPU), "team_workspaces": d.TeamWorkspaces}
 }
 
-// quotaView is the read view of a workspace's limits. Its exempt field is
-// always false: exemption belongs to the acting account, not the workspace
-// (see the capacity handler), and a read view has no acting account.
+// defaultSources says where each default allowance value comes from, keyed
+// like defaultLimits.
+func defaultSources(d service.LimitDefaults) fiber.Map {
+	out := fiber.Map{}
+	for k, v := range d.Source {
+		out[strings.TrimPrefix(k, "limit_")] = v
+	}
+	return out
+}
+
+// limitSources says where each value of a workspace's allowance comes from:
+// "workspace" (its own allowance), else the default's source ("panel",
+// "env" or "builtin").
+func limitSources(q domain.WorkspaceQuota, d service.LimitDefaults) fiber.Map {
+	out := fiber.Map{}
+	for _, f := range []struct {
+		key, setting string
+		own          *int64
+	}{{"apps", service.SetLimitApps, q.MaxApps}, {"bots", service.SetLimitBots, q.MaxBots}, {"games", service.SetLimitGames, q.MaxGames},
+		{"web_apps", service.SetLimitWeb, q.MaxWebApps}, {"sites", service.SetLimitSites, q.MaxSites},
+		{"memory_bytes", service.SetLimitMemory, q.MemoryBytes}, {"nano_cpus", service.SetLimitCPU, q.NanoCPUs}} {
+		if f.own != nil {
+			out[f.key] = "workspace"
+		} else {
+			out[f.key] = d.Source[f.setting]
+		}
+	}
+	return out
+}
+
+// quotaView is the read view of a workspace's allowance. Exemption belongs
+// to the acting account, not the workspace (see the capacity handler), so a
+// read view reports none.
 func quotaView(v service.QuotaView) fiber.Map {
 	out := fiber.Map{"workspace": fiber.Map{"id": v.Workspace.ID, "name": v.Workspace.Name, "personal": v.Workspace.Personal},
-		"quota": toQuota(v.Quota), "usage": toUsage(v.Usage), "limits": capacityLimits(v.Limits), "exempt": v.Limits.Exempt,
-		"defaults": defaultLimits(v.Defaults)}
+		"quota": toQuota(v.Quota), "usage": toUsage(v.Usage), "limits": capacityLimits(v.Limits),
+		"sources": limitSources(v.Quota, v.Defaults), "defaults": defaultLimits(v.Defaults), "default_sources": defaultSources(v.Defaults)}
 	if v.Quota.UpdatedAtMS != 0 {
 		out["updated_at_ms"] = v.Quota.UpdatedAtMS
 	}
@@ -108,6 +138,7 @@ func (s *panel) workspaceLimits(c fiber.Ctx) error {
 	}
 	out := quotaView(v)
 	delete(out, "defaults")
+	delete(out, "default_sources")
 	return c.JSON(out)
 }
 
@@ -123,11 +154,7 @@ func (s *panel) getLimitDefaults(c fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	source := fiber.Map{}
-	for k, v := range d.Source {
-		source[strings.TrimPrefix(k, "limit_")] = v
-	}
-	return c.JSON(fiber.Map{"limits": defaultLimits(d), "source": source, "builtin_team_workspaces": service.MaxOwnedWorkspaces})
+	return c.JSON(fiber.Map{"limits": defaultLimits(d), "source": defaultSources(d), "builtin_team_workspaces": service.MaxOwnedWorkspaces})
 }
 
 func (s *panel) putLimitDefaults(c fiber.Ctx) error {

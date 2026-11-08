@@ -10,10 +10,13 @@
 	import { resourceHref } from '$lib/api/games';
 	import { chat, type Conversation } from '$lib/ai/chat.svelte';
 	import { cycleTheme, theme } from '$lib/ui/theme.svelte';
-	import { workspaces } from '$lib/workspaces.svelte';
+	import { selectWorkspace, workspaces, wsName } from '$lib/workspaces.svelte';
+	import { logoSeed } from '$lib/avatar';
+	import { page } from '$app/state';
 	import { adminPages, appTabs, docs, groups, pages, score, scopes, type Entry, type Scope } from '$lib/search';
 	import Dialog from '$lib/components/ui/Dialog.svelte';
 	import Icon from '$lib/components/ui/Icon.svelte';
+	import Logo from '$lib/components/ui/Logo.svelte';
 
 	// Jump to anything: bots and their sections, sites, every page, settings and
 	// administration section, environment variables, people, AI chats and the
@@ -92,7 +95,18 @@
 		}
 		for (const s of sites) out.push({ key: `si-${s.id}`, group: 'site', label: s.name, hint: `Site · ${s.slug}${s.workspace_name ? ` · ${s.workspace_name}` : ''}`, icon: 'globe', href: `/sites/${s.id}`, words: s.slug });
 		for (const c of chats.slice(0, 30)) out.push({ key: `c-${c.id}`, group: 'chat', label: c.title || 'Untitled chat', hint: 'AI chat', icon: 'sparkle', run: () => { chat.show(); void chat.openConversation(c); } });
-		for (const w of workspaces.list) out.push({ key: `w-${w.id}`, group: 'person', label: w.name, hint: 'Workspace', icon: 'building', href: isAdmin ? `/admin/workspaces/${w.id}` : `/settings/workspaces/${w.id}` });
+		// Workspaces: switch the scope (staying on a page that follows it, else
+		// opening the overview), or open the workspace's settings.
+		const multi = workspaces.list.length > 1;
+		if (multi && workspaces.selected !== 'all')
+			out.push({ key: 'w-all', group: 'workspace', label: 'Show all workspaces', hint: 'Overview and Apps show everything you can access', icon: 'layers', run: () => switchTo('all'), words: 'switch scope everything' });
+		for (const w of workspaces.list) {
+			const logo = { src: w.logo_url, kind: 'workspace' as const, seed: logoSeed(w.id, w.logo_variant) };
+			const name = wsName(w);
+			if (multi)
+				out.push({ key: `w-${w.id}`, group: 'workspace', label: `Switch to ${name}`, hint: workspaces.selected === w.id ? 'The workspace in view' : `Workspace${w.personal ? ' · personal' : ''} · ${w.bots} app${w.bots === 1 ? '' : 's'}`, icon: 'building', logo, run: () => switchTo(w.id), words: `${name} switch scope workspace team` });
+			out.push({ key: `ws-${w.id}`, group: 'workspace', label: `${name} settings`, hint: isAdmin ? 'Administration · members, limits and apps' : 'Members, name and logo', icon: 'gear', href: isAdmin ? `/admin/workspaces/${w.id}` : `/settings/workspaces/${w.id}`, words: `${name} workspace members team roles`, boost: -4 });
+		}
 		out.push(...docs.map((d) => ({ ...d, boost: -10 })));
 		// Administration sections this role may open (all of them for administrators).
 		const known = new Set(isAdmin ? adminPages.map((p) => p.href) : []);
@@ -155,6 +169,11 @@
 	// Group heading shown above the first item of each run.
 	const headings = $derived(items.map((e, i) => (i === 0 || e.group !== items[i - 1].group || (q.trim() === '' && e.pinned !== items[i - 1].pinned) ? (q.trim() === '' && e.pinned ? 'Suggested' : (groups.find((g) => g.id === e.group)?.label ?? '')) : '')));
 
+	// Pages that follow the workspace switcher; elsewhere switching opens the overview.
+	function switchTo(id: string) {
+		selectWorkspace(id);
+		if (!['/dashboard', '/apps'].includes(page.url.pathname)) goto('/dashboard');
+	}
 	function choose(i: number) {
 		const it = items[i];
 		if (!it) return;
@@ -237,7 +256,7 @@
 				onclick={() => choose(i)}
 				onkeydown={() => {}}
 			>
-				<Icon name={it.icon} size={15} class="text-muted" />
+				{#if it.logo}<Logo {...it.logo} class="size-4 rounded-xs" />{:else}<Icon name={it.icon} size={15} class="text-muted" />{/if}
 				<span class="min-w-0 flex-1"><span class="block truncate font-medium">{it.label}</span><span class="block truncate text-[11.5px] leading-4 text-muted">{it.hint}</span></span>
 				{#if i === active}<kbd class="text-small text-muted">Enter</kbd>{/if}
 			</li>

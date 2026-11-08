@@ -36,15 +36,18 @@ type Limits struct {
 	PortPublicBind   bool
 
 	// Capacity budgets; 0 means unlimited. MaxBotsPerUser, MaxSitesPerUser
-	// and UserMemoryBytes are the environment's default limits for each
-	// workspace, used where Panel settings set none (see LimitDefaults); they
-	// do not apply to workspaces owned by administrators. NodeMemory caps the
-	// memory limits of all apps wanted running on a node (admission, not a
-	// kernel limit).
-	MaxBotsPerUser  int
-	MaxSitesPerUser int
-	UserMemoryBytes int64
-	NodeMemoryBytes int64
+	// and UserMemoryBytes are the environment's fallback for the default
+	// workspace allowance, used where Panel settings set none (see
+	// LimitDefaults). They bound every workspace; only the acting account
+	// can be exempt (a built-in administrator), never a workspace.
+	// SitesLimitFromEnv tells an environment value of MaxSitesPerUser from
+	// the built-in 10. NodeMemoryBytes is the node budget: the memory limits
+	// of all apps wanted running on a node (admission, not a kernel limit).
+	MaxBotsPerUser    int
+	MaxSitesPerUser   int
+	SitesLimitFromEnv bool
+	UserMemoryBytes   int64
+	NodeMemoryBytes   int64
 }
 
 // NormalizeEmail lowercases and validates an address. SQLite's NOCASE collation

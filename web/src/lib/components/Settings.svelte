@@ -3,7 +3,7 @@
 	import { goto } from '$app/navigation';
 	import { api, ApiError, fmtBytes, fmtCpu } from '$lib/api/client';
 	import type { Bot, Capacity, Limits, RuntimeInfo } from '$lib/api/types';
-	import { capLimits, clampMax, room, roomText } from '$lib/room';
+	import { boundText, clampMax, room } from '$lib/room';
 	import { confirmDialog } from '$lib/ui/dialogs.svelte';
 	import { registerDirty } from '$lib/ui/guard.svelte';
 	import { toast } from '$lib/ui/toast.svelte';
@@ -15,6 +15,7 @@
 	import Notifications from '$lib/components/Notifications.svelte';
 	import ResourcePicker from '$lib/components/ResourcePicker.svelte';
 	import { session } from '$lib/session.svelte';
+	import { logoSeed } from '$lib/avatar';
 	import { creatable, loadWorkspaces, workspaceName, wsName } from '$lib/workspaces.svelte';
 
 	let { bot, stopped, onSaved }: { bot: Bot; stopped: boolean; onSaved: (b: Bot) => void } = $props();
@@ -32,8 +33,8 @@
 	const rm = $derived(room(cap, { memory: bot.memory_bytes, cpu: bot.nano_cpus }));
 	const maxMem = $derived(limits ? clampMax(limits.max_memory_bytes, rm.memory) : rm.memory);
 	const maxCpu = $derived(limits ? clampMax(limits.max_nano_cpus, rm.cpu) : rm.cpu);
-	const memRoomText = $derived(roomText('memory', rm.memory, capLimits(cap).memory_bytes));
-	const cpuRoomText = $derived(roomText('cpu', rm.cpu, capLimits(cap).nano_cpus));
+	const memBound = $derived(boundText('memory', cap, limits?.max_memory_bytes ?? 0, 'this node', { keep: bot.memory_bytes }));
+	const cpuBound = $derived(boundText('cpu', cap, limits?.max_nano_cpus ?? 0, 'this node', { keep: bot.nano_cpus }));
 	$effect(() => {
 		const ws = bot.workspace_id;
 		let live = true;
@@ -69,6 +70,18 @@
 			toast(method === 'POST' ? `Got the avatar of ${b.discord_username || 'the bot'} from Discord` : method === 'PUT' ? 'Logo saved' : 'Custom logo removed', 'success');
 		} catch (err) {
 			toast(err instanceof ApiError ? err.message : 'The logo could not be changed.', 'fail');
+		} finally {
+			logoBusy = false;
+		}
+	}
+
+	async function shuffleLogo() {
+		logoBusy = true;
+		try {
+			const r = await api<{ logo_variant: number }>('POST', `/bots/${bot.id}/logo/shuffle`);
+			onSaved({ ...bot, logo_variant: r.logo_variant });
+		} catch (err) {
+			toast(err instanceof ApiError ? err.message : 'A new picture could not be drawn.', 'fail');
 		} finally {
 			logoBusy = false;
 		}
@@ -170,12 +183,12 @@
 				<div>
 					<span class="label" id="settings-memory-label">Memory</span>
 					<ResourcePicker kind="memory" id="settings-memory" labelledby="settings-memory-label" value={form.memory} onchange={(v) => (form.memory = v)} min={minMem} max={maxMem} disabled={!stopped} />
-					<span class="help">{#if limits}{fmtBytes(minMem)} to {fmtBytes(maxMem ?? limits.max_memory_bytes)}{#if maxMem != null && maxMem < limits.max_memory_bytes}{' '}in this workspace{:else}{' '}on this node{/if}.{/if}{#if memRoomText}{' '}Workspace room: {memRoomText}.{/if}</span>
+					<span class="help">{#if limits}{fmtBytes(minMem)} to {fmtBytes(maxMem ?? limits.max_memory_bytes)}.{/if}{#if memBound}<span class="block">{memBound}</span>{/if}</span>
 				</div>
 				<div>
 					<span class="label" id="settings-cpu-label">CPU</span>
 					<ResourcePicker kind="cpu" id="settings-cpu" labelledby="settings-cpu-label" value={form.cpu} onchange={(v) => (form.cpu = v)} min={minCpu} max={maxCpu} disabled={!stopped} />
-					<span class="help">{#if limits}{fmtCpu(minCpu)} to {fmtCpu(maxCpu ?? limits.max_nano_cpus)}{#if maxCpu != null && maxCpu < limits.max_nano_cpus}{' '}in this workspace{:else}{' '}on this node{/if}.{/if}{#if cpuRoomText}{' '}Workspace room: {cpuRoomText}.{/if}</span>
+					<span class="help">{#if limits}{fmtCpu(minCpu)} to {fmtCpu(maxCpu ?? limits.max_nano_cpus)}.{/if}{#if cpuBound}<span class="block">{cpuBound}</span>{/if}</span>
 				</div>
 				<label class="block max-w-xs">
 					<span class="label">Processes</span>
@@ -197,15 +210,15 @@
 
 {#if isGame}
 	<SettingsSection title="Logo" description="Shown in the server list, the sidebar and the server's header. Without a custom logo the server type's icon is used.">
-		<LogoEditor src={bot.logo_url} custom={bot.custom_logo} kind="bot" seed={bot.id} busy={logoBusy}
+		<LogoEditor src={bot.logo_url} custom={bot.custom_logo} kind="bot" seed={logoSeed(bot.id, bot.logo_variant)} busy={logoBusy}
 			onUpload={(image) => logo('PUT', { image })} onRemove={() => logo('DELETE')}>
 			{#snippet fallback()}<GameIcon type={{ slug: bot.blueprint_id }} size={64} />{/snippet}
 		</LogoEditor>
 	</SettingsSection>
 {:else}
-	<SettingsSection title="Logo" description="Shown in the bot list, the sidebar and on the bot's public page. Without a custom logo the bot's Discord avatar is used: it arrives through the telemetry SDK, or you can get it now with the bot's token. With neither, the panel draws one from the bot's ID.">
-		<LogoEditor src={bot.logo_url} custom={bot.custom_logo} kind={bot.kind === 'container' ? 'container' : 'bot'} seed={bot.id} busy={logoBusy}
-			onUpload={(image) => logo('PUT', { image })} onRemove={() => logo('DELETE')}>
+	<SettingsSection title="Logo" description="Shown in the bot list, the sidebar and on the bot's public page. Without a custom logo the bot's Discord avatar is used: it arrives through the telemetry SDK, or you can get it now with the bot's token. With neither, the panel draws one; New picture draws another.">
+		<LogoEditor src={bot.logo_url} custom={bot.custom_logo} kind={bot.kind === 'container' ? 'container' : 'bot'} seed={logoSeed(bot.id, bot.logo_variant)} busy={logoBusy}
+			onUpload={(image) => logo('PUT', { image })} onRemove={() => logo('DELETE')} onShuffle={shuffleLogo}>
 			<button type="button" class="btn btn-sm" disabled={logoBusy} onclick={() => logo('POST')} title="Uses the bot token stored in this bot's variables"><Icon name="discord" size={14} />Get avatar from Discord</button>
 		</LogoEditor>
 		{#if bot.discord_username}<p class="mt-2 text-small text-muted">Discord user: {bot.discord_username}</p>{/if}

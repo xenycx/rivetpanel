@@ -7,13 +7,16 @@
 	import { toast } from '$lib/ui/toast.svelte';
 	import { promptDialog } from '$lib/ui/dialogs.svelte';
 	import { can } from '$lib/session.svelte';
-	import { wsName } from '$lib/workspaces.svelte';
+	import { loadWorkspaces, wsName } from '$lib/workspaces.svelte';
 	import AdminBotTable from '$lib/components/AdminBotTable.svelte';
 	import OperationRow from '$lib/components/OperationRow.svelte';
 	import WorkspaceQuotaForm from '$lib/components/WorkspaceQuotaForm.svelte';
 	import WorkspacePlacementForm from '$lib/components/WorkspacePlacementForm.svelte';
 	import Dialog from '$lib/components/ui/Dialog.svelte';
 	import Icon from '$lib/components/ui/Icon.svelte';
+	import Logo from '$lib/components/ui/Logo.svelte';
+	import LogoEditor from '$lib/components/LogoEditor.svelte';
+	import { logoSeed } from '$lib/avatar';
 	import Notice from '$lib/components/ui/Notice.svelte';
 	import Skeleton from '$lib/components/ui/Skeleton.svelte';
 
@@ -64,6 +67,28 @@
 		}
 	}
 
+	// The logo (workspaces.manage, like renaming).
+	let logoBusy = $state(false);
+	async function logo(method: 'PUT' | 'DELETE' | 'POST', body?: unknown) {
+		if (!v) return;
+		logoBusy = true;
+		try {
+			if (method === 'POST') {
+				const r = await api<{ logo_variant: number }>('POST', `/workspaces/${id}/logo/shuffle`);
+				v.workspace = { ...v.workspace, logo_variant: r.logo_variant };
+			} else {
+				const r = await api<{ workspace: Workspace }>(method, `/workspaces/${id}/logo`, body);
+				v.workspace = { ...v.workspace, logo_url: r.workspace.logo_url };
+				toast(method === 'PUT' ? 'Logo saved' : 'Custom logo removed', 'success');
+			}
+			void loadWorkspaces();
+		} catch (e) {
+			toast(e instanceof ApiError ? e.message : 'The logo could not be changed.', 'fail');
+		} finally {
+			logoBusy = false;
+		}
+	}
+
 	// Deleting a team workspace with everything in it, after typing its name.
 	let delOpen = $state(false);
 	let delConfirm = $state('');
@@ -95,34 +120,37 @@
 
 <svelte:head><title>{v?.workspace.name ?? 'Workspace'} · Administration · RivetPanel</title></svelte:head>
 
-<a href="/admin/workspaces" class="mb-4 inline-flex items-center gap-1 text-small text-muted hover:text-ink"><Icon name="chevronLeft" size={14} />All workspaces</a>
+<a href="/admin/workspaces" class="mb-4 inline-flex items-center gap-1 text-small text-muted hover:text-ink"><Icon name="chevronLeft" size={14} />Workspaces</a>
 {#if error}<Notice tone="fail" live>{error}</Notice>{/if}
 {#if !v && !error}
 	<Skeleton rows={5} />
 {:else if v}
 	{@const w = v.workspace}
 	<div class="flex flex-wrap items-center gap-3">
+		{#if can('workspaces.manage')}
+			<LogoEditor compact name={wsName(w)} src={w.logo_url} custom={!!w.logo_url} kind="workspace" seed={logoSeed(w.id, w.logo_variant)} busy={logoBusy}
+				onUpload={(image) => logo('PUT', { image })} onRemove={() => logo('DELETE')} onShuffle={() => logo('POST')} />
+		{:else}
+			<Logo src={w.logo_url} kind="workspace" seed={logoSeed(w.id, w.logo_variant)} class="size-10 rounded-tile border border-rule-soft" />
+		{/if}
 		<h2 class="text-section">{wsName(w)}</h2>
 		<span class="pill">{w.personal ? 'Personal' : 'Team'}</span>
 		<div class="ml-auto flex flex-wrap gap-2">
 			{#if can('workspaces.manage')}<button class="btn btn-sm" onclick={rename}><Icon name="pencil" size={14} />Rename</button>{/if}
-			<a class="btn btn-sm" href="/settings/workspaces/{w.id}"><Icon name="users" size={14} />Manage members</a>
+			<a class="btn btn-sm" href="/settings/workspaces/{w.id}" title="Opens the workspace's member settings"><Icon name="users" size={14} />Edit members</a>
 		</div>
 	</div>
 	<p class="mt-1 text-small text-muted">Owned by <a class="link" href="/admin/users/{w.owner_id}">{w.owner_email}</a> · created {fmtWhen(w.created_at_ms)}</p>
 
 	<dl class="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4">
-		<div class="card px-4 py-3"><dt class="eyebrow">Bots running</dt><dd class="mt-1 font-mono text-title font-semibold">{w.running_bots}/{w.bots}</dd></div>
-		<div class="card px-4 py-3"><dt class="eyebrow">Memory</dt><dd class="mt-1 font-mono text-title font-semibold">{fmtBytes(w.memory_bytes)}</dd></div>
+		<div class="card px-4 py-3"><dt class="eyebrow">Apps running</dt><dd class="mt-1 font-mono text-title font-semibold">{w.running_bots}/{w.bots}</dd></div>
+		<div class="card px-4 py-3"><dt class="eyebrow">Memory assigned</dt><dd class="mt-1 font-mono text-title font-semibold">{fmtBytes(w.memory_bytes)}</dd></div>
 		<div class="card px-4 py-3"><dt class="eyebrow">Members</dt><dd class="mt-1 font-mono text-title font-semibold">{w.members}</dd></div>
 		<div class="card px-4 py-3"><dt class="eyebrow">Sites</dt><dd class="mt-1 font-mono text-title font-semibold">{w.sites}</dd></div>
 	</dl>
 
-	<WorkspaceQuotaForm workspaceId={id} />
-	<WorkspacePlacementForm workspaceId={id} nodeId={w.node_id ?? ''} />
-
 	<section class="mt-8" aria-labelledby="bots-h">
-		<h3 id="bots-h" class="mb-2 text-title font-semibold">Bots</h3>
+		<h3 id="bots-h" class="mb-2 text-title font-semibold">Apps</h3>
 		<AdminBotTable bots={v.bots} empty="No apps in this workspace." />
 	</section>
 
@@ -133,7 +161,7 @@
 				{#each v.members as m (m.user_id)}
 					<li class="flex items-center gap-3 px-4 py-2.5">
 						<a class="min-w-0 flex-1 truncate hover:underline" href="/admin/users/{m.user_id}">{m.display_name || m.email}</a>
-						<span class="pill" data-tone={m.role === 'owner' ? 'run' : undefined}>{roleText[m.role]}</span>
+						<span class="pill" data-tone={m.role === 'owner' ? 'action' : undefined}>{roleText[m.role]}</span>
 					</li>
 				{/each}
 			</ul>
@@ -158,6 +186,9 @@
 			{/if}
 		</section>
 	</div>
+
+	<WorkspaceQuotaForm workspaceId={id} />
+	<WorkspacePlacementForm workspaceId={id} nodeId={w.node_id ?? ''} />
 
 	<section class="mt-8" aria-labelledby="ops-h">
 		<h3 id="ops-h" class="mb-2 text-title font-semibold">Recent deployments and operations</h3>

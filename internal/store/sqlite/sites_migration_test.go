@@ -29,8 +29,9 @@ func TestSiteBaseDomainsMigrationKeepsSites(t *testing.T) {
 		// Everything except 0035 and the later migrations that change sites
 		// (they assume 0035's table, and 0054 rebuilds it), and 0061, which
 		// rebuilds bots with the columns those add: the seed below uses
-		// current bot columns. 0062 alters 0061's tables; 0063 alters sites.
-		if !strings.HasPrefix(f, "0035_") && !strings.HasPrefix(f, "0037_") && !strings.HasPrefix(f, "0054_") && !strings.HasPrefix(f, "0061_") && !strings.HasPrefix(f, "0062_") && !strings.HasPrefix(f, "0063_") {
+		// current bot columns. 0062 alters 0061's tables; 0063 and 0066 alter
+		// sites.
+		if !strings.HasPrefix(f, "0035_") && !strings.HasPrefix(f, "0037_") && !strings.HasPrefix(f, "0054_") && !strings.HasPrefix(f, "0061_") && !strings.HasPrefix(f, "0062_") && !strings.HasPrefix(f, "0063_") && !strings.HasPrefix(f, "0066_") {
 			b, _ := fs.ReadFile(migrations.FS, f)
 			before[f] = &fstest.MapFile{Data: b}
 		}
@@ -52,9 +53,10 @@ func TestSiteBaseDomainsMigrationKeepsSites(t *testing.T) {
 		return
 	}
 	seed(t, db)
-	w, _ := db.PersonalWorkspace(ctx, "u1")
-	exec(`INSERT INTO sites (id,workspace_id,owner_id,name,slug,page_html,created_at_ms,updated_at_ms) VALUES ('s1',?,'u1','Docs','docs','<b>hi</b>',1,2)`, w.ID)
-	exec(`INSERT INTO sites (id,workspace_id,owner_id,name,slug,created_at_ms,updated_at_ms) VALUES ('s2',?,'u1','Blog','blog',1,2)`, w.ID)
+	// Written directly: the store reads columns of later migrations (0066).
+	exec(`INSERT INTO workspaces (id,name,owner_id,personal,created_at_ms,updated_at_ms) VALUES ('w1','Personal','u1',1,1,1)`)
+	exec(`INSERT INTO sites (id,workspace_id,owner_id,name,slug,page_html,created_at_ms,updated_at_ms) VALUES ('s1','w1','u1','Docs','docs','<b>hi</b>',1,2)`)
+	exec(`INSERT INTO sites (id,workspace_id,owner_id,name,slug,created_at_ms,updated_at_ms) VALUES ('s2','w1','u1','Blog','blog',1,2)`)
 	exec(`INSERT INTO site_releases (id,site_id,source,files,bytes,created_at_ms) VALUES ('r1','s1','upload',1,1,1)`)
 	exec(`UPDATE sites SET current_release = 'r1' WHERE id = 's1'`)
 	exec(`INSERT INTO site_domains (domain,site_id,token,verified_at_ms,created_at_ms) VALUES ('www.example.com','s1','0123456789abcdef',1,1)`)
@@ -101,11 +103,11 @@ func TestSiteBaseDomainsMigrationKeepsSites(t *testing.T) {
 
 	// A slug is unique per base domain, not across the panel.
 	d2 := "d2"
-	if err := db.CreateSite(ctx, domain.Site{ID: "s3", WorkspaceID: w.ID, OwnerID: "u1", Name: "Docs 2", Slug: "docs", DomainID: &d2, CreatedAtMS: 1, UpdatedAtMS: 1}); err != nil {
+	if err := db.CreateSite(ctx, domain.Site{ID: "s3", WorkspaceID: "w1", OwnerID: "u1", Name: "Docs 2", Slug: "docs", DomainID: &d2, CreatedAtMS: 1, UpdatedAtMS: 1}); err != nil {
 		t.Fatalf("same slug under another domain: %v", err)
 	}
 	d1 := "d1"
-	if err := db.CreateSite(ctx, domain.Site{ID: "s4", WorkspaceID: w.ID, OwnerID: "u1", Name: "Docs 3", Slug: "docs", DomainID: &d1, CreatedAtMS: 1, UpdatedAtMS: 1}); err != domain.ErrConflict {
+	if err := db.CreateSite(ctx, domain.Site{ID: "s4", WorkspaceID: "w1", OwnerID: "u1", Name: "Docs 3", Slug: "docs", DomainID: &d1, CreatedAtMS: 1, UpdatedAtMS: 1}); err != domain.ErrConflict {
 		t.Fatalf("duplicate address: %v", err)
 	}
 	routes, err := db.SiteRoutes(ctx)

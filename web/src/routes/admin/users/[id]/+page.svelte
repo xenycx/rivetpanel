@@ -7,9 +7,12 @@
 	import OperationRow from '$lib/components/OperationRow.svelte';
 	import Icon from '$lib/components/ui/Icon.svelte';
 	import Logo from '$lib/components/ui/Logo.svelte';
+	import { logoSeed } from '$lib/avatar';
 	import Notice from '$lib/components/ui/Notice.svelte';
 	import Skeleton from '$lib/components/ui/Skeleton.svelte';
 	import { wsName } from '$lib/workspaces.svelte';
+	import { can } from '$lib/session.svelte';
+	import { toast } from '$lib/ui/toast.svelte';
 
 	type View = { user: User; has_password: boolean; workspaces: Workspace[]; bots: (Bot & { owner_email: string })[]; operations: Operation[] };
 	const id = $derived(page.params.id ?? '');
@@ -23,6 +26,19 @@
 	});
 	const running = $derived(v?.bots.filter((b) => b.desired_state === 'running').length ?? 0);
 	const personal = $derived(v?.workspaces.find((w) => w.personal && w.owner_id === v?.user.id));
+	let shuffling = $state(false);
+	async function shuffle() {
+		if (!v) return;
+		shuffling = true;
+		try {
+			const r = await api<{ logo_variant: number }>('POST', `/users/${v.user.id}/avatar/shuffle`);
+			v.user = { ...v.user, logo_variant: r.logo_variant };
+		} catch (e) {
+			toast(e instanceof ApiError ? e.message : 'A new picture could not be drawn.', 'fail');
+		} finally {
+			shuffling = false;
+		}
+	}
 	const memory = $derived(v?.bots.filter((b) => b.desired_state === 'running').reduce((n, b) => n + b.memory_bytes, 0) ?? 0);
 </script>
 
@@ -34,26 +50,28 @@
 	<Skeleton rows={5} />
 {:else if v}
 	<header class="card flex flex-wrap items-center gap-4 p-5">
-		<Logo src={v.user.avatar_url} kind="user" seed={v.user.id} class="size-12 rounded-pill" />
+		<Logo src={v.user.avatar_url} kind="user" seed={logoSeed(v.user.id, v.user.logo_variant)} class="size-12 rounded-pill" />
 		<div class="min-w-48 flex-1">
 			<h2 class="truncate text-section">{v.user.display_name || v.user.email}</h2>
 			<p class="text-small text-muted">{v.user.display_name ? `${v.user.email} · ` : ''}{v.user.role === 'admin' ? 'Administrator' : v.user.role_name || 'User'} · email {v.user.email_verified ? 'verified' : 'not verified'} · joined {fmtWhen(v.user.created_at_ms)} · {v.has_password ? 'password' : 'provider sign-in only'}</p>
 		</div>
+		{#if !v.user.avatar_url && can('users.manage')}<button class="btn btn-sm btn-quiet" disabled={shuffling} onclick={shuffle} title="Draw a different generated profile picture for this account"><Icon name="shuffle" size={14} />New picture</button>{/if}
 		{#if v.user.disabled}<span class="pill" data-tone="fail">Disabled</span>{:else}<span class="pill" data-tone="run">Active</span>{/if}
 	</header>
 
 	<dl class="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4">
 		<div class="card px-4 py-3"><dt class="eyebrow">Apps owned</dt><dd class="mt-1 font-mono text-title font-semibold">{running}/{v.bots.length}</dd><dd class="text-small text-muted">running / total</dd></div>
-		<div class="card px-4 py-3"><dt class="eyebrow">Memory</dt><dd class="mt-1 font-mono text-title font-semibold">{fmtBytes(memory)}</dd><dd class="text-small text-muted">assigned to running apps</dd></div>
+		<div class="card px-4 py-3"><dt class="eyebrow">Memory, running apps</dt><dd class="mt-1 font-mono text-title font-semibold">{fmtBytes(memory)}</dd><dd class="text-small text-muted">reserved by apps they own that are running, add-ons not included</dd></div>
 		<div class="card px-4 py-3"><dt class="eyebrow">Workspaces</dt><dd class="mt-1 font-mono text-title font-semibold">{v.workspaces.length}</dd><dd class="text-small text-muted">member of</dd></div>
 		<div class="card px-4 py-3"><dt class="eyebrow">Last operation</dt><dd class="mt-1 text-title font-semibold">{v.operations[0] ? fmtAgo(v.operations[0].created_at_ms) : '—'}</dd></div>
 	</dl>
 
 	<section class="mt-8" aria-labelledby="limits-h">
-		<h3 id="limits-h" class="mb-1 text-title font-semibold">Limits</h3>
+		<h3 id="limits-h" class="mb-1 text-title font-semibold">Workspace allowance</h3>
 		<p class="max-w-3xl text-small text-muted">
-			Limits belong to workspaces: every member's apps and sites in a workspace count together.
-			{#if personal}Set this account's own limits on <a class="link" href="/admin/workspaces/{personal.id}#quota-h">its personal workspace</a>; team workspaces have their own.{/if}
+			Allowances belong to workspaces, not accounts: every member's apps and sites in a workspace count together.
+			{#if personal}Set an allowance for <a class="link" href="/admin/workspaces/{personal.id}#quota-h">their personal workspace</a>; team workspaces have their own.{/if}
+			<a class="link" href="/docs#workspace-limits">How limits work</a>
 		</p>
 	</section>
 
@@ -63,7 +81,7 @@
 			{#each v.workspaces as w (w.id)}
 				<li>
 					<a href="/admin/workspaces/{w.id}" class="card flex items-center gap-3 p-4 transition-colors hover:border-rule">
-						<Logo kind="workspace" seed={w.id} class="size-9 rounded-tile" />
+						<Logo src={w.logo_url} kind="workspace" seed={logoSeed(w.id, w.logo_variant)} class="size-9 rounded-tile" />
 						<span class="min-w-0 flex-1">
 							<span class="flex items-center gap-2"><span class="truncate font-medium">{wsName(w)}</span>{#if w.personal}<span class="pill">Personal</span>{/if}</span>
 							<span class="block text-small text-muted">{w.role ? roleText[w.role] : ''} · {w.running_bots}/{w.bots} apps · {w.sites} sites · {w.members} members</span>

@@ -25,14 +25,23 @@ type workspaceDTO struct {
 	Sites        int    `json:"sites"`
 	LastActiveMS int64  `json:"last_active_at_ms"`
 	CreatedAtMS  int64  `json:"created_at_ms"`
+	// LogoURL serves the custom logo ("" = none: the generated picture
+	// chosen by LogoVariant is shown).
+	LogoURL     string `json:"logo_url"`
+	LogoVariant int64  `json:"logo_variant"`
 	// Quota is the workspace's own limits (administrator list only; absent
 	// when the panel defaults apply).
 	Quota *quotaDTO `json:"quota,omitempty"`
 }
 
 func toWorkspace(w domain.WorkspaceSummary) workspaceDTO {
-	return workspaceDTO{w.ID, w.Name, w.OwnerID, w.OwnerEmail, w.Personal, w.NodeID, w.Role, w.Members, w.Bots, w.RunningBots,
-		w.MemoryBytes, w.Sites, w.LastActiveMS, w.CreatedAtMS, nil}
+	logo := ""
+	if w.LogoUpdatedMS > 0 {
+		logo = fmt.Sprintf("/api/v1/workspaces/%s/logo?v=%d", w.ID, w.LogoUpdatedMS)
+	}
+	return workspaceDTO{ID: w.ID, Name: w.Name, OwnerID: w.OwnerID, OwnerEmail: w.OwnerEmail, Personal: w.Personal, NodeID: w.NodeID,
+		Role: w.Role, Members: w.Members, Bots: w.Bots, RunningBots: w.RunningBots, MemoryBytes: w.MemoryBytes, Sites: w.Sites,
+		LastActiveMS: w.LastActiveMS, CreatedAtMS: w.CreatedAtMS, LogoURL: logo, LogoVariant: w.LogoVariant}
 }
 
 type memberDTO struct {
@@ -41,10 +50,12 @@ type memberDTO struct {
 	DisplayName string `json:"display_name"`
 	Role        string `json:"role"`
 	CreatedAtMS int64  `json:"created_at_ms"`
+	// LogoVariant is the member's generated-picture choice.
+	LogoVariant int64 `json:"logo_variant"`
 }
 
 func toMember(m domain.WorkspaceMember) memberDTO {
-	return memberDTO{m.UserID, m.Email, m.DisplayName, m.Role, m.CreatedAtMS}
+	return memberDTO{m.UserID, m.Email, m.DisplayName, m.Role, m.CreatedAtMS, m.LogoVariant}
 }
 
 func toWorkspaceList(ws []domain.WorkspaceSummary) []workspaceDTO {

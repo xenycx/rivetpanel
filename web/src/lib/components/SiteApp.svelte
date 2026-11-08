@@ -160,8 +160,8 @@
 					<label class="block"><span class="label">Port</span><input class="field font-mono" type="number" min="1" max="65535" bind:value={form.port} /><span class="help">Passed to the app as <code>$PORT</code>.</span></label>
 					<label class="block"><span class="label">Health check path</span><input class="field font-mono" bind:value={form.health} /></label>
 					<label class="block sm:col-span-2"><span class="label">Release command</span><input class="field font-mono" bind:value={form.release} placeholder="none" /><span class="help">Runs before each start with the app's variables (database migrations).</span></label>
-					<label class="block"><span class="label">Memory (MiB)</span><input class="field font-mono" type="number" min="64" step="64" bind:value={form.memory} /></label>
-					<label class="block"><span class="label">Request body limit (MiB)</span><input class="field font-mono" type="number" min="0" bind:value={form.body} /><span class="help">0 uses the panel default.</span></label>
+					<label class="block"><span class="label">Memory (MiB)</span><input class="field font-mono" type="number" min="64" step="64" bind:value={form.memory} /><span class="help">The app's size; it counts toward the workspace memory allowance.</span></label>
+					<label class="block"><span class="label">Request body limit (MiB)</span><input class="field font-mono" type="number" min="0" bind:value={form.body} /><span class="help">0: the panel default (RIVET_SITES_MAX_BODY_BYTES, 100 MiB unless set).</span></label>
 				{/if}
 				{#if isApp && !stopped}<Notice tone="info" class="sm:col-span-2">Stop the app to change its start command, port, memory or build; the address and health check can change any time.</Notice>{/if}
 				<div class="sm:col-span-2 flex gap-2"><button class="btn btn-primary" disabled={saving}>{saving ? 'Saving…' : 'Save'}</button><button type="button" class="btn btn-quiet" onclick={reset}>Reset</button></div>

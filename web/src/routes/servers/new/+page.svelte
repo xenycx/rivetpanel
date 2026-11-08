@@ -9,10 +9,11 @@
 	import { gameBlurb } from '$lib/gameIcons';
 	import { creatable, loadWorkspaces, workspaces, wsName } from '$lib/workspaces.svelte';
 	import { can, session } from '$lib/session.svelte';
-	import { capLimits, clampMax, room, roomText } from '$lib/room';
+	import { boundText, budgetWarning, clampMax, countBlock, room } from '$lib/room';
 	import { toast } from '$lib/ui/toast.svelte';
 	import NodePickerCard from '$lib/components/NodePickerCard.svelte';
 	import PlacementNotice from '$lib/components/PlacementNotice.svelte';
+	import CreatingIn from '$lib/components/CreatingIn.svelte';
 	import Icon from '$lib/components/ui/Icon.svelte';
 	import GameIcon from '$lib/components/ui/GameIcon.svelte';
 	import Notice from '$lib/components/ui/Notice.svelte';
@@ -99,7 +100,15 @@
 				if (!nodeTouched) nodeID = p.node.id;
 			})
 			.catch(() => {});
-		api<Capacity>('GET', `/me/capacity?workspace=${encodeURIComponent(ws)}`)
+		return () => {
+			live = false;
+		};
+	});
+	// The workspace's allowance and the node budget left on the chosen node.
+	$effect(() => {
+		const q = `workspace=${encodeURIComponent(workspaceID)}&node=${encodeURIComponent(nodeID)}`;
+		let live = true;
+		api<Capacity>('GET', `/me/capacity?${q}`)
 			.then((c) => {
 				if (live) cap = c;
 			})
@@ -151,10 +160,9 @@
 	const memBoundByRoom = $derived(rm.memory != null && rm.memory < nodeMaxMiB * 1048576);
 	const cpuBoundByRoom = $derived(rm.cpu != null && rm.cpu < nodeMaxCpu * 1e9);
 	const wsLabel = $derived(cap?.workspace ? wsName(cap.workspace) : 'Personal');
-	const memRoomText = $derived(roomText('memory', rm.memory, capLimits(cap).memory_bytes));
-	const cpuRoomText = $derived(roomText('cpu', rm.cpu, capLimits(cap).nano_cpus));
 	// No room for one more server: the form says so instead of letting the server refuse.
 	const noRoom = $derived(rm.games === 0 || rm.apps === 0);
+	const blocked = $derived(countBlock(cap, ['apps', 'games'], { apps: 'apps in total', games: 'game servers' }));
 	const nodeOffline = $derived(picksNode ? !!chosenNode && chosenNode.transport !== 'local' && !chosenNode.agent?.connected : placement ? !placement.node.online : false);
 	const nodeName = $derived(chosenNode?.name ?? placement?.node.name ?? 'This host');
 	// Slider bounds on the slider's own steps, so its far end is the maximum
@@ -266,12 +274,12 @@
 			// or the node's own maximum.
 			if (tooBig(chosen))
 				p.memory = memBoundByRoom
-					? `${chosen.name} needs at least ${fmtBytes(minMiB(chosen) * 1048576)} of memory, but the workspace ${wsLabel} has only ${fmtBytes(rm.memory ?? 0)} left.`
-					: `${chosen.name} needs at least ${fmtBytes(minMiB(chosen) * 1048576)} of memory, more than the limit of ${fmtBytes(maxMiB * 1048576)} on this node.`;
+					? `${chosen.name} needs at least ${fmtBytes(minMiB(chosen) * 1048576)} of memory, but the workspace ${wsLabel} has only ${fmtBytes(rm.memory ?? 0)} of its memory allowance left.`
+					: `${chosen.name} needs at least ${fmtBytes(minMiB(chosen) * 1048576)} of memory, more than the node maximum of ${fmtBytes(maxMiB * 1048576)} on ${nodeName}.`;
 			else if (memoryMiB < minMiB(chosen)) p.memory = `Choose at least ${fmtBytes(minMiB(chosen) * 1048576)}.`;
-			else if (memoryMiB > maxMiB) p.memory = memBoundByRoom ? `The workspace ${wsLabel} has only ${fmtBytes(rm.memory ?? 0)} of memory left.` : `Choose up to ${fmtBytes(maxMiB * 1048576)} on this node.`;
+			else if (memoryMiB > maxMiB) p.memory = memBoundByRoom ? `The workspace ${wsLabel} has only ${fmtBytes(rm.memory ?? 0)} of its memory allowance left.` : `Choose up to ${fmtBytes(maxMiB * 1048576)}, the node maximum on ${nodeName}.`;
 			if (cpus < minCpu) p.cpu = `Choose at least ${minCpu} ${minCpu === 1 ? 'core' : 'cores'}.`;
-			else if (cpus > maxCpu) p.cpu = cpuBoundByRoom ? `The workspace ${wsLabel} has only ${fmtCpu(rm.cpu ?? 0)} left.` : `Choose up to ${maxCpu} cores on this node.`;
+			else if (cpus > maxCpu) p.cpu = cpuBoundByRoom ? `The workspace ${wsLabel} has only ${fmtCpu(rm.cpu ?? 0)} of its CPU allowance left.` : `Choose up to ${fmtCpu(maxCpu * 1e9)}, the node maximum on ${nodeName}.`;
 		}
 		if (chosen && i === 3) for (const a of chosen.spec.agreements) if (!agreed[a.id]) p['agree-' + a.id] = 'Accept this to run the server.';
 		problems = p;
@@ -346,6 +354,7 @@
 <div class="mx-auto max-w-3xl">
 	<a href="/servers" class="inline-flex items-center gap-1 text-muted hover:text-ink"><Icon name="chevronLeft" size={14} />Game servers</a>
 	<h1 class="mt-1 text-page">New game server</h1>
+	<CreatingIn workspace={cap?.workspace} class="mt-1.5" />
 
 	{#if !session.features.games}
 		<div class="mt-6">
@@ -535,14 +544,15 @@
 						{/if}
 						<input type="range" class="mt-3 w-full accent-[var(--color-action)]" min={memSliderMin(chosen)} max={Math.max(maxMiB, memSliderMin(chosen))} step={memStep} bind:value={memoryMiB} aria-label="Memory in MiB" aria-invalid={problems.memory ? 'true' : undefined} />
 						<span class="help {problems.memory ? 'text-fail!' : ''}">
-							{problems.memory || (isJava ? `More players, mods and view distance need more memory. About ${chosen.spec.resources.heap_percent ?? 85}% goes to the Java heap.` : `${chosen.name} needs at least ${fmtBytes(minMiB(chosen) * 1048576)}. The server is stopped if it uses more than this.`)}{#if memRoomText}<span class="block">Workspace room: {memRoomText}</span>{/if}
+							{problems.memory || (isJava ? `More players, mods and view distance need more memory. About ${chosen.spec.resources.heap_percent ?? 85}% goes to the Java heap.` : `${chosen.name} needs at least ${fmtBytes(minMiB(chosen) * 1048576)}. The server is stopped if it uses more than this.`)}<span class="block">{boundText('memory', cap, nodeMaxMiB * 1048576, nodeName)}</span>
 						</span>
+						{#if budgetWarning(cap, memoryMiB * 1048576)}<Notice tone="warn" class="mt-3" title="Over the node budget">{budgetWarning(cap, memoryMiB * 1048576)}</Notice>{/if}
 					</fieldset>
 
 					<label class="block">
 						<span class="label">CPU: <span class="font-mono">{cpus}</span> {cpus === 1 ? 'core' : 'cores'}</span>
 						<input type="range" class="w-full accent-[var(--color-action)]" min={cpuSliderMin} max={maxCpu} step={cpuStep} bind:value={cpus} aria-invalid={problems.cpu ? 'true' : undefined} />
-						<span class="help {problems.cpu ? 'text-fail!' : ''}">{problems.cpu || `Suggested ${chosen.spec.resources.cpus} ${chosen.spec.resources.cpus === 1 ? 'core' : 'cores'}, up to ${maxCpu} ${cpuBoundByRoom ? 'in this workspace' : 'on this node'}. A limit, not a reservation: other servers can use idle CPU.`}{#if cpuRoomText}<span class="block">Workspace room: {cpuRoomText}</span>{/if}</span>
+						<span class="help {problems.cpu ? 'text-fail!' : ''}">{problems.cpu || `Suggested ${fmtCpu(chosen.spec.resources.cpus * 1e9)}. A limit, not a reservation: other servers can use idle CPU.`}<span class="block">{boundText('cpu', cap, nodeMaxCpu * 1e9, nodeName)}</span></span>
 					</label>
 
 					{#if creatable().length > 1}
@@ -605,10 +615,8 @@
 				{/if}
 				{#if submitError}<Notice tone="fail" class="mt-4" live>{submitError}</Notice>{/if}
 			{/if}
-			{#if noRoom && step > 0}
-				<Notice tone="warn" class="mt-4" title="No room for another server">
-					The workspace {wsLabel} has reached its limit of {rm.games === 0 ? `${capLimits(cap).games} ${capLimits(cap).games === 1 ? 'game server' : 'game servers'}` : `${capLimits(cap).apps} ${capLimits(cap).apps === 1 ? 'app' : 'apps'}`}. Delete one, or ask an administrator to raise the limit.
-				</Notice>
+			{#if noRoom && blocked && step > 0}
+				<Notice tone="warn" class="mt-4" title="No room for another server">{blocked}</Notice>
 			{/if}
 		</section>
 

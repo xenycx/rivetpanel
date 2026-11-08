@@ -895,6 +895,8 @@ func (c *ContainerService) PlanCompose(ctx context.Context, actor domain.User, i
 		return plan, err
 	}
 	if len(plan.Services) > 0 {
+		// Each service is a container app: it counts toward "Bots and
+		// containers" as well as the apps in total.
 		added := domain.WorkspaceUsage{Apps: int64(len(plan.Services)), Bots: int64(len(plan.Services)), Memory: plan.MemoryBytes, CPU: plan.NanoCPUs}
 		if err := s.checkWorkspace(ctx, actor, wsID, added); err != nil {
 			plan.fail("", "%s", err.Error())
