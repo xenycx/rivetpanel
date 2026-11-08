@@ -278,7 +278,15 @@ by name (natural order, so `file2` comes before `file10`), size, date modified
 or type, ascending or descending, with folders first or mixed in; the choice
 is remembered per browser. **New file** and **New folder** accept a path below
 the current folder, such as `src/index.js` or `src/lib`, and create any missing
-folders on the way; leading slashes, `.` and `..` are refused. Saves are
+folders on the way; leading slashes, `.` and `..` are refused. Files and
+folders move three ways: **Move to…** in a row's menu opens a folder browser
+whose destination field also takes a typed path; **Rename** accepts a path as
+well as a name (`data/.env.example`, `data/` to keep the name, `/` to start at
+the workspace root, `..` for the parent folder); and rows can be dragged onto
+a folder, the "Up one folder" row or a breadcrumb. Missing folders are created
+on the way, a move never replaces something already at the destination (the
+API answers 409), an open file follows its move, and the confirmation offers
+**Undo**. SFTP rename keeps its standard replace semantics. Saves are
 conditional on the file's revision: if SFTP, a deployment or another editor
 changed the file, the editor offers to download your version, load theirs or
 replace it deliberately, and a failed save keeps your text. While a deployment

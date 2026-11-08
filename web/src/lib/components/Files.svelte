@@ -10,6 +10,8 @@
 	import Icon from '$lib/components/ui/Icon.svelte';
 	import Menu from '$lib/components/ui/Menu.svelte';
 	import Notice from '$lib/components/ui/Notice.svelte';
+	import MoveDialog from '$lib/components/MoveDialog.svelte';
+	import { baseOf, parentOf, resolveTarget, shown, within } from '$lib/files/paths';
 	import { fmtAgo, fmtTime } from '$lib/args';
 	import { SORT_LABELS, parseSort, sortEntries, type FileSort, type SortKey } from '$lib/files/sort';
 
@@ -133,7 +135,6 @@
 	const q = (p: string) => encodeURIComponent(p);
 	const join = (dir: string, name: string) => (dir ? `${dir}/${name}` : name);
 	const err = (e: unknown, fallback: string) => (e instanceof ApiError ? e.message : fallback);
-	const validName = (v: string) => (/[\\/\0]/.test(v) || v === '.' || v === '..' ? 'Use a name without slashes.' : null);
 	// New files and folders may name a path below the current folder, such as
 	// src/index.js; missing folders are created on the way.
 	const validPath = (v: string) => {
@@ -323,19 +324,114 @@
 			toast(err(e, 'The folder could not be created.'), 'fail');
 		}
 	}
-	async function rename(en: FileEntry) {
-		const name = await promptDialog({ title: `Rename ${en.name}`, label: 'New name', value: en.name, confirmLabel: 'Rename', mono: true, validate: validName });
-		if (!name || name === en.name) return;
-		const from = join(cwd, en.name);
+	/**
+	 * Moves or renames one entry; missing folders on the way are created and
+	 * nothing already at the destination is replaced. An open file follows.
+	 * Resolves true on success; failures are reported here.
+	 */
+	async function moveEntry(from: string, to: string, takenHint = ''): Promise<boolean> {
 		try {
-			await api('POST', `${base(botId)}/move`, { from, to: join(cwd, name) });
-			if (open === from) open = join(cwd, name);
-			await list();
-			toast(`Renamed to ${name}`);
+			await api('POST', `${base(botId)}/move`, { from, to });
 		} catch (e) {
-			toast(err(e, 'It could not be renamed.'), 'fail');
+			toast(e instanceof ApiError && e.status === 409 ? `${shown(to)} already exists.${takenHint}` : err(e, `${baseOf(from)} could not be moved.`), 'fail');
+			return false;
 		}
+		if (open && within(open, from)) open = to + open.slice(from.length);
+		await list(cwd);
+		return true;
 	}
+	/** Moves and confirms with an Undo that puts it back where it was. */
+	async function moveWithUndo(from: string, to: string, takenHint = '') {
+		if (!(await moveEntry(from, to, takenHint))) return;
+		const renamed = parentOf(from) === parentOf(to);
+		toast(renamed ? `Renamed to ${baseOf(to)}` : `Moved ${baseOf(from)} to ${shown(parentOf(to))}`, 'success', {
+			label: 'Undo',
+			run: async () => {
+				if (await moveEntry(to, from)) toast(renamed ? `Name restored: ${baseOf(from)}` : `${baseOf(from)} is back in ${shown(parentOf(from))}`);
+			}
+		});
+	}
+	async function rename(en: FileEntry) {
+		const from = join(cwd, en.name);
+		const target = (v: string) => resolveTarget(cwd, v, en.name, rootLabel);
+		const dot = en.name.lastIndexOf('.');
+		const input = await promptDialog({
+			title: `Rename ${en.name}`,
+			body: `To move it as well, type a path such as data/${en.name}. Start with / to begin at the ${rootLabel} root. Missing folders are created.`,
+			label: 'New name or path',
+			value: en.name,
+			confirmLabel: 'Rename',
+			mono: true,
+			selectTo: en.type !== 'dir' && dot > 0 ? dot : en.name.length,
+			validate: (v) => {
+				const r = target(v);
+				if ('error' in r) return r.error;
+				if (en.type === 'dir' && r.path !== from && within(r.path, from)) return 'A folder cannot move into itself.';
+				return null;
+			},
+			preview: (v) => {
+				const r = target(v);
+				return 'path' in r && parentOf(r.path) !== cwd ? `Moves to ${shown(r.path)}` : null;
+			}
+		});
+		if (!input) return;
+		const r = target(input);
+		if (!('path' in r) || r.path === from) return;
+		// A bare name that matches a folder here was probably meant as "into it".
+		const folder = !input.includes('/') && entries?.some((e) => e.type === 'dir' && e.name === input);
+		await moveWithUndo(from, r.path, folder ? ` To move into that folder, end with a slash: ${input}/` : '');
+	}
+
+	// Moving: the dialog for keyboard and precise choices, drag and drop for
+	// the quick case. Drops land on folder rows, "Up one folder" and crumbs.
+	let moving = $state<{ from: string; isDir: boolean } | null>(null);
+	let moveOpen = $state(false);
+	function startMove(en: FileEntry) {
+		moving = { from: join(cwd, en.name), isDir: en.type === 'dir' };
+		moveOpen = true;
+	}
+	async function listFolders(dir: string) {
+		const r = await api<{ entries: FileEntry[] }>('GET', `${base(botId)}?path=${q(dir || '.')}`);
+		return r.entries.filter((e) => e.type === 'dir').map((e) => e.name).sort((a, b) => a.localeCompare(b));
+	}
+	const DRAG_TYPE = 'application/x-rivet-path';
+	let dragging = $state<string | null>(null);
+	let dropTarget = $state<string | null>(null);
+	const canDrop = (dest: string) => dragging !== null && parentOf(dragging) !== dest && !within(dest, dragging);
+	function dragFrom(p: string) {
+		return {
+			draggable: true,
+			ondragstart: (e: DragEvent) => {
+				dragging = p;
+				e.dataTransfer?.setData(DRAG_TYPE, p);
+				e.dataTransfer?.setData('text/plain', p);
+				if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move';
+			},
+			ondragend: () => (dragging = dropTarget = null)
+		};
+	}
+	function dropOn(dest: string) {
+		return {
+			ondragover: (e: DragEvent) => {
+				if (!canDrop(dest)) return;
+				e.preventDefault();
+				if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+				dropTarget = dest;
+			},
+			ondragleave: (e: DragEvent) => {
+				if (dropTarget === dest && !(e.currentTarget as Node).contains(e.relatedTarget as Node | null)) dropTarget = null;
+			},
+			ondrop: (e: DragEvent) => {
+				const from = dragging;
+				dragging = dropTarget = null;
+				if (from === null || !canDropFrom(from, dest)) return;
+				e.preventDefault();
+				void moveWithUndo(from, join(dest, baseOf(from)));
+			}
+		};
+	}
+	const canDropFrom = (from: string, dest: string) => parentOf(from) !== dest && !within(dest, from);
+	const dropClass = (dest: string) => (dropTarget === dest ? 'bg-action/10 outline outline-1 -outline-offset-1 outline-action' : '');
 	async function remove(en: FileEntry) {
 		const ok = await confirmDialog({
 			title: `Delete ${en.name}?`,
@@ -423,10 +519,10 @@
 			</div>
 
 			<nav class="flex min-w-0 flex-wrap items-center gap-0.5 px-2 pt-2 text-small" aria-label="Folder">
-				<button class="rounded-control px-1 py-0.5 font-mono hover:bg-paper-2 {cwd ? 'text-action' : 'font-semibold'}" onclick={() => list('')} aria-current={cwd ? undefined : 'location'}>{rootLabel}</button>
+				<button class="rounded-control px-1 py-0.5 font-mono hover:bg-paper-2 {cwd ? 'text-action' : 'font-semibold'} {dropClass('')}" {...dropOn('')} onclick={() => list('')} aria-current={cwd ? undefined : 'location'}>{rootLabel}</button>
 				{#each crumbs as c, i (c.path)}
 					<Icon name="chevronRight" size={12} class="text-muted" />
-					<button class="max-w-40 truncate rounded-control px-1 py-0.5 font-mono hover:bg-paper-2 {i === crumbs.length - 1 ? 'font-semibold' : 'text-action'}" onclick={() => list(c.path)} aria-current={i === crumbs.length - 1 ? 'location' : undefined}>{c.name}</button>
+					<button class="max-w-40 truncate rounded-control px-1 py-0.5 font-mono hover:bg-paper-2 {i === crumbs.length - 1 ? 'font-semibold' : 'text-action'} {dropClass(c.path)}" {...dropOn(c.path)} onclick={() => list(c.path)} aria-current={i === crumbs.length - 1 ? 'location' : undefined}>{c.name}</button>
 				{/each}
 			</nav>
 			{#if (entries?.length ?? 0) > 8}
@@ -455,14 +551,18 @@
 
 			<ul class="mt-1.5 max-h-[60dvh] min-h-40 flex-1 overflow-auto px-1.5 pb-2 lg:max-h-none">
 				{#if cwd}
-					<li><button class="flex w-full items-center gap-2 rounded-control px-2 py-1 text-left text-muted hover:bg-paper-2" onclick={() => list(cwd.includes('/') ? cwd.slice(0, cwd.lastIndexOf('/')) : '')}><Icon name="chevronLeft" size={14} />Up one folder</button></li>
+					<li><button class="flex w-full items-center gap-2 rounded-control px-2 py-1 text-left text-muted hover:bg-paper-2 {dropClass(parentOf(cwd))}" {...dropOn(parentOf(cwd))} onclick={() => list(parentOf(cwd))}><Icon name="chevronLeft" size={14} />{dropTarget === parentOf(cwd) ? `Move to ${shown(parentOf(cwd))}` : 'Up one folder'}</button></li>
 				{/if}
 				{#if entries === null && !listError}
 					<li class="px-2 py-3 text-muted">Loading…</li>
 				{:else}
 					{#each shownEntries as en (en.name)}
 						{@const p = join(cwd, en.name)}
-						<li class="group flex items-center rounded-control {open === p ? 'bg-action/10 text-ink' : 'hover:bg-paper-2/60'}">
+						<li
+								class="group flex items-center rounded-control {open === p ? 'bg-action/10 text-ink' : 'hover:bg-paper-2/60'} {dragging === p ? 'opacity-50' : ''} {en.type === 'dir' ? dropClass(p) : ''}"
+								{...dragFrom(p)}
+								{...en.type === 'dir' ? dropOn(p) : {}}
+							>
 							{#if en.type === 'dir'}
 								<button class="flex min-w-0 flex-1 items-center gap-2 px-2 py-1 text-left font-medium" onclick={() => list(p)} title={modifiedTitle(en)}><Icon name="folder" size={15} class="text-muted" /><span class="truncate">{en.name}</span></button>
 							{:else if en.type === 'symlink'}
@@ -480,6 +580,7 @@
 									...(!basePath && en.type !== 'symlink' ? [{ label: 'Compress to zip', onselect: () => compress(p) }] : []),
 									...(!basePath && en.type === 'file' && isArchive(en.name) ? [{ label: 'Extract here', onselect: () => extractHere(p) }] : []),
 									{ label: 'Rename', onselect: () => rename(en) },
+									{ label: 'Move to…', onselect: () => startMove(en) },
 									'separator',
 									{ label: 'Delete', danger: true, onselect: () => remove(en) }
 								]}
@@ -538,4 +639,15 @@
 		</div>
 	</div>
 </div>
+{#if moving}
+	<MoveDialog
+		bind:open={moveOpen}
+		from={moving.from}
+		isDir={moving.isDir}
+		{cwd}
+		{rootLabel}
+		{listFolders}
+		onmove={(dest) => moving && void moveWithUndo(moving.from, join(dest, baseOf(moving.from)))}
+	/>
+{/if}
 {#if focusMode}<div class="fixed inset-0 z-40 bg-black/50" role="presentation" onclick={() => (focusMode = false)}></div>{/if}

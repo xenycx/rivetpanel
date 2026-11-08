@@ -25,7 +25,9 @@ import (
 var (
 	ErrInvalidPath = errors.New("invalid path")
 	ErrTooLarge    = errors.New("file too large")
-	ErrInvalidID   = errors.New("invalid bot id")
+	// ErrDestinationExists is returned by Move when the target name is taken.
+	ErrDestinationExists = errors.New("destination exists")
+	ErrInvalidID         = errors.New("invalid bot id")
 )
 
 // Manager owns the data root directory, opened once so later replacement of the
@@ -584,6 +586,27 @@ func (w *Workspace) Rename(from, to string) error {
 		}
 	}
 	return w.root.Rename(from, to)
+}
+
+// Move is Rename for people: it refuses to replace anything already at the
+// destination, so moving a file into a folder never overwrites a namesake.
+// Missing parent folders are created. SFTP keeps Rename's replace semantics,
+// which clients rely on for atomic saves.
+func (w *Workspace) Move(from, to string) error {
+	cf, err := clean(from)
+	if err != nil {
+		return err
+	}
+	ct, err := clean(to)
+	if err != nil {
+		return err
+	}
+	if cf != ct {
+		if _, err := w.root.Lstat(ct); err == nil {
+			return fmt.Errorf("%w: %s", ErrDestinationExists, ct)
+		}
+	}
+	return w.Rename(cf, ct)
 }
 
 // Stat describes a path without following a symlink out of the workspace.

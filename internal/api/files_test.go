@@ -183,6 +183,13 @@ func TestFileMkdirMoveDeleteAndListingOrder(t *testing.T) {
 	u.mustStatus(400, "POST", base+"/move", map[string]string{"from": "src", "to": "src/lib/inner"})
 	u.mustStatus(400, "POST", base+"/move", map[string]string{"from": "../x", "to": "y"})
 	u.mustStatus(404, "POST", base+"/move", map[string]string{"from": "missing", "to": "y"})
+	// A move never replaces what is already at the destination.
+	u.raw("PUT", fpath(id, "/content", "beta.txt"), []byte("b"), "")
+	u.mustStatus(409, "POST", base+"/move", map[string]string{"from": "beta.txt", "to": "src/lib/a.txt"})
+	u.mustStatus(409, "POST", base+"/move", map[string]string{"from": "beta.txt", "to": "src"})
+	u.mustStatus(204, "POST", base+"/move", map[string]string{"from": "beta.txt", "to": "beta.txt"})
+	u.mustStatus(204, "POST", base+"/move", map[string]string{"from": "beta.txt", "to": "deep/new/beta.txt"})
+	u.mustStatus(204, "DELETE", fpath(id, "", "deep"), nil)
 	u.mustStatus(204, "DELETE", fpath(id, "", "src"), nil)
 	json.Unmarshal(u.mustStatus(200, "GET", base, nil), &list)
 	if len(list.Entries) != 1 || list.Entries[0].Name != "zeta.txt" {

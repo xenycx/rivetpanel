@@ -50,6 +50,16 @@
 		}
 		finish(() => req.resolve(v));
 	}
+	const preview = $derived(req?.kind === 'prompt' && !problem && text.trim() ? (req.o.preview?.(text.trim()) ?? null) : null);
+	// Selects a file name's stem once the dialog has focused the field.
+	function selectStem(el: HTMLInputElement) {
+		const r = dialogs.current;
+		if (r?.kind !== 'prompt' || r.o.selectTo === undefined) return;
+		const n = r.o.selectTo;
+		requestAnimationFrame(() => {
+			if (document.activeElement === el) el.setSelectionRange(0, n);
+		});
+	}
 	const paragraphs = (s?: string) => (s ? s.split(/\n{1,}/).filter(Boolean) : []);
 </script>
 
@@ -80,14 +90,17 @@
 					<input
 						class="field {req.o.mono ? 'font-mono' : ''}"
 						bind:value={text}
+						oninput={() => (problem = '')}
+						{@attach selectStem}
 						placeholder={req.o.placeholder}
 						aria-invalid={problem ? 'true' : undefined}
-						aria-describedby={problem ? 'prompt-err' : undefined}
+						aria-describedby={problem ? 'prompt-err' : req.o.preview ? 'prompt-preview' : undefined}
 						autocomplete="off"
 						spellcheck="false"
 					/>
 				</label>
-				{#if problem}<p id="prompt-err" class="mt-1 text-small text-fail">{problem}</p>{/if}
+				{#if problem}<p id="prompt-err" class="mt-1 text-small text-fail">{problem}</p>
+				{:else if req.o.preview}<p id="prompt-preview" class="mt-1 min-h-[1lh] text-small text-muted" aria-live="polite">{preview ?? ''}</p>{/if}
 			</form>
 		{/if}
 		{#snippet footer()}

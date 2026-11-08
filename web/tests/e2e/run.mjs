@@ -219,6 +219,39 @@ await step('unsaved edits are protected when leaving the section', async () => {
 	await page.waitForURL(/tab=startup/);
 });
 
+await step('files move by rename path, the Move dialog and Undo, never overwriting', async () => {
+	await admin('PUT', `/bots/${botId}/files/content?path=move-me.txt`, 'm');
+	await page.goto(`/bots/${botId}?tab=files`);
+	const names = async (p) => (await admin('GET', `/bots/${botId}/files?path=${encodeURIComponent(p)}`)).entries.map((e) => e.name);
+	await page.getByRole('button', { name: 'Actions for move-me.txt' }).click();
+	await page.getByRole('menuitem', { name: 'Rename' }).click();
+	await page.getByLabel('New name or path').fill('/moved/deep/move-me.txt');
+	await page.getByText('Moves to /moved/deep/move-me.txt').waitFor();
+	await page.getByRole('button', { name: 'Rename', exact: true }).click();
+	await page.getByText('Moved move-me.txt to /moved/deep').waitFor();
+	expect((await names('moved/deep')).includes('move-me.txt'), 'rename with a path did not move the file');
+	await page.getByRole('button', { name: 'Undo' }).last().click();
+	await page.getByText('move-me.txt is back in /').waitFor();
+	expect((await names('.')).includes('move-me.txt'), 'Undo did not put the file back');
+	await page.getByRole('button', { name: 'Actions for move-me.txt' }).click();
+	await page.getByRole('menuitem', { name: 'Move to…' }).click();
+	await page.getByLabel('Destination folder').fill('/moved');
+	await page.getByText('Moves to /moved/move-me.txt').waitFor();
+	await page.getByRole('button', { name: 'Move here' }).click();
+	await page.getByText('Moved move-me.txt to /moved').waitFor();
+	expect((await names('moved')).includes('move-me.txt'), 'the Move dialog did not move the file');
+	await admin('PUT', `/bots/${botId}/files/content?path=move-me.txt`, 'second');
+	await page.goto(`/bots/${botId}?tab=files`);
+	await page.getByRole('button', { name: 'Actions for move-me.txt' }).click();
+	await page.getByRole('menuitem', { name: 'Move to…' }).click();
+	await page.getByLabel('Destination folder').fill('/moved');
+	await page.getByRole('button', { name: 'Move here' }).click();
+	await page.getByText('/moved/move-me.txt already exists.').waitFor();
+	expect((await admin('GET', `/bots/${botId}/files/content?path=moved/move-me.txt`)) === 'm', 'a move overwrote an existing file');
+	await admin('DELETE', `/bots/${botId}/files?path=moved`);
+	await admin('DELETE', `/bots/${botId}/files?path=move-me.txt`);
+});
+
 await step('a save after someone else changed the file shows a conflict, not an overwrite', async () => {
 	await page.goto(`/bots/${botId}?tab=files`);
 	await page.getByRole('button', { name: 'README.md', exact: true }).click();

@@ -30,6 +30,10 @@ export type PromptOptions = Base & {
 	confirmLabel: string;
 	mono?: boolean;
 	validate?: (v: string) => string | null;
+	/** A live line under the field describing what the current value will do. */
+	preview?: (v: string) => string | null;
+	/** Select only the first n characters on open (a file name's stem). */
+	selectTo?: number;
 };
 
 export type ChoiceOptions = Base & { choices: Choice[]; cancelLabel?: string };

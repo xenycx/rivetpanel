@@ -252,6 +252,10 @@ items state exactly what remains.
   dependencies listed), one-shot console commands (`POST …/command`, power
   permission) and task-chain schedules (≤20 steps, ≤1 h of waits, per-step
   permission re-check, one run at a time). Enforcement: application level.
+- [x] File-manager moves: **Move to…** (folder browser with a typed-path
+  field), path-aware **Rename**, drag and drop onto folders and breadcrumbs,
+  and Undo. `POST …/files/move` creates missing parent folders and refuses an
+  existing destination with 409 (application level; SFTP rename unchanged).
 - [x] File-manager archives: folder download as zip, compress to zip, and
   staged extraction of zip/mrpack/tar.gz/tgz/tar already in the workspace with
   entry, size and compression-ratio limits (application level, descriptor-

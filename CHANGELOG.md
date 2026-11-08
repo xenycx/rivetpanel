@@ -6,6 +6,29 @@ authoritative current version.
 
 ## Unreleased
 
+## 1.1.3 - 2026-11-08
+
+### Added
+
+- **Move files and folders in the file manager.** Each row's menu has
+  **Move to…**, which opens a folder browser with a destination field that also
+  accepts a typed path such as `/lib/core`; missing folders are created. Rows
+  can also be dragged onto a folder, the "Up one folder" row or a breadcrumb.
+  Every move and rename confirms with **Undo**. Works for bot, game server and
+  site-draft files.
+- **Rename accepts a path.** Typing `data/.env.example` (or `data/` to keep
+  the name) moves the item into that folder, creating it if needed. A leading
+  `/` starts at the workspace root and `..` goes up a folder; the dialog shows
+  where it will land before you confirm and preselects the name without its
+  extension.
+
+### Fixed
+
+- **Moving or renaming no longer silently overwrites a file.** The file API's
+  move now refuses a destination that already exists with a 409 and a clear
+  message instead of replacing it. Typing a bare folder name in Rename explains
+  how to move into that folder instead. SFTP rename behaviour is unchanged.
+
 ## 1.1.2 - 2026-11-08
 
 ### Changed

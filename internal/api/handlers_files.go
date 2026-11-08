@@ -36,6 +36,8 @@ func mapFSError(err error) error {
 		return nil
 	case errors.Is(err, filesystem.ErrTooLarge):
 		return fiber.NewError(fiber.StatusRequestEntityTooLarge, "file is too large")
+	case errors.Is(err, filesystem.ErrDestinationExists):
+		return fiber.NewError(fiber.StatusConflict, "something with that name is already there")
 	case errors.Is(err, filesystem.ErrInvalidPath):
 		return domain.Invalid("invalid path")
 	case errors.As(err, &ae):
@@ -284,7 +286,7 @@ func (s *panel) moveFile(c fiber.Ctx) error {
 		return err
 	}
 	defer w.Close()
-	if err := w.Rename(in.From, in.To); err != nil {
+	if err := w.Move(in.From, in.To); err != nil {
 		return mapFSError(err)
 	}
 	return c.SendStatus(fiber.StatusNoContent)
