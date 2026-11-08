@@ -1,20 +1,24 @@
 id: clipboard-vault
 name: Clipboard Vault
 tagline: Private vault for pasted text, screenshots and files
-description: Paste text and screenshots with Ctrl+V, drop files up to 10 GiB with resumable uploads, and reach everything from the browser, API keys, or a dependency-free Python client.
+description: Paste text and screenshots with Ctrl+V, drop files up to 10 GiB with resumable uploads, and reach everything from the browser, API keys, or a dependency-free Python client. One small container with its database and files on one volume.
 category: productivity
 web: {service: app, port: 8080, health: /health/live}
 vars:
-  - name: BOOTSTRAP_TOKEN
+  - name: SETUP_TOKEN
     label: Setup token
     description: Claims the first administrator account at /setup. Keep it until you have used it.
     secret: true
     credential: true
     generate: {kind: base64url, length: 48}
-  - {name: BETTER_AUTH_SECRET, label: Session signing secret, secret: true, advanced: true, generate: {kind: hex, length: 64}}
-  - {name: AUTH_BRIDGE_SECRET, label: Internal service secret, secret: true, advanced: true, generate: {kind: hex, length: 64}}
-  - {name: DB_PASSWORD, label: Database password, secret: true, advanced: true, generate: {kind: hex, length: 32}}
+  - name: VAULT_SECRET
+    label: Signing secret
+    description: Signs short-lived sign-in state. Changing it only interrupts sign-ins in progress.
+    secret: true
+    advanced: true
+    generate: {kind: hex, length: 64}
 notes:
   - Open ${APP_URL}/login and create your account, then open ${APP_URL}/setup and paste the setup token shown above. That account becomes the administrator.
-  - Under Administration you can close registration, create accounts for other people, and change the default upload limit.
+  - Under Administration you can close registration, create accounts for other people, change the default upload limit, and download a database snapshot.
   - Create API keys under Keys and team; each new key offers vault.py, a Python client with the address and key already filled in.
+  - The database and files live in the data volume. A consistent database snapshot is written to backups/ inside it every day.

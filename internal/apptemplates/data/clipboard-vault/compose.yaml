@@ -1,44 +1,19 @@
 services:
   app:
-    image: ghcr.io/xenycx/clipboard-vault:2.0.0
-    depends_on: [auth, db]
+    image: ghcr.io/xenycx/clipboard-vault:3.0.0
     user: "10001:10001"
     ports: ["${APP_PORT}:8080"]
     environment:
       PORT: "8080"
-      DATABASE_URL: postgresql://vault:${DB_PASSWORD}@db:5432/clipboard_vault
       PUBLIC_BASE_URL: ${APP_ORIGIN}
-      AUTH_INTERNAL_URL: http://auth:3001
-      AUTH_BRIDGE_SECRET: ${AUTH_BRIDGE_SECRET}
-      AUTH_PROXY_ENABLED: "true"
-      UPLOAD_ROOT: /data/uploads
+      VAULT_SECRET: ${VAULT_SECRET}
+      SETUP_TOKEN: ${SETUP_TOKEN}
+      DATA_DIR: /data
+      TRUST_PROXY_HEADERS: "true"
       SERVER_MAX_UPLOAD_BYTES: "10737418240"
-      UPLOAD_DISK_RESERVE_BYTES: "5368709120"
+      UPLOAD_DISK_RESERVE_BYTES: "2147483648"
       RUST_LOG: clipboard_vault=info,tower_http=warn
-    volumes: ["uploads:/data/uploads"]
-    mem_limit: 256m
-  auth:
-    image: ghcr.io/xenycx/clipboard-vault-auth:2.0.0
-    depends_on: [db]
-    user: "10002:10002"
-    environment:
-      AUTH_PORT: "3001"
-      DATABASE_URL: postgresql://vault:${DB_PASSWORD}@db:5432/clipboard_vault
-      BETTER_AUTH_URL: ${APP_ORIGIN}
-      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
-      AUTH_BRIDGE_SECRET: ${AUTH_BRIDGE_SECRET}
-      BOOTSTRAP_TOKEN: ${BOOTSTRAP_TOKEN}
-    mem_limit: 256m
-  db:
-    image: postgres:17-alpine
-    user: "70:70"
-    environment:
-      POSTGRES_USER: vault
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
-      POSTGRES_DB: clipboard_vault
-      PGDATA: /var/lib/postgresql/data/pgdata
-    volumes: ["db:/var/lib/postgresql/data"]
-    mem_limit: 256m
+    volumes: ["data:/data"]
+    mem_limit: 192m
 volumes:
-  db: {}
-  uploads: {}
+  data: {}
