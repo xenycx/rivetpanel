@@ -169,7 +169,7 @@ The catalog (25 apps):
 | Category | Apps |
 | --- | --- |
 | Publishing | Flarum, Ghost |
-| Productivity | Actual Budget, Excalidraw, Mealie, Memos, n8n, Stirling-PDF, Vikunja, Wiki.js |
+| Productivity | Actual Budget, Clipboard Vault, Excalidraw, Mealie, Memos, n8n, Stirling-PDF, Vikunja, Wiki.js |
 | Developer tools | CyberChef, Gitea, IT-Tools |
 | Monitoring | Gotify, ntfy, Umami, Uptime Kuma |
 | Reading | linkding, Miniflux |
