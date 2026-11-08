@@ -6,6 +6,21 @@ authoritative current version.
 
 ## Unreleased
 
+## 1.2.0 - 2026-11-08
+
+### Added
+
+- **"Configuration and startup" role permission (`bots.configure`).** A
+  custom role can now let its accounts open a bot's **Configuration** tab and
+  change the runtime, start command, entrypoint, build command and
+  auto-restart without also granting console, power, files and environment
+  variables. It applies on bots the account owns or has full access to (owner,
+  workspace owner or admin, or a full-access share); it never widens a
+  partial share. Name, limits, network and backups still need full access, as
+  do game servers, containers and site apps. Existing roles keep exactly what
+  they could do. Migration `0064` adds the permission to the built-in User
+  role, which already had this through its other permissions.
+
 ## 1.1.3 - 2026-11-08
 
 ### Added

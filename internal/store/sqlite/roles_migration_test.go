@@ -166,3 +166,53 @@ func TestMigration0057SeedsUserRole(t *testing.T) {
 		}
 	}
 }
+
+// 0064 adds bots.configure to the built-in User role after bots.env (catalog
+// order), keeps whatever an administrator removed from that role, and leaves
+// custom roles alone.
+func TestMigration0064AddsConfigureToUserRole(t *testing.T) {
+	ctx := context.Background()
+	db, err := Open(ctx, filepath.Join(t.TempDir(), "t.db"), 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { db.Close() })
+	if err := db.Migrate(ctx, upTo(t, 63)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.ExecContext(ctx, `INSERT INTO roles (id, name, description, permissions_json, system, created_at_ms, updated_at_ms)
+		VALUES ('ops', 'Ops', '', '["bots.console","bots.env"]', 0, 1, 1)`); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Migrate(ctx, migrations.FS); err != nil {
+		t.Fatal(err)
+	}
+	user, _ := db.GetRole(ctx, domain.SystemRoleUser)
+	if !slices.Equal(user.Permissions, domain.DefaultUserPermissions()) {
+		t.Fatalf("user role: %v", user.Permissions)
+	}
+	ops, _ := db.GetRole(ctx, "ops")
+	if !slices.Equal(ops.Permissions, []string{domain.PermBotsConsole, domain.PermBotsEnv}) {
+		t.Fatalf("custom role changed: %v", ops.Permissions)
+	}
+
+	// A User role an administrator trimmed (no bots.env) gains it at the end.
+	db2, err := Open(ctx, filepath.Join(t.TempDir(), "t2.db"), 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { db2.Close() })
+	if err := db2.Migrate(ctx, upTo(t, 63)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db2.ExecContext(ctx, `UPDATE roles SET permissions_json = '["bots.console","ai.use"]' WHERE id = 'user'`); err != nil {
+		t.Fatal(err)
+	}
+	if err := db2.Migrate(ctx, migrations.FS); err != nil {
+		t.Fatal(err)
+	}
+	trimmed, _ := db2.GetRole(ctx, domain.SystemRoleUser)
+	if !slices.Equal(trimmed.Permissions, []string{domain.PermBotsConsole, domain.PermAIUse, domain.PermBotsConfigure}) {
+		t.Fatalf("trimmed user role: %v", trimmed.Permissions)
+	}
+}

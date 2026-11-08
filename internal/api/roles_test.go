@@ -391,3 +391,48 @@ func TestUserRoleEditable(t *testing.T) {
 	}
 	mgr.mustStatus(400, "POST", "/api/v1/admin/account-invites", map[string]any{"role": "user", "expires_in_days": 3})
 }
+
+// bots.configure lets a role without console, power, files and variables
+// change a bot's startup configuration where the account has full access,
+// and nothing else that full access covers.
+func TestConfigurePermission(t *testing.T) {
+	e := newEnv(t)
+	admin := e.user("admin@x.io", domain.RoleAdmin)
+	op := e.user("op@x.io", domain.RoleUser)
+	owner := e.user("owner@x.io", domain.RoleUser)
+	mine := op.createBot("mine")
+	shared := "/api/v1/bots/" + owner.createBot("shared")
+	owner.mustStatus(200, "PUT", shared+"/users", map[string]any{"email": "op@x.io", "permissions": domain.PermFullAdmin})
+	startup := map[string]any{"argv": []string{"node", "src/index.js"}, "restart_policy": "on_failure"}
+
+	// Without bots.configure a trimmed role cannot touch the start command.
+	plain := admin.createRole("Watchers", domain.PermBotsConsole)
+	admin.mustStatus(204, "PATCH", "/api/v1/users/"+e.userID("op@x.io"), map[string]any{"role": plain})
+	op.mustStatus(403, "PATCH", shared, startup)
+
+	rid := admin.createRole("Configurers", domain.PermBotsConsole, domain.PermBotsConfigure)
+	admin.mustStatus(204, "PATCH", "/api/v1/users/"+e.userID("op@x.io"), map[string]any{"role": rid})
+	var got botDTO
+	json.Unmarshal(op.mustStatus(200, "PATCH", shared, startup), &got)
+	if strings.Join(got.Argv, " ") != "node src/index.js" {
+		t.Fatalf("argv not saved: %v", got.Argv)
+	}
+	if got.Permissions&domain.PermConfigure == 0 || got.Permissions&domain.PermFullAdmin != 0 || got.Permissions&domain.PermEditFiles != 0 {
+		t.Fatalf("permissions: %b", got.Permissions)
+	}
+	// Anything beyond the startup configuration still needs full access.
+	op.mustStatus(403, "PATCH", shared, map[string]any{"name": "x"})
+	op.mustStatus(403, "PATCH", shared, map[string]any{"argv": []string{"node", "a.js"}, "memory_bytes": 256 << 20})
+	op.mustStatus(403, "GET", shared+"/files?path=.", nil)
+
+	// It never stretches a partial share.
+	owner.mustStatus(200, "PUT", shared+"/users", map[string]any{"email": "op@x.io", "permissions": domain.PermViewConsole})
+	op.mustStatus(403, "PATCH", shared, startup)
+
+	// Own bots show the Configuration tab (the bit) and accept the change.
+	json.Unmarshal(op.mustStatus(200, "GET", "/api/v1/bots/"+mine, nil), &got)
+	if got.Permissions&domain.PermConfigure == 0 {
+		t.Fatalf("own bot permissions: %b", got.Permissions)
+	}
+	op.mustStatus(200, "PATCH", "/api/v1/bots/"+mine, startup)
+}

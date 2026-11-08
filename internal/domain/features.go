@@ -9,6 +9,12 @@ const (
 	PermFullAdmin
 
 	PermAll = PermViewConsole | PermPower | PermEditFiles | PermManageEnv | PermFullAdmin
+
+	// PermConfigure (a bot's runtime, start command, entrypoint, build
+	// command and auto-restart) is derived, never stored or shared: full
+	// access implies it, and MaskBotPerms keeps it for a role that trims full
+	// access but holds bots.configure.
+	PermConfigure = PermFullAdmin << 1
 )
 
 // Has reports whether the mask grants perm; full admin grants everything.

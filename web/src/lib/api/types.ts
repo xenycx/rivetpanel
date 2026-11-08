@@ -197,7 +197,9 @@ export type Phase =
 export type Port = { container_port: number; host_port: number; protocol: 'tcp' | 'udp'; host_ip: string };
 
 /** Sub-user permission bits (mirror internal/domain). */
-export const Perm = { console: 1, power: 2, files: 4, env: 8, admin: 16 } as const;
+// configure (32) is derived by the server: full access implies it, and a role
+// with "Configuration and startup" keeps it on bots it trims full access from.
+export const Perm = { console: 1, power: 2, files: 4, env: 8, admin: 16, configure: 32 } as const;
 export const can = (b: { permissions: number }, p: number) => (b.permissions & Perm.admin) !== 0 || (b.permissions & p) === p;
 
 export type RuntimeInfo = {

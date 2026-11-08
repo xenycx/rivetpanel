@@ -21,6 +21,7 @@ const (
 	PermBotsPower        = "bots.power"
 	PermBotsFiles        = "bots.files"
 	PermBotsEnv          = "bots.env"
+	PermBotsConfigure    = "bots.configure"
 	PermBotsBackups      = "bots.backups"
 	PermBotsDeploy       = "bots.deploy"
 	PermBotsShare        = "bots.share"
@@ -70,6 +71,7 @@ var Permissions = []PermissionInfo{
 	{PermBotsPower, "resources", "Power and console input", "Start, stop, restart and kill; send console input and commands."},
 	{PermBotsFiles, "resources", "Files", "File manager, SFTP, packages and AI file changes."},
 	{PermBotsEnv, "resources", "Environment variables", "Read and change environment variables."},
+	{PermBotsConfigure, "resources", "Configuration and startup", "A bot's Configuration tab: runtime, start command, build command and auto-restart, on bots the account owns or fully accesses, without console, power, files or variables."},
 	{PermBotsBackups, "resources", "Backups", "Create, restore, verify and delete backups."},
 	{PermBotsDeploy, "resources", "Deployments", "Link GitHub repositories, deploy, publish and push."},
 	{PermBotsShare, "resources", "Sharing", "Share apps with other accounts, invitations and ownership transfer."},
@@ -221,7 +223,8 @@ func (u User) MaskBotPerms(mask int) int {
 	if u.IsAdmin() {
 		return mask
 	}
-	if mask&PermFullAdmin != 0 {
+	full := mask&PermFullAdmin != 0
+	if full {
 		mask = PermAll
 	}
 	for _, b := range botPermBits {
@@ -231,6 +234,11 @@ func (u User) MaskBotPerms(mask int) int {
 	}
 	if mask != PermAll {
 		mask &^= PermFullAdmin
+		// Full access the role trimmed still covers a bot's startup
+		// configuration when the role grants that on its own.
+		if full && u.Can(PermBotsConfigure) {
+			mask |= PermConfigure
+		}
 	}
 	return mask
 }

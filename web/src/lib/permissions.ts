@@ -8,6 +8,7 @@ const labels: Record<string, string> = {
 	'bots.power': 'power actions and console input',
 	'bots.files': 'files',
 	'bots.env': 'environment variables',
+	'bots.configure': 'configuration and startup',
 	'bots.backups': 'backups',
 	'bots.deploy': 'deployments',
 	'bots.share': 'sharing',

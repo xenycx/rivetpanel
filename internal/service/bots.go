@@ -232,6 +232,14 @@ type UpdateBotInput struct {
 	ReleaseCommand *string // web units only; "" clears it
 }
 
+// startupOnly reports whether the update touches only what the bot
+// Configuration tab edits: runtime, command, entrypoint, build command and
+// the restart policy.
+func (in UpdateBotInput) startupOnly() bool {
+	return in.Name == nil && in.MemoryBytes == nil && in.NanoCPUs == nil && in.PidsLimit == nil &&
+		in.NetworkEnabled == nil && in.BandwidthKbps == nil && in.AutoBackup == nil && in.ReleaseCommand == nil
+}
+
 // EnvView is the masked view of a variable.
 type EnvView struct {
 	Name        string
@@ -564,9 +572,21 @@ func (s *BotService) List(ctx context.Context, actor domain.User) ([]domain.Bot,
 
 // Update changes configuration of a stopped bot.
 func (s *BotService) Update(ctx context.Context, actor domain.User, id string, in UpdateBotInput) (domain.Bot, error) {
-	b, err := s.loadPerm(ctx, actor, id, domain.PermFullAdmin, false)
+	// A bot's startup configuration alone needs only PermConfigure; anything
+	// else here (name, limits, network, backups, release command) and every
+	// game server, container and site app keep needing full access.
+	need := domain.PermFullAdmin
+	if in.startupOnly() {
+		need = domain.PermConfigure
+	}
+	b, err := s.loadPerm(ctx, actor, id, need, false)
 	if err != nil {
 		return domain.Bot{}, err
+	}
+	if need != domain.PermFullAdmin && (b.IsGame() || b.IsContainer() || b.IsWeb()) {
+		if b, err = s.loadPerm(ctx, actor, id, domain.PermFullAdmin, false); err != nil {
+			return domain.Bot{}, err
+		}
 	}
 	old := b
 	if b.IsGame() && (in.Runtime != nil || in.Argv != nil || in.Entrypoint != nil || in.BuildCommand != nil) {

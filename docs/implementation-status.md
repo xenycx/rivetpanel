@@ -507,6 +507,13 @@ items state exactly what remains.
     covers, including the automation API; services re-check administration
     permissions; `BotService` masks the per-bot console/power/files/env bits
     for owners, workspace roles and sharing grants (SFTP uses the same mask).
+    `bots.configure` (migration `0064`) keeps a bot's startup configuration
+    (runtime, command, entrypoint, build command, auto-restart) on full access
+    a trimmed role removes, through a derived per-bot bit (32) that is never
+    stored or shared. Enforced by the application (`BotService.Update`);
+    game servers, containers and site apps still need full access. Known
+    boundary: owners and workspace owners/admins are not role-checked on
+    full-access-only actions at the API (the UI hides those tabs).
     Delegated administrators cannot grant permissions they lack, make or
     touch administrators, change their own role, act on (role, address,
     verified flag, enabled state) an account holding administration
@@ -1170,6 +1177,7 @@ Migrations added since 0.2.0 (the schema-version assertion in
 | `0061_containers.sql` | Rebuilds `bots` (SQLite cannot change a CHECK in place; every column is copied by name and foreign keys are checked before commit): `kind` gains `container`, `runtime` gains `image`, and `argv_json` may be empty for container apps (the image's own command). Additive: `stacks` (workspace, owner, name, the imported Compose file up to 256 KiB) and `bot_containers` (`bots` `ON DELETE CASCADE`: run user, writable paths, volumes, `stack_id` `ON DELETE SET NULL`, service name unique per stack, dependencies). Covered by `TestMigrateIdempotentAndSchema` and the populated-database upgrade in `sites_migration_test.go` |
 | `0062_app_templates.sql` | Additive: `stacks.template_id` (the one-click app template, `''` for a pasted Compose file), `bot_containers.routable` (joins the apps network so a site can proxy to the container) and `bot_containers.cap_add_json` (trusted extra capabilities from a built-in template, JSON array). Covered by `TestMigrateIdempotentAndSchema` (63 versions) |
 | `0063_site_backups.sql` | Additive: `sites.auto_backup` (scheduled backups of a files site, on by default) and `site_backups` (`sites` `ON DELETE CASCADE`: kind auto/manual, the archived release, label, files, bytes, SHA-256, creator `ON DELETE SET NULL`). Archive files live under `RIVET_BACKUP_DIR/sites/<site>/`. Covered by `TestMigrateIdempotentAndSchema` (64 versions) |
+| `0064_configure_permission.sql` | Additive: the built-in User role's stored permissions gain `bots.configure` after `bots.env` (catalog order); custom roles are unchanged. Covered by `TestMigration0064AddsConfigureToUserRole` and `TestMigrateIdempotentAndSchema` (65 versions) |
 | `0054_web_apps.sql` | Rebuilds `bots` (kind gains `web`, runtime gains `php`, new `release_command`) and `sites` (mode gains `app`; `app_id`, `framework`, `build_output_dir`, `app_port`, `health_path`, `max_body_bytes`) with explicit column lists and foreign keys off (checked with `PRAGMA foreign_key_check`; all indexes recreated); additive `site_releases.source_ref` and `bot_health_probes.target` (`host`/`app`). Covered by `apps_migration_test.go` |
 | `0030_ai_global_chat.sql` | Rebuilds `ai_conversations` so a chat may have no target; `ai_runs.bot_id`/`site_id`, `ai_messages.context_json` (the conversation subtree is stashed and restored, rows preserved) |
 

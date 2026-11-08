@@ -22,6 +22,18 @@ func TestMaskBotPermsAndCan(t *testing.T) {
 	if custom.CanBotBit(PermEditFiles) || !custom.CanBotBit(PermPower) || custom.BotBitDenied(PermManageEnv) == nil {
 		t.Fatal("bit checks")
 	}
+	// bots.configure keeps a bot's startup configuration on full access the
+	// role trimmed, and only there.
+	cfg := User{Role: RoleUser, RoleID: "r", CustomPermissions: []string{PermBotsConsole, PermBotsConfigure}}
+	if got := cfg.MaskBotPerms(PermFullAdmin); got != PermViewConsole|PermConfigure || HasPerm(got, PermEditFiles) || HasPerm(got, PermFullAdmin) {
+		t.Fatalf("configure on full access: %b", got)
+	}
+	if got := cfg.MaskBotPerms(PermViewConsole | PermEditFiles); HasPerm(got, PermConfigure) {
+		t.Fatalf("configure without full access: %b", got)
+	}
+	if !HasPerm(user.MaskBotPerms(PermAll), PermConfigure) || HasPerm(custom.MaskBotPerms(PermFullAdmin), PermConfigure) {
+		t.Fatal("full access implies configure; a role without it gets none")
+	}
 	unverified := User{Role: RoleUser, Withheld: []string{PermBotsCreate}}
 	if unverified.Can(PermBotsCreate) || !unverified.Can(PermBotsFiles) {
 		t.Fatal("policy not applied")

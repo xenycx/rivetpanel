@@ -65,8 +65,9 @@ export const tabDefs: readonly TabDef[] = [
 	{ id: 'mods', label: (c) => (c.game?.spec.addons?.kind === 'plugin' ? 'Plugins' : 'Mods'), icon: 'package', group: 'code', kinds: ['game'], when: (c) => !!c.game?.spec.addons, words: 'modrinth plugins mods install' },
 
 	// A game server's configuration holds its server-type variables, which
-	// "Change server settings" (the variables permission) may edit.
-	{ id: 'startup', label: 'Configuration', icon: 'sliders', group: 'configuration', kinds: ['bot', 'game', 'web', 'container'], perm: (c) => (c.kind === 'game' ? Perm.env : Perm.admin), needsStop: true, words: 'startup command entrypoint arguments restart policy build script version jvm port' },
+	// "Change server settings" (the variables permission) may edit. A bot's
+	// startup needs "Configuration and startup" (or full access).
+	{ id: 'startup', label: 'Configuration', icon: 'sliders', group: 'configuration', kinds: ['bot', 'game', 'web', 'container'], perm: (c) => (c.kind === 'game' ? Perm.env : c.kind === 'bot' ? Perm.configure : Perm.admin), needsStop: true, words: 'startup command entrypoint arguments restart policy build script version jvm port' },
 	{ id: 'properties', label: 'Properties', icon: 'list', group: 'configuration', kinds: ['game'], perm: Perm.files, when: (c) => has(c, 'minecraft-properties'), words: 'server.properties motd difficulty gamemode' },
 	{ id: 'env', label: 'Variables', icon: 'key', group: 'configuration', kinds: ['bot', 'web', 'container'], perm: Perm.env, needsStop: true, words: 'env environment secrets token config' },
 	{ id: 'network', label: 'Network', icon: 'network', group: 'configuration', kinds: apps, perm: Perm.admin, needsStop: true, words: 'ports publish outbound allocations' },
