@@ -9,12 +9,14 @@ authoritative current version.
 ### Added
 
 - Clipboard Vault is available as a one-click app: a private vault for pasted
-  text, screenshots and files with its auth service and PostgreSQL in one stack.
-  The setup token for the first administrator is generated and shown after
-  install. Its images (`ghcr.io/xenycx/clipboard-vault` and
-  `ghcr.io/xenycx/clipboard-vault-auth`, tag `2.0.0`) must be present on the
-  host or pullable from the registry; the template is listed as unavailable on
-  panels that do not allow `ghcr.io`.
+  text, screenshots and files. It installs Clipboard Vault 3.0
+  (`ghcr.io/xenycx/clipboard-vault:3.0.0`, amd64 and arm64): one container of
+  about 192 MiB with its SQLite database, files and daily snapshots in one
+  `data` volume. The setup token for the first administrator is generated and
+  shown after install. The template is listed as unavailable on panels that do
+  not allow `ghcr.io`. Stacks installed from the earlier three-service template
+  (2.x) keep running unchanged; moving one to 3.0 is a one-time import described
+  in Clipboard Vault's DEPLOYMENT.md.
 
 ## 1.4.0 - 2026-11-08
 
