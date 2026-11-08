@@ -1,0 +1,168 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="800" viewBox="0 0 1600 800">
+  <title>RivetPanel: bots, game servers, containers and websites in one self-hosted panel</title>
+  <defs>
+    <radialGradient id="glowA" cx="1" cy="0" r="1">
+      <stop offset="0" stop-color="#ea621f" stop-opacity="0.42"/>
+      <stop offset="0.55" stop-color="#ea621f" stop-opacity="0.06"/>
+      <stop offset="1" stop-color="#ea621f" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="glowB" cx="0" cy="1" r="0.7">
+      <stop offset="0" stop-color="#8a3a14" stop-opacity="0.35"/>
+      <stop offset="1" stop-color="#8a3a14" stop-opacity="0"/>
+    </radialGradient>
+    <pattern id="rivets" width="32" height="32" patternUnits="userSpaceOnUse">
+      <circle cx="16" cy="16" r="1.2" fill="#ffffff" fill-opacity="0.07"/>
+    </pattern>
+    <linearGradient id="fade" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#0b0908" stop-opacity="1"/>
+      <stop offset="0.45" stop-color="#0b0908" stop-opacity="0.9"/>
+      <stop offset="1" stop-color="#0b0908" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="bgLogo" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2b201a"/>
+      <stop offset="1" stop-color="#0b0908"/>
+    </linearGradient>
+    <linearGradient id="metal" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ffa45c"/>
+      <stop offset="1" stop-color="#e8561a"/>
+    </linearGradient>
+    <linearGradient id="card" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1c1714"/>
+      <stop offset="1" stop-color="#120f0d"/>
+    </linearGradient>
+    <pattern id="hazard" width="10" height="10" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+      <rect width="10" height="10" fill="#1b1308"/>
+      <rect width="5" height="10" fill="#f2ab3c"/>
+    </pattern>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="150%">
+      <feDropShadow dx="0" dy="24" stdDeviation="28" flood-color="#000000" flood-opacity="0.6"/>
+    </filter>
+    <clipPath id="fleetClip"><rect x="868" y="92" width="636" height="404" rx="18"/></clipPath>
+  </defs>
+
+  <!-- Canvas -->
+  <rect width="1600" height="800" fill="#0b0908"/>
+  <rect width="1600" height="800" fill="url(#rivets)"/>
+  <rect width="1600" height="800" fill="url(#glowA)"/>
+  <rect width="1600" height="800" fill="url(#glowB)"/>
+  <rect width="900" height="800" fill="url(#fade)" opacity="0.75"/>
+
+  <!-- Brand -->
+  <g transform="translate(96 88)">
+    <rect width="68" height="68" rx="16" fill="url(#bgLogo)"/>
+    <rect x="0.75" y="0.75" width="66.5" height="66.5" rx="15.25" fill="none" stroke="#ffffff" stroke-opacity="0.12" stroke-width="1.5"/>
+    <g transform="translate(2 2)">
+      <path d="M12 19a5 5 0 0 1 5-5h25a5 5 0 0 1 5 5v13H12V19Z" fill="#f3ece7"/>
+      <path d="M17 32h35v13a5 5 0 0 1-5 5H17a5 5 0 0 1-5-5V32h5Z" fill="#cfd8dd"/>
+      <path d="M12 32h40" stroke="#0b0908" stroke-opacity=".22" stroke-width="2"/>
+      <circle cx="32" cy="32" r="10" fill="url(#metal)" stroke="#0b0908" stroke-width="3"/>
+      <circle cx="32" cy="32" r="3" fill="#241b16"/>
+    </g>
+  </g>
+  <text x="186" y="135" font-family="IBM Plex Sans" font-weight="600" font-size="38" fill="#f3ece7">RivetPanel</text>
+
+  <!-- Pitch -->
+  <text x="96" y="268" font-family="IBM Plex Mono" font-weight="500" font-size="17" letter-spacing="3.4" fill="#c2a593">SELF-HOSTED · ONE SMALL BINARY · DOCKER-ISOLATED</text>
+  <text font-family="IBM Plex Sans" font-weight="600" font-size="74" fill="#f6efe9" letter-spacing="-1.5">
+    <tspan x="92" y="356">Everything you run,</tspan>
+    <tspan x="92" y="440">riveted to one panel<tspan fill="#f47a3d">.</tspan></tspan>
+  </text>
+  <text font-family="IBM Plex Sans" font-weight="400" font-size="26" fill="#b9aea6">
+    <tspan x="96" y="510">Discord bots, Minecraft and Steam servers, containers</tspan>
+    <tspan x="96" y="546">and websites, with a live console, backups and deploys.</tspan>
+  </text>
+
+  <!-- Chips -->
+  <g font-family="IBM Plex Mono" font-weight="500" font-size="17" fill="#e4dcd6">
+    <rect x="96" y="618" width="154" height="44" rx="10" fill="#ffffff" fill-opacity="0.04" stroke="#ffffff" stroke-opacity="0.14"/>
+    <text x="116" y="646">Go + SQLite</text>
+    <rect x="264" y="618" width="164" height="44" rx="10" fill="#ffffff" fill-opacity="0.04" stroke="#ffffff" stroke-opacity="0.14"/>
+    <text x="284" y="646">~38 MiB idle</text>
+    <rect x="442" y="618" width="216" height="44" rx="10" fill="#f47a3d" fill-opacity="0.12" stroke="#f47a3d" stroke-opacity="0.55"/>
+    <text x="462" y="646" fill="#ffb487">25 one-click apps</text>
+  </g>
+
+  <!-- Fleet card -->
+  <g filter="url(#shadow)">
+    <rect x="868" y="92" width="636" height="404" rx="18" fill="url(#card)"/>
+  </g>
+  <g clip-path="url(#fleetClip)">
+    <rect x="868" y="92" width="636" height="60" fill="#ffffff" fill-opacity="0.02"/>
+    <text x="896" y="129" font-family="IBM Plex Mono" font-weight="500" font-size="15" letter-spacing="3" fill="#9d928a">APPS</text>
+    <text x="1476" y="129" text-anchor="end" font-family="IBM Plex Mono" font-weight="500" font-size="15" letter-spacing="2" fill="#9d928a">3 RUNNING · 1 DEPLOYING</text>
+    <path d="M868 152h636M868 238h636M868 324h636M868 410h636" stroke="#ffffff" stroke-opacity="0.07"/>
+
+    <!-- Row 1: bot -->
+    <rect x="868" y="153" width="5" height="85" fill="#3ecf9e"/>
+    <g transform="translate(898 173)">
+      <rect width="46" height="46" rx="11" fill="#5865f2"/>
+      <rect x="10" y="14" width="26" height="20" rx="6" fill="#ffffff"/>
+      <circle cx="18" cy="24" r="3" fill="#5865f2"/>
+      <circle cx="28" cy="24" r="3" fill="#5865f2"/>
+      <path d="M23 14v-5" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round"/>
+    </g>
+    <text x="964" y="191" font-family="IBM Plex Sans" font-weight="600" font-size="22" fill="#f3ece7">moderation</text>
+    <text x="964" y="219" font-family="IBM Plex Sans" font-size="17" fill="#958a83">Discord bot · discord.js · 112 MiB</text>
+    <circle cx="1378" cy="196" r="5" fill="#3ecf9e"/>
+    <text x="1476" y="202" text-anchor="end" font-family="IBM Plex Sans" font-weight="600" font-size="18" fill="#3ecf9e">Running</text>
+
+    <!-- Row 2: minecraft -->
+    <rect x="868" y="239" width="5" height="85" fill="#3ecf9e"/>
+    <g transform="translate(898 259)">
+      <rect width="46" height="46" rx="11" fill="#6b4a2f"/>
+      <path d="M0 11a11 11 0 0 1 11-11h24a11 11 0 0 1 11 11v8H0Z" fill="#5fa83f"/>
+      <path d="M8 19v6M16 19v3M30 19v5M38 19v3" stroke="#5fa83f" stroke-width="4"/>
+      <rect x="12" y="30" width="5" height="5" fill="#523822"/>
+      <rect x="28" y="34" width="5" height="5" fill="#523822"/>
+    </g>
+    <text x="964" y="277" font-family="IBM Plex Sans" font-weight="600" font-size="22" fill="#f3ece7">survival</text>
+    <text x="964" y="305" font-family="IBM Plex Sans" font-size="17" fill="#958a83">Minecraft · Paper 1.21 · 7 / 20 players</text>
+    <circle cx="1378" cy="282" r="5" fill="#3ecf9e"/>
+    <text x="1476" y="288" text-anchor="end" font-family="IBM Plex Sans" font-weight="600" font-size="18" fill="#3ecf9e">Running</text>
+
+    <!-- Row 3: one-click app -->
+    <rect x="868" y="325" width="5" height="85" fill="#3ecf9e"/>
+    <g transform="translate(898 345)">
+      <rect width="46" height="46" rx="11" fill="#2a2522"/>
+      <rect x="9" y="9" width="12" height="12" rx="2.5" fill="#6f9cff"/>
+      <rect x="25" y="9" width="12" height="12" rx="2.5" fill="#6f9cff" fill-opacity="0.6"/>
+      <rect x="9" y="25" width="12" height="12" rx="2.5" fill="#6f9cff" fill-opacity="0.6"/>
+      <rect x="25" y="25" width="12" height="12" rx="2.5" fill="#6f9cff"/>
+    </g>
+    <text x="964" y="363" font-family="IBM Plex Sans" font-weight="600" font-size="22" fill="#f3ece7">blog</text>
+    <text x="964" y="391" font-family="IBM Plex Sans" font-size="17" fill="#958a83">Compose stack · Ghost + MySQL · 2 containers</text>
+    <circle cx="1378" cy="368" r="5" fill="#3ecf9e"/>
+    <text x="1476" y="374" text-anchor="end" font-family="IBM Plex Sans" font-weight="600" font-size="18" fill="#3ecf9e">Running</text>
+
+    <!-- Row 4: site -->
+    <rect x="868" y="411" width="5" height="85" fill="url(#hazard)"/>
+    <g transform="translate(898 431)">
+      <rect width="46" height="46" rx="11" fill="#2a2522"/>
+      <circle cx="23" cy="23" r="13" fill="none" stroke="#f0ad3d" stroke-width="2.5"/>
+      <ellipse cx="23" cy="23" rx="5.5" ry="13" fill="none" stroke="#f0ad3d" stroke-width="2.5"/>
+      <path d="M10 23h26" stroke="#f0ad3d" stroke-width="2.5"/>
+    </g>
+    <text x="964" y="449" font-family="IBM Plex Sans" font-weight="600" font-size="22" fill="#f3ece7">docs</text>
+    <text x="964" y="477" font-family="IBM Plex Sans" font-size="17" fill="#958a83">Website · Astro build · push to main</text>
+    <circle cx="1358" cy="454" r="5" fill="#f2ab3c"/>
+    <text x="1476" y="460" text-anchor="end" font-family="IBM Plex Sans" font-weight="600" font-size="18" fill="#f2ab3c">Deploying</text>
+  </g>
+  <rect x="868.5" y="92.5" width="635" height="403" rx="17.5" fill="none" stroke="#ffffff" stroke-opacity="0.1"/>
+
+  <!-- Console card -->
+  <g filter="url(#shadow)">
+    <rect x="948" y="526" width="580" height="214" rx="16" fill="#161517"/>
+  </g>
+  <rect x="948.5" y="526.5" width="579" height="213" rx="15.5" fill="none" stroke="#ffffff" stroke-opacity="0.1"/>
+  <circle cx="976" cy="554" r="6" fill="#ff6a55" fill-opacity="0.85"/>
+  <circle cx="998" cy="554" r="6" fill="#f2ab3c" fill-opacity="0.85"/>
+  <circle cx="1020" cy="554" r="6" fill="#3ecf9e" fill-opacity="0.85"/>
+  <text x="1500" y="559" text-anchor="end" font-family="IBM Plex Mono" font-size="14" fill="#7d7a77">live console</text>
+  <path d="M948 578h580" stroke="#ffffff" stroke-opacity="0.06"/>
+  <g font-family="IBM Plex Mono" font-size="16" xml:space="preserve">
+    <text x="972" y="612"><tspan fill="#6f6c69">12:04:31 </tspan><tspan fill="#8ea7bf">survival </tspan><tspan fill="#e4e2e0">Done (4.2s)! For help, type "help"</tspan></text>
+    <text x="972" y="642"><tspan fill="#6f6c69">12:04:33 </tspan><tspan fill="#8ea7bf">moderation </tspan><tspan fill="#e4e2e0">Logged in, 14 guilds</tspan></text>
+    <text x="972" y="672"><tspan fill="#6f6c69">12:04:38 </tspan><tspan fill="#8ea7bf">docs </tspan><tspan fill="#e4e2e0">build </tspan><tspan fill="#3ecf9e">✓</tspan><tspan fill="#e4e2e0"> 212 pages in 9.8s</tspan></text>
+    <text x="972" y="708"><tspan fill="#f47a3d">› </tspan><tspan fill="#e4e2e0">say Restarting in 5 minutes</tspan><tspan fill="#f47a3d">▍</tspan></text>
+  </g>
+</svg>

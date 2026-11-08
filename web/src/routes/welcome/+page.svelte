@@ -21,7 +21,7 @@
 				{ icon: 'github', title: 'Deploy from GitHub', text: 'Paste any public repository or pick your own. The panel detects language, commands and variables, deploys on push and can roll back.' },
 				{ icon: 'terminal', title: 'Live console', text: 'Stream output, send input, and see the exact lifecycle state with live CPU, memory, disk and network gauges.' },
 				{ icon: 'package', title: 'Databases and packages', text: 'Private PostgreSQL, Redis, MongoDB or MariaDB add-ons per bot, and a package manager for npm, PyPI, crates.io and Go modules.' },
-				{ icon: 'globe', title: 'Public pages and sites', text: 'Give a bot a generated page or host static sites, starting from five templates, with custom domains, immutable releases and rollback.' },
+				{ icon: 'globe', title: 'Bot Sites', text: 'Every Discord bot can have a public page: generated with live widgets, or your own HTML, CSS and JavaScript published as immutable releases.' },
 				{ icon: 'chart', title: 'Bot insights', text: 'Guilds, latency, commands and events pushed by small SDKs for six languages, kept private to the bot’s team.' }
 			]
 		},
@@ -36,6 +36,31 @@
 				{ icon: 'gamepad', title: 'Steam dedicated servers', text: 'Valheim, Rust and Project Zomboid installed with an anonymous SteamCMD login, saved with the game’s own stop signal.' },
 				{ icon: 'download', title: 'Plugins and mods', text: 'Install from Modrinth with SHA-512 verification. Manage players, whitelists and server.properties from the panel.' },
 				{ icon: 'upload', title: 'Bring your own eggs', text: 'Convert a Pterodactyl egg into a server type. Everything that could not be mapped is listed for review first.' }
+			]
+		},
+		{
+			id: 'containers',
+			eyebrow: 'Containers and one-click apps',
+			title: 'Any image, any Compose file, 25 apps ready to go',
+			lead: 'Run a Docker image from an allowed registry, or import a docker-compose.yml and see exactly what will be created before anything starts. Containers run as a non-root user with a read-only root file system.',
+			preview: true,
+			features: [
+				{ icon: 'rocket', title: 'One-click apps', text: 'Ghost, Vaultwarden, n8n, Gitea, Uptime Kuma, Miniflux and more, installed with their database and admin account already set up.' },
+				{ icon: 'layers', title: 'Compose stacks', text: 'Import a Compose file as a stack whose services reach each other by name. Privileged mode, host namespaces and the Docker socket are refused.' },
+				{ icon: 'box', title: 'Containers as apps', text: 'Each container gets the same console, files, variables, ports, volumes, backups and limits as every other app.' },
+				{ icon: 'terminal', title: 'In-browser terminal', text: 'A shell inside the running container with its own user and limits, never the host. Every terminal opened is audited.' }
+			]
+		},
+		{
+			id: 'sites',
+			eyebrow: 'Websites',
+			title: 'From a ZIP file to a running web app',
+			lead: 'Sites live on their own listener with your domains. Upload files, build on every push, or run a full web app from GitHub with its own variables, data folder and database.',
+			features: [
+				{ icon: 'file', title: 'Static sites', text: 'Upload a ZIP, edit in the browser or connect GitHub. _redirects and _headers files, proper caching and compression.' },
+				{ icon: 'bolt', title: 'Static builds', text: 'Vite, SvelteKit, Astro, Next.js export and Nuxt, built again on every push to the branch you choose.' },
+				{ icon: 'server', title: 'Web apps', text: 'Node.js and TypeScript, PHP and Laravel, Python, Go and Rust apps running behind the site address, with health checks and logs.' },
+				{ icon: 'globe', title: 'Your domains', text: 'Custom domains with DNS verification, certificates on demand through your reverse proxy, and instant rollback to any release.' }
 			]
 		},
 		{
@@ -80,6 +105,8 @@
 	const nav = [
 		{ href: '#bots', label: 'Bots' },
 		{ href: '#games', label: 'Game servers' },
+		{ href: '#containers', label: 'Containers' },
+		{ href: '#sites', label: 'Websites' },
 		{ href: '#infra', label: 'Infrastructure' },
 		{ href: '#identity', label: 'Teams' },
 		{ href: '#support', label: 'Support' },
@@ -111,17 +138,17 @@
 	function copy() {
 		navigator.clipboard?.writeText(install).then(() => toast('Command copied', 'success'));
 	}
-	const fleet: { name: string; meta: string; state: string; tone: string; game?: string }[] = [
+	const fleet: { name: string; meta: string; state: string; tone: string; game?: string; icon?: IconName }[] = [
 		{ name: 'moderation', meta: 'discord.js · 256 MiB', state: 'Running', tone: 'run' },
 		{ name: 'survival', meta: 'Paper 1.21 · 4/20 players', state: 'Running', tone: 'run', game: 'minecraft-paper' },
-		{ name: 'music-rs', meta: 'Rust · building', state: 'Building', tone: 'warn' },
-		{ name: 'vikings', meta: 'Valheim · node eu-2', state: 'Installing', tone: 'warn', game: 'steam-valheim' }
+		{ name: 'blog', meta: 'Compose stack · Ghost + MySQL', state: 'Running', tone: 'run', icon: 'layers' },
+		{ name: 'docs', meta: 'Website · Astro build', state: 'Deploying', tone: 'warn', icon: 'globe' }
 	];
 </script>
 
 <svelte:head>
-	<title>RivetPanel · Self-hosted bot and game server hosting</title>
-	<meta name="description" content="Host Discord bots and Minecraft or Steam game servers on your own machines: container isolation, GitHub deploys, backups, remote nodes, teams, support and an AI assistant in one small binary." />
+	<title>RivetPanel · Self-hosted bots, game servers, containers and websites</title>
+	<meta name="description" content="Host Discord bots, Minecraft and Steam game servers, Docker containers, Compose stacks and websites on your own machines: container isolation, GitHub deploys, 25 one-click apps, backups, remote nodes, teams and an AI assistant in one small binary." />
 </svelte:head>
 
 <div class="landing">
@@ -150,9 +177,9 @@
 		<section>
 			<div class="mx-auto grid max-w-6xl items-center gap-12 px-5 pt-14 pb-16 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)] lg:pt-20">
 				<div>
-					<p class="eyebrow">Self-hosted bot, game server and website hosting</p>
-					<h1 class="mt-3 text-[2.25rem] leading-[1.1] font-semibold tracking-tight sm:text-[2.875rem]">Run every bot and server.<br />Know its state.</h1>
-					<p class="mt-4 max-w-xl text-title leading-relaxed text-muted">One small binary turns your machines into a host for Discord bots, Minecraft or Steam game servers and websites: container isolation, GitHub deploys, crash-safe backups, remote nodes, teams, support tools and an AI assistant.</p>
+					<p class="eyebrow">Self-hosted · one small binary · Docker-isolated</p>
+					<h1 class="mt-3 text-[2.25rem] leading-[1.1] font-semibold tracking-tight sm:text-[2.875rem]">Everything you run,<br />riveted to one panel<span class="text-action">.</span></h1>
+					<p class="mt-4 max-w-xl text-title leading-relaxed text-muted">Discord bots, Minecraft and Steam servers, Docker containers and websites on your own machines. Each runs locked in its own container, with a live console, GitHub deploys, crash-safe backups and an AI assistant.</p>
 					<div class="mt-7 flex flex-wrap gap-3">
 						<a href={session.user ? '/dashboard' : '/login'} class="btn btn-primary h-10 px-4">{session.user ? 'Open your panel' : 'Sign in to your panel'}</a>
 						<a href="#self-host" class="btn h-10 px-4"><Icon name="download" size={15} />Install it</a>
@@ -165,16 +192,16 @@
 				</div>
 
 				<!-- Product preview -->
-				<div class="grid gap-3" aria-label="Preview of the overview with bots and game servers" role="img">
+				<div class="grid gap-3" aria-label="Preview of the apps list with a bot, a game server, a Compose stack and a website" role="img">
 					<div class="card p-5">
 						<div class="flex items-center justify-between">
-							<p class="eyebrow">Fleet</p>
-							<span class="pill" data-tone="run"><span class="side-dot !m-0 !size-1.5" data-tone="run"></span>2 running</span>
+							<p class="eyebrow">Apps</p>
+							<span class="pill" data-tone="run"><span class="side-dot !m-0 !size-1.5" data-tone="run"></span>3 running</span>
 						</div>
 						<ul class="mt-4 grid gap-2">
 							{#each fleet as b (b.name)}
 								<li class="spine flex items-center gap-3 rounded-tile border border-rule-soft bg-paper py-2.5 pr-4 pl-5" data-tone={b.tone} data-busy={b.tone === 'warn'}>
-									{#if b.game}<GameIcon type={{ slug: b.game }} size={32} />{:else}<span class="grid size-8 place-items-center rounded-tile bg-paper-2/70 text-action"><Icon name="discord" size={16} /></span>{/if}
+									{#if b.game}<GameIcon type={{ slug: b.game }} size={32} />{:else}<span class="grid size-8 place-items-center rounded-tile bg-paper-2/70 text-action"><Icon name={b.icon ?? 'discord'} size={16} /></span>{/if}
 									<div class="min-w-0 flex-1">
 										<p class="font-semibold">{b.name}</p>
 										<p class="truncate text-small text-muted">{b.meta}</p>
@@ -270,7 +297,7 @@
 				<p class="eyebrow">How it works</p>
 				<h2 class="mt-3 text-[1.75rem] leading-tight font-semibold tracking-tight">Three steps to something running</h2>
 				<ol class="mt-8 grid gap-6 md:grid-cols-3">
-					{#each [{ t: 'Start the panel', d: 'One container (or one binary with systemd) next to Docker. It prints a setup code in its log.' }, { t: 'Finish the setup', d: 'Create the administrator, set the address, and optionally connect GitHub, Discord, single sign-on and email in the browser.' }, { t: 'Create from the New menu', d: 'Deploy a bot from a template or repository, or pick a game and a version. Watch the build or install and the console live.' }] as s, i (s.t)}
+					{#each [{ t: 'Start the panel', d: 'One container (or one binary with systemd) next to Docker. It prints a setup code in its log.' }, { t: 'Finish the setup', d: 'Create the administrator, set the address, and optionally connect GitHub, Discord, single sign-on and email in the browser.' }, { t: 'Create from the New menu', d: 'Deploy a bot from a template or repository, pick a game and a version, install a one-click app or connect a site. Watch the build and the console live.' }] as s, i (s.t)}
 						<li class="border-t border-rule pt-4">
 							<h3 class="flex items-baseline gap-2.5 text-title font-semibold"><span class="font-mono text-small text-muted">{i + 1}.</span>{s.t}</h3>
 							<p class="mt-1.5 text-small leading-relaxed text-muted">{s.d}</p>
@@ -319,7 +346,7 @@
 	<footer class="border-t border-rule-soft">
 		<div class="mx-auto flex max-w-6xl flex-wrap items-center gap-4 px-5 py-8 text-small text-muted">
 			<img src="/favicon.svg" alt="" width="20" height="20" class="rounded-control" />
-			<span>RivetPanel · self-hosted bot and game server hosting</span>
+			<span>RivetPanel · self-hosted bots, game servers, containers and websites</span>
 			<span class="flex-1"></span>
 			<a href="/status" class="hover:text-ink">Status</a>
 			<a href="/help" class="hover:text-ink">Help center</a>

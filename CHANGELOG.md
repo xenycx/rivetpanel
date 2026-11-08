@@ -6,6 +6,24 @@ authoritative current version.
 
 ## Unreleased
 
+## 1.1.2 - 2026-11-08
+
+### Changed
+
+- **The landing page covers everything the panel runs.** The public home
+  page leads with "Everything you run, riveted to one panel", shows a bot, a
+  game server, a Compose stack and a website in its preview, and has new
+  **Containers** (one-click apps, Compose stacks, the container terminal) and
+  **Websites** (static sites, static builds, web apps, custom domains)
+  sections with matching navigation links. Page title, description and footer
+  now mention containers and websites.
+- **Rewritten README with illustrated headers.** The GitHub README is now a
+  guided introduction (what it runs, why people pick it, a quick start, the
+  boundaries it does not enforce, and a documentation map) with a hero banner,
+  a "what it runs" overview and a "how it fits together" diagram. The images
+  and their SVG sources live in `docs/readme/`. Known limitations are unchanged
+  and still listed, condensed, under "Honest about the boundaries".
+
 ## 1.1.1 - 2026-11-08
 
 ### Added

@@ -1,0 +1,141 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="600" viewBox="0 0 1600 600">
+  <title>What RivetPanel runs: bots, game servers, containers and stacks, websites</title>
+  <defs>
+    <radialGradient id="glow" cx="0.5" cy="0" r="0.9">
+      <stop offset="0" stop-color="#ea621f" stop-opacity="0.22"/>
+      <stop offset="1" stop-color="#ea621f" stop-opacity="0"/>
+    </radialGradient>
+    <pattern id="rivets" width="32" height="32" patternUnits="userSpaceOnUse">
+      <circle cx="16" cy="16" r="1.2" fill="#ffffff" fill-opacity="0.06"/>
+    </pattern>
+    <linearGradient id="card" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1d1815"/>
+      <stop offset="1" stop-color="#110e0c"/>
+    </linearGradient>
+    <linearGradient id="stage" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.035"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1600" height="600" fill="#0b0908"/>
+  <rect width="1600" height="600" fill="url(#rivets)"/>
+  <rect width="1600" height="600" fill="url(#glow)"/>
+
+  <text x="800" y="70" text-anchor="middle" font-family="IBM Plex Mono" font-weight="500" font-size="17" letter-spacing="3.4" fill="#c2a593">ONE APPS LIST · FOUR KINDS OF WORKLOAD</text>
+
+  <!-- Card frames -->
+  <g>
+    <rect x="64" y="104" width="350" height="440" rx="18" fill="url(#card)"/>
+    <rect x="438" y="104" width="350" height="440" rx="18" fill="url(#card)"/>
+    <rect x="812" y="104" width="350" height="440" rx="18" fill="url(#card)"/>
+    <rect x="1186" y="104" width="350" height="440" rx="18" fill="url(#card)"/>
+    <rect x="64" y="104" width="350" height="190" rx="18" fill="url(#stage)"/>
+    <rect x="438" y="104" width="350" height="190" rx="18" fill="url(#stage)"/>
+    <rect x="812" y="104" width="350" height="190" rx="18" fill="url(#stage)"/>
+    <rect x="1186" y="104" width="350" height="190" rx="18" fill="url(#stage)"/>
+    <g fill="none" stroke="#ffffff" stroke-opacity="0.1">
+      <rect x="64.5" y="104.5" width="349" height="439" rx="17.5"/>
+      <rect x="438.5" y="104.5" width="349" height="439" rx="17.5"/>
+      <rect x="812.5" y="104.5" width="349" height="439" rx="17.5"/>
+      <rect x="1186.5" y="104.5" width="349" height="439" rx="17.5"/>
+    </g>
+  </g>
+
+  <!-- 1. Bots: a bot head with chat bubbles -->
+  <g transform="translate(239 200)">
+    <rect x="-142" y="-52" width="92" height="40" rx="12" fill="#2a2522"/>
+    <path d="M-64 -12l10 12 4 -12z" fill="#2a2522"/>
+    <text x="-96" y="-26" text-anchor="middle" font-family="IBM Plex Mono" font-size="15" fill="#d6cdc6">/ping</text>
+    <rect x="34" y="8" width="96" height="40" rx="12" fill="#5865f2"/>
+    <path d="M40 8l-8 -10 18 10z" fill="#5865f2"/>
+    <text x="82" y="34" text-anchor="middle" font-family="IBM Plex Mono" font-size="15" fill="#ffffff">pong 42ms</text>
+    <path d="M0 -58v-14" stroke="#cfd8dd" stroke-width="4" stroke-linecap="round"/>
+    <circle cx="0" cy="-76" r="7" fill="#f47a3d"/>
+    <rect x="-46" y="-58" width="92" height="84" rx="22" fill="#cfd8dd"/>
+    <rect x="-34" y="-40" width="68" height="40" rx="12" fill="#161517"/>
+    <circle cx="-14" cy="-20" r="7" fill="#3ecf9e"/>
+    <circle cx="14" cy="-20" r="7" fill="#3ecf9e"/>
+    <path d="M-16 12h32" stroke="#8a969c" stroke-width="4" stroke-linecap="round"/>
+  </g>
+
+  <!-- 2. Game servers: isometric grass block -->
+  <g transform="translate(613 206)">
+    <path d="M0 -78l66 34v76l-66 34l-66 -34v-76z" fill="#6b4a2f"/>
+    <path d="M0 -78l66 34l-66 34l-66 -34z" fill="#6fbf4a"/>
+    <path d="M-66 -44l66 34v24l-66 -34z" fill="#5fa83f"/>
+    <path d="M66 -44l-66 34v24l66 -34z" fill="#4e9133"/>
+    <path d="M-66 -20l66 34v52l-66 -34z" fill="#7a5537"/>
+    <path d="M66 -20l-66 34v52l66 -34z" fill="#5e412a"/>
+    <path d="M-50 -12v12M-34 -4v8M-14 6v10" stroke="#5fa83f" stroke-width="7"/>
+    <path d="M50 -12v10M30 -2v12M14 6v8" stroke="#4e9133" stroke-width="7"/>
+    <rect x="-44" y="22" width="8" height="8" fill="#5a3e27"/>
+    <rect x="24" y="30" width="8" height="8" fill="#47311f"/>
+    <path d="M-12 -52l12 6 12-6" stroke="#8ad464" stroke-width="5" fill="none"/>
+    <g font-family="IBM Plex Mono" font-weight="500" font-size="14">
+      <rect x="64" y="-84" width="80" height="30" rx="8" fill="#0f2a22" stroke="#3ecf9e" stroke-opacity="0.5"/>
+      <text x="104" y="-64" text-anchor="middle" fill="#3ecf9e">7 / 20</text>
+    </g>
+  </g>
+
+  <!-- 3. Containers and stacks: stacked containers -->
+  <g transform="translate(987 204)">
+    <g>
+      <rect x="-104" y="6" width="96" height="58" rx="8" fill="#2458d3"/>
+      <rect x="4" y="6" width="96" height="58" rx="8" fill="#6f9cff"/>
+      <rect x="-50" y="-60" width="96" height="58" rx="8" fill="#4b7cf0"/>
+      <g stroke="#0b1530" stroke-opacity="0.35" stroke-width="3">
+        <path d="M-88 16v38M-72 16v38M-56 16v38M-40 16v38M-24 16v38"/>
+        <path d="M20 16v38M36 16v38M52 16v38M68 16v38M84 16v38"/>
+        <path d="M-34 -50v38M-18 -50v38M-2 -50v38M14 -50v38M30 -50v38"/>
+      </g>
+    </g>
+    <path d="M-104 74h204" stroke="#ffffff" stroke-opacity="0.12" stroke-width="2"/>
+    <rect x="62" y="-70" width="92" height="30" rx="8" fill="#161517" stroke="#ffffff" stroke-opacity="0.16"/>
+    <text x="108" y="-50" text-anchor="middle" font-family="IBM Plex Mono" font-size="14" fill="#d6cdc6">compose</text>
+  </g>
+
+  <!-- 4. Websites: browser window -->
+  <g transform="translate(1361 200)">
+    <rect x="-118" y="-74" width="236" height="150" rx="12" fill="#ece6e1"/>
+    <path d="M-118 -62a12 12 0 0 1 12 -12h212a12 12 0 0 1 12 12v18h-236z" fill="#cfc6bf"/>
+    <circle cx="-100" cy="-59" r="4.5" fill="#ff6a55"/>
+    <circle cx="-86" cy="-59" r="4.5" fill="#f2ab3c"/>
+    <circle cx="-72" cy="-59" r="4.5" fill="#3ecf9e"/>
+    <rect x="-56" y="-66" width="150" height="15" rx="7.5" fill="#ece6e1"/>
+    <path d="M-48 -58.5h4" stroke="#3ea17a" stroke-width="5" stroke-linecap="round"/>
+    <rect x="-38" y="-62" width="96" height="7" rx="3.5" fill="#b3aaa3"/>
+    <rect x="-100" y="-30" width="122" height="14" rx="4" fill="#1b1a19"/>
+    <rect x="-100" y="-8" width="90" height="8" rx="4" fill="#9a918a"/>
+    <rect x="-100" y="6" width="104" height="8" rx="4" fill="#9a918a"/>
+    <rect x="-100" y="26" width="64" height="24" rx="6" fill="#f47a3d"/>
+    <rect x="36" y="-30" width="64" height="80" rx="8" fill="#f47a3d" fill-opacity="0.22"/>
+    <circle cx="68" cy="2" r="18" fill="#f47a3d"/>
+    <rect x="-56" y="56" width="0" height="0"/>
+    <rect x="54" y="62" width="88" height="30" rx="8" fill="#161517" stroke="#3ecf9e" stroke-opacity="0.5"/>
+    <text x="98" y="82" text-anchor="middle" font-family="IBM Plex Mono" font-size="14" fill="#3ecf9e">https ✓</text>
+  </g>
+
+  <!-- Text: titles, descriptions, tags -->
+  <g font-family="IBM Plex Sans">
+    <g font-weight="600" font-size="30" fill="#f6efe9">
+      <text x="96" y="348">Bots</text>
+      <text x="470" y="348">Game servers</text>
+      <text x="844" y="348">Containers</text>
+      <text x="1218" y="348">Websites</text>
+    </g>
+    <g font-size="19" fill="#b2a79f">
+      <text x="96" y="388"><tspan x="96">Discord bots and workers in</tspan><tspan x="96" dy="27">Node.js, Python, Rust, Go,</tspan><tspan x="96" dy="27">Java, Ruby or PHP.</tspan></text>
+      <text x="470" y="388"><tspan x="470">Paper, Fabric, Forge and</tspan><tspan x="470" dy="27">friends, plus Valheim, Rust</tspan><tspan x="470" dy="27">and Project Zomboid.</tspan></text>
+      <text x="844" y="388"><tspan x="844">Any allowed image, or a</tspan><tspan x="844" dy="27">whole docker-compose.yml</tspan><tspan x="844" dy="27">imported as one stack.</tspan></text>
+      <text x="1218" y="388"><tspan x="1218">Static sites, Vite and Astro</tspan><tspan x="1218" dy="27">builds, or running web apps</tspan><tspan x="1218" dy="27">on your own domains.</tspan></text>
+    </g>
+  </g>
+  <g font-family="IBM Plex Mono" font-weight="500" font-size="14" fill="#f4a477" letter-spacing="0.5">
+    <text x="96" y="510">deploy from GitHub</text>
+    <text x="470" y="510">Modrinth · player counts</text>
+    <text x="844" y="510">25 one-click apps</text>
+    <text x="1218" y="510">instant rollback</text>
+  </g>
+  <path d="M96 478h286M470 478h286M844 478h286M1218 478h286" stroke="#ffffff" stroke-opacity="0.08"/>
+</svg>
