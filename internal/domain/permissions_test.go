@@ -34,6 +34,20 @@ func TestMaskBotPermsAndCan(t *testing.T) {
 	if !HasPerm(user.MaskBotPerms(PermAll), PermConfigure) || HasPerm(custom.MaskBotPerms(PermFullAdmin), PermConfigure) {
 		t.Fatal("full access implies configure; a role without it gets none")
 	}
+	// A share that ticks Configuration grants it alone, within the role.
+	if got := cfg.MaskBotPerms(PermViewConsole | PermConfigure); got != PermViewConsole|PermConfigure {
+		t.Fatalf("configure grant: %b", got)
+	}
+	if got := user.MaskBotPerms(PermViewConsole | PermConfigure); got != PermViewConsole|PermConfigure {
+		t.Fatalf("configure grant, built-in user: %b", got)
+	}
+	if got := custom.MaskBotPerms(PermViewConsole | PermConfigure); got != PermViewConsole {
+		t.Fatalf("configure grant beyond the role: %b", got)
+	}
+	four := User{Role: RoleUser, RoleID: "f", CustomPermissions: []string{PermBotsConsole, PermBotsPower, PermBotsFiles, PermBotsEnv}}
+	if got := four.MaskBotPerms(PermConfigure); got != PermConfigure || !four.CanConfigure() || custom.CanConfigure() {
+		t.Fatalf("a role with all four may configure: %b", got)
+	}
 	unverified := User{Role: RoleUser, Withheld: []string{PermBotsCreate}}
 	if unverified.Can(PermBotsCreate) || !unverified.Can(PermBotsFiles) {
 		t.Fatal("policy not applied")

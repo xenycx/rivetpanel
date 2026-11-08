@@ -1,8 +1,9 @@
 <script lang="ts">
 	import { appIcon } from '$lib/appIcons';
+	import Logo from '$lib/components/ui/Logo.svelte';
 
-	// The logo of a one-click app on a soft tile; its initial when there is
-	// none. Decorative: the name is always written next to it.
+	// The logo of a one-click app on a soft tile; a generated DiceBear logo
+	// when there is none. Decorative: the name is always written next to it.
 	let { id, name = '', size = 40, class: cls = '' }: { id: string | undefined | null; name?: string; size?: number; class?: string } = $props();
 	const src = $derived(appIcon(id));
 	const dark = $derived(appIcon(id, true));
@@ -16,7 +17,7 @@
 		<img src={src} alt="" width={px} height={px} class="object-contain {dark !== src ? 'app-icon-light' : ''} {invert ? 'app-icon-invert' : ''}" loading="lazy" decoding="async" draggable="false" />
 		{#if dark !== src}<img src={dark} alt="" width={px} height={px} class="app-icon-dark object-contain" loading="lazy" decoding="async" draggable="false" />{/if}
 	{:else}
-		<span class="font-semibold text-action" style="font-size: {Math.round(size * 0.42)}px">{(name || id || '?').slice(0, 1).toUpperCase()}</span>
+		<Logo kind="app" seed={id || name || '?'} class="size-full" />
 	{/if}
 </span>
 

@@ -18,6 +18,7 @@
 		[Perm.power, 'Start, stop and restart it'],
 		[Perm.files, 'Edit files, packages, deployments and backups'],
 		[Perm.env, 'Read and change environment variables'],
+		[Perm.configure, 'Change its runtime, start command, build command and auto-restart'],
 		[Perm.admin, 'Change every setting (full admin)']
 	];
 

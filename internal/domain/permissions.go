@@ -71,7 +71,7 @@ var Permissions = []PermissionInfo{
 	{PermBotsPower, "resources", "Power and console input", "Start, stop, restart and kill; send console input and commands."},
 	{PermBotsFiles, "resources", "Files", "File manager, SFTP, packages and AI file changes."},
 	{PermBotsEnv, "resources", "Environment variables", "Read and change environment variables."},
-	{PermBotsConfigure, "resources", "Configuration and startup", "A bot's Configuration tab: runtime, start command, build command and auto-restart, on bots the account owns or fully accesses, without console, power, files or variables."},
+	{PermBotsConfigure, "resources", "Configuration and startup", "A bot's Configuration tab: runtime, start command, build command and auto-restart, on own bots, full-access shares and shares that tick Configuration, without console, power, files or variables."},
 	{PermBotsBackups, "resources", "Backups", "Create, restore, verify and delete backups."},
 	{PermBotsDeploy, "resources", "Deployments", "Link GitHub repositories, deploy, publish and push."},
 	{PermBotsShare, "resources", "Sharing", "Share apps with other accounts, invitations and ownership transfer."},
@@ -224,6 +224,8 @@ func (u User) MaskBotPerms(mask int) int {
 		return mask
 	}
 	full := mask&PermFullAdmin != 0
+	configure := full || mask&PermConfigure != 0
+	mask &^= PermConfigure
 	if full {
 		mask = PermAll
 	}
@@ -234,13 +236,28 @@ func (u User) MaskBotPerms(mask int) int {
 	}
 	if mask != PermAll {
 		mask &^= PermFullAdmin
-		// Full access the role trimmed still covers a bot's startup
-		// configuration when the role grants that on its own.
-		if full && u.Can(PermBotsConfigure) {
+		// A Configuration grant, or full access the role trimmed, keeps a
+		// bot's startup configuration when the role allows that.
+		if configure && u.CanConfigure() {
 			mask |= PermConfigure
 		}
 	}
 	return mask
+}
+
+// CanConfigure reports whether the role allows a bot's startup
+// configuration: bots.configure, or all four per-bot permissions (which
+// always gave full access, and with it the configuration).
+func (u User) CanConfigure() bool {
+	if u.Can(PermBotsConfigure) {
+		return true
+	}
+	for _, b := range botPermBits {
+		if !u.Can(b.perm) {
+			return false
+		}
+	}
+	return true
 }
 
 // CanBotBit reports whether the role allows a single per-bot permission bit

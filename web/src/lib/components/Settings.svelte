@@ -10,6 +10,7 @@
 	import Notice from '$lib/components/ui/Notice.svelte';
 	import SettingsSection from '$lib/components/ui/SettingsSection.svelte';
 	import LogoEditor from '$lib/components/LogoEditor.svelte';
+	import GameIcon from '$lib/components/ui/GameIcon.svelte';
 	import Icon from '$lib/components/ui/Icon.svelte';
 	import Notifications from '$lib/components/Notifications.svelte';
 	import ResourcePicker from '$lib/components/ResourcePicker.svelte';
@@ -196,12 +197,14 @@
 
 {#if isGame}
 	<SettingsSection title="Logo" description="Shown in the server list, the sidebar and the server's header. Without a custom logo the server type's icon is used.">
-		<LogoEditor src={bot.logo_url} custom={bot.custom_logo} fallbackLabel={bot.name.slice(0, 2).toUpperCase()} busy={logoBusy}
-			onUpload={(image) => logo('PUT', { image })} onRemove={() => logo('DELETE')} />
+		<LogoEditor src={bot.logo_url} custom={bot.custom_logo} kind="bot" seed={bot.id} busy={logoBusy}
+			onUpload={(image) => logo('PUT', { image })} onRemove={() => logo('DELETE')}>
+			{#snippet fallback()}<GameIcon type={{ slug: bot.blueprint_id }} size={64} />{/snippet}
+		</LogoEditor>
 	</SettingsSection>
 {:else}
-	<SettingsSection title="Logo" description="Shown in the bot list, the sidebar and on the bot's public page. Without a custom logo the bot's Discord avatar is used: it arrives through the telemetry SDK, or you can get it now with the bot's token.">
-		<LogoEditor src={bot.logo_url} custom={bot.custom_logo} fallbackLabel={bot.name.slice(0, 2).toUpperCase()} busy={logoBusy}
+	<SettingsSection title="Logo" description="Shown in the bot list, the sidebar and on the bot's public page. Without a custom logo the bot's Discord avatar is used: it arrives through the telemetry SDK, or you can get it now with the bot's token. With neither, the panel draws one from the bot's ID.">
+		<LogoEditor src={bot.logo_url} custom={bot.custom_logo} kind={bot.kind === 'container' ? 'container' : 'bot'} seed={bot.id} busy={logoBusy}
 			onUpload={(image) => logo('PUT', { image })} onRemove={() => logo('DELETE')}>
 			<button type="button" class="btn btn-sm" disabled={logoBusy} onclick={() => logo('POST')} title="Uses the bot token stored in this bot's variables"><Icon name="discord" size={14} />Get avatar from Discord</button>
 		</LogoEditor>

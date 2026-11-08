@@ -11,6 +11,7 @@
 	import StatusBadge from '$lib/components/ui/StatusBadge.svelte';
 	import GameIcon from '$lib/components/ui/GameIcon.svelte';
 	import Icon from '$lib/components/ui/Icon.svelte';
+	import Logo from '$lib/components/ui/Logo.svelte';
 	import Menu, { type MenuItem } from '$lib/components/ui/Menu.svelte';
 	import type { Snippet } from 'svelte';
 
@@ -53,7 +54,6 @@
 	});
 	const runner = $derived(session.features.runner);
 	const runtimeName = (id: string) => runtimes.find((r) => r.id === id)?.display_name ?? id;
-	const runtimeTag: Record<string, string> = { nodejs: 'JS', python: 'PY', rust: 'RS', go: 'GO', java: 'JV', ruby: 'RB' };
 	// A container's image without the Docker Hub defaults: nginx:1.27, ghcr.io/o/app:v1.
 	const shortImage = (ref: string) => ref.replace(/^docker\.io\/library\//, '').replace(/^docker\.io\//, '');
 	const typeLine = (b: Bot) =>
@@ -141,14 +141,10 @@
 				<span role="cell">{#if can(b, Perm.power) && runner}<input type="checkbox" aria-label="Select {b.name}" bind:checked={selected[b.id]} />{/if}</span>
 			{/if}
 			<div class="flex min-w-0 items-center gap-3" role="cell">
-				{#if b.logo_url}
-					<img src={b.logo_url} alt="" class="size-8 shrink-0 rounded-control object-cover" referrerpolicy="no-referrer" data-vt-icon={b.id} />
-				{:else if b.kind === 'game'}
+				{#if b.kind === 'game' && !b.logo_url}
 					<span class="grid shrink-0" data-vt-icon={b.id}><GameIcon type={blueprints[b.blueprint_id ?? '']} size={32} /></span>
-				{:else if b.kind === 'container'}
-					<span class="grid size-8 shrink-0 place-items-center rounded-control bg-paper-2 text-muted" aria-hidden="true" data-vt-icon={b.id}><Icon name="box" size={15} /></span>
 				{:else}
-					<span class="grid size-8 shrink-0 place-items-center rounded-control bg-paper-2 font-mono text-[11px] font-medium text-muted" aria-hidden="true" data-vt-icon={b.id}>{b.template_id === 'discordts' ? 'TS' : (runtimeTag[b.runtime] ?? b.runtime.slice(0, 2).toUpperCase())}</span>
+					<Logo src={b.logo_url} kind={b.kind === 'container' ? 'container' : 'bot'} seed={b.id} class="size-8 rounded-control" data-vt-icon={b.id} />
 				{/if}
 				<div class="min-w-0">
 					<p class="flex min-w-0 items-center gap-1.5">

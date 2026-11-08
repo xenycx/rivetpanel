@@ -7,6 +7,7 @@
 	import { session } from '$lib/session.svelte';
 	import { loadWorkspaces, selectWorkspace, workspaces, wsName } from '$lib/workspaces.svelte';
 	import Icon from '$lib/components/ui/Icon.svelte';
+	import Logo from '$lib/components/ui/Logo.svelte';
 	import Notice from '$lib/components/ui/Notice.svelte';
 	import Skeleton from '$lib/components/ui/Skeleton.svelte';
 	import SettingsSection from '$lib/components/ui/SettingsSection.svelte';
@@ -58,7 +59,7 @@
 			{#each workspaces.list as w (w.id)}
 				<li class="card flex flex-col p-4">
 					<div class="flex items-start gap-3">
-						<span class="grid size-10 shrink-0 place-items-center rounded-tile bg-action/12 font-mono text-small font-semibold text-action" aria-hidden="true">{wsName(w).slice(0, 2).toUpperCase()}</span>
+						<Logo kind="workspace" seed={w.id} class="size-10 rounded-tile" />
 						<div class="min-w-0 flex-1">
 							<a href="/settings/workspaces/{w.id}" class="block truncate font-semibold hover:underline">{wsName(w)}</a>
 							<p class="text-small text-muted">{w.role ? roleText[w.role] : 'Administrator view'}{w.personal ? '' : ` · owned by ${w.owner_id === session.user?.id ? 'you' : w.owner_email}`}</p>

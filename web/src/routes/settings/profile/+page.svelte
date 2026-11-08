@@ -4,6 +4,7 @@
 	import { loadSession, session } from '$lib/session.svelte';
 	import { toast } from '$lib/ui/toast.svelte';
 	import Icon from '$lib/components/ui/Icon.svelte';
+	import Logo from '$lib/components/ui/Logo.svelte';
 	import Notice from '$lib/components/ui/Notice.svelte';
 	import SettingsSection from '$lib/components/ui/SettingsSection.svelte';
 	import Switch from '$lib/components/ui/Switch.svelte';
@@ -96,7 +97,7 @@
 	{#if error}<Notice tone="fail" class="mb-4">{error}</Notice>{/if}
 	<form class="card grid gap-6 p-5 @container" onsubmit={save}>
 		<div class="flex flex-col gap-5 sm:flex-row sm:items-center">
-			{#if preview}<img src={preview} alt="Profile preview" class="size-20 rounded-pill border border-rule object-cover" />{:else}<div class="grid size-20 place-items-center rounded-pill bg-paper-2 text-section font-semibold text-muted">{(name || session.user?.email || '?').slice(0, 2).toUpperCase()}</div>{/if}
+			<Logo src={preview} kind="user" seed={session.user?.id ?? ''} class="size-20 rounded-pill border border-rule" />
 			<div>
 				<div class="flex flex-wrap gap-2">
 					<label class="btn cursor-pointer"><Icon name="upload" size={14} />Choose picture<input class="sr-only" type="file" accept="image/jpeg,image/png,image/webp" onchange={choose} /></label>

@@ -4,6 +4,7 @@
 	import type { Bot } from '$lib/api/types';
 	import { fmtAgo } from '$lib/args';
 	import { describe } from '$lib/status';
+	import Logo from '$lib/components/ui/Logo.svelte';
 
 	// Apps in administrator overviews: state, owner and footprint at a glance.
 	let { bots, showOwner = true, empty = 'No apps.' }: { bots: (Bot & { owner_email?: string })[]; showOwner?: boolean; empty?: string } = $props();
@@ -27,7 +28,7 @@
 					<tr class="[&>td]:px-4 [&>td]:py-2.5 hover:bg-paper/40">
 						<td class="max-w-64">
 							<a href={resourceHref(b)} class="flex min-w-0 items-center gap-2 font-medium hover:underline">
-								{#if b.logo_url}<img src={b.logo_url} alt="" class="size-6 shrink-0 rounded-pill object-cover" referrerpolicy="no-referrer" />{/if}
+								<Logo src={b.logo_url} kind={b.kind === 'container' ? 'container' : 'bot'} seed={b.id} class="size-6 rounded-pill" />
 								<span class="truncate">{b.name}</span>
 							</a>
 							<span class="block truncate font-mono text-label text-muted">{b.runtime} · {b.source_type}</span>

@@ -15,7 +15,7 @@ import (
 )
 
 func normalizePerms(p int) (int, error) {
-	if p < 1 || p > domain.PermAll {
+	if p < 1 || p&^domain.PermGrantable != 0 {
 		return 0, domain.Invalid("choose at least one valid permission")
 	}
 	if p&domain.PermFullAdmin != 0 {

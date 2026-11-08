@@ -6,6 +6,7 @@
 	import { wsName } from '$lib/workspaces.svelte';
 	import { fmtAgo } from '$lib/args';
 	import Icon from '$lib/components/ui/Icon.svelte';
+	import Logo from '$lib/components/ui/Logo.svelte';
 	import Notice from '$lib/components/ui/Notice.svelte';
 	import Skeleton from '$lib/components/ui/Skeleton.svelte';
 
@@ -106,7 +107,7 @@
 					<tr class="[&>td]:px-4 [&>td]:py-2.5 hover:bg-paper/40">
 						<td class="max-w-64">
 							<a class="flex items-center gap-2 font-medium hover:underline" href="/admin/workspaces/{w.id}">
-								<span class="grid size-7 shrink-0 place-items-center rounded-control bg-paper-2 font-mono text-[11px] text-action" aria-hidden="true">{wsName(w).slice(0, 2).toUpperCase()}</span>
+								<Logo kind="workspace" seed={w.id} class="size-7 rounded-control" />
 								<span class="truncate">{wsName(w)}</span>
 								{#if w.personal}<span class="pill shrink-0">Personal</span>{/if}
 							</a>

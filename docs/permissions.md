@@ -91,7 +91,7 @@ shared with it and in workspaces it belongs to):
 | `bots.power` | Start, stop, restart, kill; console input and one-shot commands; batch actions |
 | `bots.files` | File manager, SFTP, package manager and AI file changes |
 | `bots.env` | Read and change environment variables |
-| `bots.configure` | A bot's Configuration tab (runtime, start command, entrypoint, build command, auto-restart) on bots the account owns or has full access to, even when the role leaves out console, power, files or variables. Roles with all four of those already have it. Game servers, containers and site apps still need full access |
+| `bots.configure` | A bot's Configuration tab (runtime, start command, entrypoint, build command, auto-restart) on bots the account owns, has full access to, or was shared with **Configuration** ticked, even when the role leaves out console, power, files or variables. Roles with all four of those already have it. Game servers, containers and site apps still need full access |
 | `bots.backups` | Create, restore, verify, download and delete backups |
 | `bots.deploy` | Link GitHub repositories, deploy, publish and push |
 | `bots.share` | Share bots, bot invitations and ownership transfer |
@@ -180,7 +180,11 @@ kernel):
   `bots.configure`: the API accepts `PATCH /bots/:id` with only runtime,
   `argv`, entrypoint, build command and restart fields, and refuses anything
   else (name, limits, network, backups) and every game server, container and
-  site app with 403. It never extends a partial share.
+  site app with 403.
+* A share or invitation can also grant **Configuration** (bit 32) on its
+  own, without full access. It counts only when the role holds
+  `bots.configure` or all four basic permissions; otherwise it is masked off
+  like any other bit the role lacks.
 * Known boundary: for owners and workspace owners or admins, the API does
   not apply the role to full-access-only actions (settings, network, startup)
   at all; the interface hides those tabs, but a direct API call succeeds.

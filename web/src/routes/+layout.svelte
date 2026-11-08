@@ -13,6 +13,7 @@
 	import DialogHost from '$lib/components/ui/DialogHost.svelte';
 	import ToastRegion from '$lib/components/ui/ToastRegion.svelte';
 	import Icon, { type IconName } from '$lib/components/ui/Icon.svelte';
+	import Logo from '$lib/components/ui/Logo.svelte';
 	import Menu, { type MenuItem } from '$lib/components/ui/Menu.svelte';
 	import OperationShelf from '$lib/components/OperationShelf.svelte';
 	import CommandPalette from '$lib/components/CommandPalette.svelte';
@@ -195,7 +196,6 @@
 	const helpActive = $derived(path.startsWith('/docs') || path.startsWith('/help') || path === '/admin/diagnostics');
 	const bare = $derived((PUBLIC.includes(path) && path !== '/docs') || (!session.user && session.loaded));
 	const who = $derived(session.user?.display_name || session.user?.email.split('@')[0] || '');
-	const initials = $derived(who.slice(0, 2).toUpperCase());
 	const themeLabel = $derived(theme.pref === 'system' ? `System theme (${theme.dark ? 'dark' : 'light'})` : theme.pref === 'dark' ? 'Dark theme' : 'Light theme');
 	const accountItems = $derived([
 		{ heading: session.user?.email ?? '' },
@@ -246,7 +246,7 @@
 					{@const d = describe(b)}
 					<li>
 						<a href={resourceHref(b)} class="side-link {compact ? 'justify-center px-0' : ''}" data-active={path === resourceHref(b)} aria-label={compact ? b.name : undefined} title={compact ? b.name : undefined}>
-							{#if b.logo_url}<img src={b.logo_url} alt="" class="size-5 shrink-0 rounded-pill object-cover" referrerpolicy="no-referrer" />{:else}<span class="side-dot" data-tone={d.tone}></span>{/if}{#if !compact}<span class="truncate">{b.name}</span>{/if}
+							{#if b.kind === 'game' && !b.logo_url}<span class="side-dot" data-tone={d.tone}></span>{:else}<Logo src={b.logo_url} kind={b.kind === 'container' ? 'container' : 'bot'} seed={b.id} class="size-5 rounded-pill" />{/if}{#if !compact}<span class="truncate">{b.name}</span>{/if}
 						</a>
 					</li>
 				{/each}
@@ -292,7 +292,7 @@
 						</button>
 						{#if path !== '/dashboard' && path !== '/apps'}<NewMenu />{/if}
 						<Menu label="Account" items={accountItems}>
-							{#snippet trigger()}{#if session.user?.avatar_url}<img class="avatar object-cover" src={session.user.avatar_url} alt="" />{:else}<span class="avatar" aria-hidden="true">{initials}</span>{/if}<Icon name="chevronDown" size={14} class="text-muted" />{/snippet}
+							{#snippet trigger()}<Logo src={session.user?.avatar_url} kind="user" seed={session.user?.id ?? who} class="avatar" /><Icon name="chevronDown" size={14} class="text-muted" />{/snippet}
 						</Menu>
 					</div>
 				</div>

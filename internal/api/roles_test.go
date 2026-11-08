@@ -425,9 +425,29 @@ func TestConfigurePermission(t *testing.T) {
 	op.mustStatus(403, "PATCH", shared, map[string]any{"argv": []string{"node", "a.js"}, "memory_bytes": 256 << 20})
 	op.mustStatus(403, "GET", shared+"/files?path=.", nil)
 
-	// It never stretches a partial share.
+	// It never stretches a partial share that leaves Configuration out...
 	owner.mustStatus(200, "PUT", shared+"/users", map[string]any{"email": "op@x.io", "permissions": domain.PermViewConsole})
 	op.mustStatus(403, "PATCH", shared, startup)
+	// ...and a share can grant Configuration on its own.
+	owner.mustStatus(200, "PUT", shared+"/users", map[string]any{"email": "op@x.io", "permissions": domain.PermViewConsole | domain.PermConfigure})
+	json.Unmarshal(op.mustStatus(200, "PATCH", shared, startup), &got)
+	if got.Permissions != domain.PermViewConsole|domain.PermConfigure {
+		t.Fatalf("configure share: %b", got.Permissions)
+	}
+	op.mustStatus(403, "PATCH", shared, map[string]any{"name": "x"})
+	owner.mustStatus(400, "PUT", shared+"/users", map[string]any{"email": "op@x.io", "permissions": 64})
+	// Even with all four basic rights in the role, a Configuration share is
+	// not full access.
+	all4 := admin.createRole("Four", domain.PermBotsConsole, domain.PermBotsPower, domain.PermBotsFiles, domain.PermBotsEnv)
+	admin.mustStatus(204, "PATCH", "/api/v1/users/"+e.userID("op@x.io"), map[string]any{"role": all4})
+	owner.mustStatus(200, "PUT", shared+"/users", map[string]any{"email": "op@x.io", "permissions": domain.PermViewConsole | domain.PermPower | domain.PermEditFiles | domain.PermManageEnv | domain.PermConfigure})
+	op.mustStatus(200, "PATCH", shared, startup)
+	op.mustStatus(403, "PATCH", shared, map[string]any{"name": "x"})
+	// A role without bots.configure and without all four ignores the grant.
+	admin.mustStatus(204, "PATCH", "/api/v1/users/"+e.userID("op@x.io"), map[string]any{"role": plain})
+	owner.mustStatus(200, "PUT", shared+"/users", map[string]any{"email": "op@x.io", "permissions": domain.PermViewConsole | domain.PermConfigure})
+	op.mustStatus(403, "PATCH", shared, startup)
+	admin.mustStatus(204, "PATCH", "/api/v1/users/"+e.userID("op@x.io"), map[string]any{"role": rid})
 
 	// Own bots show the Configuration tab (the bit) and accept the change.
 	json.Unmarshal(op.mustStatus(200, "GET", "/api/v1/bots/"+mine, nil), &got)

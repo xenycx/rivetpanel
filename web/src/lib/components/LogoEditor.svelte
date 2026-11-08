@@ -1,21 +1,29 @@
 <script lang="ts">
 	import { squarePng } from '$lib/image';
 	import Icon from '$lib/components/ui/Icon.svelte';
+	import Logo from '$lib/components/ui/Logo.svelte';
+	import type { AvatarKind } from '$lib/avatar';
 
 	let {
 		src,
 		custom,
-		fallbackLabel,
+		kind,
+		seed,
+		fallback,
 		disabled = false,
 		busy = false,
 		onUpload,
 		onRemove,
 		children
 	}: {
-		/** What is shown now (custom, Discord avatar, favicon...); "" = initials. */
+		/** What is shown now (custom, Discord avatar, favicon...); "" = generated. */
 		src: string;
 		custom: boolean;
-		fallbackLabel: string;
+		/** The generated DiceBear logo shown when there is no image. */
+		kind: AvatarKind;
+		seed: string;
+		/** Shown instead of the generated logo when there is no image (game servers). */
+		fallback?: import('svelte').Snippet;
 		disabled?: boolean;
 		busy?: boolean;
 		onUpload: (base64: string) => Promise<void>;
@@ -24,12 +32,7 @@
 	} = $props();
 
 	let error = $state('');
-	let broken = $state(false);
 	let input: HTMLInputElement | undefined = $state();
-	$effect(() => {
-		void src;
-		broken = false;
-	});
 
 	async function choose(e: Event) {
 		const file = (e.currentTarget as HTMLInputElement).files?.[0];
@@ -46,10 +49,10 @@
 </script>
 
 <div class="flex flex-wrap items-center gap-4">
-	{#if src && !broken}
-		<img {src} alt="" class="size-16 shrink-0 rounded-tile border border-rule-soft object-cover" referrerpolicy="no-referrer" onerror={() => (broken = true)} />
+	{#if fallback && !src}
+		{@render fallback()}
 	{:else}
-		<span class="grid size-16 shrink-0 place-items-center rounded-tile bg-paper-2 font-mono text-title font-semibold text-action" aria-hidden="true">{fallbackLabel}</span>
+		<Logo {src} {kind} {seed} class="size-16 rounded-tile border border-rule-soft" />
 	{/if}
 	<div class="flex flex-wrap gap-2">
 		<input bind:this={input} type="file" accept="image/png,image/jpeg,image/webp,image/gif" class="sr-only" onchange={choose} {disabled} />

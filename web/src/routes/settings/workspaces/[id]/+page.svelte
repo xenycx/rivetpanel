@@ -9,6 +9,7 @@
 	import { toast } from '$lib/ui/toast.svelte';
 	import { loadWorkspaces, selectWorkspace, wsName } from '$lib/workspaces.svelte';
 	import Icon from '$lib/components/ui/Icon.svelte';
+	import Logo from '$lib/components/ui/Logo.svelte';
 	import Notice from '$lib/components/ui/Notice.svelte';
 	import Skeleton from '$lib/components/ui/Skeleton.svelte';
 	import SettingsSection from '$lib/components/ui/SettingsSection.svelte';
@@ -158,7 +159,7 @@
 			<ul class="divide-y divide-rule-soft">
 				{#each members as m (m.user_id)}
 					<li class="flex flex-wrap items-center gap-3 px-4 py-3">
-						<span class="grid size-9 shrink-0 place-items-center rounded-pill bg-paper-2 text-small font-semibold text-muted" aria-hidden="true">{(m.display_name || m.email).slice(0, 2).toUpperCase()}</span>
+						<Logo kind="user" seed={m.user_id} class="size-9 rounded-pill" />
 						<div class="min-w-0 flex-1 basis-48">
 							<p class="truncate font-medium">{m.display_name || m.email}{#if m.user_id === session.user?.id}<span class="ml-2 text-small font-normal text-muted">you</span>{/if}</p>
 							<p class="truncate text-small text-muted">{m.display_name ? `${m.email} · ` : ''}added {fmtWhen(m.created_at_ms)}</p>

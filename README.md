@@ -254,5 +254,5 @@ and every change is recorded in the [changelog](CHANGELOG.md).
 <p align="center">
   <img src="docs/branding/rivetpanel-logo.svg" alt="" width="40"><br>
   <sub>Built for people who would rather run their own stuff.<br>
-  Game names and logos belong to their owners.</sub>
+  Game names and logos belong to their owners. Generated logos by <a href="https://www.dicebear.com">DiceBear</a>.</sub>
 </p>

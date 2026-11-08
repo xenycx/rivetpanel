@@ -50,6 +50,16 @@ func TestInvitationLinks(t *testing.T) {
 	other.mustStatus(404, "GET", base, nil)
 	other.mustStatus(400, "POST", "/api/v1/invites/accept", map[string]string{"token": "bpi_forged"})
 
+	// An invitation can carry Configuration on its own (stored as bit 32).
+	json.Unmarshal(owner.mustStatus(201, "POST", base+"/invites", map[string]any{"permissions": domain.PermViewConsole | domain.PermConfigure, "expires_in_days": 1}), &inv)
+	other.mustStatus(200, "POST", "/api/v1/invites/accept", map[string]string{"token": inv.Token})
+	json.Unmarshal(other.mustStatus(200, "GET", base, nil), &got)
+	if got.Permissions != domain.PermViewConsole|domain.PermConfigure {
+		t.Fatalf("configure invite: %b", got.Permissions)
+	}
+	other.mustStatus(200, "PATCH", base, map[string]any{"argv": []string{"node", "index.js"}})
+	other.mustStatus(403, "PATCH", base, map[string]any{"name": "x"})
+
 	// Revoked links stop working.
 	json.Unmarshal(owner.mustStatus(201, "POST", base+"/invites", map[string]any{"permissions": domain.PermEditFiles, "expires_in_days": 1}), &inv)
 	json.Unmarshal(owner.mustStatus(200, "GET", base+"/invites", nil), &list)

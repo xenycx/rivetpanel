@@ -216,3 +216,54 @@ func TestMigration0064AddsConfigureToUserRole(t *testing.T) {
 		t.Fatalf("trimmed user role: %v", trimmed.Permissions)
 	}
 }
+
+// 0065 rebuilds bot_subusers and bot_invites so they may store the
+// Configuration bit (32); existing grants survive unchanged.
+func TestMigration0065WidensSharePermissions(t *testing.T) {
+	ctx := context.Background()
+	db, err := Open(ctx, filepath.Join(t.TempDir(), "t.db"), 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { db.Close() })
+	if err := db.Migrate(ctx, upTo(t, 64)); err != nil {
+		t.Fatal(err)
+	}
+	node := "n1"
+	if _, err := db.ExecContext(ctx, `INSERT INTO nodes (id, location_id, name, transport, endpoint, enabled, created_at_ms, updated_at_ms)
+		VALUES (?, ?, 'n1', 'agent', NULL, 1, 1, 1)`, node, domain.LocalLocationID); err != nil {
+		t.Fatal(err)
+	}
+	for _, q := range []string{
+		`INSERT INTO users (id,email,password_hash,role,created_at_ms,updated_at_ms) VALUES ('o','o@x.io','h','user',1,1)`,
+		`INSERT INTO users (id,email,password_hash,role,created_at_ms,updated_at_ms) VALUES ('s','s@x.io','h','user',1,1)`,
+	} {
+		if _, err := db.ExecContext(ctx, q); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := db.ExecContext(ctx, `INSERT INTO bots (id, owner_id, node_id, name, runtime, image_ref, argv_json, memory_bytes, nano_cpus, created_at_ms, updated_at_ms)
+		VALUES ('b', 'o', ?, 'b', 'nodejs', 'img', '["node","index.js"]', 1, 1, 1, 1)`, node); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.ExecContext(ctx, `INSERT INTO bot_subusers (bot_id,user_id,permissions,invited_by,created_at_ms,updated_at_ms) VALUES ('b','s',5,'o',1,1)`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.ExecContext(ctx, `UPDATE bot_subusers SET permissions = 33`); err == nil {
+		t.Fatal("before 0065 the check should refuse bit 32")
+	}
+	if err := db.Migrate(ctx, migrations.FS); err != nil {
+		t.Fatal(err)
+	}
+	var p int
+	db.QueryRowContext(ctx, `SELECT permissions FROM bot_subusers WHERE bot_id='b' AND user_id='s'`).Scan(&p)
+	if p != 5 {
+		t.Fatalf("grant lost: %d", p)
+	}
+	if _, err := db.ExecContext(ctx, `UPDATE bot_subusers SET permissions = 33`); err != nil {
+		t.Fatalf("bit 32 refused after 0065: %v", err)
+	}
+	if _, err := db.ExecContext(ctx, `UPDATE bot_subusers SET permissions = 64`); err == nil {
+		t.Fatal("unknown bits must stay refused")
+	}
+}

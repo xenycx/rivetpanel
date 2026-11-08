@@ -161,7 +161,11 @@ with an **invitation link**. Permissions are a bitmask:
 | Start / stop | start, stop, restart, kill, console input |
 | Edit files | file manager, SFTP, packages, deployments, backups (create/download) |
 | Manage env vars | list, reveal, set and delete environment variables |
-| Full admin | everything above plus startup, settings, telemetry key, GitHub link, alert rules, restore and delete backups |
+| Configuration | bots only: the Configuration tab (runtime, start command, entrypoint, build command, auto-restart), without full admin |
+| Full admin | everything above plus settings, telemetry key, GitHub link, alert rules, restore and delete backups |
+
+The account's role is the ceiling: Configuration counts only when the role
+holds `bots.configure` or all four of console, power, files and variables.
 
 Only the **owner or an administrator** can share the bot, delete it, transfer
 it or publish host ports. A user with no grant gets `404`, indistinguishable
@@ -486,6 +490,16 @@ token); the token is only sent to Discord. A site shows its custom logo, else
 the favicon of its active release (the `<link rel="icon">` in `index.html`, or
 `favicon.ico`/`.png`/`.svg`), else its bot's logo. Logos are served to signed-in
 people with access only, sandboxed and without content sniffing.
+
+Anything without an image of its own gets a generated
+[DiceBear](https://www.dicebear.com) logo instead: robots (Bottts Neutral, by
+Pablo Stanley) for bots, Disco for workspaces, Shapes for containers and
+one-click apps, Glass for sites and Thumbs for people (all CC0 1.0 by
+DiceBear). The picture is drawn in the browser from the item's ID, so it
+survives a rename and no request leaves the panel for it. Game servers without
+a custom logo keep their game's icon. An uploaded logo or profile picture, a
+Discord avatar or a favicon always takes priority, and if one of them fails to
+load the generated logo is shown in its place.
 
 ### Publishing a bot to GitHub
 

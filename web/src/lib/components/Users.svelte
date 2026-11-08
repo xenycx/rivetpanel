@@ -12,7 +12,7 @@
 	import { goto } from '$app/navigation';
 	import { session } from '$lib/session.svelte';
 
-	let { botId, botName, isGame = false }: { botId: string; botName: string; isGame?: boolean } = $props();
+	let { botId, botName, isGame = false, isBot = false }: { botId: string; botName: string; isGame?: boolean; isBot?: boolean } = $props();
 	const noun = $derived(isGame ? 'server' : 'bot');
 
 	const options = $derived(
@@ -29,7 +29,10 @@
 					{ bit: Perm.power, label: 'Start / stop', hint: 'Start, stop, restart, kill and send console input' },
 					{ bit: Perm.files, label: 'Edit files', hint: 'File manager, SFTP, packages, deployments and backups' },
 					{ bit: Perm.env, label: 'Manage env vars', hint: 'Read and change environment variables, including secrets' },
-					{ bit: Perm.admin, label: 'Full admin', hint: 'Everything above plus settings, startup, restore and delete backups' }
+					// Only a bot's startup is its own right; containers and site
+					// apps change theirs with full admin.
+					...(isBot ? [{ bit: Perm.configure, label: 'Configuration', hint: 'Runtime, start command, entrypoint, build command and auto-restart' }] : []),
+					{ bit: Perm.admin, label: 'Full admin', hint: isBot ? 'Everything above plus settings, network, restore and delete backups' : 'Everything above plus settings, startup, restore and delete backups' }
 				]
 	);
 
@@ -77,10 +80,15 @@
 		}
 	}
 
+	// Full admin implies every right listed (Configuration included) and is
+	// stored as the full set (31). Unticking it, or any right under it, keeps
+	// the other rights ticked.
+	const rights = $derived(options.filter((o) => o.bit !== Perm.admin).reduce((m, o) => m | o.bit, 0));
+	const has = (mask: number, bit: number) => (mask & bit) !== 0 || (mask & Perm.admin) !== 0;
 	function toggle(mask: number, bit: number): number {
-		if (bit === Perm.admin) return mask & Perm.admin ? mask & ~Perm.admin : 31;
-		const next = mask ^ bit;
-		return next & Perm.admin ? next & ~Perm.admin : next;
+		const expanded = mask & Perm.admin ? rights : mask;
+		if (bit === Perm.admin) return mask & Perm.admin ? rights : 31;
+		return expanded ^ bit;
 	}
 
 	async function save(em: string, p: number, added = false) {
@@ -156,7 +164,7 @@
 					<div class="mt-1 flex flex-wrap gap-x-4 gap-y-1">
 						{#each options as o (o.bit)}
 							<label class="flex items-center gap-1.5" title={o.hint}>
-								<input type="checkbox" checked={(u.permissions & o.bit) !== 0} onchange={() => save(u.email, toggle(u.permissions, o.bit))} />{o.label}
+								<input type="checkbox" checked={has(u.permissions, o.bit)} onchange={() => save(u.email, toggle(u.permissions, o.bit))} />{o.label}
 							</label>
 						{/each}
 					</div>
@@ -174,7 +182,7 @@
 		<label class="block"><span class="label">Email of a panel user</span><input class="field" type="email" required bind:value={email} placeholder="friend@example.com" /></label>
 		<div class="mt-3 grid gap-3 sm:grid-cols-2">
 			{#each options as o (o.bit)}
-				<label class="flex items-start gap-2.5 rounded-tile border border-rule-soft bg-panel px-3 py-2.5 has-[:checked]:border-action/40"><input type="checkbox" class="mt-0.5" checked={(perms & o.bit) !== 0} onchange={() => (perms = toggle(perms, o.bit))} /><span>{o.label}<span class="help mt-0">{o.hint}</span></span></label>
+				<label class="flex items-start gap-2.5 rounded-tile border border-rule-soft bg-panel px-3 py-2.5 has-[:checked]:border-action/40"><input type="checkbox" class="mt-0.5" checked={has(perms, o.bit)} onchange={() => (perms = toggle(perms, o.bit))} /><span>{o.label}<span class="help mt-0">{o.hint}</span></span></label>
 			{/each}
 		</div>
 		{#if error}<Notice tone="fail" class="mt-3" live>{error}</Notice>{/if}
@@ -186,7 +194,7 @@
 	<form class="grid gap-3" onsubmit={createInvite}>
 		<div class="flex flex-wrap gap-x-5 gap-y-2">
 			{#each options as o (o.bit)}
-				<label class="flex items-center gap-2"><input type="checkbox" checked={(invPerms & o.bit) !== 0} onchange={() => (invPerms = toggle(invPerms, o.bit))} /><span>{o.label}</span></label>
+				<label class="flex items-center gap-2"><input type="checkbox" checked={has(invPerms, o.bit)} onchange={() => (invPerms = toggle(invPerms, o.bit))} /><span>{o.label}</span></label>
 			{/each}
 		</div>
 		<div class="flex flex-wrap items-end gap-2">

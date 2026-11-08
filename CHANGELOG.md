@@ -6,6 +6,33 @@ authoritative current version.
 
 ## Unreleased
 
+## 1.3.0 - 2026-11-08
+
+### Added
+
+- **Share a bot's Configuration on its own.** The bot's **Access** tab and
+  invitation links have a new **Configuration** right next to Console,
+  Start / stop, Files and Env vars. It opens the Configuration tab (runtime,
+  start command, entrypoint, build command, auto-restart) without giving Full
+  admin, so the person cannot rename the bot or change its limits, network or
+  backups. The account's role still caps it: it counts when the role has
+  "Configuration and startup" (`bots.configure`) or all four basic rights.
+  Migration `0065` rebuilds the sharing and invitation tables to allow the new
+  right; existing grants are unchanged.
+
+### Changed
+
+- **Generated logos for everything without a picture.** Bots, containers,
+  workspaces, sites, accounts and one-click apps that have no logo of their own
+  now get a DiceBear picture instead of initials, runtime tags, status dots or
+  a generic box or globe: robots for bots, Disco patterns for workspaces,
+  shapes for containers and apps, Glass gradients for sites and Thumbs for
+  people. Each one is drawn in the browser from the item's ID, so it stays the
+  same after a rename and nothing is requested from a third party. Uploaded
+  logos and profile pictures, Discord bot avatars and site favicons still take
+  priority, and an image that fails to load falls back to the generated one.
+  Game servers without a custom logo keep their game's icon.
+
 ## 1.2.0 - 2026-11-08
 
 ### Added

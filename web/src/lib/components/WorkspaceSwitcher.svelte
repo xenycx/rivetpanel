@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import Icon from '$lib/components/ui/Icon.svelte';
+	import Logo from '$lib/components/ui/Logo.svelte';
 	import Menu, { type MenuItem } from '$lib/components/ui/Menu.svelte';
 	import { currentWorkspace, selectWorkspace, workspaces, wsName } from '$lib/workspaces.svelte';
 
@@ -8,7 +9,6 @@
 	let { compact = false }: { compact?: boolean } = $props();
 	const current = $derived(currentWorkspace());
 	const label = $derived(current ? wsName(current) : 'All workspaces');
-	const initials = $derived(current ? label.slice(0, 2).toUpperCase() : '∗');
 	const items = $derived<MenuItem[]>([
 		{ label: `${workspaces.selected === 'all' ? '✓ ' : ''}All workspaces`, hint: 'Everything you can access', detail: true, onselect: () => selectWorkspace('all') },
 		'separator',
@@ -37,9 +37,9 @@
 >
 	{#snippet trigger()}
 		{#if compact}
-			<span title="Workspace: {label}" class="grid place-items-center"><Icon name="building" size={17} /></span>
+			<span title="Workspace: {label}" class="grid place-items-center">{#if current}<Logo kind="workspace" seed={current.id} class="size-7 rounded-control" />{:else}<Icon name="building" size={17} />{/if}</span>
 		{:else}
-			<span class="grid size-7 shrink-0 place-items-center rounded-control bg-paper-2 font-mono text-[11px] font-semibold text-ink" aria-hidden="true">{initials}</span>
+			{#if current}<Logo kind="workspace" seed={current.id} class="size-7 rounded-control" />{:else}<span class="grid size-7 shrink-0 place-items-center rounded-control bg-paper-2 text-muted" aria-hidden="true"><Icon name="layers" size={14} /></span>{/if}
 			<span class="min-w-0 flex-1">
 				<span class="eyebrow block leading-none">Workspace</span>
 				<span class="mt-0.5 block truncate font-medium">{label}</span>

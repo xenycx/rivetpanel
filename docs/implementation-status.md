@@ -509,8 +509,10 @@ items state exactly what remains.
     for owners, workspace roles and sharing grants (SFTP uses the same mask).
     `bots.configure` (migration `0064`) keeps a bot's startup configuration
     (runtime, command, entrypoint, build command, auto-restart) on full access
-    a trimmed role removes, through a derived per-bot bit (32) that is never
-    stored or shared. Enforced by the application (`BotService.Update`);
+    a trimmed role removes, through a per-bot bit (32). Since migration
+    `0065` a share or invitation can grant that bit on its own ("Configuration"
+    in the Access tab); the role still caps it. Enforced by the application
+    (`BotService.Update`, `MaskBotPerms`);
     game servers, containers and site apps still need full access. Known
     boundary: owners and workspace owners/admins are not role-checked on
     full-access-only actions at the API (the UI hides those tabs).
@@ -836,6 +838,11 @@ items state exactly what remains.
   and automatic site favicons (Unreleased; migration `0037`). Access control is
   application level; images are validated (PNG/JPEG, size and dimensions) and
   served sandboxed with `nosniff`.
+- [x] Generated DiceBear logos (Unreleased) for bots, containers, workspaces,
+  sites, accounts and one-click apps without an image of their own. Drawn in
+  the browser from the item's ID by `@dicebear/core`; uploaded logos, profile
+  pictures, Discord avatars and favicons always take priority. No server
+  change or migration.
 
 - [x] Email through Mailgun (Unreleased): password reset by emailed link,
   invitation emails, bot alerts by email, and security notices; configured in
@@ -1178,6 +1185,7 @@ Migrations added since 0.2.0 (the schema-version assertion in
 | `0062_app_templates.sql` | Additive: `stacks.template_id` (the one-click app template, `''` for a pasted Compose file), `bot_containers.routable` (joins the apps network so a site can proxy to the container) and `bot_containers.cap_add_json` (trusted extra capabilities from a built-in template, JSON array). Covered by `TestMigrateIdempotentAndSchema` (63 versions) |
 | `0063_site_backups.sql` | Additive: `sites.auto_backup` (scheduled backups of a files site, on by default) and `site_backups` (`sites` `ON DELETE CASCADE`: kind auto/manual, the archived release, label, files, bytes, SHA-256, creator `ON DELETE SET NULL`). Archive files live under `RIVET_BACKUP_DIR/sites/<site>/`. Covered by `TestMigrateIdempotentAndSchema` (64 versions) |
 | `0064_configure_permission.sql` | Additive: the built-in User role's stored permissions gain `bots.configure` after `bots.env` (catalog order); custom roles are unchanged. Covered by `TestMigration0064AddsConfigureToUserRole` and `TestMigrateIdempotentAndSchema` (65 versions) |
+| `0065_configure_share.sql` | Rebuild (foreign keys off, checked after): `bot_subusers` and `bot_invites` widen `permissions` from 1..31 to 1..63 so a share or invitation can hold the Configuration bit (32); every column copied by name, indexes recreated, existing grants unchanged. Covered by `TestMigration0065WidensSharePermissions` and `TestMigrateIdempotentAndSchema` (66 versions) |
 | `0054_web_apps.sql` | Rebuilds `bots` (kind gains `web`, runtime gains `php`, new `release_command`) and `sites` (mode gains `app`; `app_id`, `framework`, `build_output_dir`, `app_port`, `health_path`, `max_body_bytes`) with explicit column lists and foreign keys off (checked with `PRAGMA foreign_key_check`; all indexes recreated); additive `site_releases.source_ref` and `bot_health_probes.target` (`host`/`app`). Covered by `apps_migration_test.go` |
 | `0030_ai_global_chat.sql` | Rebuilds `ai_conversations` so a chat may have no target; `ai_runs.bot_id`/`site_id`, `ai_messages.context_json` (the conversation subtree is stashed and restored, rows preserved) |
 
@@ -1211,7 +1219,8 @@ Known gaps in this work:
 - [x] Safe renderers for line, area, donut, gauge, heatmap, sparkline, key/value,
   Markdown, image, log, and code widgets.
 - [x] Discord bot avatar reporting from ready discord.js/discord.py clients and
-  avatar display in Fleet and Favorites, with runtime initials as fallback.
+  avatar display in Fleet and Favorites, with a generated DiceBear logo as
+  fallback (runtime initials before).
 - [x] Authenticated Prometheus `/metrics`, disabled by default and free of
   bot/user/path labels.
 - [x] Per-bot TCP/HTTP health probes against published loopback ports, including

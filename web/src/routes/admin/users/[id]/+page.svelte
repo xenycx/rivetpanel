@@ -6,6 +6,7 @@
 	import AdminBotTable from '$lib/components/AdminBotTable.svelte';
 	import OperationRow from '$lib/components/OperationRow.svelte';
 	import Icon from '$lib/components/ui/Icon.svelte';
+	import Logo from '$lib/components/ui/Logo.svelte';
 	import Notice from '$lib/components/ui/Notice.svelte';
 	import Skeleton from '$lib/components/ui/Skeleton.svelte';
 	import { wsName } from '$lib/workspaces.svelte';
@@ -33,7 +34,7 @@
 	<Skeleton rows={5} />
 {:else if v}
 	<header class="card flex flex-wrap items-center gap-4 p-5">
-		{#if v.user.avatar_url}<img src={v.user.avatar_url} alt="" class="size-12 rounded-pill object-cover" />{:else}<span class="grid size-12 place-items-center rounded-pill bg-paper-2 font-semibold text-muted" aria-hidden="true">{(v.user.display_name || v.user.email).slice(0, 2).toUpperCase()}</span>{/if}
+		<Logo src={v.user.avatar_url} kind="user" seed={v.user.id} class="size-12 rounded-pill" />
 		<div class="min-w-48 flex-1">
 			<h2 class="truncate text-section">{v.user.display_name || v.user.email}</h2>
 			<p class="text-small text-muted">{v.user.display_name ? `${v.user.email} · ` : ''}{v.user.role === 'admin' ? 'Administrator' : v.user.role_name || 'User'} · email {v.user.email_verified ? 'verified' : 'not verified'} · joined {fmtWhen(v.user.created_at_ms)} · {v.has_password ? 'password' : 'provider sign-in only'}</p>
@@ -62,7 +63,7 @@
 			{#each v.workspaces as w (w.id)}
 				<li>
 					<a href="/admin/workspaces/{w.id}" class="card flex items-center gap-3 p-4 transition-colors hover:border-rule">
-						<span class="grid size-9 shrink-0 place-items-center rounded-tile bg-action/12 font-mono text-[11px] font-semibold text-action" aria-hidden="true">{wsName(w).slice(0, 2).toUpperCase()}</span>
+						<Logo kind="workspace" seed={w.id} class="size-9 rounded-tile" />
 						<span class="min-w-0 flex-1">
 							<span class="flex items-center gap-2"><span class="truncate font-medium">{wsName(w)}</span>{#if w.personal}<span class="pill">Personal</span>{/if}</span>
 							<span class="block text-small text-muted">{w.role ? roleText[w.role] : ''} · {w.running_bots}/{w.bots} apps · {w.sites} sites · {w.members} members</span>

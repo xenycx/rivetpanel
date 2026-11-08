@@ -424,9 +424,9 @@
 					<h2 id="set-h" class="text-title font-semibold">Settings</h2>
 					<div class="mt-4">
 						<span class="label">Logo</span>
-						<LogoEditor src={d.site.icon_url} custom={d.site.custom_logo} fallbackLabel={d.site.name.slice(0, 2).toUpperCase()} busy={logoBusy}
+						<LogoEditor src={d.site.icon_url} custom={d.site.custom_logo} kind="site" seed={d.site.id} busy={logoBusy}
 							onUpload={(image) => siteLogo('PUT', { image })} onRemove={() => siteLogo('DELETE')} />
-						<span class="help">Without a custom logo the site's own favicon is used{d.site.bot_id ? ", or else the bot's logo" : ''}.</span>
+						<span class="help">Without a custom logo the site's own favicon is used{d.site.bot_id ? ", or else the bot's logo" : ''}, and with none of them the panel draws one.</span>
 					</div>
 					<form class="mt-4 grid gap-4" onsubmit={saveSettings}>
 						<label class="block"><span class="label">Name</span><input class="field" required maxlength="64" bind:value={settings.name} /></label>
