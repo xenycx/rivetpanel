@@ -384,6 +384,21 @@ func TestConditionalSavesDetectConflicts(t *testing.T) {
 	if resp, _ := c.rawH("PUT", fpath(b.ID, "/content", "new.js"), nil, map[string]string{"If-None-Match": "*"}); resp.StatusCode != 204 {
 		t.Fatalf("create-only of a new file: %d", resp.StatusCode)
 	}
+	// The file manager's "New file" accepts a path such as src/lib/index.js and
+	// relies on the write creating the missing folders.
+	nested := fpath(b.ID, "/content", "src/lib/index.js")
+	if resp, _ := c.rawH("PUT", nested, nil, map[string]string{"If-None-Match": "*"}); resp.StatusCode != 204 {
+		t.Fatalf("create-only of a file in new folders: %d", resp.StatusCode)
+	}
+	if resp, _ := c.raw("GET", nested, nil, ""); resp.StatusCode != 200 {
+		t.Fatalf("read the nested file: %d", resp.StatusCode)
+	}
+	if resp, _ := c.rawH("PUT", nested, nil, map[string]string{"If-None-Match": "*"}); resp.StatusCode != 412 {
+		t.Fatalf("create-only over an existing nested file: %d", resp.StatusCode)
+	}
+	if resp, _ := c.rawH("PUT", fpath(b.ID, "/content", "src/../../escape.js"), nil, map[string]string{"If-None-Match": "*"}); resp.StatusCode < 400 {
+		t.Fatalf("a path leaving the workspace was accepted: %d", resp.StatusCode)
+	}
 }
 
 func TestFileChangesWaitForExclusiveOperations(t *testing.T) {

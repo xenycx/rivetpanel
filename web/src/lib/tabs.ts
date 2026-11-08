@@ -46,7 +46,8 @@ export type TabDef = {
 };
 
 /** A tab resolved for one app and viewer: what the tab bars render. */
-export type Tab = { id: string; label: string; icon: IconName; group: TabGroupId; needsStop?: boolean };
+// disabled: shown greyed out and not clickable (unless it is the open tab); hint says why.
+export type Tab = { id: string; label: string; icon: IconName; group: TabGroupId; needsStop?: boolean; disabled?: boolean; hint?: string };
 
 const apps: readonly AppKind[] = ['bot', 'game', 'container'];
 const has = (c: TabContext, feature: string) => !!c.game?.spec.features?.includes(feature);
@@ -141,7 +142,7 @@ export function resolveTab(asked: string | null, kind: AppKind, tabs: Pick<Tab, 
 }
 
 /** A link in a tab bar. */
-export type TabLink = { id: string; label: string; icon: IconName; href: string; pin?: boolean; iconOnly?: boolean };
+export type TabLink = { id: string; label: string; icon: IconName; href: string; pin?: boolean; iconOnly?: boolean; disabled?: boolean; hint?: string };
 
 /** Up to this many tabs sit in one row; more are grouped. */
 export const FLAT_TABS = 7;
@@ -153,7 +154,7 @@ export const FLAT_TABS = 7;
  * second row.
  */
 export function tabNav(tabs: Tab[], current: string, kind: AppKind, href: (id: string) => string): { primary: TabLink[]; active: string; secondary: TabLink[]; groupLabel: string } {
-	const link = (t: Tab): TabLink => ({ id: t.id, label: t.label, icon: t.icon, href: href(t.id) });
+	const link = (t: Tab): TabLink => ({ id: t.id, label: t.label, icon: t.icon, href: href(t.id), disabled: t.disabled, hint: t.hint });
 	if (tabs.length <= FLAT_TABS) return { primary: tabs.map(link), active: current, secondary: [], groupLabel: '' };
 	const primary: TabLink[] = [];
 	let active = current;
@@ -170,7 +171,7 @@ export function tabNav(tabs: Tab[], current: string, kind: AppKind, href: (id: s
 		}
 		const id = `group-${g}`;
 		const label = tabGroups[g].label(kind);
-		primary.push({ id, label, icon: tabGroups[g].icon(kind), href: href(open ? current : members[0].id), pin, iconOnly: pin });
+		primary.push({ id, label, icon: tabGroups[g].icon(kind), href: href(open ? current : (members.find((t) => !t.disabled) ?? members[0]).id), pin, iconOnly: pin });
 		if (open) {
 			active = id;
 			secondary = members.map(link);

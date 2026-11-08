@@ -276,7 +276,9 @@ Web file manager with breadcrumbs, filter, upload with progress and cancel,
 zip extraction and a CodeMirror editor (loaded on demand). The explorer sorts
 by name (natural order, so `file2` comes before `file10`), size, date modified
 or type, ascending or descending, with folders first or mixed in; the choice
-is remembered per browser. Saves are
+is remembered per browser. **New file** and **New folder** accept a path below
+the current folder, such as `src/index.js` or `src/lib`, and create any missing
+folders on the way; leading slashes, `.` and `..` are refused. Saves are
 conditional on the file's revision: if SFTP, a deployment or another editor
 changed the file, the editor offers to download your version, load theirs or
 replace it deliberately, and a failed save keeps your text. While a deployment
@@ -299,7 +301,9 @@ Reads and edits `package.json`, `requirements.txt` (or `pyproject.toml`
 crates.io; PyPI and the Go proxy resolve an exact name. Names and version specs
 are matched against per-ecosystem patterns, so nothing can be injected.
 Dependencies install when the bot next starts. Java (Maven) and Ruby (Bundler)
-manifests are not edited by the panel.
+manifests are not edited by the panel. The **Packages** tab stays greyed out
+until the project has its manifest (for example `package.json` for a Node.js
+bot); create it in **Files** and the tab becomes available straight away.
 
 The package manager edits only the manifest, not lockfiles. For Node.js, the
 build installs with `npm ci` when `package-lock.json` exists; when npm refuses

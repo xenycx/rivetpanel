@@ -1,8 +1,8 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, untrack } from 'svelte';
 	import { page } from '$app/state';
 	import { api, ApiError, fmtBytes, fmtCpu } from '$lib/api/client';
-	import { can, Perm, type Bot } from '$lib/api/types';
+	import { can, Perm, type Bot, type Packages } from '$lib/api/types';
 	import { power, type PowerAction } from '$lib/api/bots';
 	import { describe, isStopped, mayBeLive } from '$lib/status';
 	import { chat } from '$lib/ai/chat.svelte';
@@ -56,16 +56,47 @@
 			x.bot_tabs.map((t) => ({ id: `x-${x.id}-${t.id}`, label: t.label, icon: 'layers' as IconName, group: 'data' as const, perm: botPermBit(t.bot_perm), ext: x.id, page: t.page, extName: x.name }))
 		)
 	);
+	// The Packages tab is disabled until the project has its dependency
+	// manifest (package.json for Node.js, requirements.txt for Python …).
+	// Unknown (not loaded, or the check failed) leaves it enabled.
+	let pkgs = $state<Pick<Packages, 'supported' | 'file' | 'exists'> | null>(null);
+	const pkgHint = $derived(!pkgs ? null : !pkgs.supported ? 'The package manager is not available for this runtime.' : !pkgs.exists ? `Create ${pkgs.file} in Files to manage packages here.` : null);
 	const tabs = $derived.by<Tab[]>(() => {
 		const b = bot;
 		if (!b) return [];
 		const allow = (p: number) => p === 0 || (p === -1 ? !b.shared : can(b, p));
-		return [...tabsFor({ kind, bot: b, features: session.features, game, allow }), ...extTabs.filter((t) => allow(t.perm))];
+		const list = tabsFor({ kind, bot: b, features: session.features, game, allow }).map((t) => (t.id === 'packages' && pkgHint ? { ...t, disabled: true, hint: pkgHint } : t));
+		return [...list, ...extTabs.filter((t) => allow(t.perm))];
 	});
 	const asked = $derived(page.url.searchParams.get('tab'));
 	const resolved = $derived(resolveTab(asked, kind, tabs));
 	const tab = $derived(resolved.id);
 	const current = $derived(tabs.find((s) => s.id === tab));
+
+	// Check the manifest when the bot loads, on every tab switch and when the
+	// file manager changes files, so creating package.json enables the tab.
+	const hasPackagesTab = $derived(tabs.some((t) => t.id === 'packages'));
+	let pkgSeq = 0;
+	async function checkPackages() {
+		const seq = ++pkgSeq;
+		try {
+			const r = await api<Packages>('GET', `/bots/${id}/packages`);
+			if (seq === pkgSeq) pkgs = { supported: r.supported, file: r.file, exists: r.exists };
+		} catch {
+			if (seq === pkgSeq) pkgs = null;
+		}
+	}
+	$effect(() => {
+		void tab;
+		if (hasPackagesTab) untrack(checkPackages);
+	});
+	onMount(() => {
+		const onFiles = (e: Event) => {
+			if ((e as CustomEvent<{ botId: string }>).detail?.botId === id && hasPackagesTab) checkPackages();
+		};
+		window.addEventListener('rivet:files-changed', onFiles);
+		return () => window.removeEventListener('rivet:files-changed', onFiles);
+	});
 
 	function sectionHref(sid: string) {
 		return `${base}/${id}?tab=${sid}`;
@@ -161,6 +192,14 @@
 					{isGame ? (game?.blueprint.name ?? 'Game server') : isContainer ? bot.image_ref.replace(/^docker\.io\/library\//, '').replace(/^docker\.io\//, '') : bot.runtime}, {fmtBytes(bot.memory_bytes)}, {fmtCpu(bot.nano_cpus)}{#if bot.node_name}, {bot.node_name}{#if bot.node_online === false}<span class="ml-1 text-warn" title="The node's agent is not connected. Status and output are the last ones it reported.">(node offline)</span>{/if}{/if}{#if bot.source_type === 'github'}, deployed from GitHub{/if}{#if bot.shared}, shared with you{/if}
 				</p>
 			</div>
+			{#if configSection && !stopped}
+				<!-- Settings tabs need a stopped app: say so beside the Stop button
+				     instead of pushing the section down. -->
+				<div class="flex min-w-0 items-center gap-2 rounded-control border border-warn/30 bg-warn/7 px-3 py-1.5 text-small max-sm:w-full" role="status">
+					<Icon name="alert" size={14} class="shrink-0 text-warn" />
+					<p class="min-w-0"><span class="font-medium text-ink">Stop the {noun} to change these settings.</span> <span class="text-ink/75">Changes apply the next time it starts.</span></p>
+				</div>
+			{/if}
 			{#if canPower}
 				<div class="grid w-full grid-cols-4 gap-1.5 sm:flex sm:w-auto" role="group" aria-label="Power controls">
 					<button class="btn {powerOk.start ? 'btn-primary' : ''}" disabled={acting || !powerOk.start} onclick={() => act('start')}><Icon name="play" size={11} />Start</button>
@@ -200,15 +239,6 @@
 	{#if loadError}<Notice tone="warn" class="mt-3">{loadError}</Notice>{/if}
 
 	<section class="{nav.secondary.length ? 'mt-3' : 'mt-4'} min-w-0" aria-label={current?.label}>
-		{#if configSection && !stopped}
-			<Notice tone="warn" class="mb-4" title="Stop the {noun} to change these settings">
-				Changes need a stopped {noun} and apply the next time it starts.
-				{#snippet action()}
-					{#if canPower}<button class="btn btn-sm" disabled={acting} onclick={() => act('stop')}>Stop {noun}</button>{/if}
-				{/snippet}
-			</Notice>
-		{/if}
-
 		<!-- Every tab except Manage downloads its code when first opened, so a bot
 		     page ships one tab instead of all twenty. A failed download usually
 		     means the panel was updated while this page was open. -->

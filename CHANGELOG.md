@@ -6,6 +6,30 @@ authoritative current version.
 
 ## Unreleased
 
+## 1.1.1 - 2026-11-08
+
+### Added
+
+- **Create files inside new folders in one step.** The file manager's
+  **New file** dialog accepts a path such as `src/index.js` and creates the
+  missing `src` folder along with the file; **New folder** likewise accepts
+  nested paths such as `src/lib`. Paths stay inside the current app's files:
+  leading slashes, backslashes, `.` and `..` are refused. Renaming still takes
+  a single name.
+
+### Changed
+
+- **Packages tab waits for a manifest.** On a bot whose project has no
+  dependency manifest yet (`package.json` for Node.js, `requirements.txt` or
+  `pyproject.toml` for Python, `Cargo.toml`, `go.mod`), or whose runtime the
+  package manager does not support, the Packages tab is greyed out with a
+  tooltip saying what to create. Creating the file in Files enables the tab
+  without reloading the page; links straight to `?tab=packages` still open it.
+- **"Stop the bot to change these settings" moved into the page header.** On
+  Configuration, Variables, Network, Services and Settings the warning now sits
+  as a compact line beside the power buttons instead of a large banner above
+  the section, and no longer repeats its own Stop button.
+
 ## 1.1.0 - 2026-11-08
 
 ### Added

@@ -134,10 +134,23 @@
 	const join = (dir: string, name: string) => (dir ? `${dir}/${name}` : name);
 	const err = (e: unknown, fallback: string) => (e instanceof ApiError ? e.message : fallback);
 	const validName = (v: string) => (/[\\/\0]/.test(v) || v === '.' || v === '..' ? 'Use a name without slashes.' : null);
+	// New files and folders may name a path below the current folder, such as
+	// src/index.js; missing folders are created on the way.
+	const validPath = (v: string) => {
+		if (/[\\\0]/.test(v)) return 'Use forward slashes (/) to separate folders.';
+		if (v.startsWith('/')) return 'Paths start from this folder, so leave out the leading slash.';
+		const parts = v.split('/');
+		if (parts.some((s) => s === '')) return v.endsWith('/') ? 'End the path with a name, not a slash.' : 'Remove the doubled slash.';
+		if (parts.some((s) => s === '.' || s === '..')) return 'Paths cannot use . or .. as a folder name.';
+		return null;
+	};
 
 	async function list(dir = cwd) {
 		try {
 			entries = (await api<{ entries: FileEntry[] }>('GET', `${base(botId)}?path=${q(dir || '.')}`)).entries;
+			// Every change here relists the folder; the page uses this to notice
+			// a new or removed package manifest (it enables the Packages tab).
+			window.dispatchEvent(new CustomEvent('rivet:files-changed', { detail: { botId } }));
 			cwd = dir;
 			filter = '';
 			listError = '';
@@ -289,7 +302,7 @@
 	}
 
 	async function newFile() {
-		const name = await promptDialog({ title: 'New file', label: 'File name', placeholder: 'index.js', confirmLabel: 'Create file', mono: true, validate: validName });
+		const name = await promptDialog({ title: 'New file', body: 'Include folders to create them too, for example src/index.js.', label: 'File name or path', placeholder: 'src/index.js', confirmLabel: 'Create file', mono: true, validate: validPath });
 		if (!name) return;
 		const p = join(cwd, name);
 		try {
@@ -301,7 +314,7 @@
 		}
 	}
 	async function newFolder() {
-		const name = await promptDialog({ title: 'New folder', label: 'Folder name', confirmLabel: 'Create folder', mono: true, validate: validName });
+		const name = await promptDialog({ title: 'New folder', body: 'Nested folders such as src/lib are created in one step.', label: 'Folder name or path', placeholder: 'src/lib', confirmLabel: 'Create folder', mono: true, validate: validPath });
 		if (!name) return;
 		try {
 			await api('POST', `${base(botId)}/mkdir`, { path: join(cwd, name) });

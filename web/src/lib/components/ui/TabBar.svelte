@@ -8,8 +8,9 @@
 	// always kept in the row. Widths are measured from an invisible copy, so the
 	// split follows the real labels, the font and the window size.
 	// pin: always shown, at the end of the row (a settings gear); iconOnly: the
-	// label is the accessible name and tooltip only.
-	type Tab = { id: string; label: string; icon: IconName; href: string; pin?: boolean; iconOnly?: boolean };
+	// label is the accessible name and tooltip only. disabled: greyed out and not
+	// a link (unless it is the current tab), with hint as its tooltip.
+	type Tab = { id: string; label: string; icon: IconName; href: string; pin?: boolean; iconOnly?: boolean; disabled?: boolean; hint?: string };
 	// fill: the shown tabs grow to share the whole row instead of leaving a gap on the right.
 	// variant: 'line' underlines the current tab (the page's main tabs, whose
 	// underline slides between them); 'pill' marks it with a soft fill, for a
@@ -65,7 +66,7 @@
 		return { shown, hidden: flow.filter((i) => !shown.includes(i)), pins };
 	});
 	const overflow = $derived<MenuItem[]>(
-		split.hidden.map((i) => ({ label: tabs[i].label, onselect: () => goto(tabs[i].href, { noScroll: true, keepFocus: true }) }))
+		split.hidden.map((i) => ({ label: tabs[i].label, disabled: tabs[i].disabled, hint: tabs[i].disabled ? tabs[i].hint : undefined, onselect: () => goto(tabs[i].href, { noScroll: true, keepFocus: true }) }))
 	);
 	const tabClass = $derived(
 		variant === 'pill'
@@ -77,6 +78,11 @@
 
 {#snippet tab(t: Tab, grow: boolean)}
 	{@const on = current === t.id}
+	{#if t.disabled && !on}
+		<span class="{tabClass} {grow ? 'grow' : ''} cursor-not-allowed text-muted opacity-50" role="link" aria-disabled="true" aria-label={t.hint ? `${t.label}: ${t.hint}` : t.label} title={t.hint ?? t.label}>
+			<Icon name={t.icon} size={t.iconOnly ? 16 : 14} />{#if !t.iconOnly}{t.label}{/if}
+		</span>
+	{:else}
 	<a
 		href={t.href}
 		data-sveltekit-noscroll
@@ -88,6 +94,7 @@
 	>
 		<Icon name={t.icon} size={t.iconOnly ? 16 : 14} />{#if !t.iconOnly}{t.label}{/if}{#if on && variant === 'line'}<span class="absolute inset-x-1 -bottom-px h-0.5 rounded-pill bg-action" data-tab-ink aria-hidden="true"></span>{/if}
 	</a>
+	{/if}
 {/snippet}
 
 <nav class="relative flex min-w-0 items-stretch overflow-hidden {variant === 'pill' ? 'gap-1' : ''}" aria-label={label} bind:this={row}>
