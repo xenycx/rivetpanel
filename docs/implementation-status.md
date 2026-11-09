@@ -64,7 +64,9 @@ items state exactly what remains.
   that calls only that extension's routes and answers only the first
   document: a frame that loads anything else is removed; a page navigating
   itself to an outside address cannot be prevented by browsers and is
-  documented). The review screen shows permissions with the safeguard each
+  documented; a page may ask to fill the panel's window (`expand`), and the
+  panel then always draws its own bar naming the extension with an exit, so
+  the page cannot cover the panel unlabelled — enforced by the panel's UI). The review screen shows permissions with the safeguard each
   one carries instead of risk levels. Install/upgrade with
   re-consent for new capabilities, rollback to the three newest stored
   versions, uninstall with full data removal, five-failure auto-stop with a

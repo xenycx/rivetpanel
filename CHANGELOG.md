@@ -6,6 +6,18 @@ authoritative current version.
 
 ## Unreleased
 
+## 1.6.0 - 2026-11-09
+
+### Added
+
+- **Full screen for the Data tab.** A button at the top right of the database
+  browser lets it fill the panel's window (not the browser's full screen), with
+  the panel's own bar above it naming the extension and offering **Exit full
+  screen**; Esc also returns. The page keeps its state, and the change
+  confirmation still opens on top. Extension pages can ask for the same with
+  the new `expand` bridge message. The built-in extension moves to 1.2.0 and
+  updates itself.
+
 ## 1.5.0 - 2026-11-09
 
 ### Added

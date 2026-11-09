@@ -63,6 +63,8 @@ svg.i { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor;
 .tab { border: 0; background: transparent; padding: 6px 10px 9px; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px; display: inline-flex; gap: 6px; align-items: center; }
 .tab:hover { color: var(--ink); }
 .tab[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--action); font-weight: 600; }
+.full { align-self: center; margin: -2px -4px 8px 0; }
+.full[aria-pressed="true"] { color: var(--action); }
 
 .bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 14px; border-bottom: 1px solid var(--rule-soft); min-height: 46px; }
 .bar .grow { flex: 1; }
@@ -140,7 +142,7 @@ pre.text { margin: 0; padding: 14px; font: 12.5px/1.55 var(--mono); white-space:
 	.side section + section { flex: 1; }
 	.head { padding-top: 8px; }
 	.crumb { flex-basis: 100%; padding-bottom: 0; }
-	.tabs { width: 100%; }
+	.tabs { flex: 1; }
 	.lbl { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 	.bar, .meta, .editor { padding-left: 10px; padding-right: 10px; }
 	.hint-row { display: none; }
@@ -166,6 +168,8 @@ pre.text { margin: 0; padding: 14px; font: 12.5px/1.55 var(--mono); white-space:
 	<symbol id="i-lock" viewBox="0 0 16 16"><rect x="3" y="7" width="10" height="7" rx="1"/><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2"/></symbol>
 	<symbol id="i-alert" viewBox="0 0 16 16"><path d="M8 2 1.5 13.5h13z"/><path d="M8 6.5v3.2M8 11.6v.1"/></symbol>
 	<symbol id="i-play" viewBox="0 0 16 16"><path d="M4.5 3v10l8-5z"/></symbol>
+	<symbol id="i-max" viewBox="0 0 16 16"><path d="M9.5 2.5h4v4M6.5 13.5h-4v-4M13.5 2.5 9 7M2.5 13.5 7 9"/></symbol>
+	<symbol id="i-min" viewBox="0 0 16 16"><path d="M13.5 6.5h-4v-4M2.5 9.5h4v4M9.5 6.5 14 2M6.5 9.5 2 14"/></symbol>
 	<symbol id="i-edit" viewBox="0 0 16 16"><path d="M10.5 2.5 13.5 5.5 6 13H3v-3z"/></symbol>
 </svg>
 <div class="app">
@@ -184,6 +188,7 @@ pre.text { margin: 0; padding: 14px; font: 12.5px/1.55 var(--mono); white-space:
 		<header class="head">
 			<div class="crumb" id="crumb"><span class="seg">Database browser</span></div>
 			<div class="tabs" role="tablist" id="tabs" aria-label="View"></div>
+			<button class="btn ghost icon full" type="button" id="full" aria-pressed="false" aria-label="Full screen" title="Full screen" hidden><svg class="i" aria-hidden="true"><use href="#i-max"/></svg></button>
 		</header>
 		<div id="view"></div>
 		<div class="meta" id="meta" hidden></div>
@@ -220,8 +225,9 @@ pre.text { margin: 0; padding: 14px; font: 12.5px/1.55 var(--mono); white-space:
 		if (e.source !== window.parent) return;
 		const m = e.data;
 		if (!m || m.rivet !== 1) return;
-		if (m.type === 'init' && !nonce) { nonce = m.nonce; theme(m.theme || {}); start(); return; }
+		if (m.type === 'init' && !nonce) { nonce = m.nonce; theme(m.theme || {}); $('full').hidden = false; start(); return; }
 		if (m.type === 'theme') { theme(m.theme || {}); return; }
+		if (m.type === 'expanded') { fullscreen(m.on === true); return; }
 		if (m.type === 'reply' && waiting.has(m.id)) {
 			const w = waiting.get(m.id); waiting.delete(m.id);
 			m.ok ? w.res(m.body) : w.rej(new Error((m.body && m.body.error && (m.body.error.message || m.body.error)) || 'The request failed.'));
@@ -233,6 +239,19 @@ pre.text { margin: 0; padding: 14px; font: 12.5px/1.55 var(--mono); white-space:
 	});
 	const rpc = (method, path, body) => call('rpc', { method, path, body });
 	window.parent.postMessage({ rivet: 1, type: 'ready' }, '*');
+
+	// Full screen fills the panel's window (the panel draws the frame and its
+	// own exit bar); it is not the browser's full screen.
+	let full = false;
+	function fullscreen(on) {
+		full = on;
+		const b = $('full');
+		b.setAttribute('aria-pressed', String(on));
+		b.setAttribute('aria-label', on ? 'Exit full screen' : 'Full screen');
+		b.title = on ? 'Exit full screen (Esc)' : 'Full screen';
+		b.querySelector('use').setAttribute('href', on ? '#i-min' : '#i-max');
+	}
+	$('full').addEventListener('click', () => window.parent.postMessage({ rivet: 1, nonce, type: 'expand', on: !full }, '*'));
 
 	function theme(vars) {
 		for (const [k, v] of Object.entries(vars)) if (/^--[a-z0-9-]+$/.test(k) && typeof v === 'string' && v.length < 200) document.documentElement.style.setProperty(k, v);
@@ -647,7 +666,11 @@ pre.text { margin: 0; padding: 14px; font: 12.5px/1.55 var(--mono); white-space:
 		if (d) d.remove();
 		if (!keepSel) { selected = -1; for (const tr of $('out').querySelectorAll('tbody tr[aria-selected="true"]')) { tr.setAttribute('aria-selected', 'false'); tr.focus(); } }
 	}
-	document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && $('detail')) closeDetail(); });
+	document.addEventListener('keydown', (e) => {
+		if (e.key !== 'Escape') return;
+		if ($('detail')) closeDetail();
+		else if (full) window.parent.postMessage({ rivet: 1, nonce, type: 'expand', on: false }, '*');
+	});
 	const pretty = (v) => {
 		if (!/^\s*[[{]/.test(v)) return v;
 		try { return JSON.stringify(JSON.parse(v), null, 2); } catch { return v; }

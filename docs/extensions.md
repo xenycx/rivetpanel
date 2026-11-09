@@ -189,7 +189,8 @@ Pick a database on the left, then a table: **Data** pages through its rows
 (100 at a time, sortable by any column), **Columns** lists its columns and
 types, and **SQL** runs your own queries (recent ones are kept while the tab is
 open). Click a row to read every value in full and copy it; **Copy CSV** copies
-the rows shown. Redis and MongoDB open in their command and query editors.
+the rows shown. The full-screen button (top right) lets the tab fill the
+panel's window; **Exit full screen** or Esc brings it back. Redis and MongoDB open in their command and query editors.
 
 ### SQLite files
 
@@ -358,4 +359,9 @@ talks to the panel by `postMessage` with this protocol:
    extension's own routes (on the current bot inside a bot tab). The answer is
    `{type: "reply", id, ok, body}`.
 4. Other messages: `confirm-write` (`token` from `addons.query` in write mode),
-   `toast` (`text`, `tone`), `navigate` (`path`), `resize` (`height`).
+   `toast` (`text`, `tone`), `navigate` (`path`), `resize` (`height`),
+   `expand` (`on`: fill the panel's window, or return). The panel answers
+   `expand` (and the person leaving it with its own **Exit full screen** button
+   or Esc) with `{type: "expanded", on}`. While expanded, the panel always
+   shows its own bar above the page naming the extension, so a page cannot
+   pass itself off as the panel. It is not the browser's full screen.
