@@ -12,7 +12,7 @@ Three extensions ship with the panel:
 | --- | --- |
 | **Discord bot insights** | A Discord card on each bot's overview: the bot user, application, approximate server count, invite link and token state. Keeps the bot's name and avatar current and notifies the owner when Discord resets the bot's token. |
 | **Discord ChatOps** | Slash commands in your Discord server: `/status`, `/logs`, `/start`, `/stop`, `/restart`, `/deploy`. Each person acts with their own panel permissions after linking Discord and allowing ChatOps. |
-| **Database browser** | A **Data** tab on bots with database add-ons: browse PostgreSQL and MariaDB tables, Redis keys and MongoDB collections, and run queries. Queries are read-only; a change runs only after you confirm it in a panel dialog. |
+| **Database browser** | A **Data** tab on bots with database add-ons or SQLite files: browse PostgreSQL, MariaDB and SQLite tables, Redis keys and MongoDB collections, and run queries. Queries are read-only; a change runs only after you confirm it in a panel dialog. |
 
 ## Turning extensions on
 
@@ -146,10 +146,11 @@ How it is protected:
 
 ## Database browser
 
-Install it, then open the **Data** tab on a bot that has a database add-on
-(the tab needs permission to manage the bot's environment, the same as
-revealing the database password). The bot must be running, because its add-ons
-run while it runs.
+Install it, then open the **Data** tab on a bot that has a database add-on or
+a SQLite database in its files (the tab needs permission to manage the bot's
+environment, the same as revealing the database password). For add-ons the bot
+must be running, because its add-ons run while it runs; SQLite files can be
+browsed while it is stopped.
 
 | Add-on | Browse | Query |
 | --- | --- | --- |
@@ -157,6 +158,7 @@ run while it runs.
 | MariaDB | Tables | SQL |
 | Redis | Keys (first scan page) | One command per line, quotes allowed |
 | MongoDB | Databases and collections | find, count, aggregate (JSON filter or pipeline) |
+| SQLite file | Tables and views | SQL |
 
 Each query runs in a **disposable client container** started from the add-on's
 own image on the bot's private network: no workspace, a read-only root, no
@@ -183,8 +185,38 @@ mode and a hash, never by its text.
 > A PostgreSQL function the bot itself defined as `SECURITY DEFINER` runs
 > with its owner's rights when a read calls it.
 
+Pick a database on the left, then a table: **Data** pages through its rows
+(100 at a time, sortable by any column), **Columns** lists its columns and
+types, and **SQL** runs your own queries (recent ones are kept while the tab is
+open). Click a row to read every value in full and copy it; **Copy CSV** copies
+the rows shown. Redis and MongoDB open in their command and query editors.
+
+### SQLite files
+
+The tab lists up to 50 SQLite databases found in the app's files (a container
+app's volumes included): files named `.db`, `.sqlite`, `.sqlite3`, `.db3`,
+`.s3db` or `.sl3` whose header says SQLite. It does not follow symbolic links
+and skips dependency folders such as `node_modules`, `.git` and `.venv`.
+
+Each query runs in a disposable `python:3.11-alpine` container (Python's
+`sqlite3` module; pulled on first use) with no network, a read-only root, no
+capabilities, 128 MiB of memory, 64 processes and a 10-second query limit. It
+runs as the user that owns the file, the user the app writes it as (never as
+root). The query text reaches it only through its environment.
+
+| Boundary | Enforced by |
+| --- | --- |
+| **Run** cannot change the file | The app's files are bind-mounted **read-only** (kernel), and the file is opened read-only with `PRAGMA query_only` (SQLite) |
+| A query reaches only the chosen file | `ATTACH` and `DETACH` are refused by an authorizer (SQLite); only the app's own files are mounted (container runtime) |
+| **Run as change…** | Mounts the files writable only after you confirm the exact file and statement in the panel dialog; all statements run in one transaction, rolled back on any error (application, SQLite) |
+
+Reads of a WAL database see changes still in its `-wal` file while the app
+runs. If the app is stopped and the `-wal` and `-shm` files are gone, the file
+is opened as immutable (there is no writer to coordinate with). A change waits
+up to five seconds for the app's own write lock.
+
 Not available yet: apps on remote nodes (the query has to run on the node; this
-needs a new agent route), and Redis or MongoDB schemas beyond the first page of
+needs a new agent route; this includes SQLite files), and Redis or MongoDB schemas beyond the first page of
 keys.
 
 ## Security model

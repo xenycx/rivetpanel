@@ -128,6 +128,8 @@ type ContainerSpec struct {
 // Mount is a bind mount of a host directory.
 type Mount struct {
 	Source, Target string
+	// ReadOnly mounts it read-only (omitempty keeps existing spec hashes).
+	ReadOnly bool `json:",omitempty"`
 }
 
 // PortBinding publishes one container port on the host.

@@ -89,7 +89,7 @@
 			case 'confirm-write': {
 				if (typeof m.token !== 'string' || !/^[0-9a-f]{32}$/.test(m.token)) return reply(false, { error: { message: 'Invalid confirmation.' } });
 				try {
-					const p = await api<{ bot_id: string; kind: string; query: string }>('GET', `/extensions/confirmations/${m.token}`);
+					const p = await api<{ bot_id: string; kind: string; query: string; file?: string }>('GET', `/extensions/confirmations/${m.token}`);
 					if (botId && p.bot_id !== botId) return reply(false, { error: { message: 'That confirmation belongs to another app.' } });
 					// Name the app the change runs against, also on pages outside a bot.
 					const app = await api<{ name: string }>('GET', `/bots/${encodeURIComponent(p.bot_id)}`).then((b) => b.name, () => p.bot_id);
@@ -98,7 +98,7 @@
 						body: 'It runs without the read-only guard, as you, against this app’s database. Changes cannot be undone from here; take a backup first if in doubt.',
 						details: [
 							['App', app],
-							['Database', p.kind],
+							['Database', p.file ? `SQLite file ${p.file}` : p.kind],
 							['Statement', p.query]
 						],
 						confirmLabel: 'Run change',

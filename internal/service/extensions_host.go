@@ -809,7 +809,18 @@ func (inv *invocation) addons(ctx context.Context, name string, raw []byte) []by
 		for _, v := range views {
 			out = append(out, map[string]any{"kind": v.Kind, "name": v.DisplayName, "status": v.Status})
 		}
-		return reply(map[string]any{"addons": out, "remote": inv.svc.Bots.remote(b.NodeID)})
+		remote := inv.svc.Bots.remote(b.NodeID)
+		files := []map[string]any{}
+		if inv.svc.Addons != nil && !remote {
+			found, err := inv.svc.Addons.SQLiteFiles(ctx, b)
+			if err != nil {
+				return errReply(err)
+			}
+			for _, f := range found {
+				files = append(files, map[string]any{"path": f.Path, "size": f.Size, "modified_ms": f.ModTime.UnixMilli()})
+			}
+		}
+		return reply(map[string]any{"addons": out, "sqlite": files, "remote": remote})
 	}
 	if inv.svc.Addons == nil {
 		return replyErr("unavailable", "database queries need the local Docker runner")
@@ -889,13 +900,18 @@ func (s *ExtensionService) PendingAddonWrite(actor domain.User, token string) (m
 	if !ok || time.Now().After(p.expires) || p.user != actor.ID {
 		return nil, domain.ErrNotFound
 	}
-	text := p.q.ForKind(p.kind).Describe(p.kind)
+	q := p.q.ForKind(p.kind)
+	text := q.Describe(p.kind)
 	// A statement too long to show in full is not offered for confirmation:
 	// a person approves only what they could read.
 	if len(text) > 2000 {
 		return nil, domain.Invalid("this change is too long to show for confirmation (at most 2000 characters)")
 	}
-	return map[string]string{"bot_id": p.bot, "kind": p.kind, "query": text}, nil
+	out := map[string]string{"bot_id": p.bot, "kind": p.kind, "query": text}
+	if p.kind == "sqlite" {
+		out["file"] = q.File
+	}
+	return out, nil
 }
 
 func (s *ExtensionService) recordQuery(ctx context.Context, u domain.User, botID, kind, mode, hash string, err error) {

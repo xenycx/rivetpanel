@@ -156,3 +156,13 @@ func TestHostConfigTmpfsOwnedByUser(t *testing.T) {
 		t.Fatalf("/tmp keeps its sticky shared mode: %q", h.Tmpfs["/tmp"])
 	}
 }
+
+func TestHostConfigReadOnlyMount(t *testing.T) {
+	s := spec()
+	s.WorkspaceHostPath = ""
+	s.Mounts = []runner.Mount{{Source: "/var/lib/rivetpanel/bots/x", Target: "/files", ReadOnly: true}, {Source: "/v", Target: "/data"}}
+	h := HostConfig(s)
+	if len(h.Mounts) != 2 || !h.Mounts[0].ReadOnly || h.Mounts[1].ReadOnly || h.Mounts[0].Target != "/files" {
+		t.Fatalf("%+v", h.Mounts)
+	}
+}

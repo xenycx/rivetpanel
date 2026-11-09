@@ -479,7 +479,8 @@ Limits: one add-on of each kind per bot; add-on data is **not** included in
 bot backups or `rivetpanel backup` (dump it from the bot, for example with
 `pg_dump`); no version choice or database extensions; no Lavalink yet. With
 the extensions module on, the **database browser** extension adds a Data tab
-for browsing and querying add-on databases (`docs/extensions.md`).
+for browsing and querying add-on databases and SQLite files in the bot's files
+(`docs/extensions.md`).
 
 ## Logos
 

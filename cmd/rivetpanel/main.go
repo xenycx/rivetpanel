@@ -840,7 +840,7 @@ func serve(log *slog.Logger, logs *logbuf.Buffer) error {
 			Logs: aiLogs, Bus: bus, Builtins: builtin.Bundles(), PanelVersion: version, AllowUnsigned: !cfg.Production,
 			SafeMode: cfg.ExtensionsSafeMode, Log: log}
 		if addonQueries != nil {
-			extSvc.Addons = &service.LocalAddonQuerier{Runner: addonQueries, Bots: botSvc}
+			extSvc.Addons = &service.LocalAddonQuerier{Runner: addonQueries, Bots: botSvc, Files: wsm}
 		}
 		if err := extSvc.SyncBuiltins(ctx); err != nil {
 			return fmt.Errorf("built-in extensions: %w", err)

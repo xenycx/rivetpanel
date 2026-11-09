@@ -6,6 +6,8 @@ authoritative current version.
 
 ## Unreleased
 
+## 1.5.0 - 2026-11-09
+
 ### Added
 
 - Clipboard Vault is available as a one-click app: a private vault for pasted
@@ -17,6 +19,31 @@ authoritative current version.
   not allow `ghcr.io`. Stacks installed from the earlier three-service template
   (2.x) keep running unchanged; moving one to 3.0 is a one-time import described
   in Clipboard Vault's DEPLOYMENT.md.
+- **SQLite in the database browser.** The Data tab now finds SQLite databases
+  (`.db`, `.sqlite`, `.sqlite3`, `.db3`, `.s3db`, `.sl3`) in an app's files,
+  including a container app's volumes, so apps such as Clipboard Vault, Gitea
+  or Gotify can be browsed without a database add-on. Pick a file, browse its
+  tables and run SQL. Reads run in a disposable client container
+  (`python:3.11-alpine`, pulled on first use) without a network, as the file's
+  owner, with the app's files mounted **read-only** and the file opened
+  read-only with `query_only`, so a read cannot change anything. **Run as
+  change…** mounts them writable only after you confirm the exact statement and
+  file in the panel dialog, and runs every statement in one transaction that is
+  rolled back on error. Queries stop after 10 seconds; `ATTACH` is refused.
+  Works while the app is stopped too. Apps on remote nodes are not supported
+  yet. The built-in extension moves to 1.1.0 and updates itself on panels that
+  have it installed.
+
+### Changed
+
+- **Redesigned Data tab.** Every database of an app, add-ons and SQLite files
+  alike, is listed in one place, with a filterable list of its tables. Tables
+  open straight into their rows with page-by-page browsing, row counts and
+  sorting by any column; a **Columns** view shows each table's columns and
+  types, and **SQL** keeps the query editor with recent queries. Clicking a
+  row shows every value in full (JSON formatted) with copy buttons, results
+  copy as CSV, and **Run as change…** is set apart from **Run** with a note on
+  what each does.
 
 ## 1.4.0 - 2026-11-08
 

@@ -22,7 +22,8 @@ import (
 // AddonQuery is one request against a bot's database add-on.
 type AddonQuery struct {
 	Mode  string   `json:"mode"`       // read | write
-	Query string   `json:"query"`      // SQL (postgres, mariadb)
+	Query string   `json:"query"`      // SQL (postgres, mariadb, sqlite)
+	File  string   `json:"file"`       // sqlite: workspace-relative database file
 	Op    string   `json:"op"`         // mongodb: databases | collections | find | count | aggregate | insert | update | delete
 	DB    string   `json:"database"`   // mongodb database
 	Coll  string   `json:"collection"` // mongodb collection
@@ -37,6 +38,8 @@ func (q AddonQuery) ForKind(kind string) AddonQuery {
 	switch kind {
 	case "postgres", "mariadb":
 		out.Query = q.Query
+	case "sqlite":
+		out.Query, out.File = q.Query, q.File
 	case "redis":
 		out.Args = q.Args
 	case "mongodb":
@@ -45,7 +48,8 @@ func (q AddonQuery) ForKind(kind string) AddonQuery {
 	return out
 }
 
-// Describe is the request as the confirmation dialog shows it.
+// Describe is the request as the confirmation dialog shows it (a SQLite
+// file is shown beside it).
 func (q AddonQuery) Describe(kind string) string {
 	switch kind {
 	case "redis":

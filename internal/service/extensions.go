@@ -26,6 +26,7 @@ import (
 	"github.com/xenycx/rivetpanel/internal/events"
 	"github.com/xenycx/rivetpanel/internal/extensions/bundle"
 	extrt "github.com/xenycx/rivetpanel/internal/extensions/runtime"
+	"github.com/xenycx/rivetpanel/internal/filesystem"
 	"github.com/xenycx/rivetpanel/internal/secrets"
 )
 
@@ -73,9 +74,11 @@ const (
 	extMaxFailures  = 5
 )
 
-// AddonQuerier runs a query against a bot's database add-on (see addonquery.go).
+// AddonQuerier runs a query against a bot's database add-on, or a SQLite
+// file in its files (kind "sqlite"; see addonquery.go).
 type AddonQuerier interface {
 	QueryAddon(ctx context.Context, b domain.Bot, kind string, q AddonQuery) (AddonQueryResult, error)
+	SQLiteFiles(ctx context.Context, b domain.Bot) ([]filesystem.SQLiteFile, error)
 }
 
 // ExtensionService installs, configures and runs panel extensions.

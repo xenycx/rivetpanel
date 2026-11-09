@@ -507,15 +507,15 @@ func HostConfig(s runner.ContainerSpec) *container.HostConfig {
 		bindings[k] = append(bindings[k], nat.PortBinding{HostIP: p.HostIP, HostPort: strconv.Itoa(p.HostPort)})
 	}
 	var mounts []mount.Mount
-	bind := func(src, dst string) {
-		mounts = append(mounts, mount.Mount{Type: mount.TypeBind, Source: src, Target: dst,
+	bind := func(src, dst string, ro bool) {
+		mounts = append(mounts, mount.Mount{Type: mount.TypeBind, Source: src, Target: dst, ReadOnly: ro,
 			BindOptions: &mount.BindOptions{Propagation: mount.PropagationRPrivate, CreateMountpoint: false}})
 	}
 	if s.WorkspaceHostPath != "" {
-		bind(s.WorkspaceHostPath, "/workspace")
+		bind(s.WorkspaceHostPath, "/workspace", false)
 	}
 	for _, m := range s.Mounts {
-		bind(m.Source, m.Target)
+		bind(m.Source, m.Target, m.ReadOnly)
 	}
 	tmpfs := map[string]string{"/tmp": fmt.Sprintf("rw,nosuid,nodev,size=%d", s.TmpfsBytes)}
 	// Writable paths belong to the container's user: a tmpfs otherwise takes

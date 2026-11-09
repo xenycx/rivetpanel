@@ -58,6 +58,16 @@ func TestAddonWriteShowsWhatRuns(t *testing.T) {
 	if got := q.ForKind("postgres"); len(got.Args) != 0 || got.Op != "" {
 		t.Fatalf("unused fields kept: %+v", got)
 	}
+	// A SQLite change names the file it runs against; the file is part of
+	// the confirmed request (and its hash), not something the page adds later.
+	sq := runner.AddonQuery{Mode: "write", Query: "DELETE FROM items", File: "volumes/data/vault.db", Args: []string{"x"}}.ForKind("sqlite")
+	s.confirms["s"] = pendingConfirm{user: "u1", bot: "b1", kind: "sqlite", q: sq, expires: time.Now().Add(time.Minute)}
+	if p, err := s.PendingAddonWrite(domain.User{ID: "u1"}, "s"); err != nil || p["file"] != "volumes/data/vault.db" || p["query"] != "DELETE FROM items" || len(sq.Args) != 0 {
+		t.Fatalf("sqlite dialog %v (%v)", p, err)
+	}
+	if queryHash("sqlite", sq) == queryHash("sqlite", runner.AddonQuery{Mode: "write", Query: "DELETE FROM items", File: "other.db"}) {
+		t.Fatal("the file is not part of the confirmed request")
+	}
 	s.confirms["long"] = pendingConfirm{user: "u1", kind: "postgres", q: runner.AddonQuery{Query: strings.Repeat("x", 2001)}, expires: time.Now().Add(time.Minute)}
 	if _, err := s.PendingAddonWrite(domain.User{ID: "u1"}, "long"); err == nil {
 		t.Fatal("a change too long to show in full was offered for confirmation")

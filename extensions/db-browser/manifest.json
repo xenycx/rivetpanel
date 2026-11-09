@@ -2,13 +2,13 @@
   "manifest_version": 1,
   "id": "dev.rivetpanel.db-browser",
   "name": "Database browser",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "publisher": "RivetPanel",
-  "description": "Browse and query an app's PostgreSQL, MariaDB, Redis and MongoDB add-ons from a Data tab. Queries run read-only; a change runs only after you confirm it in a panel dialog.",
+  "description": "Browse and query an app's PostgreSQL, MariaDB, Redis and MongoDB add-ons and the SQLite databases in its files from a Data tab. Queries run read-only; a change runs only after you confirm it in a panel dialog.",
   "compat": { "panel": ">=0.9.0 <2.0.0", "abi": 1 },
   "runtime": { "memory_mb": 32, "timeout_ms": 30000 },
   "capabilities": [
-    { "name": "addons.query", "reason": "Run queries against the app's database add-ons as the person using the Data tab, who needs permission to manage the app's environment." }
+    { "name": "addons.query", "reason": "Run queries against the app's database add-ons and SQLite files as the person using the Data tab, who needs permission to manage the app's environment." }
   ],
   "routes": [
     { "id": "addons", "method": "GET", "path": "/addons", "auth": "bot", "bot_perm": "manage_env" },

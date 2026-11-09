@@ -126,7 +126,7 @@ on the smallest VPS you have.
 - Signed **WebAssembly extensions** that run sandboxed with only the
   capabilities an administrator grants. Built in: Discord bot insights,
   **Discord ChatOps** (`/status`, `/logs`, `/restart` from your server), and a
-  database browser.
+  database browser for database add-ons and SQLite files.
 - **Remote nodes**: enroll other Docker hosts with a one-use token. The
   `rivet-agent` connects out over mutual TLS and handles console, files,
   backups, deploys and stats for the apps placed on it.

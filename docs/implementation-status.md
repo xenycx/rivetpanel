@@ -77,7 +77,17 @@ items state exactly what remains.
   so read mode is enforced by the **database** for PostgreSQL and MariaDB
   (verified against PostgreSQL 17 and MariaDB 11); Redis and MongoDB reads
   remain an application allowlist; confirmed changes show exactly the
-  request that runs; local nodes only). Not enforced: a failing route can
+  request that runs; local nodes only). SQLite files in an app's files
+  (workspace and container volumes, found by extension and header, symbolic
+  links not followed) are queried in a `python:3.11-alpine` client with no
+  network, as the file's owner (never root): reads see the app's files through
+  a **read-only bind mount** (kernel/container runtime) and open the file
+  read-only with `query_only` (SQLite); `ATTACH`/`DETACH` are refused by an
+  SQLite authorizer; confirmed changes get a writable mount and run in one
+  transaction. Unit tests: `internal/runner/sqlitequery_test.go`,
+  `internal/filesystem/sqlite_test.go`; the client script was checked against
+  a live WAL database held open by a writer (reads see uncheckpointed rows,
+  writes in read mode fail, the 10-second limit stops a runaway query). Not enforced: a failing route can
   count toward the five-failure auto-stop for everyone, and one job queue
   serves all extensions. Not done: remote-node database queries (needs
   an agent route and protocol bump), third-party extension catalog or

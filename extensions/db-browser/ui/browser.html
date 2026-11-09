@@ -6,70 +6,190 @@
 <title>Database browser</title>
 <style>
 :root {
-	--paper: #f7f6f3; --panel: #fff; --paper-2: #efeee9; --ink: #1d1c1a; --muted: #6b6862; --rule: #d9d6cf; --rule-soft: #e7e4de;
-	--action: #b44718; --action-ink: #fff; --fail: #b3261e; --run: #1f7a4d; --warn: #8a5a00; --term: #16181d; --term-ink: #e6e6e6;
-	--radius: 8px; --font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; --mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+	--paper: #f4f4f3; --panel: #fff; --paper-2: #e9e8e6; --ink: #1b1a19; --muted: #625f5b; --rule: #d6d4d0; --rule-soft: #e6e4e1;
+	--action: #b44718; --action-ink: #fff; --fail: #b33929; --run: #076c5c; --warn: #905600; --term: #161517; --term-ink: #e4e2e0;
+	--radius: 6px; --font: "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+	--mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+	--ease: cubic-bezier(0.2, 0.7, 0.3, 1);
 }
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 html, body { margin: 0; height: 100%; }
-body { font: 14px/1.45 var(--font); color: var(--ink); background: var(--panel); display: flex; flex-direction: column; }
+body { font: 14px/1.45 var(--font); color: var(--ink); background: var(--panel); overflow: hidden; }
+::selection { background: color-mix(in srgb, var(--action) 24%, transparent); }
 button, select, input, textarea { font: inherit; color: inherit; }
 button { cursor: pointer; }
-.bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--rule-soft); }
-.seg { display: inline-flex; border: 1px solid var(--rule); border-radius: var(--radius); overflow: hidden; }
-.seg button { border: 0; background: transparent; padding: 5px 12px; }
-.seg button + button { border-left: 1px solid var(--rule); }
-.seg button[aria-pressed="true"] { background: var(--paper-2); font-weight: 600; }
-.pill { font-size: 12px; padding: 2px 8px; border-radius: 999px; background: var(--paper-2); color: var(--muted); }
-.pill.write { background: color-mix(in srgb, var(--warn) 15%, transparent); color: var(--warn); }
-.grow { flex: 1; }
-.layout { flex: 1; min-height: 0; display: grid; grid-template-columns: 15rem minmax(0, 1fr); }
-@media (max-width: 720px) { .layout { grid-template-columns: 1fr; grid-template-rows: auto 1fr; } .side { max-height: 9rem; border-right: 0; border-bottom: 1px solid var(--rule-soft); } }
-.side { border-right: 1px solid var(--rule-soft); overflow: auto; padding: 8px; }
-.side h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 6px 6px 4px; font-weight: 600; }
-.side ul { list-style: none; margin: 0; padding: 0; }
-.side li button { width: 100%; text-align: left; border: 0; background: transparent; padding: 4px 8px; border-radius: 6px; font-family: var(--mono); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.side li button:hover { background: var(--paper-2); }
-.side .muted { padding: 4px 8px; }
-.main { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
-.editor { padding: 10px 12px; border-bottom: 1px solid var(--rule-soft); display: grid; gap: 8px; }
-.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-textarea, input[type=text], select { border: 1px solid var(--rule); border-radius: var(--radius); background: var(--panel); padding: 6px 8px; }
-textarea { width: 100%; min-height: 5.5rem; resize: vertical; font-family: var(--mono); font-size: 13px; }
-input[type=text] { font-family: var(--mono); font-size: 13px; min-width: 0; }
-textarea:focus, input:focus, select:focus, button:focus-visible { outline: 2px solid var(--action); outline-offset: 1px; }
-.btn { border: 1px solid var(--rule); background: var(--panel); border-radius: var(--radius); padding: 5px 12px; }
-.btn.primary { background: var(--action); border-color: var(--action); color: var(--action-ink); font-weight: 600; }
-.btn.danger { color: var(--fail); }
-.btn:disabled { opacity: .55; cursor: default; }
-.out { flex: 1; min-height: 0; overflow: auto; }
-.meta { padding: 6px 12px; color: var(--muted); font-size: 12px; border-bottom: 1px solid var(--rule-soft); display: flex; gap: 12px; }
-table { border-collapse: collapse; font-family: var(--mono); font-size: 12.5px; }
-th, td { border-bottom: 1px solid var(--rule-soft); padding: 4px 10px; text-align: left; vertical-align: top; white-space: pre; max-width: 32rem; overflow: hidden; text-overflow: ellipsis; }
-th { position: sticky; top: 0; background: var(--paper); font-weight: 600; z-index: 1; }
-td.null { color: var(--muted); font-style: italic; }
-pre.text { margin: 0; padding: 12px; font: 12.5px/1.5 var(--mono); white-space: pre-wrap; word-break: break-word; }
-.notice { margin: 12px; padding: 10px 12px; border-radius: var(--radius); background: var(--paper-2); }
-.notice.fail { background: color-mix(in srgb, var(--fail) 10%, transparent); color: var(--fail); }
+:focus-visible { outline: 2px solid var(--action); outline-offset: 1px; }
+* { scrollbar-width: thin; scrollbar-color: var(--rule) transparent; }
+svg.i { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .muted { color: var(--muted); }
-.kbd { font-size: 11px; color: var(--muted); }
-.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+.mono { font-family: var(--mono); }
+
+/* Frame */
+.app { height: 100%; display: grid; grid-template-columns: 16.5rem minmax(0, 1fr); }
+.side { background: var(--paper); border-right: 1px solid var(--rule-soft); display: flex; flex-direction: column; min-height: 0; }
+.side section { padding: 12px 10px 10px; }
+.side section + section { border-top: 1px solid var(--rule-soft); flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.side h2 { font-size: 12px; font-weight: 600; color: var(--muted); margin: 0 6px 6px; display: flex; justify-content: space-between; align-items: baseline; }
+.side h2 .count { font-weight: 400; font-variant-numeric: tabular-nums; }
+.side ul { list-style: none; margin: 0; padding: 0; }
+.objects-list { overflow: auto; flex: 1; min-height: 0; margin: 0 -4px; padding: 0 4px; }
+.item { width: 100%; display: flex; align-items: center; gap: 8px; text-align: left; border: 0; background: transparent; padding: 5px 8px; border-radius: var(--radius); min-height: 30px; transition: background-color 150ms var(--ease); }
+.item:hover { background: color-mix(in srgb, var(--paper-2) 70%, transparent); }
+.item[aria-current="true"] { background: var(--panel); box-shadow: 0 1px 2px rgb(20 18 16 / 0.08), 0 0 0 1px var(--rule-soft); }
+.item[aria-current="true"] .i { color: var(--action); }
+.item .i { color: var(--muted); }
+.item .txt { min-width: 0; display: flex; flex-direction: column; }
+.item .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.item .sub { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.item.obj .name { font-family: var(--mono); font-size: 13px; }
+.filter { position: relative; margin: 0 0 6px; }
+.filter .i { position: absolute; left: 8px; top: 50%; transform: translateY(-50%); color: var(--muted); width: 14px; height: 14px; }
+.filter input { width: 100%; padding: 5px 8px 5px 28px; border: 1px solid var(--rule); border-radius: var(--radius); background: var(--panel); font-size: 13px; }
+.side .hint { font-size: 12px; color: var(--muted); padding: 4px 6px; }
+.skel { height: 12px; border-radius: 4px; background: linear-gradient(90deg, var(--paper-2), color-mix(in srgb, var(--paper-2) 40%, transparent), var(--paper-2)); background-size: 200% 100%; animation: shimmer 1.2s linear infinite; margin: 10px 8px; }
+@keyframes shimmer { to { background-position: -200% 0; } }
+@media (prefers-reduced-motion: reduce) { .skel { animation: none; } * { transition: none !important; } }
+
+.main { min-width: 0; min-height: 0; display: flex; flex-direction: column; position: relative; }
+.head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; padding: 10px 14px 0; border-bottom: 1px solid var(--rule-soft); }
+.crumb { display: flex; align-items: center; gap: 6px; min-width: 0; flex: 1; padding-bottom: 10px; font-weight: 600; }
+.crumb .seg { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.crumb .seg.mono { font-weight: 500; }
+.crumb .sep { color: var(--muted); width: 14px; height: 14px; }
+.crumb .tag { font-weight: 400; font-size: 12px; color: var(--muted); white-space: nowrap; }
+.tabs { display: flex; gap: 2px; align-self: flex-end; }
+.tab { border: 0; background: transparent; padding: 6px 10px 9px; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px; display: inline-flex; gap: 6px; align-items: center; }
+.tab:hover { color: var(--ink); }
+.tab[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--action); font-weight: 600; }
+
+.bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 14px; border-bottom: 1px solid var(--rule-soft); min-height: 46px; }
+.bar .grow { flex: 1; }
+.btn { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--rule); background: var(--panel); border-radius: var(--radius); padding: 4px 10px; min-height: 30px; transition: background-color 150ms var(--ease), border-color 150ms var(--ease); }
+.btn:hover:not(:disabled) { background: var(--paper); border-color: color-mix(in srgb, var(--rule) 60%, var(--ink)); }
+.btn.primary { background: var(--action); border-color: var(--action); color: var(--action-ink); font-weight: 600; }
+.btn.primary:hover:not(:disabled) { background: color-mix(in srgb, var(--action) 88%, var(--ink)); border-color: color-mix(in srgb, var(--action) 88%, var(--ink)); }
+.btn.change { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 40%, var(--rule)); }
+.btn.change:hover:not(:disabled) { background: color-mix(in srgb, var(--warn) 8%, var(--panel)); }
+.btn.ghost { border-color: transparent; background: transparent; color: var(--muted); }
+.btn.ghost:hover:not(:disabled) { color: var(--ink); background: var(--paper); border-color: transparent; }
+.btn.icon { padding: 4px 6px; }
+.btn:disabled { opacity: .5; cursor: default; }
+.kbd { font-size: 12px; color: var(--muted); }
+kbd { font: 11px var(--mono); border: 1px solid var(--rule); border-bottom-width: 2px; border-radius: 4px; padding: 0 4px; background: var(--panel); }
+select, input[type=text], textarea { border: 1px solid var(--rule); border-radius: var(--radius); background: var(--panel); padding: 5px 8px; min-height: 30px; }
+input:focus-visible, textarea:focus-visible, select:focus-visible { outline: 0; border-color: var(--action); box-shadow: 0 0 0 3px color-mix(in srgb, var(--action) 18%, transparent); }
+.editor { padding: 12px 14px; border-bottom: 1px solid var(--rule-soft); display: grid; gap: 8px; }
+.editor .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+textarea { width: 100%; min-height: 6.5rem; resize: vertical; font: 13px/1.55 var(--mono); tab-size: 2; }
+input.code { font: 13px var(--mono); }
+.guard { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+.guard .i { width: 14px; height: 14px; color: var(--run); }
+
+.meta { display: flex; align-items: center; gap: 12px; padding: 6px 14px; font-size: 12px; color: var(--muted); border-bottom: 1px solid var(--rule-soft); font-variant-numeric: tabular-nums; min-height: 38px; }
+.meta .grow { flex: 1; }
+.pill { font-size: 12px; padding: 1px 8px; border-radius: 999px; background: var(--paper-2); color: var(--muted); white-space: nowrap; }
+.pill.warn { background: color-mix(in srgb, var(--warn) 14%, transparent); color: var(--warn); }
+.pill.ok { background: color-mix(in srgb, var(--run) 12%, transparent); color: var(--run); }
+
+.out { flex: 1; min-height: 0; overflow: auto; }
+table { border-collapse: separate; border-spacing: 0; font: 12.5px/1.4 var(--mono); min-width: 100%; }
+th, td { border-bottom: 1px solid var(--rule-soft); padding: 5px 12px; text-align: left; vertical-align: top; white-space: nowrap; max-width: 28rem; overflow: hidden; text-overflow: ellipsis; }
+th { position: sticky; top: 0; background: var(--paper); font-weight: 600; z-index: 1; font-family: var(--font); font-size: 12px; color: var(--ink); }
+th button { all: unset; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; }
+th button:focus-visible { outline: 2px solid var(--action); outline-offset: 2px; border-radius: 2px; }
+th .i { width: 12px; height: 12px; color: var(--muted); }
+th.sorted .i { color: var(--action); }
+td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; }
+th.n button { flex-direction: row-reverse; }
+td.null { color: var(--muted); font-style: italic; }
+td.idx, th.idx { color: var(--muted); text-align: right; width: 1%; padding-right: 8px; font-variant-numeric: tabular-nums; position: sticky; left: 0; background: var(--panel); border-right: 1px solid var(--rule-soft); }
+th.idx { background: var(--paper); z-index: 2; }
+tbody tr { cursor: pointer; }
+tbody tr:hover td { background: color-mix(in srgb, var(--paper) 80%, transparent); }
+tbody tr[aria-selected="true"] td { background: color-mix(in srgb, var(--action) 8%, var(--panel)); }
+pre.text { margin: 0; padding: 14px; font: 12.5px/1.55 var(--mono); white-space: pre-wrap; word-break: break-word; }
+
+.state { display: grid; place-items: center; height: 100%; padding: 24px; text-align: center; }
+.state > div { max-width: 30rem; display: grid; gap: 8px; justify-items: center; }
+.state .i { width: 28px; height: 28px; color: var(--muted); stroke-width: 1.25; }
+.state h3 { margin: 4px 0 0; font-size: 15px; }
+.state p { margin: 0; color: var(--muted); }
+.state.fail .i, .state.fail h3 { color: var(--fail); }
+.state.fail p { font-family: var(--mono); font-size: 12.5px; color: var(--ink); white-space: pre-wrap; word-break: break-word; }
+.loading { padding: 4px 0; }
+.loading .skel { margin: 12px 14px; }
+
+.detail { position: absolute; top: 0; right: 0; bottom: 0; width: min(26rem, 100%); background: var(--panel); border-left: 1px solid var(--rule-soft); box-shadow: -12px 0 32px -16px rgb(20 18 16 / 0.25); display: flex; flex-direction: column; z-index: 5; animation: slide 200ms var(--ease); }
+@keyframes slide { from { transform: translateX(16px); opacity: 0; } }
+.detail header { display: flex; align-items: center; gap: 8px; padding: 10px 10px 10px 14px; border-bottom: 1px solid var(--rule-soft); }
+.detail header h3 { margin: 0; font-size: 14px; flex: 1; }
+.detail dl { margin: 0; overflow: auto; flex: 1; padding: 6px 0 14px; }
+.detail .field { padding: 8px 14px; border-bottom: 1px solid var(--rule-soft); }
+.detail dt { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+.detail dt span { flex: 1; font-weight: 600; color: var(--ink); }
+.detail dd { margin: 0; font: 12.5px/1.5 var(--mono); white-space: pre-wrap; word-break: break-word; max-height: 16rem; overflow: auto; }
+.detail dd.null { color: var(--muted); font-style: italic; }
+
+@media (max-width: 720px) {
+	.app { grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr); }
+	.side { border-right: 0; border-bottom: 1px solid var(--rule-soft); max-height: 44vh; overflow: hidden; }
+	.side section { padding: 8px 8px 6px; }
+	#sources { max-height: 7.5rem; overflow: auto; }
+	.side section + section { flex: 1; }
+	.head { padding-top: 8px; }
+	.crumb { flex-basis: 100%; padding-bottom: 0; }
+	.tabs { width: 100%; }
+	.lbl { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+	.bar, .meta, .editor { padding-left: 10px; padding-right: 10px; }
+	.hint-row { display: none; }
+}
 </style>
 </head>
 <body>
-<div class="bar">
-	<div class="seg" id="kinds" role="group" aria-label="Add-on"></div>
-	<span class="pill" id="mode" title="Queries run in a read-only session. A change runs only after you confirm it in the panel.">Read-only</span>
-	<span class="grow"></span>
-	<span class="muted" id="status" role="status" aria-live="polite"></span>
-</div>
-<div class="layout">
-	<nav class="side" id="side" aria-label="Schema"></nav>
-	<section class="main">
-		<div class="editor" id="editor"></div>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+	<symbol id="i-db" viewBox="0 0 16 16"><ellipse cx="8" cy="3.5" rx="5.5" ry="2"/><path d="M2.5 3.5v9c0 1.1 2.5 2 5.5 2s5.5-.9 5.5-2v-9"/><path d="M2.5 8c0 1.1 2.5 2 5.5 2s5.5-.9 5.5-2"/></symbol>
+	<symbol id="i-file" viewBox="0 0 16 16"><path d="M9.5 1.5H4a1 1 0 0 0-1 1v11a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V5z"/><path d="M9.5 1.5V5H13"/><path d="M5.5 8.5h5M5.5 11h3"/></symbol>
+	<symbol id="i-key" viewBox="0 0 16 16"><circle cx="5" cy="11" r="2.5"/><path d="m6.8 9.2 6.7-6.7M11 4.5l1.5 1.5"/></symbol>
+	<symbol id="i-table" viewBox="0 0 16 16"><rect x="2" y="2.5" width="12" height="11" rx="1"/><path d="M2 6h12M2 9.5h12M6.5 6v7.5"/></symbol>
+	<symbol id="i-cols" viewBox="0 0 16 16"><rect x="2" y="2.5" width="12" height="11" rx="1"/><path d="M6 2.5v11M10 2.5v11"/></symbol>
+	<symbol id="i-code" viewBox="0 0 16 16"><path d="m5.5 4.5-3.5 3.5 3.5 3.5M10.5 4.5l3.5 3.5-3.5 3.5"/></symbol>
+	<symbol id="i-search" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.5"/><path d="m10.5 10.5 3 3"/></symbol>
+	<symbol id="i-chev" viewBox="0 0 16 16"><path d="m6 3.5 4.5 4.5L6 12.5"/></symbol>
+	<symbol id="i-left" viewBox="0 0 16 16"><path d="M10 3.5 5.5 8l4.5 4.5"/></symbol>
+	<symbol id="i-up" viewBox="0 0 16 16"><path d="M8 13V3.5M4 7.5l4-4 4 4"/></symbol>
+	<symbol id="i-down" viewBox="0 0 16 16"><path d="M8 3v9.5M4 8.5l4 4 4-4"/></symbol>
+	<symbol id="i-sort" viewBox="0 0 16 16"><path d="m5 6 3-3 3 3M5 10l3 3 3-3"/></symbol>
+	<symbol id="i-copy" viewBox="0 0 16 16"><rect x="5.5" y="5.5" width="8" height="8" rx="1"/><path d="M10.5 5.5v-2a1 1 0 0 0-1-1h-6a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2"/></symbol>
+	<symbol id="i-x" viewBox="0 0 16 16"><path d="m4 4 8 8M12 4l-8 8"/></symbol>
+	<symbol id="i-lock" viewBox="0 0 16 16"><rect x="3" y="7" width="10" height="7" rx="1"/><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2"/></symbol>
+	<symbol id="i-alert" viewBox="0 0 16 16"><path d="M8 2 1.5 13.5h13z"/><path d="M8 6.5v3.2M8 11.6v.1"/></symbol>
+	<symbol id="i-play" viewBox="0 0 16 16"><path d="M4.5 3v10l8-5z"/></symbol>
+	<symbol id="i-edit" viewBox="0 0 16 16"><path d="M10.5 2.5 13.5 5.5 6 13H3v-3z"/></symbol>
+</svg>
+<div class="app">
+	<aside class="side" aria-label="Databases and tables">
+		<section>
+			<h2 id="srcTitle">Databases</h2>
+			<ul id="sources" aria-labelledby="srcTitle"><li><div class="skel" style="width:70%"></div><div class="skel" style="width:50%"></div></li></ul>
+		</section>
+		<section id="objSection" hidden>
+			<h2><span id="objTitle">Tables</span><span class="count" id="objCount"></span></h2>
+			<div class="filter" id="filterWrap" hidden><svg class="i"><use href="#i-search"/></svg><label class="sr" for="filter">Filter</label><input id="filter" type="text" placeholder="Filter" autocomplete="off" spellcheck="false"></div>
+			<ul class="objects-list" id="objects"></ul>
+		</section>
+	</aside>
+	<main class="main">
+		<header class="head">
+			<div class="crumb" id="crumb"><span class="seg">Database browser</span></div>
+			<div class="tabs" role="tablist" id="tabs" aria-label="View"></div>
+		</header>
+		<div id="view"></div>
 		<div class="meta" id="meta" hidden></div>
-		<div class="out" id="out"><div class="notice muted">Loading…</div></div>
-	</section>
+		<div class="out" id="out" tabindex="-1"></div>
+		<div class="sr" id="status" role="status" aria-live="polite"></div>
+	</main>
 </div>
 <script>
 (() => {
@@ -80,10 +200,17 @@ pre.text { margin: 0; padding: 12px; font: 12.5px/1.5 var(--mono); white-space: 
 		for (const [k, v] of Object.entries(props)) {
 			if (k === 'on') for (const [ev, fn] of Object.entries(v)) n.addEventListener(ev, fn);
 			else if (k === 'text') n.textContent = v;
-			else if (v !== undefined && v !== false) n.setAttribute(k, v === true ? '' : v);
+			else if (v !== undefined && v !== false && v !== null) n.setAttribute(k, v === true ? '' : v);
 		}
-		for (const kid of kids) if (kid != null) n.append(kid);
+		for (const kid of kids) if (kid != null && kid !== false) n.append(kid);
 		return n;
+	};
+	const icon = (name, cls) => {
+		const s = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+		s.setAttribute('class', 'i' + (cls ? ' ' + cls : '')); s.setAttribute('aria-hidden', 'true');
+		const u = document.createElementNS('http://www.w3.org/2000/svg', 'use');
+		u.setAttribute('href', '#i-' + name); s.append(u);
+		return s;
 	};
 
 	// Bridge to the panel (this page has an opaque origin and no network).
@@ -111,100 +238,271 @@ pre.text { margin: 0; padding: 12px; font: 12.5px/1.5 var(--mono); white-space: 
 		for (const [k, v] of Object.entries(vars)) if (/^--[a-z0-9-]+$/.test(k) && typeof v === 'string' && v.length < 200) document.documentElement.style.setProperty(k, v);
 	}
 
-	const NAMES = { postgres: 'PostgreSQL', mariadb: 'MariaDB', redis: 'Redis', mongodb: 'MongoDB' };
-	const SQL = { postgres: true, mariadb: true };
-	let addons = [], kind = '', busy = false, mongoDB = '';
+	const NAMES = { postgres: 'PostgreSQL', mariadb: 'MariaDB', redis: 'Redis', mongodb: 'MongoDB', sqlite: 'SQLite' };
+	const SQL = { postgres: true, mariadb: true, sqlite: true };
+	const PAGE = 100;
 
-	const status = (t) => { $('status').textContent = t || ''; };
-	const notice = (text, fail) => { $('out').replaceChildren(el('div', { class: 'notice' + (fail ? ' fail' : '') , text })); $('meta').hidden = true; };
+	// State.
+	let sources = [], src = null;        // src: { id, kind, label, sub, file }
+	let objects = [], obj = '';          // tables, keys or collections of src
+	let tab = 'data';
+	let offset = 0, sort = null, total = null;
+	let result = null, selected = -1, busy = false, mongoDB = '';
+	const history = new Map();           // source id -> recent queries
+	const drafts = new Map();            // source id -> editor text
+
+	const say = (t) => { $('status').textContent = t || ''; };
+	const size = (n) => n >= 1 << 30 ? (n / (1 << 30)).toFixed(1) + ' GiB' : n >= 1 << 20 ? (n / (1 << 20)).toFixed(1) + ' MiB' : n >= 1024 ? Math.round(n / 1024) + ' KiB' : n + ' B';
+	const fmt = (n) => Number(n).toLocaleString('en-US');
+	const qid = (name) => src.kind === 'mariadb' ? '`' + name.replace(/`/g, '``') + '`'
+		: name.split('.').length === 2 && src.kind === 'postgres' ? name.split('.').map((p) => '"' + p.replace(/"/g, '""') + '"').join('.')
+		: '"' + name.replace(/"/g, '""') + '"';
+	const lit = (s) => "'" + s.replace(/'/g, "''") + "'";
+
+	function state(kind, title, text, action) {
+		$('out').replaceChildren(el('div', { class: 'state' + (kind === 'fail' ? ' fail' : '') },
+			el('div', {}, icon(kind === 'fail' ? 'alert' : kind), el('h3', { text: title }), text ? el('p', { text }) : null, action || null)));
+		$('meta').hidden = true;
+	}
+	const loading = () => { $('out').replaceChildren(el('div', { class: 'loading', 'aria-hidden': 'true' }, ...[90, 70, 80, 60, 75].map((w) => el('div', { class: 'skel', style: `width:${w}%` })))); };
 
 	async function start() {
+		let r;
 		try {
-			const r = await rpc('GET', '/addons');
-			if (r.remote) return notice('Database queries are not available yet for apps on remote nodes.');
-			addons = (r.addons || []).filter((a) => NAMES[a.kind]);
-		} catch (e) { return notice(e.message, true); }
-		if (!addons.length) return notice('This app has no database add-on. Add PostgreSQL, MariaDB, Redis or MongoDB in its add-on settings, start the app, then come back.');
-		$('kinds').replaceChildren(...addons.map((a) => el('button', { type: 'button', 'aria-pressed': 'false', 'data-kind': a.kind, on: { click: () => choose(a.kind) } }, NAMES[a.kind])));
-		choose(addons[0].kind);
+			r = await rpc('GET', '/addons');
+		} catch (e) { renderSources(); return state('fail', 'The databases could not be listed', e.message); }
+		if (r.remote) { sources = []; renderSources(); return state('db', 'Not available on remote nodes yet', 'This app runs on a remote node. Browsing its databases there is not supported yet.'); }
+		sources = [];
+		for (const a of r.addons || []) if (NAMES[a.kind] && a.kind !== 'sqlite') sources.push({ id: a.kind, kind: a.kind, label: NAMES[a.kind], sub: a.name && a.status ? `${a.name} · ${a.status}` : (a.status || 'add-on') });
+		for (const f of r.sqlite || []) {
+			if (!f || typeof f.path !== 'string') continue;
+			const cut = f.path.lastIndexOf('/');
+			sources.push({ id: 'sqlite:' + f.path, kind: 'sqlite', file: f.path, label: f.path.slice(cut + 1), sub: (cut > 0 ? f.path.slice(0, cut) + ' · ' : '') + size(f.size || 0) });
+		}
+		renderSources();
+		if (!sources.length) {
+			return state('db', 'No databases yet', 'Add PostgreSQL, MariaDB, Redis or MongoDB on the app’s Services tab and start it, or keep a SQLite file (.db, .sqlite, .sqlite3) in its files. It appears here.');
+		}
+		choose(sources[0]);
 	}
 
-	function choose(k) {
-		kind = k;
-		for (const b of $('kinds').children) b.setAttribute('aria-pressed', String(b.dataset.kind === k));
-		buildEditor(); loadSchema();
-		notice('Run a query to see results here.');
+	function renderSources() {
+		$('sources').replaceChildren(...sources.map((s) => el('li', {}, el('button', {
+			class: 'item', type: 'button', 'aria-current': String(src === s), title: s.file || s.label,
+			on: { click: () => { if (src !== s) choose(s); } },
+		}, icon(s.kind === 'sqlite' ? 'file' : s.kind === 'redis' ? 'key' : 'db'),
+			el('span', { class: 'txt' }, el('span', { class: 'name', text: s.label }), el('span', { class: 'sub', text: s.kind === 'sqlite' ? 'SQLite · ' + s.sub : s.sub }))))));
+		if (!sources.length) $('sources').replaceChildren(el('li', { class: 'hint', text: 'None found' }));
 	}
 
-	function buildEditor() {
-		const run = el('button', { class: 'btn primary', type: 'button', on: { click: () => go('read') } }, 'Run');
-		const change = el('button', { class: 'btn danger', type: 'button', title: 'Runs without the read-only guard after you confirm it in the panel', on: { click: () => go('write') } }, 'Run as change…');
+	function choose(s) {
+		if (src) drafts.set(src.id, $('q') ? $('q').value : '');
+		src = s; obj = ''; objects = []; result = null; offset = 0; sort = null; total = null;
+		tab = SQL[s.kind] ? 'data' : 'query';
+		renderSources(); closeDetail();
+		$('filter').value = '';
+		const old = document.getElementById('mongoDB');
+		if (old) old.remove();
+		render();
+		if (tab === 'data') loading(); else state('code', s.kind === 'redis' ? 'Run a command' : 'Run a query', s.kind === 'redis' ? 'Pick a key on the left or type a command. Run is read-only.' : 'Pick a collection on the left or write a filter. Run is read-only.');
+		$('meta').hidden = true;
+		loadObjects();
+	}
+
+	// Tables, keys or collections of the current source.
+	async function loadObjects() {
+		const mine = src;
+		$('objSection').hidden = false;
+		$('objTitle').textContent = mine.kind === 'redis' ? 'Keys' : mine.kind === 'mongodb' ? 'Collections' : 'Tables';
+		$('objCount').textContent = '';
+		$('objects').replaceChildren(el('li', {}, el('div', { class: 'skel', style: 'width:60%' }), el('div', { class: 'skel', style: 'width:75%' }), el('div', { class: 'skel', style: 'width:45%' })));
+		let names = [];
+		try {
+			if (mine.kind === 'postgres') {
+				const r = await query({ query: "select table_schema || '.' || table_name from information_schema.tables where table_schema not in ('pg_catalog','information_schema') order by 1" });
+				names = (r.rows || []).map((x) => x[0]);
+			} else if (mine.kind === 'mariadb') {
+				names = ((await query({ query: 'SHOW TABLES' })).rows || []).map((x) => x[0]);
+			} else if (mine.kind === 'sqlite') {
+				const r = await query({ query: "SELECT name FROM sqlite_master WHERE type IN ('table', 'view') AND name NOT LIKE 'sqlite\\_%' ESCAPE '\\' ORDER BY name" });
+				names = (r.rows || []).map((x) => x[0]);
+			} else if (mine.kind === 'redis') {
+				const r = await query({ args: ['SCAN', '0', 'COUNT', '200'] });
+				names = (r.text || '').split('\n').map((l) => l.replace(/^\s*(\d+\)\s*)+/, '').replace(/^"|"$/g, '')).filter(Boolean).slice(1, 201);
+			} else {
+				const r = await query({ op: 'databases' });
+				const dbs = (r.rows || []).map((x) => JSON.parse(x[0]).name).filter((n) => !['admin', 'config', 'local'].includes(n));
+				mongoDB = mongoDB && dbs.includes(mongoDB) ? mongoDB : (dbs[0] || '');
+				if (mongoDB) names = ((await query({ op: 'collections', database: mongoDB })).rows || []).map((x) => JSON.parse(x[0]).name);
+				if (mine === src) renderMongoDBs(dbs);
+			}
+		} catch (e) {
+			if (mine === src) $('objects').replaceChildren(el('li', { class: 'hint', text: 'Could not be read: ' + e.message }));
+			return;
+		}
+		if (mine !== src) return;
+		objects = names;
+		renderObjects();
+		if (tab === 'data' && !obj && names.length && SQL[mine.kind]) pick(names[0]);
+		else if (tab === 'data' && !names.length) render();
+	}
+
+	function renderMongoDBs(dbs) {
+		const pick = el('select', { 'aria-label': 'Database', style: 'width:100%;margin-bottom:6px', on: { change: () => { mongoDB = pick.value; obj = ''; loadObjects(); } } }, ...dbs.map((d) => el('option', { value: d }, d)));
+		pick.value = mongoDB;
+		const wrap = $('filterWrap');
+		const old = document.getElementById('mongoDB');
+		if (old) old.remove();
+		pick.id = 'mongoDB';
+		wrap.before(pick);
+	}
+
+	function renderObjects() {
+		const f = $('filter').value.trim().toLowerCase();
+		const shown = f ? objects.filter((n) => n.toLowerCase().includes(f)) : objects;
+		$('objCount').textContent = objects.length ? (f ? `${shown.length} of ${objects.length}` : String(objects.length)) : '';
+		$('filterWrap').hidden = objects.length < 8;
+		const ic = src.kind === 'redis' ? 'key' : 'table';
+		$('objects').replaceChildren(...shown.map((n) => el('li', {}, el('button', {
+			class: 'item obj', type: 'button', 'aria-current': String(obj === n), title: n, on: { click: () => pick(n) },
+		}, icon(ic), el('span', { class: 'txt' }, el('span', { class: 'name', text: n }))))));
+		if (!objects.length) $('objects').replaceChildren(el('li', { class: 'hint', text: src.kind === 'redis' ? 'No keys yet' : src.kind === 'mongodb' ? (mongoDB ? 'No collections yet' : 'No databases yet') : 'No tables yet' }));
+		else if (!shown.length) $('objects').replaceChildren(el('li', { class: 'hint', text: 'No match' }));
+	}
+	$('filter').addEventListener('input', renderObjects);
+
+	function pick(n) {
+		obj = n; offset = 0; sort = null; total = null;
+		renderObjects();
+		if (SQL[src.kind]) {
+			if (tab === 'query') { setQ(`SELECT * FROM ${qid(n)} LIMIT ${PAGE}`); render(); return go('read'); }
+			render(); return tab === 'data' ? browse() : columns();
+		}
+		render();
+		if (src.kind === 'redis') { setQ('TYPE ' + quote(n)); go('read'); }
+		else { $('coll').value = n; $('op').value = 'find'; setQ('{}'); go('read'); }
+	}
+
+	// Header: where you are and which view.
+	function render() {
+		const c = [el('span', { class: 'seg', text: src.label })];
+		if (src.kind === 'sqlite') c.push(el('span', { class: 'tag', text: 'SQLite' }));
+		if (obj) c.push(icon('chev', 'sep'), el('span', { class: 'seg mono', text: obj }));
+		$('crumb').replaceChildren(...c);
+		const tabs = SQL[src.kind] ? [['data', 'Data', 'table'], ['columns', 'Columns', 'cols'], ['query', 'SQL', 'code']] : [['query', src.kind === 'redis' ? 'Command' : 'Query', 'code']];
+		$('tabs').replaceChildren(...tabs.map(([id, label, ic]) => el('button', {
+			class: 'tab', type: 'button', role: 'tab', 'aria-selected': String(tab === id), on: { click: () => switchTab(id) },
+		}, icon(ic), label)));
+		renderView();
+	}
+
+	function switchTab(id) {
+		if (tab === id) return;
+		if ($('q')) drafts.set(src.id, $('q').value);
+		tab = id; closeDetail(); render();
+		if (id === 'data') obj ? browse() : state('table', 'Pick a table', 'Choose a table on the left to see its rows.');
+		else if (id === 'columns') obj ? columns() : state('cols', 'Pick a table', 'Choose a table on the left to see its columns.');
+		else if (result && result.forQuery) show(result); else state('code', 'Run a query', 'Results appear here. Run is read-only.');
+	}
+
+	function renderView() {
+		const v = $('view');
+		if (tab === 'data') {
+			v.replaceChildren(el('div', { class: 'bar' },
+				el('button', { class: 'btn icon', type: 'button', id: 'prev', 'aria-label': 'Previous page', disabled: offset === 0, on: { click: () => { offset = Math.max(0, offset - PAGE); browse(); } } }, icon('left')),
+				el('button', { class: 'btn icon', type: 'button', id: 'next', 'aria-label': 'Next page', on: { click: () => { offset += PAGE; browse(); } } }, icon('chev')),
+				el('span', { class: 'kbd', id: 'range' }),
+				el('span', { class: 'grow' }),
+				el('button', { class: 'btn ghost', type: 'button', on: { click: () => { if (!obj) return; tab = 'query'; render(); setQ(browseSQL()); } } }, icon('code'), el('span', { class: 'lbl', text: 'Open in SQL' })),
+				el('button', { class: 'btn ghost', type: 'button', id: 'copy', on: { click: copyCSV } }, icon('copy'), el('span', { class: 'lbl', text: 'Copy CSV' }))));
+			return;
+		}
+		if (tab === 'columns') { v.replaceChildren(); return; }
+		const run = el('button', { class: 'btn primary', type: 'button', on: { click: () => go('read') } }, icon('play'), 'Run');
+		const change = el('button', { class: 'btn change', type: 'button', title: 'Runs without the read-only guard after you confirm it in the panel', on: { click: () => go('write') } }, icon('edit'), 'Run as change…');
 		const keys = (e) => { if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); go('read'); } };
 		let fields;
-		if (SQL[kind]) {
-			fields = [el('label', { class: 'sr', for: 'q' }, 'SQL'), el('textarea', { id: 'q', spellcheck: 'false', placeholder: 'SELECT * FROM … LIMIT 100', on: { keydown: keys } })];
-		} else if (kind === 'redis') {
-			fields = [el('label', { class: 'sr', for: 'q' }, 'Command'), el('input', { id: 'q', type: 'text', spellcheck: 'false', placeholder: 'GET key   ·   HGETALL key   ·   SCAN 0 MATCH user:* COUNT 100', style: 'width:100%', on: { keydown: (e) => { if (e.key === 'Enter') { e.preventDefault(); go('read'); } } } })];
+		if (SQL[src.kind]) {
+			fields = [el('label', { class: 'sr', for: 'q' }, 'SQL'), el('textarea', { id: 'q', spellcheck: 'false', placeholder: obj ? `SELECT * FROM ${qid(obj)} LIMIT ${PAGE}` : 'SELECT …', on: { keydown: keys } })];
+		} else if (src.kind === 'redis') {
+			fields = [el('label', { class: 'sr', for: 'q' }, 'Command'), el('input', { id: 'q', class: 'code', type: 'text', spellcheck: 'false', autocomplete: 'off', placeholder: 'GET key   ·   HGETALL key   ·   SCAN 0 MATCH user:* COUNT 100', style: 'width:100%', on: { keydown: (e) => { if (e.key === 'Enter') { e.preventDefault(); go('read'); } } } })];
 		} else {
-			const ops = ['find', 'count', 'aggregate', 'insert', 'update', 'delete'];
 			fields = [
 				el('div', { class: 'row' },
 					el('label', { for: 'op', class: 'muted' }, 'Operation'),
-					el('select', { id: 'op' }, ...ops.map((o) => el('option', { value: o }, o))),
+					el('select', { id: 'op' }, ...['find', 'count', 'aggregate', 'insert', 'update', 'delete'].map((o) => el('option', { value: o }, o))),
 					el('label', { for: 'coll', class: 'muted' }, 'Collection'),
-					el('input', { id: 'coll', type: 'text', spellcheck: 'false', placeholder: 'users', size: '18' })),
+					el('input', { id: 'coll', class: 'code', type: 'text', spellcheck: 'false', placeholder: 'users', size: '18', value: obj || undefined })),
 				el('label', { class: 'sr', for: 'q' }, 'Filter, pipeline or document (JSON)'),
 				el('textarea', { id: 'q', spellcheck: 'false', placeholder: '{ "active": true }   (a filter; aggregate takes a pipeline array; update takes {"filter":…, "update":…})', on: { keydown: keys } }),
 			];
 		}
-		$('editor').replaceChildren(...fields, el('div', { class: 'row' }, run, change, el('span', { class: 'kbd' }, SQL[kind] || kind === 'mongodb' ? 'Ctrl+Enter runs' : 'Enter runs')));
+		const recent = history.get(src.id) || [];
+		const hist = recent.length ? el('select', { 'aria-label': 'Recent queries', style: 'max-width:16rem', on: { change: (e) => { if (e.target.value !== '') setQ(recent[Number(e.target.value)]); e.target.value = ''; } } },
+			el('option', { value: '' }, 'Recent'), ...recent.map((t, i) => el('option', { value: String(i) }, t.replace(/\s+/g, ' ').slice(0, 80)))) : null;
+		v.replaceChildren(el('div', { class: 'editor' }, ...fields,
+			el('div', { class: 'row' }, run, el('span', { class: 'kbd' }, el('kbd', { text: 'Ctrl' }), ' ', el('kbd', { text: 'Enter' })), el('span', { style: 'flex:1' }), hist, change),
+			el('div', { class: 'guard' }, icon('lock'), src.kind === 'sqlite' ? 'Run is read-only: the file is opened read-only. Run as change… asks you to confirm in the panel first.' : 'Run is read-only. Run as change… asks you to confirm in the panel first.')));
+		const d = drafts.get(src.id);
+		if (d) $('q').value = d;
+		else if (SQL[src.kind] && obj) $('q').value = `SELECT * FROM ${qid(obj)} LIMIT ${PAGE}`;
 	}
 
-	async function query(q) { return rpc('POST', '/query', { kind, query: q }); }
+	const browseSQL = () => {
+		const order = sort ? ` ORDER BY ${qid(sort.col)} ${sort.dir === 'desc' ? 'DESC' : 'ASC'}` : '';
+		return `SELECT * FROM ${qid(obj)}${order} LIMIT ${PAGE} OFFSET ${offset}`;
+	};
 
-	async function loadSchema() {
-		const side = $('side');
-		side.replaceChildren(el('div', { class: 'muted', text: 'Loading…' }));
-		const list = (title, items, onpick) => {
-			const ul = el('ul');
-			for (const it of items) ul.append(el('li', {}, el('button', { type: 'button', title: it, on: { click: () => onpick(it) } }, it)));
-			return [el('h2', { text: title }), items.length ? ul : el('div', { class: 'muted', text: 'None' })];
-		};
+	async function browse() {
+		if (!obj) return;
+		const mine = src, t = obj;
+		loading(); renderView();
 		try {
-			if (kind === 'postgres') {
-				const r = await query({ query: "select table_schema || '.' || table_name from information_schema.tables where table_schema not in ('pg_catalog','information_schema') order by 1" });
-				const names = (r.rows || []).map((x) => x[0]);
-				side.replaceChildren(...list('Tables', names, (t) => { const [s, n] = t.split('.'); setQ(`SELECT * FROM "${s}"."${n}" LIMIT 100`); go('read'); }));
-			} else if (kind === 'mariadb') {
-				const r = await query({ query: 'SHOW TABLES' });
-				const names = (r.rows || []).map((x) => x[0]);
-				side.replaceChildren(...list('Tables', names, (t) => { setQ('SELECT * FROM `' + t.replace(/`/g, '``') + '` LIMIT 100'); go('read'); }));
-			} else if (kind === 'redis') {
-				const r = await query({ args: ['SCAN', '0', 'COUNT', '200'] });
-				const lines = (r.text || '').split('\n').map((l) => l.replace(/^\d+\)\s*/, '').replace(/^"|"$/g, '')).filter(Boolean);
-				const keys = lines.slice(1, 201);
-				side.replaceChildren(...list('Keys (first scan page)', keys, (k) => { setQ('TYPE ' + quote(k)); go('read'); }));
-			} else {
-				const r = await query({ op: 'databases' });
-				const dbs = (r.rows || []).map((x) => JSON.parse(x[0]).name).filter((n) => !['admin', 'config', 'local'].includes(n));
-				const pick = el('select', { id: 'db', 'aria-label': 'Database', on: { change: () => { mongoDB = pick.value; loadCollections(); } } }, ...dbs.map((d) => el('option', { value: d }, d)));
-				mongoDB = mongoDB && dbs.includes(mongoDB) ? mongoDB : (dbs[0] || '');
-				pick.value = mongoDB;
-				side.replaceChildren(el('h2', { text: 'Database' }), dbs.length ? pick : el('div', { class: 'muted', text: 'No databases yet' }), el('div', { id: 'colls' }));
-				loadCollections();
-				async function loadCollections() {
-					if (!mongoDB) return;
-					const c = await query({ op: 'collections', database: mongoDB });
-					const names = (c.rows || []).map((x) => JSON.parse(x[0]).name);
-					$('colls').replaceChildren(...list('Collections', names, (n) => { $('coll').value = n; $('op').value = 'find'; setQ('{}'); go('read'); }));
-				}
+			const r = await query({ query: browseSQL() });
+			if (mine !== src || t !== obj || tab !== 'data') return;
+			r.forQuery = false;
+			show(r, true);
+			if (total === null) {
+				query({ query: `SELECT count(*) FROM ${qid(t)}` }).then((c) => {
+					if (mine !== src || t !== obj) return;
+					total = Number(c.rows && c.rows[0] && c.rows[0][0]);
+					pager();
+				}, () => {});
 			}
-		} catch (e) {
-			side.replaceChildren(el('div', { class: 'muted', text: 'The schema could not be read: ' + e.message }));
-		}
+			pager();
+		} catch (e) { if (mine === src && t === obj) state('fail', 'The table could not be read', e.message); }
 	}
 
-	const setQ = (v) => { $('q').value = v; $('q').focus(); };
+	function pager() {
+		if (tab !== 'data' || !result) return;
+		const n = (result.rows || []).length;
+		const end = offset + n;
+		$('next').disabled = n < PAGE || (total !== null && end >= total);
+		$('prev').disabled = offset === 0;
+		$('range').textContent = n ? `${fmt(offset + 1)}–${fmt(end)}${total !== null && !isNaN(total) ? ' of ' + fmt(total) : ''}` : (offset ? 'No more rows' : '');
+	}
+
+	async function columns() {
+		if (!obj) return;
+		const mine = src, t = obj;
+		loading();
+		let q;
+		if (mine.kind === 'sqlite') q = `SELECT name AS "column", type, CASE WHEN "notnull" THEN 'no' ELSE 'yes' END AS nullable, dflt_value AS "default", CASE WHEN pk > 0 THEN 'yes' ELSE '' END AS "primary key" FROM pragma_table_info(${lit(t)})`;
+		else if (mine.kind === 'postgres') {
+			const [s, n] = t.includes('.') ? t.split('.') : ['public', t];
+			q = `select column_name as "column", data_type as type, is_nullable as nullable, column_default as "default" from information_schema.columns where table_schema = ${lit(s)} and table_name = ${lit(n)} order by ordinal_position`;
+		} else q = `SHOW COLUMNS FROM ${qid(t)}`;
+		try {
+			const r = await query({ query: q });
+			if (mine !== src || t !== obj || tab !== 'columns') return;
+			r.forQuery = false;
+			show(r, false, 'column');
+		} catch (e) { if (mine === src && t === obj) state('fail', 'The columns could not be read', e.message); }
+	}
+
+	async function query(q) { return rpc('POST', '/query', { kind: src.kind, query: src.kind === 'sqlite' ? Object.assign({ file: src.file }, q) : q }); }
+
+	const setQ = (v) => { const q = $('q'); if (!q) return; q.value = v; q.focus(); };
 	const quote = (s) => /[\s"']/.test(s) ? '"' + s.replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"' : s;
 
 	// Splits a Redis command line, honouring double and single quotes.
@@ -223,45 +521,159 @@ pre.text { margin: 0; padding: 12px; font: 12.5px/1.5 var(--mono); white-space: 
 
 	function build(mode) {
 		const text = $('q').value;
-		if (SQL[kind]) return { mode, query: text };
-		if (kind === 'redis') return { mode, args: splitArgs(text) };
+		if (SQL[src.kind]) return { mode, query: text };
+		if (src.kind === 'redis') return { mode, args: splitArgs(text) };
 		return { mode, op: $('op').value, database: mongoDB, collection: $('coll').value.trim(), json: text.trim() };
 	}
 
 	async function go(mode) {
-		if (busy || !kind) return;
-		const q = build(mode);
-		busy = true; status(mode === 'write' ? 'Waiting for confirmation…' : 'Running…');
+		if (busy || !src || !$('q')) return;
+		const text = $('q').value;
+		if (!text.trim() && src.kind !== 'mongodb') { $('q').focus(); return say('Enter a query first.'); }
+		const q = build(mode), mine = src;
+		busy = true; closeDetail();
+		say(mode === 'write' ? 'Waiting for confirmation in the panel…' : 'Running…');
+		if (mode !== 'write') loading();
 		try {
 			let r = await query(q);
 			if (r && r.confirm) {
 				r = await call('confirm-write', { token: r.confirm });
-				if (!r) { status('Cancelled'); return; }
-				loadSchema();
+				if (!r) { say('Cancelled'); return; }
+				total = null;
+				loadObjects();
 			}
+			remember(mine, text);
+			if (mine !== src) return;
+			r.forQuery = true;
 			show(r);
-			status('');
+			say(r.rows ? `${r.rows.length} rows` : 'Done');
 		} catch (e) {
-			notice(e.message, true); status('');
+			if (mine === src) state('fail', mode === 'write' ? 'The change did not run' : 'The query failed', e.message);
+			say('');
 		} finally { busy = false; }
 	}
 
-	function show(r) {
-		const meta = $('meta');
-		meta.replaceChildren(...[
-			el('span', { text: r.rows ? `${r.rows.length} row${r.rows.length === 1 ? '' : 's'}` : 'Done' }),
-			el('span', { text: `${r.ms ?? 0} ms` }),
-			r.truncated ? el('span', { class: 'pill write', text: 'Truncated to the first 500 rows' }) : null].filter(Boolean));
-		meta.hidden = false;
-		if (r.columns && r.columns.length) {
-			const table = el('table', {},
-				el('thead', {}, el('tr', {}, ...r.columns.map((c) => el('th', { scope: 'col', text: c })))),
-				el('tbody', {}, ...(r.rows || []).map((row) => el('tr', {}, ...row.map((v) => v === '' || v === 'NULL' ? el('td', { class: 'null', text: v === '' ? '' : 'NULL' }) : el('td', { text: v, title: v.length > 60 ? v : undefined }))))));
-			$('out').replaceChildren(table);
-		} else {
-			$('out').replaceChildren(el('pre', { class: 'text', text: r.text || 'The statement ran and returned nothing.' }));
+	function remember(s, text) {
+		if (!text.trim()) return;
+		const list = (history.get(s.id) || []).filter((t) => t !== text);
+		list.unshift(text);
+		history.set(s.id, list.slice(0, 15));
+		if (tab === 'query' && s === src) {
+			const cur = $('q').value;
+			renderView();
+			$('q').value = cur;
 		}
 	}
+
+	const numeric = (rows, i) => {
+		let seen = 0;
+		for (const r of rows) {
+			const v = r[i];
+			if (v === '' || v === 'NULL') continue;
+			if (!/^-?\d+(\.\d+)?(e[+-]?\d+)?$/i.test(v)) return false;
+			seen++;
+		}
+		return seen > 0;
+	};
+
+	function show(r, browsing, noun = 'row') {
+		result = r; selected = -1;
+		const meta = $('meta');
+		const rows = r.rows || [];
+		meta.replaceChildren(...[
+			browsing ? null : el('span', { text: r.columns && r.columns.length ? `${fmt(rows.length)} ${noun}${rows.length === 1 ? '' : 's'}` : 'Done' }),
+			el('span', { text: `${r.ms ?? 0} ms` }),
+			r.truncated ? el('span', { class: 'pill warn', text: 'Showing the first rows only' }) : null,
+			el('span', { class: 'grow' }),
+			rows.length && noun === 'row' ? el('span', { class: 'hint-row', text: 'Click a row to see every value' }) : null,
+			r.columns && r.columns.length && !browsing ? el('button', { class: 'btn ghost', type: 'button', on: { click: copyCSV } }, icon('copy'), el('span', { class: 'lbl', text: 'Copy CSV' })) : null].filter(Boolean));
+		meta.hidden = false;
+		if (!(r.columns && r.columns.length)) {
+			$('out').replaceChildren(el('pre', { class: 'text', text: r.text || 'The statement ran and returned nothing.' }));
+			return;
+		}
+		if (!rows.length) {
+			state('table', browsing ? 'This table has no rows' : 'No rows', browsing && offset ? 'There are no rows past this page.' : browsing ? '' : 'The query ran and matched nothing.');
+			meta.hidden = false;
+			return;
+		}
+		const num = r.columns.map((_, i) => numeric(rows, i));
+		const head = el('tr', {}, el('th', { class: 'idx', scope: 'col' }, el('span', { class: 'sr', text: 'Row' }), '#'),
+			...r.columns.map((c, i) => {
+				const cls = (num[i] ? 'n' : '') + (sort && sort.col === c ? ' sorted' : '');
+				if (!(browsing && tab === 'data')) return el('th', { scope: 'col', class: cls || undefined, text: c });
+				const dir = sort && sort.col === c ? sort.dir : null;
+				return el('th', { scope: 'col', class: cls || undefined, 'aria-sort': dir ? (dir === 'asc' ? 'ascending' : 'descending') : 'none' },
+					el('button', { type: 'button', title: 'Sort by ' + c, on: { click: () => { sort = !dir ? { col: c, dir: 'asc' } : dir === 'asc' ? { col: c, dir: 'desc' } : null; offset = 0; browse(); } } },
+						el('span', { text: c }), icon(dir === 'asc' ? 'up' : dir === 'desc' ? 'down' : 'sort')));
+			}));
+		const body = el('tbody');
+		rows.forEach((row, ri) => {
+			const tr = el('tr', { 'aria-selected': 'false', tabindex: '0', on: { click: () => openDetail(ri), keydown: (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openDetail(ri); } } } },
+				el('td', { class: 'idx', text: String((browsing ? offset : 0) + ri + 1) }),
+				...row.map((v, i) => v === 'NULL' || v === '' ? el('td', { class: 'null' + (num[i] ? ' n' : ''), text: v === '' ? '' : 'NULL' }) : el('td', { class: num[i] ? 'n' : undefined, text: v })));
+			body.append(tr);
+		});
+		$('out').replaceChildren(el('table', { 'aria-label': obj && browsing ? `Rows of ${obj}` : 'Query result' }, el('thead', {}, head), body));
+	}
+
+	// Row inspector: the full value of every column.
+	function openDetail(i) {
+		if (!result || !result.rows || !result.rows[i]) return;
+		selected = i;
+		for (const tr of $('out').querySelectorAll('tbody tr')) tr.setAttribute('aria-selected', 'false');
+		const tr = $('out').querySelectorAll('tbody tr')[i];
+		if (tr) tr.setAttribute('aria-selected', 'true');
+		closeDetail(true);
+		const row = result.rows[i];
+		const n = (tab === 'data' ? offset : 0) + i + 1;
+		const panel = el('aside', { class: 'detail', id: 'detail', 'aria-label': `Row ${n}`, on: { keydown: (e) => { if (e.key === 'Escape') closeDetail(); } } },
+			el('header', {}, el('h3', { text: `Row ${n}` }),
+				el('button', { class: 'btn ghost icon', type: 'button', 'aria-label': 'Previous row', disabled: i === 0, on: { click: () => openDetail(i - 1) } }, icon('up')),
+				el('button', { class: 'btn ghost icon', type: 'button', 'aria-label': 'Next row', disabled: i >= result.rows.length - 1, on: { click: () => openDetail(i + 1) } }, icon('down')),
+				el('button', { class: 'btn ghost icon', type: 'button', id: 'closeDetail', 'aria-label': 'Close', on: { click: () => closeDetail() } }, icon('x'))),
+			el('dl', {}, ...result.columns.map((c, ci) => {
+				const v = row[ci];
+				const isNull = v === 'NULL' || v === '';
+				return el('div', { class: 'field' },
+					el('dt', {}, el('span', { text: c }), isNull ? null : el('button', { class: 'btn ghost icon', type: 'button', 'aria-label': 'Copy ' + c, title: 'Copy', on: { click: () => copy(pretty(v), c) } }, icon('copy'))),
+					el('dd', { class: isNull ? 'null' : undefined, text: isNull ? (v === '' ? '(empty)' : 'NULL') : pretty(v) }));
+			})));
+		document.querySelector('.main').append(panel);
+		$('closeDetail').focus();
+	}
+	function closeDetail(keepSel) {
+		const d = $('detail');
+		if (d) d.remove();
+		if (!keepSel) { selected = -1; for (const tr of $('out').querySelectorAll('tbody tr[aria-selected="true"]')) { tr.setAttribute('aria-selected', 'false'); tr.focus(); } }
+	}
+	document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && $('detail')) closeDetail(); });
+	const pretty = (v) => {
+		if (!/^\s*[[{]/.test(v)) return v;
+		try { return JSON.stringify(JSON.parse(v), null, 2); } catch { return v; }
+	};
+
+	function csv() {
+		const esc = (v) => /[",\n\r]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
+		return [result.columns, ...(result.rows || [])].map((r) => r.map((v) => esc(v === 'NULL' ? '' : v)).join(',')).join('\n');
+	}
+	function copyCSV() { if (result && result.columns) copy(csv(), `${(result.rows || []).length} rows`); }
+
+	// Copies text. The frame may not use the clipboard API, so this falls
+	// back to a selected text field and the browser's copy command.
+	async function copy(text, what) {
+		let ok = false;
+		try { await navigator.clipboard.writeText(text); ok = true; } catch {}
+		if (!ok) {
+			const t = el('textarea', { style: 'position:fixed;opacity:0;top:0;left:0', 'aria-hidden': 'true' });
+			t.value = text; document.body.append(t); t.select();
+			try { ok = document.execCommand('copy'); } catch {}
+			t.remove();
+		}
+		say(ok ? `Copied ${what}` : 'Copying is blocked here; select the text and press Ctrl+C.');
+		toast(ok ? `Copied ${what}` : 'Copying is blocked in this frame', ok ? 'success' : 'fail');
+	}
+	const toast = (text, tone) => window.parent.postMessage({ rivet: 1, nonce, type: 'toast', text: text.slice(0, 200), tone }, '*');
 })();
 </script>
 </body>
