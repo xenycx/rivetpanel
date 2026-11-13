@@ -7,60 +7,51 @@
 	import { toast } from '$lib/ui/toast.svelte';
 	import Icon from '$lib/components/ui/Icon.svelte';
 	import Notice from '$lib/components/ui/Notice.svelte';
-	import {
-		type TicketView,
-		type TicketMessage,
-		ticketPriorities,
-		priorityLabel,
-		statusKeys,
-		statusLabel,
-		staffStatusLabel,
-		staffStatusShort,
-		statusTone,
-		categoryLabel,
-		drafts,
-		shortcutAllowed
-	} from '$lib/api/support';
+	import { type TicketView, type TicketMessage, type ReactionKind, statusKeys, staffStatusLabel, ticketKey, shortcutAllowed } from '$lib/api/support';
+	import TicketDetails from '$lib/components/support/TicketDetails.svelte';
+	import TicketMessageItem from '$lib/components/support/TicketMessageItem.svelte';
+	import TicketComposer from '$lib/components/support/TicketComposer.svelte';
+	import LabelManager from '$lib/components/support/LabelManager.svelte';
 
-	// One ticket's conversation: header, staff controls, thread and composer.
-	// The ticket page shows it in the page flow; the triage desk shows it
-	// embedded in a pane of fixed height that scrolls its thread inside and
-	// keeps the composer in reach.
+	// One ticket: header, details, conversation and reply box.
+	//   page  the ticket's own page: conversation beside a details sidebar
+	//   pane  the split layout's right side: fixed height, scrolls inside
+	//   peek  the slide-over panel of the table and board layouts
 	let {
 		id,
-		embedded = false,
+		mode = 'page',
 		initial = null,
 		onview,
-		onescape
+		onescape,
+		onclose
 	}: {
 		id: string;
-		embedded?: boolean;
+		mode?: 'page' | 'pane' | 'peek';
 		/** A cached copy to show at once while the current one loads. */
 		initial?: TicketView | null;
-		/** Every newly loaded or changed view (the desk updates its row and cache). */
+		/** Every newly loaded or changed view (lists update their rows). */
 		onview?: (v: TicketView) => void;
-		/** Escape in the composer (the desk returns focus to its list). */
+		/** Escape in the reply box. */
 		onescape?: () => void;
+		/** The peek panel's close button. */
+		onclose?: () => void;
 	} = $props();
 
+	const embedded = $derived(mode !== 'page');
 	let view = $state<TicketView | null>(untrack(() => initial));
 	let error = $state('');
 	let notFound = $state(false);
-	let staff = $state<{ id: string; email: string; display_name: string }[]>([]);
 	const msg = (e: unknown) => (e instanceof ApiError ? e.message : 'The request failed.');
+	const me = $derived(session.user?.id ?? '');
 
-	// Messages present at first render arrive silently; later ones (a reply
-	// sent here, or one fetched on refresh) settle in.
+	// Messages present at first render arrive silently; later ones settle in.
 	let known: Set<string> | null = null;
 	const isNew = (m: TicketMessage) => !!known && !known.has(m.id);
-
 	function accept(v: TicketView) {
 		view = v;
 		if (!known) known = new Set(v.messages.map((m) => m.id));
 		onview?.(v);
 	}
-
-	let staffLoaded = false;
 	async function load() {
 		error = '';
 		try {
@@ -68,22 +59,29 @@
 			const grew = !!view && v.messages.length > view.messages.length;
 			accept(v);
 			if (grew) settleToEnd();
-			if (v.manage && !staffLoaded) {
-				staffLoaded = true;
-				staff = (await api<{ staff: typeof staff }>('GET', '/tickets/staff')).staff;
-			}
 		} catch (e) {
 			if (e instanceof ApiError && e.status === 404) notFound = true;
 			else error = msg(e);
 		}
 	}
 
-	// The thread scroller (embedded) opens at the latest message.
 	let scroller = $state<HTMLElement>();
 	async function settleToEnd(smooth = true) {
 		await tick();
 		if (!embedded || !scroller) return;
 		scroller.scrollTo({ top: scroller.scrollHeight, behavior: smooth && !matchMedia('(prefers-reduced-motion: reduce)').matches ? 'smooth' : 'auto' });
+	}
+	// A link to a message (#m-<id>) scrolls to it and flashes it.
+	async function toHash() {
+		const h = location.hash;
+		if (!h.startsWith('#m-')) return false;
+		await tick();
+		const el = document.getElementById(h.slice(1));
+		if (!el) return false;
+		el.scrollIntoView({ block: 'center' });
+		el.classList.add('flash');
+		setTimeout(() => el.classList.remove('flash'), 1700);
+		return true;
 	}
 
 	onMount(() => {
@@ -91,99 +89,66 @@
 			known = new Set(view.messages.map((m) => m.id));
 			settleToEnd(false);
 		}
-		load().then(() => {
-			if (!initial) settleToEnd(false);
+		load().then(async () => {
+			if (!(await toHash()) && !initial) settleToEnd(false);
 		});
-		// Pick up answers that arrived while the tab was in the background.
 		const back = () => document.visibilityState === 'visible' && !sending && load();
 		document.addEventListener('visibilitychange', back);
 		return () => document.removeEventListener('visibilitychange', back);
 	});
 
 	const t = $derived(view?.ticket);
-	const labels = $derived(view?.staff ? staffStatusLabel : statusLabel);
 	const canReply = $derived(!!view && (view.manage || (view.requester && t?.status !== 'closed')));
-	const me = $derived(session.user?.id);
+	const key = $derived(t ? ticketKey(t) : '');
 
-	// ---- Composer --------------------------------------------------------
-	const saved = untrack(() => drafts.get(id));
-	let reply = $state(saved?.body ?? '');
-	let internal = $state(saved?.internal ?? false);
+	// ---- Sending ---------------------------------------------------------------
+	let composer = $state<{ compose: (note?: boolean) => void; quote: (a: string, b: string) => void }>();
 	let sending = $state(false);
-	let box = $state<HTMLTextAreaElement>();
-	$effect(() => {
-		const body = reply;
-		const note = internal;
-		untrack(() => (body.trim() ? drafts.set(id, { body, internal: note }) : drafts.delete(id)));
-	});
-
-	/** Focus the composer, as a reply or as an internal note. */
-	export function compose(note = false) {
-		if (!canReply) return;
-		internal = note && !!view?.manage;
-		box?.focus();
-	}
-
 	let pending = $state<TicketMessage | null>(null);
-	async function send(e?: SubmitEvent) {
-		e?.preventDefault();
-		const body = reply.trim();
-		if (!body || sending || !view) return;
+	async function send({ body, internal, mentions }: { body: string; internal: boolean; mentions: string[] }) {
+		if (!view) return false;
 		sending = true;
 		error = '';
-		const note = internal;
-		// Show it in the thread at once; the server's copy replaces it.
 		pending = {
 			id: 'pending',
 			author: 'You',
 			mine: true,
 			kind: 'message',
-			staff: view.manage && !(view.requester && !note),
-			internal: note,
+			staff: view.manage && !(view.requester && !internal),
+			internal,
 			body,
-			created_at_ms: Date.now()
+			created_at_ms: Date.now(),
+			person: null,
+			reactions: []
 		};
-		reply = '';
-		internal = false;
 		settleToEnd();
 		try {
-			const v = await api<TicketView>('POST', `/tickets/${id}/messages`, { body, internal: note });
+			const v = await api<TicketView>('POST', `/tickets/${id}/messages`, { body, internal, mentions });
 			pending = null;
 			accept(v);
 			settleToEnd();
-		} catch (err) {
+			return true;
+		} catch (e) {
 			pending = null;
-			reply = body;
-			internal = note;
-			error = msg(err);
+			error = msg(e);
+			return false;
 		} finally {
 			sending = false;
 		}
 	}
-	function composerKey(e: KeyboardEvent) {
-		if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-			e.preventDefault();
-			send();
-		} else if (e.key === 'Escape') {
-			e.preventDefault();
-			box?.blur();
-			onescape?.();
-		}
-	}
 
-	// ---- Changes -----------------------------------------------------------
+	// ---- Changes -----------------------------------------------------------------
 	/** Apply a change at once, then confirm it with the server (or roll back). */
-	async function change(patch: { status?: string; priority?: string; assignee_id?: string }) {
+	async function change(patch: Record<string, string>) {
 		if (!view) return false;
 		error = '';
 		const before = view;
 		const next = { ...view.ticket };
 		if (patch.status) next.status = patch.status;
 		if (patch.priority) next.priority = patch.priority;
-		if (patch.assignee_id !== undefined) {
-			next.assignee_id = patch.assignee_id || null;
-			next.assignee_email = staff.find((s) => s.id === patch.assignee_id)?.email ?? '';
-		}
+		if (patch.category) next.category = patch.category;
+		if (patch.subject) next.subject = patch.subject;
+		if (patch.assignee_id !== undefined) next.assignee_id = patch.assignee_id || null;
 		view = { ...view, ticket: next };
 		onview?.(view);
 		try {
@@ -196,45 +161,108 @@
 			return false;
 		}
 	}
+	async function act(method: string, path: string, body?: unknown) {
+		error = '';
+		try {
+			accept(await api<TicketView>(method, `/tickets/${id}${path}`, body));
+			return true;
+		} catch (e) {
+			error = msg(e);
+			return false;
+		}
+	}
 
 	/** Staff: move the ticket to a status, with an undo. */
 	export async function setStatus(s: string) {
 		if (!view?.manage || !t || t.status === s) return;
 		const prev = t.status;
 		if (await change({ status: s })) {
-			toast(`#${t.number} is now ${staffStatusLabel[s].toLowerCase()}`, 'success', { label: 'Undo', run: () => change({ status: prev }) });
+			toast(`${key} is now ${staffStatusLabel[s].toLowerCase()}`, 'success', { label: 'Undo', run: () => change({ status: prev }) });
 		}
 	}
-
 	/** Staff: take the ticket. */
 	export async function assignMe() {
 		if (!view?.manage || !me || t?.assignee_id === me) return;
-		if (await change({ assignee_id: me })) toast(`#${t?.number} is assigned to you`);
+		if (await change({ assignee_id: me })) toast(`${key} is assigned to you`);
 	}
+	const setLabels = (ids: string[]) => {
+		if (view) view = { ...view, ticket: { ...view.ticket, labels: ids } };
+		act('PUT', '/labels', { labels: ids });
+	};
+	const watch = (on: boolean) => act(on ? 'PUT' : 'DELETE', '/watch');
 
 	async function close() {
 		const ok = await confirmDialog({ title: 'Close this ticket?', body: 'You cannot reply to a closed ticket; open a new one if you need more help.', confirmLabel: 'Close ticket' });
 		if (ok) await change({ status: 'closed' });
 	}
 
-	function key(e: KeyboardEvent) {
+	// ---- Messages ------------------------------------------------------------------
+	const firstId = $derived(view?.messages.find((m) => m.kind === 'message')?.id);
+	const closed = $derived(t?.status === 'closed');
+	const canEdit = (m: TicketMessage) => !!view && m.mine && m.kind === 'message' && !m.deleted && (m.staff ? view.manage : !closed);
+	const canRemove = (m: TicketMessage) =>
+		!!view && m.kind === 'message' && !m.deleted && m.id !== firstId && (view.manage || (m.mine && !m.staff && !closed));
+	const editMessage = (m: TicketMessage) => (body: string) => act('PATCH', `/messages/${m.id}`, { body });
+	async function removeMessage(m: TicketMessage) {
+		const own = m.mine;
+		const ok = await confirmDialog({
+			title: own ? 'Remove your message?' : 'Remove this message?',
+			body: own
+				? 'Its text and earlier versions are deleted for everyone. A short “Message removed” line stays in the conversation.'
+				: 'Its text and earlier versions are deleted for everyone, including the person who wrote it.',
+			confirmLabel: 'Remove message',
+			tone: 'danger'
+		});
+		if (ok) act('DELETE', `/messages/${m.id}`);
+	}
+	function react(m: TicketMessage, kind: ReactionKind, on: boolean) {
+		act(on ? 'PUT' : 'DELETE', `/messages/${m.id}/reactions/${kind}`);
+	}
+	function quote(m: TicketMessage) {
+		composer?.quote(m.mine ? 'You' : (m.person?.name ?? m.author), m.body);
+	}
+
+	// ---- Subject editing --------------------------------------------------------
+	const canEditDetails = $derived(!!view && (view.manage || (view.requester && (t?.status === 'open' || t?.status === 'pending'))));
+	let editingSubject = $state(false);
+	let subjectDraft = $state('');
+	let subjectBox = $state<HTMLInputElement>();
+	async function editSubject() {
+		if (!t || !canEditDetails) return;
+		subjectDraft = t.subject;
+		editingSubject = true;
+		await tick();
+		subjectBox?.select();
+	}
+	async function saveSubject() {
+		if (!t) return;
+		const s = subjectDraft.trim();
+		editingSubject = false;
+		if (s && s !== t.subject) await change({ subject: s });
+	}
+
+	// ---- Keys ------------------------------------------------------------------------
+	function keydown(e: KeyboardEvent) {
 		if (!view || !shortcutAllowed(e)) return;
 		if (e.key === 'r' && canReply) {
 			e.preventDefault();
-			compose(false);
+			composer?.compose(false);
 		} else if (e.key === 'n' && view.manage) {
 			e.preventDefault();
-			compose(true);
+			composer?.compose(true);
 		} else if (view.manage && /^[1-4]$/.test(e.key)) {
 			e.preventDefault();
 			setStatus(statusKeys[Number(e.key) - 1]);
 		} else if (e.key === 'a' && view.manage) {
 			e.preventDefault();
 			assignMe();
+		} else if (e.key === 'e' && canEditDetails && !editingSubject) {
+			e.preventDefault();
+			editSubject();
 		}
 	}
 
-	// ---- Thread layout -------------------------------------------------------
+	// ---- Thread layout -------------------------------------------------------------
 	const dayFmt = new Intl.DateTimeFormat(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
 	const timeFmt = new Intl.DateTimeFormat(undefined, { timeStyle: 'short' });
 	function dayLabel(ms: number) {
@@ -257,135 +285,133 @@
 		}
 		return out;
 	});
+
+	let labelsOpen = $state(false);
 </script>
 
-<svelte:window onkeydown={key} />
+<svelte:window onkeydown={keydown} />
+
+{#snippet header()}
+	<div class="flex items-start gap-3">
+		<div class="min-w-0 flex-1">
+			{#if embedded}<p class="flex items-center gap-2"><a class="ticket-key hover:text-ink" href="/support/{key}" title="Link to this ticket">{key}</a></p>{/if}
+			{#if editingSubject}
+				<form class="mt-0.5" onsubmit={(e) => (e.preventDefault(), saveSubject())}>
+					<label class="sr-only" for="subject-{id}">Subject</label>
+					<input
+						id="subject-{id}"
+						bind:this={subjectBox}
+						bind:value={subjectDraft}
+						maxlength="150"
+						class="field subject-field {embedded ? 'text-title' : 'text-section'} font-semibold"
+						onblur={saveSubject}
+						onkeydown={(e) => e.key === 'Escape' && (e.preventDefault(), e.stopPropagation(), (editingSubject = false))}
+					/>
+				</form>
+			{:else if embedded}
+				<h2 class="subject-line text-title font-semibold text-balance break-words">
+					{t?.subject}{#if canEditDetails}<button type="button" class="subject-edit" onclick={editSubject} title="Edit the subject (E)" aria-label="Edit the subject"><Icon name="pencil" size={13} /></button>{/if}
+				</h2>
+			{:else}
+				<h1 class="subject-line text-page text-balance break-words">
+					{t?.subject}{#if canEditDetails}<button type="button" class="subject-edit" onclick={editSubject} title="Edit the subject (E)" aria-label="Edit the subject"><Icon name="pencil" size={15} /></button>{/if}
+				</h1>
+			{/if}
+			<p class="mt-1 text-small text-muted">
+				Opened {fmtWhen(t!.created_at_ms)}{#if view?.staff}{' '}by {t?.requester?.name ?? t?.requester_email}{/if}{#if t?.bot_name}{' '}· about {t.bot_name}{/if}
+			</p>
+		</div>
+		{#if mode !== 'page' && view?.manage && t?.assignee_id !== me}
+			<button type="button" class="btn btn-quiet h-8 shrink-0 px-2.5 text-small" onclick={assignMe} aria-keyshortcuts="a" title="Assign the ticket to yourself">Take it<kbd class="key-hint">A</kbd></button>
+		{/if}
+		{#if mode !== 'page'}
+			<a class="btn btn-quiet h-8 shrink-0 px-2" href="/support/{key}" title="Open the ticket on its own page" aria-label="Open the ticket on its own page"><Icon name="maximize" size={14} /></a>
+		{/if}
+		{#if mode === 'peek'}
+			<button type="button" class="btn btn-quiet h-8 shrink-0 px-2" onclick={onclose} title="Close (Esc)" aria-label="Close the ticket"><Icon name="x" size={15} /></button>
+		{/if}
+	</div>
+{/snippet}
+
+{#snippet details(variant: 'aside' | 'strip')}
+	{#if view}
+		<TicketDetails {view} {variant} onchange={change} onstatus={setStatus} onassignme={assignMe} onlabels={setLabels} onwatch={watch} onmanagelabels={() => (labelsOpen = true)} />
+	{/if}
+{/snippet}
+
+{#snippet thread()}
+	<ol class="grid gap-3" aria-label="Conversation">
+		{#each rows as { m, day } (m.id)}
+			{#if day}
+				<li class="day-rule mt-3 text-label text-muted"><span>{day}</span></li>
+			{/if}
+			{#if m.kind === 'event'}
+				<li id="m-{m.id}" class="flex flex-wrap items-center gap-x-2 px-1 text-small text-muted" class:msg-new={isNew(m)}>
+					<Icon name="history" size={13} /><span>{m.body}</span><span aria-hidden="true">·</span><span>{m.person?.name ?? m.author}</span><time class="tabular-nums" datetime={new Date(m.created_at_ms).toISOString()} title={fmtWhen(m.created_at_ms)}>{timeFmt.format(m.created_at_ms)}</time>{#if m.internal}<span class="rounded-pill border border-warn/30 px-1.5 text-label text-warn">staff only</span>{/if}
+				</li>
+			{:else}
+				<TicketMessageItem
+					{m}
+					ticketId={id}
+					ticketKey={key}
+					canEdit={canEdit(m)}
+					canRemove={canRemove(m)}
+					canReact={m.id !== 'pending' && !closed}
+					showHistory={!!view && (view.staff || m.mine)}
+					isNew={isNew(m)}
+					pending={m.id === 'pending'}
+					onedit={editMessage(m)}
+					onremove={() => removeMessage(m)}
+					onreact={(k, on) => react(m, k, on)}
+					onquote={() => quote(m)}
+				/>
+			{/if}
+		{/each}
+	</ol>
+{/snippet}
+
+{#snippet reply()}
+	{#if view && canReply}
+		<TicketComposer bind:this={composer} {id} {view} {embedded} {sending} onsend={send} {onescape} />
+		{#if view.requester && !view.manage}
+			<div class="flex flex-wrap justify-end gap-1 {embedded ? 'px-5 pb-3' : '-mt-2 pb-2'}">
+				{#if t?.status === 'resolved'}<button type="button" class="btn btn-quiet h-8" onclick={() => change({ status: 'open' })}>Reopen</button>{/if}
+				<button type="button" class="btn btn-quiet h-8" onclick={close}>Close ticket</button>
+			</div>
+		{/if}
+	{:else if view?.requester && closed}
+		<Notice class={embedded ? 'm-5' : 'mt-6'}>This ticket is closed. <a class="link" href="/support?new=1">Open a new ticket</a> if you need more help.</Notice>
+	{/if}
+{/snippet}
 
 {#if notFound}
 	<Notice tone="warn" class={embedded ? 'm-5' : 'mt-4'}>This ticket does not exist or you cannot see it.</Notice>
 {:else if view && t}
-	<div class={embedded ? 'flex h-full min-h-0 flex-col' : 'contents'}>
-		<header class={embedded ? 'border-b border-rule-soft px-5 pt-4 pb-4' : 'mt-3 border-b border-rule-soft pb-5'}>
-			<div class="flex items-start gap-3">
-				<div class="min-w-0 flex-1">
-					<p class="font-mono text-small text-muted tabular-nums">#{t.number}</p>
-					{#if embedded}
-						<h2 class="text-section font-semibold break-words text-balance">{t.subject}</h2>
-					{:else}
-						<h1 class="text-page break-words text-balance">{t.subject}</h1>
-					{/if}
-					<p class="mt-1 text-small text-muted">
-						{categoryLabel(t.category)} · {t.priority} priority · opened {fmtWhen(t.created_at_ms)}
-						{#if t.bot_name}{' '}· about {#if t.bot_id && view.requester}<a class="link" href="/bots/{t.bot_id}">{t.bot_name}</a>{:else}{t.bot_name}{/if}{/if}
-						{#if view.staff}{' '}· by {t.requester_email}{/if}
-					</p>
-				</div>
-				{#if view.manage && t.assignee_id !== me}
-					<button type="button" class="btn btn-quiet h-8 shrink-0 px-2.5 text-small" onclick={assignMe} title="Assign the ticket to yourself (press A)" aria-keyshortcuts="a">Take it<kbd class="key-hint">A</kbd></button>
-				{/if}
-				{#if embedded}
-					<a class="btn btn-quiet h-8 shrink-0 px-2" href="/support/{t.id}" title="Open the ticket on its own page" aria-label="Open the ticket on its own page"><Icon name="maximize" size={14} /></a>
-				{/if}
-				{#if !view.manage}
-					<span class="shrink-0 rounded-pill border px-2.5 py-1 text-small {statusTone[t.status]}">{labels[t.status]}</span>
-				{/if}
-			</div>
-
-			{#if view.manage}
-				<div class="mt-4 flex flex-wrap items-center gap-2">
-					<div role="group" aria-label="Status" class="seg">
-						{#each statusKeys as s, i (s)}
-							<button type="button" class="seg-item status-opt" data-s={s} aria-pressed={t.status === s} onclick={() => setStatus(s)} title="{staffStatusLabel[s]} (press {i + 1})" aria-keyshortcuts={String(i + 1)}>
-								<span class="status-dot" aria-hidden="true"></span>{staffStatusShort[s]}
-							</button>
-						{/each}
-					</div>
-					<select class="field h-8 w-auto py-0 text-small" aria-label="Priority" value={t.priority} onchange={(e) => change({ priority: e.currentTarget.value })}>
-						{#each ticketPriorities as p (p)}<option value={p}>{priorityLabel(p)} priority</option>{/each}
-					</select>
-					<select class="field h-8 w-auto max-w-60 py-0 text-small" aria-label="Assignee" value={t.assignee_id ?? ''} onchange={(e) => change({ assignee_id: e.currentTarget.value })}>
-						<option value="">Unassigned</option>
-						{#each staff as s (s.id)}<option value={s.id}>{s.id === me ? 'Assigned to me' : `Assigned to ${s.display_name || s.email}`}</option>{/each}
-					</select>
-				</div>
-			{:else if view.staff}
-				<p class="mt-3 text-small text-muted">You can read this ticket and its internal notes but not answer it.{#if t.assignee_email}{' '}Assigned to {t.assignee_email}.{/if}</p>
-			{/if}
-		</header>
-
-		{#if error}<Notice tone="fail" class={embedded ? 'mx-5 mt-4' : 'mt-4'} live>{error}</Notice>{/if}
-
-		<div bind:this={scroller} class={embedded ? 'thread-scroll min-h-0 flex-1 overflow-y-auto px-5 pt-2 pb-4' : 'pb-2'}>
-			<ol class="grid gap-3" aria-label="Conversation">
-				{#each rows as { m, day } (m.id)}
-					{#if day}
-						<li class="day-rule mt-3 text-label text-muted"><span>{day}</span></li>
-					{/if}
-					{#if m.kind === 'event'}
-						<li class="flex flex-wrap items-center gap-x-2 px-1 text-small text-muted" class:msg-new={isNew(m)}>
-							<Icon name="history" size={13} /><span>{m.body}</span><span aria-hidden="true">·</span><span>{m.author}</span><time class="tabular-nums" datetime={new Date(m.created_at_ms).toISOString()} title={fmtWhen(m.created_at_ms)}>{timeFmt.format(m.created_at_ms)}</time>{#if m.internal}<span class="rounded-pill border border-warn/30 px-1.5 text-label text-warn">staff only</span>{/if}
-						</li>
-					{:else}
-						<li
-							class="msg rounded-card border p-4 {m.internal ? 'border-warn/40 bg-warn/6' : m.staff ? 'border-action/25 bg-action/4' : 'border-rule-soft bg-raised'}"
-							class:msg-new={isNew(m) || m.id === 'pending'}
-							class:opacity-60={m.id === 'pending'}
-							aria-busy={m.id === 'pending'}
-						>
-							<div class="flex flex-wrap items-center gap-2 text-small">
-								<span class="font-medium">{m.mine ? 'You' : m.author}</span>
-								{#if m.staff && !m.internal}<span class="rounded-pill border border-action/30 px-1.5 text-label text-action">support</span>{/if}
-								{#if m.internal}<span class="rounded-pill border border-warn/40 px-1.5 text-label text-warn">internal note · staff only</span>{/if}
-								<span class="ml-auto text-muted tabular-nums">
-									{#if m.id === 'pending'}Sending…{:else}<time datetime={new Date(m.created_at_ms).toISOString()} title={fmtWhen(m.created_at_ms)}>{timeFmt.format(m.created_at_ms)}</time>{/if}
-								</span>
-							</div>
-							<p class="mt-2 max-w-[75ch] break-words whitespace-pre-wrap">{m.body}</p>
-						</li>
-					{/if}
-				{/each}
-			</ol>
+	{#if embedded}
+		<div class="flex h-full min-h-0 flex-col">
+			<header class="grid gap-3 border-b border-rule-soft px-5 pt-4 pb-3">
+				{@render header()}
+				{@render details('strip')}
+			</header>
+			{#if error}<Notice tone="fail" class="mx-5 mt-3" live>{error}</Notice>{/if}
+			<div bind:this={scroller} class="thread-scroll min-h-0 flex-1 overflow-y-auto px-5 pt-3 pb-4">{@render thread()}</div>
+			{@render reply()}
 		</div>
-
-		{#if canReply}
-			<form class="composer {embedded ? 'border-t border-rule-soft px-5 pt-3 pb-4' : 'sticky bottom-0 z-10 -mx-1 mt-4 px-1 pt-3 pb-4'}" data-note={internal} data-embedded={embedded} onsubmit={send}>
-				<div class="composer-box rounded-tile border" data-idle={embedded && !reply.trim()}>
-					{#if view.manage}
-						<div class="flex items-center gap-2 px-3 pt-2.5">
-							<div role="group" aria-label="Write" class="seg">
-								<button type="button" class="seg-item" aria-pressed={!internal} onclick={() => compose(false)}>Reply<kbd class="key-hint">R</kbd></button>
-								<button type="button" class="seg-item" aria-pressed={internal} onclick={() => compose(true)}><Icon name="lock" size={12} />Internal note<kbd class="key-hint">N</kbd></button>
-							</div>
-							{#if internal}<span class="text-small text-warn">The requester never sees it.</span>{/if}
-						</div>
-					{/if}
-					<label class="sr-only" for="reply-{id}">{internal ? 'Internal note' : 'Reply'}</label>
-					<textarea
-						id="reply-{id}"
-						bind:this={box}
-						bind:value={reply}
-						onkeydown={composerKey}
-						class="composer-input block w-full resize-none bg-transparent px-3 py-2.5 outline-none"
-						rows="3"
-						maxlength="10000"
-						placeholder={internal ? 'Note for the support team…' : view.manage ? `Reply to ${t.requester_email ?? 'the requester'}…` : 'Write a reply…'}
-					></textarea>
-					<div class="composer-actions flex flex-wrap items-center gap-2 px-3 pb-2.5">
-						<button class="btn btn-primary h-8 px-3" disabled={sending || !reply.trim()}><Icon name="send" size={14} />{internal ? 'Add note' : 'Send reply'}</button>
-						<span class="hidden text-small text-muted sm:inline"><kbd class="key-hint">Ctrl</kbd> <kbd class="key-hint">Enter</kbd></span>
-						{#if view.requester && !view.manage}
-							<span class="ml-auto flex gap-1">
-								{#if t.status === 'resolved'}<button type="button" class="btn btn-quiet h-8" onclick={() => change({ status: 'open' })}>Reopen</button>{/if}
-								<button type="button" class="btn btn-quiet h-8" onclick={close}>Close ticket</button>
-							</span>
-						{/if}
-					</div>
-				</div>
-			</form>
-		{:else if view.requester && t.status === 'closed'}
-			<Notice class={embedded ? 'm-5' : 'mt-6'}>This ticket is closed. <a class="link" href="/support?new=1">Open a new ticket</a> if you need more help.</Notice>
-		{/if}
-	</div>
+	{:else}
+		<div class="ticket-wrap"><div class="ticket-page">
+			<header class="ticket-head border-b border-rule-soft pb-4">
+				{@render header()}
+				<div class="ticket-strip mt-3">{@render details('strip')}</div>
+			</header>
+			<div class="ticket-main min-w-0">
+				{#if error}<Notice tone="fail" class="mb-4" live>{error}</Notice>{/if}
+				{@render thread()}
+				{@render reply()}
+			</div>
+			<div class="ticket-side">{@render details('aside')}</div>
+		</div></div>
+	{/if}
+	{#if view.manage}<LabelManager bind:open={labelsOpen} />{/if}
 {:else if error}
 	<Notice tone="fail" class={embedded ? 'm-5' : 'mt-4'} live>{error}</Notice>
 {:else if embedded}
@@ -393,57 +419,79 @@
 {/if}
 
 <style>
-	/* Status switch: each option carries its lifecycle colour as a dot, and
-	   the chosen one takes the colour as a tint. */
-	.status-opt {
-		--s: var(--color-muted);
+	/* The ticket page: the conversation beside a sticky details sidebar on
+	   wide content, the details above the conversation otherwise. */
+	.ticket-wrap {
+		container-type: inline-size;
 	}
-	.status-opt[data-s='open'] {
-		--s: var(--color-action);
+	.ticket-page {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr);
+		grid-template-areas: 'head' 'main';
+		gap: 1.25rem;
+		margin-top: 0.75rem;
 	}
-	.status-opt[data-s='pending'] {
-		--s: var(--color-warn);
+	.ticket-head {
+		grid-area: head;
 	}
-	.status-opt[data-s='resolved'] {
-		--s: var(--color-run);
+	.ticket-main {
+		grid-area: main;
 	}
-	.status-dot {
-		width: 0.5rem;
-		height: 0.5rem;
-		border-radius: var(--radius-pill);
-		background: var(--s);
-		opacity: 0.55;
-		transition:
-			opacity 160ms,
-			transform 220ms cubic-bezier(0.16, 1, 0.3, 1);
+	.ticket-side {
+		grid-area: side;
+		display: none;
 	}
-	.status-opt[aria-pressed='true'] {
-		background: color-mix(in srgb, var(--s) var(--tint-state), var(--color-raised));
-		box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--s) 45%, transparent);
-	}
-	.status-opt[aria-pressed='true'] .status-dot {
-		opacity: 1;
-		transform: scale(1.15);
-	}
-	.key-hint {
-		margin-left: 0.125rem;
-		min-width: 1.1rem;
-		border: 1px solid var(--color-rule);
-		border-radius: var(--radius-inner);
-		padding: 0 0.25rem;
-		font-family: var(--font-mono);
-		font-size: 10.5px;
-		line-height: 1rem;
-		text-align: center;
-		color: var(--color-muted);
-	}
-	@media (pointer: coarse) {
-		.key-hint {
+	/* Narrow: the compact strip under the title; wide: the sidebar. */
+	@container (min-width: 54rem) {
+		.ticket-strip {
 			display: none;
 		}
+		.ticket-side {
+			display: block;
+		}
+		.ticket-page {
+			grid-template-columns: minmax(0, 1fr) 19rem;
+			grid-template-areas: 'head head' 'main side';
+			column-gap: 2rem;
+		}
+		.ticket-side {
+			position: sticky;
+			top: calc(3.5rem + 1px + 1.25rem);
+			align-self: start;
+		}
 	}
-
-	/* Day rule: a hairline with the day centred on it. */
+	.subject-line {
+		position: relative;
+	}
+	.subject-edit {
+		display: inline-grid;
+		place-items: center;
+		width: 1.75rem;
+		height: 1.75rem;
+		margin-left: 0.375rem;
+		vertical-align: middle;
+		border-radius: var(--radius-control);
+		color: var(--color-muted);
+		opacity: 0;
+		transition: opacity 120ms;
+	}
+	.subject-line:hover .subject-edit,
+	.subject-edit:focus-visible {
+		opacity: 1;
+	}
+	@media (pointer: coarse) {
+		.subject-edit {
+			opacity: 1;
+		}
+	}
+	.subject-edit:hover {
+		color: var(--color-ink);
+		background: color-mix(in srgb, var(--color-ink) 6%, transparent);
+	}
+	.subject-field {
+		height: auto;
+		padding-block: 0.25rem;
+	}
 	.day-rule {
 		display: flex;
 		align-items: center;
@@ -455,8 +503,6 @@
 		flex: 1;
 		border-top: 1px solid var(--color-rule-soft);
 	}
-
-	/* A message that arrives while the thread is open settles in from below. */
 	.msg-new {
 		animation: settle 380ms cubic-bezier(0.16, 1, 0.3, 1) both;
 	}
@@ -464,7 +510,6 @@
 		from {
 			opacity: 0;
 			transform: translateY(10px);
-			filter: blur(2px);
 		}
 	}
 	@media (prefers-reduced-motion: reduce) {
@@ -472,52 +517,11 @@
 			animation: fade 200ms ease-out both;
 		}
 	}
-
-	/* Composer: the whole surface turns amber for an internal note, so a note
-	   is never mistaken for a reply. */
-	.composer[data-embedded='false'] {
-		background: linear-gradient(to bottom, transparent, var(--color-paper) 0.75rem);
-	}
-	.composer-box {
-		border-color: var(--color-rule);
-		background: var(--color-panel);
-		transition:
-			border-color 160ms,
-			background-color 160ms,
-			box-shadow 160ms;
-	}
-	.composer-box:focus-within {
-		border-color: color-mix(in srgb, var(--color-action) 55%, var(--color-rule));
-		box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-action) 14%, transparent);
-	}
-	.composer[data-note='true'] .composer-box {
-		border-color: color-mix(in srgb, var(--color-warn) 45%, var(--color-rule));
-		background: color-mix(in srgb, var(--color-warn) 7%, var(--color-panel));
-	}
-	.composer[data-note='true'] .composer-box:focus-within {
-		box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-warn) 16%, transparent);
-	}
-	.composer-input {
-		field-sizing: content;
-		min-height: 4.5rem;
-		max-height: 16rem;
-	}
-	/* In the desk an empty, unfocused composer folds to one line, so the
-	   thread keeps the room; focus (R, N or a click) opens it again. */
-	.composer-box[data-idle='true']:not(:focus-within) .composer-input {
-		min-height: 2.6rem;
-		height: 2.6rem;
-		overflow: hidden;
-	}
-	.composer-box[data-idle='true']:not(:focus-within) .composer-actions {
-		display: none;
-	}
-	.composer-input::placeholder {
-		color: var(--color-muted);
-	}
 	.thread-scroll {
 		scrollbar-width: thin;
 		scrollbar-color: var(--color-rule) transparent;
 		overscroll-behavior: contain;
+		/* Room above the first message for its hover toolbar. */
+		scroll-padding-top: 1rem;
 	}
 </style>

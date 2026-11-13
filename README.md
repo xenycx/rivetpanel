@@ -119,8 +119,10 @@ on the smallest VPS you have.
   a generated picture you can re-roll with **New picture**.
 - Sign in with **GitHub, Discord, any OpenID Connect provider or a passkey**,
   with two-step codes and scoped **API clients** for automation.
-- Support tickets, a Markdown **help center** at `/help` and a public **status
-  page** at `/status`.
+- Support tickets with `RT-000042` keys, split, table and board layouts,
+  Markdown conversations (edit, remove, reactions, @mentions in internal
+  notes), labels, saved replies and watchers; a Markdown **help center** at
+  `/help` and a public **status page** at `/status`.
 
 ### 🧩 Extensions and remote nodes <sub>preview</sub>
 - Signed **WebAssembly extensions** that run sandboxed with only the

@@ -1,8 +1,13 @@
 import { SvelteMap } from 'svelte/reactivity';
 
+/** How an account appears on a ticket. */
+export type Person = { id: string; name: string; email: string; avatar_url: string; logo_variant: number };
+
 export type Ticket = {
 	id: string;
 	number: number;
+	/** RT-000042 */
+	key: string;
 	subject: string;
 	category: string;
 	priority: string;
@@ -17,6 +22,12 @@ export type Ticket = {
 	requester_email?: string;
 	assignee_id?: string | null;
 	assignee_email?: string;
+	requester?: Person | null;
+	assignee?: Person | null;
+	/** Staff view only: label ids. */
+	labels?: string[];
+	/** Staff view only: the reader follows the ticket. */
+	watching?: boolean;
 };
 
 export type TicketMessage = {
@@ -28,9 +39,54 @@ export type TicketMessage = {
 	internal: boolean;
 	body: string;
 	created_at_ms: number;
+	/** The author's picture and name; null for staff seen by a requester. */
+	person?: Person | null;
+	edited_at_ms?: number | null;
+	deleted?: boolean;
+	deleted_by?: string;
+	mentions?: string[];
+	reactions?: Reaction[];
 };
 
-export type TicketView = { ticket: Ticket; messages: TicketMessage[]; staff: boolean; manage: boolean; requester: boolean };
+export type Reaction = { kind: ReactionKind; count: number; mine: boolean; names: string[] };
+export type ReactionKind = 'ack' | 'thanks' | 'seen' | 'solved';
+export const reactionKinds: { kind: ReactionKind; label: string; icon: 'check' | 'star' | 'eye' | 'sparkle' }[] = [
+	{ kind: 'ack', label: 'Agree', icon: 'check' },
+	{ kind: 'thanks', label: 'Thanks', icon: 'star' },
+	{ kind: 'seen', label: 'Seen', icon: 'eye' },
+	{ kind: 'solved', label: 'Solved it', icon: 'sparkle' }
+];
+
+export type TicketView = {
+	ticket: Ticket;
+	messages: TicketMessage[];
+	staff: boolean;
+	manage: boolean;
+	requester: boolean;
+	/** Staff view only. */
+	watchers?: Person[];
+};
+
+export type Label = { id: string; name: string; color: LabelColor; tickets: number };
+export type LabelColor = 'action' | 'data' | 'run' | 'warn' | 'fail' | 'violet' | 'cyan' | 'slate';
+export const labelColors: { id: LabelColor; name: string }[] = [
+	{ id: 'action', name: 'Accent' },
+	{ id: 'data', name: 'Blue' },
+	{ id: 'run', name: 'Green' },
+	{ id: 'warn', name: 'Amber' },
+	{ id: 'fail', name: 'Red' },
+	{ id: 'violet', name: 'Violet' },
+	{ id: 'cyan', name: 'Cyan' },
+	{ id: 'slate', name: 'Slate' }
+];
+export type SavedReply = { id: string; title: string; body: string; updated_at_ms: number };
+export type StaffMember = { id: string; email: string; display_name: string; avatar_url: string; logo_variant: number };
+
+/** A ticket's reference: RT-000042. */
+export const ticketKey = (t: Pick<Ticket, 'number'> & { key?: string }) => t.key || `RT-${String(t.number).padStart(6, '0')}`;
+
+export const priorityRank: Record<string, number> = { urgent: 0, high: 1, normal: 2, low: 3 };
+export const statusRank: Record<string, number> = { open: 0, pending: 1, resolved: 2, closed: 3 };
 
 export const ticketCategories = [
 	{ value: 'general', label: 'General question' },
@@ -111,3 +167,32 @@ export function shortcutAllowed(e: KeyboardEvent): boolean {
 
 /** Unsent replies by ticket id, kept while the panel stays open (switching tickets keeps them). */
 export const drafts = new SvelteMap<string, { body: string; internal: boolean }>();
+
+/** Tickets ordered by a table column. */
+export function sortTickets(list: Ticket[], key: string, desc: boolean): Ticket[] {
+	const name = (p?: Person | null) => (p?.name ?? '￿').toLowerCase();
+	const val = (t: Ticket): string | number => {
+		switch (key) {
+			case 'key':
+				return t.number;
+			case 'subject':
+				return t.subject.toLowerCase();
+			case 'status':
+				return statusRank[t.status] ?? 9;
+			case 'priority':
+				return priorityRank[t.priority] ?? 9;
+			case 'requester':
+				return name(t.requester) || (t.requester_email ?? '');
+			case 'assignee':
+				return name(t.assignee);
+			default:
+				return t.updated_at_ms;
+		}
+	};
+	return [...list].sort((a, b) => {
+		const x = val(a);
+		const y = val(b);
+		const c = x < y ? -1 : x > y ? 1 : b.updated_at_ms - a.updated_at_ms;
+		return desc ? -c : c;
+	});
+}

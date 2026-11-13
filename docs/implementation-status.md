@@ -657,6 +657,19 @@ items state exactly what remains.
     tab only. Browser-verified on a scratch local panel (dark and light,
     1440/1280/900 px wide, staff and requester accounts); no automated UI
     test.
+  - Collaboration (1.8.0, 2026-11-13, migration 0067): `RT-000042` ticket keys
+    (also accepted in place of the id), Split/Table/Board/Classic layouts
+    (per-browser setting), Details panel and two-column ticket page,
+    Markdown messages, edit with revisions, removal that deletes the text,
+    revisions and reactions, reactions, @mentions in internal notes, ticket
+    detail edits, labels, saved replies and watchers. All rules are enforced
+    by the application on the ticket API (`internal/service/support_collab.go`):
+    authors edit and remove their own messages, `tickets.manage` moderates,
+    requesters never receive labels, watchers, mentions, staff names or staff
+    revisions. Tests: `internal/api/support_collab_test.go`. Browser-verified
+    on a scratch local panel (dark and light, 1440/1280 px and the mobile
+    preset; staff and requester accounts; drag to change status, mentions,
+    saved replies, editing). Not automated in the browser suite.
   - Not done: attachments, a push (SSE/WebSocket) channel for the bell,
     Discord fan-out of the new categories (only the existing bot alerts post
     to Discord). Knowledgebase and status page: support batch 2 below.
@@ -1242,6 +1255,7 @@ Migrations added since 0.2.0 (the schema-version assertion in
 | `0064_configure_permission.sql` | Additive: the built-in User role's stored permissions gain `bots.configure` after `bots.env` (catalog order); custom roles are unchanged. Covered by `TestMigration0064AddsConfigureToUserRole` and `TestMigrateIdempotentAndSchema` (65 versions) |
 | `0065_configure_share.sql` | Rebuild (foreign keys off, checked after): `bot_subusers` and `bot_invites` widen `permissions` from 1..31 to 1..63 so a share or invitation can hold the Configuration bit (32); every column copied by name, indexes recreated, existing grants unchanged. Covered by `TestMigration0065WidensSharePermissions` and `TestMigrateIdempotentAndSchema` (66 versions) |
 | `0066_workspace_logos.sql` | Additive: `workspaces` gains `logo` (BLOB ≤ 256 KiB), `logo_type` (`image/png`/`image/jpeg`) and `logo_updated_at_ms`; `workspaces`, `bots`, `sites` and `users` gain `logo_variant INTEGER NOT NULL DEFAULT 0` (≥ 0), so existing generated pictures are unchanged. Covered by `TestMigration0066WorkspaceLogosAndVariants` and `TestMigrateIdempotentAndSchema` (67 versions) |
+| `0067_support_collab.sql` | Additive: `support_ticket_messages` gains `edited_at_ms`, `deleted_at_ms`, `deleted_by` and `mentions_json` (a JSON array, default `[]`); new tables `support_message_revisions`, `support_message_reactions` (kinds `ack`/`thanks`/`seen`/`solved`), `support_labels` (palette colors), `support_ticket_labels`, `support_saved_replies` and `support_ticket_watchers`, all cascading with their ticket or message. Existing rows keep their meaning. Covered by `TestMigrateIdempotentAndSchema` (68 versions) and the support collaboration API tests |
 | `0054_web_apps.sql` | Rebuilds `bots` (kind gains `web`, runtime gains `php`, new `release_command`) and `sites` (mode gains `app`; `app_id`, `framework`, `build_output_dir`, `app_port`, `health_path`, `max_body_bytes`) with explicit column lists and foreign keys off (checked with `PRAGMA foreign_key_check`; all indexes recreated); additive `site_releases.source_ref` and `bot_health_probes.target` (`host`/`app`). Covered by `apps_migration_test.go` |
 | `0030_ai_global_chat.sql` | Rebuilds `ai_conversations` so a chat may have no target; `ai_runs.bot_id`/`site_id`, `ai_messages.context_json` (the conversation subtree is stashed and restored, rows preserved) |
 

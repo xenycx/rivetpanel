@@ -1108,6 +1108,157 @@ aside.sidebar {
 	width: auto;
 }
 
+/* Support tickets: status lozenges, priority marks, people and labels
+   (components/support). Every color is a theme token or a tag tone tuned
+   for its theme, mixed into the surface so text keeps 4.5:1. */
+:root {
+	--tag-violet: #6945bd;
+	--tag-cyan: #116f86;
+	--tag-slate: #486474;
+}
+:root[data-theme='dark'] {
+	--tag-violet: #a98bff;
+	--tag-cyan: #4cc9e8;
+	--tag-slate: #8ba9bb;
+}
+@layer components {
+	.lozenge {
+		--s: var(--color-muted);
+		display: inline-flex;
+		align-items: center;
+		gap: 0.375rem;
+		white-space: nowrap;
+		border-radius: var(--radius-inner);
+		padding: 0 0.4rem;
+		font-size: var(--text-label);
+		line-height: 1.25rem;
+		font-weight: 600;
+		letter-spacing: 0.01em;
+		color: var(--s);
+		background: color-mix(in srgb, var(--s) var(--tint-state), transparent);
+		box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--s) 28%, transparent);
+	}
+	.lozenge[data-s='open'] {
+		--s: var(--color-action);
+	}
+	.lozenge[data-s='pending'] {
+		--s: var(--color-warn);
+	}
+	.lozenge[data-s='resolved'] {
+		--s: var(--color-run);
+	}
+	.lozenge-dot {
+		width: 0.4rem;
+		height: 0.4rem;
+		border-radius: var(--radius-pill);
+		background: currentColor;
+	}
+	.prio-mark {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.25rem;
+		white-space: nowrap;
+		color: var(--color-muted);
+	}
+	.prio-mark[data-p='urgent'] {
+		color: var(--color-fail);
+		font-weight: 600;
+	}
+	.prio-mark[data-p='high'] {
+		color: var(--color-warn);
+		font-weight: 500;
+	}
+	.prio-mark[data-p='low'] {
+		color: var(--color-data);
+	}
+	.avatar-wrap,
+	.avatar-team,
+	.avatar-none {
+		display: inline-grid;
+		flex: none;
+		place-items: center;
+		overflow: hidden;
+		border-radius: var(--radius-pill);
+	}
+	.avatar-wrap.me {
+		box-shadow: 0 0 0 2px var(--color-panel), 0 0 0 3.5px color-mix(in srgb, var(--color-action) 70%, transparent);
+	}
+	.avatar-team {
+		color: var(--color-action-ink);
+		background: var(--color-action);
+	}
+	.avatar-none {
+		border: 1.5px dashed var(--color-rule);
+	}
+	.tag-chip {
+		--c: var(--color-muted);
+		display: inline-flex;
+		align-items: center;
+		max-width: 12rem;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		border-radius: var(--radius-pill);
+		padding: 0 0.45rem;
+		font-size: 11.5px;
+		line-height: 1.125rem;
+		font-weight: 500;
+		color: color-mix(in srgb, var(--c) 82%, var(--color-ink));
+		background: color-mix(in srgb, var(--c) 13%, transparent);
+		box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c) 30%, transparent);
+	}
+	.tag-chip[data-c='action'] { --c: var(--color-action); }
+	.tag-chip[data-c='data'] { --c: var(--color-data); }
+	.tag-chip[data-c='run'] { --c: var(--color-run); }
+	.tag-chip[data-c='warn'] { --c: var(--color-warn); }
+	.tag-chip[data-c='fail'] { --c: var(--color-fail); }
+	.tag-chip[data-c='violet'] { --c: var(--tag-violet); }
+	.tag-chip[data-c='cyan'] { --c: var(--tag-cyan); }
+	.tag-chip[data-c='slate'] { --c: var(--tag-slate); }
+	/* The last row of a picker: a quiet "Manage …" action. */
+	.pick-foot {
+		display: flex;
+		width: 100%;
+		align-items: center;
+		gap: 0.5rem;
+		border-radius: var(--radius-control);
+		padding: 0.375rem 0.5rem;
+		font-size: 13px;
+		color: var(--color-muted);
+	}
+	.pick-foot:hover,
+	.pick-foot:focus-visible {
+		color: var(--color-ink);
+		background: color-mix(in srgb, var(--color-ink) 6%, transparent);
+	}
+	/* The ticket key: mono, tabular, quiet. */
+	.ticket-key {
+		font-family: var(--font-mono);
+		font-size: 12px;
+		font-variant-numeric: tabular-nums;
+		letter-spacing: 0.01em;
+		color: var(--color-muted);
+		white-space: nowrap;
+	}
+	.key-hint {
+		margin-left: 0.125rem;
+		min-width: 1.1rem;
+		border: 1px solid var(--color-rule);
+		border-radius: var(--radius-inner);
+		padding: 0 0.25rem;
+		font-family: var(--font-mono);
+		font-size: 10.5px;
+		line-height: 1rem;
+		text-align: center;
+		color: var(--color-muted);
+	}
+	@media (pointer: coarse) {
+		.key-hint {
+			display: none;
+		}
+	}
+}
+
 /* The support triage desk (routes/support). Moving through the queue is not
    a navigation: the page holds still, the selection slab glides to the new
    row, and the thread pane hands over in the direction of travel (j: the

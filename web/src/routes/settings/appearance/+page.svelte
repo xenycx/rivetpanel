@@ -2,6 +2,8 @@
 	import { accents, radii, setAccent, setRadius, setTheme, theme, type Accent, type Radius, type ThemePref } from '$lib/ui/theme.svelte';
 	import Icon from '$lib/components/ui/Icon.svelte';
 	import SettingsSection from '$lib/components/ui/SettingsSection.svelte';
+	import LayoutIcon from '$lib/components/support/LayoutIcon.svelte';
+	import { supportLayouts, supportView, setSupportLayout } from '$lib/ui/supportLayout.svelte';
 
 	const modes: { id: ThemePref; label: string; text: string; icon: 'sun' | 'moon' | 'monitor' }[] = [
 		{ id: 'light', label: 'Light', text: 'Bright working surfaces', icon: 'sun' },
@@ -60,6 +62,20 @@
 				</span>
 				<span class="min-w-0 flex-1 font-medium">{accent.name}</span>
 				{#if theme.accent === accent.id}<Icon name="check" class="text-action" />{/if}
+			</button>
+		{/each}
+	</div>
+</SettingsSection>
+
+<SettingsSection title="Support tickets" description="How Support and the support queue lay out tickets. Narrow windows and phones always show the classic list. The switcher on the Support page changes the same setting.">
+	<div class="grid grid-cols-2 gap-3 xl:grid-cols-4">
+		{#each supportLayouts as l (l.id)}
+			<button class="flex-col !items-stretch {choice} {supportView.layout === l.id ? on : off}" aria-pressed={supportView.layout === l.id} onclick={() => setSupportLayout(l.id)}>
+				<LayoutIcon layout={l.id} thumb />
+				<span class="flex items-center justify-between gap-2">
+					<span class="min-w-0"><span class="block font-semibold">{l.name}</span><span class="block text-small text-muted">{l.text}</span></span>
+					{#if supportView.layout === l.id}<Icon name="check" class="shrink-0 text-action" />{/if}
+				</span>
 			</button>
 		{/each}
 	</div>

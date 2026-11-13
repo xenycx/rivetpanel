@@ -2,19 +2,22 @@
 	import { page } from '$app/state';
 	import Icon from '$lib/components/ui/Icon.svelte';
 	import TicketThread from '$lib/components/TicketThread.svelte';
-	import type { TicketView } from '$lib/api/support';
+	import { type TicketView, ticketKey } from '$lib/api/support';
 
+	// The ticket's own page; the address takes its id or its key (RT-000042).
 	const id = $derived(page.params.id ?? '');
 	let view = $state<TicketView | null>(null);
 	const t = $derived(view?.ticket);
+	const toQueue = $derived(!!view?.staff && !view.requester);
 </script>
 
-<svelte:head><title>{t ? `#${t.number} ${t.subject}` : 'Ticket'} · RivetPanel</title></svelte:head>
+<svelte:head><title>{t ? `${ticketKey(t)} ${t.subject}` : 'Ticket'} · RivetPanel</title></svelte:head>
 
-<a class="link inline-flex items-center gap-1 text-small" href={view?.staff && !view.requester ? `/support?queue=all&t=${id}` : '/support'}><Icon name="chevronLeft" size={14} />{view?.staff && !view.requester ? 'Support queue' : 'Support'}</a>
+<nav class="flex items-center gap-1.5 text-small" aria-label="Breadcrumb">
+	<a class="link inline-flex items-center gap-1" href={toQueue ? `/support?queue=all&t=${t?.id ?? ''}` : '/support'}><Icon name="chevronLeft" size={14} />{toQueue ? 'Support queue' : 'Support'}</a>
+	{#if t}<span class="text-muted" aria-hidden="true">/</span><span class="ticket-key">{ticketKey(t)}</span>{/if}
+</nav>
 
-<div class="max-w-[60rem]">
-	{#key id}
-		<TicketThread {id} onview={(v) => (view = v)} />
-	{/key}
-</div>
+{#key id}
+	<TicketThread {id} onview={(v) => (view = v)} />
+{/key}

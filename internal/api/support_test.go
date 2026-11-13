@@ -71,7 +71,7 @@ func TestTicketAuthorization(t *testing.T) {
 		t.Fatalf("created: %+v", tk)
 	}
 	// The administrator (staff) was told.
-	if ns, unread := inbox(t, admin); unread != 1 || !strings.Contains(ns[0].Title, "New ticket #") || ns[0].Link != "/support/"+tk.ID {
+	if ns, unread := inbox(t, admin); unread != 1 || !strings.Contains(ns[0].Title, "New ticket RT-") || ns[0].Link != "/support/"+tk.ID {
 		t.Fatalf("staff inbox: %+v", ns)
 	}
 

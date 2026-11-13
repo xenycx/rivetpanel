@@ -6,6 +6,46 @@ authoritative current version.
 
 ## Unreleased
 
+## 1.8.0 - 2026-11-13
+
+### Added
+
+- **Ticket keys.** Every ticket is shown as `RT-000042` (six digits) in lists,
+  notifications, email and the activity log, and `/support/RT-000042` opens
+  it. The API accepts the key wherever it takes a ticket id and returns it
+  as `key`.
+- **Ticket layouts for everyone.** Settings → Appearance → Support tickets (or
+  the switcher on the Support page) chooses Split (list and ticket side by
+  side, now also for My tickets), Table (sortable columns, tickets open in a
+  slide-over panel), Board (a column per status; staff drag cards to change
+  status, with Undo) or Classic list. Narrow windows and phones keep the
+  list.
+- **Jira-style ticket page and details.** The ticket page shows the
+  conversation beside a Details sidebar (status, assignee picker with
+  pictures, requester, priority, labels, category, linked app, watchers,
+  dates). Status lozenges, priority marks, avatars and label chips highlight
+  people and states across every layout, and tickets assigned to you are
+  marked.
+- **Richer conversations.** Markdown in messages, quote and copy-link
+  actions, editing your own messages (with history for the author and
+  staff), removing messages (the text and its history are deleted; staff who
+  manage tickets can remove any message), reactions (Agree, Thanks, Seen,
+  Solved it) and @mentions of colleagues in internal notes, which notify
+  them.
+- **Support team tools.** Requesters edit the subject, category and linked
+  app of an open ticket and staff at any time (every change is recorded).
+  Staff-only colored labels with a queue filter, shared saved replies
+  (inserted with `/` or a button), and Watch to follow a ticket and get its
+  notifications. The queue filters by assignee, watching and labels.
+
+### Changed
+
+- Database migration 0067 adds message edit and removal fields, reactions,
+  revisions, labels, saved replies and watchers. It is additive; no existing
+  data changes.
+- The list of staff for assignment now returns pictures; notifications for
+  requester replies, notes and status changes also reach a ticket's watchers.
+
 ## 1.7.0 - 2026-11-13
 
 ### Added

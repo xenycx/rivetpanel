@@ -84,33 +84,61 @@ window; **Ctrl+Enter** (⌘+Enter) sends and **R** focuses it. A reply shows in
 the thread as soon as it is sent and is put back in the box if the server
 refuses it.
 
-### The triage desk
+### Ticket keys
 
-Staff open the queue with **Queue** (`/support?queue=all`). On a wide window
-(a content area of at least 880 px) the queue becomes a desk: the tickets on
-the left, the selected ticket's thread on the right, with no page change. The
-address keeps the selected ticket (`&t=<id>`), so a reload or a shared link
-opens it. On narrower windows and phones the queue is a list and each ticket
-opens on its own page, as before.
+Every ticket has a key: `RT-` and its number padded to six digits
+(`RT-000001` … `RT-999999`; later numbers simply grow wider). Keys appear in
+lists, notifications, email subjects and the activity log, and
+`/support/RT-000042` opens the ticket (the API accepts the key wherever it
+takes a ticket id). Search matches `RT-000042`, `rt-42`, `#42` or `42`.
+
+### Layouts
+
+**Settings → Appearance → Support tickets** chooses how Support and the queue
+lay out tickets; the switcher at the top of the Support page changes the same
+setting. It is kept per browser, like the theme.
+
+| Layout | What it shows |
+|---|---|
+| **Split** (default) | Tickets on the left, the selected ticket on the right, without leaving the page. The address keeps the selected ticket (`&t=<id>`). |
+| **Table** | Sortable columns: key, subject with labels, status, priority, and for staff the requester and assignee with their pictures, and the last update. A ticket opens in a panel that slides in from the right; the table stays usable behind it. |
+| **Board** | A column per status. Staff who manage tickets drag a card to another column (or focus it and press `1`–`4`) to change its status, with **Undo**. Requesters see the board read-only. Closed shows its 30 most recent tickets. |
+| **Classic list** | A full-width list; a ticket opens on its own page. |
+
+On windows with a content area under 880 px, and on phones, every layout
+shows the classic list. The ticket's own page shows the conversation beside a
+**Details** sidebar (status, assignee, requester, priority, labels, category,
+linked app, watchers, dates); on narrow screens the details become a compact
+row under the title.
+
+Statuses show as colored lozenges (open in the accent color, waiting amber,
+resolved green, closed grey), priorities as marks (urgent a red double
+chevron, high an amber chevron, normal two bars, low a blue chevron down),
+people with their pictures, and tickets assigned to you with an accent dot
+before the key.
+
+### Keyboard
 
 | Key | Action |
 |---|---|
-| `J` / `K` (↓ / ↑ on a row) | Next / previous ticket |
-| `Enter` on a row | Open the ticket on its own page |
+| `J` / `K` (↓ / ↑ on a row) | Next / previous ticket (split and table) |
+| `Enter` on a row or card | Split: open the ticket's page. Table and board: open the panel |
+| `Esc` | Close the panel, leave the reply box or clear the search |
 | `R` | Reply |
 | `N` | Internal note (the reply box turns amber) |
-| `1` – `4` | Status: open, pending, resolved, closed (with **Undo** in the confirmation) |
+| `1` – `4` | Status: open, pending, resolved, closed (with **Undo**) |
 | `A` | Assign to yourself ("Take it") |
-| `/` | Search; `Esc` clears it, then returns to the list |
-| `Ctrl+Enter` | Send the reply or note |
+| `E` | Edit the subject |
+| `/` | Search; in an empty reply box (staff), a saved reply |
+| `Ctrl+Enter` | Send the reply or note; save an edited message |
 
 Shortcuts are ignored while typing in a field or while a dialog is open; the
-single-letter ones need `tickets.manage` (status and assignment) or the right
+ones that change a ticket need `tickets.manage`, and replying needs the right
 to reply. Status, priority and assignment change on screen at once and are
 rolled back with an error if the server refuses them. A ticket whose status
 no longer matches the tab stays in the list, dimmed, until the tab or filter
-changes. The assignee filter narrows the queue to tickets assigned to you or
-to nobody.
+changes. Staff can narrow the queue by assignee (anyone, me, nobody, tickets
+they watch) and by labels.
 
 Each row shows how long ago the ticket last changed. On an **open** ticket
 (waiting for staff) the time turns amber after 4 hours and red after 24.
@@ -118,6 +146,53 @@ This is time since any activity on the thread, internal notes and staff
 changes included, not a measured response time. An unsent reply or note is
 kept per ticket while the panel stays open (rows show **Draft**); it is held
 in the browser tab only and is lost on reload.
+
+### Conversations
+
+* **Markdown**: messages render bold, italics, code, lists, quotes, tables and
+  links (http(s) and panel paths only); HTML is shown as text and never runs.
+* **Quote**: the quote button puts a message into the reply box as a quote.
+* **Copy link**: links to one message (`/support/RT-000042#m-<id>`), which
+  scrolls to it and highlights it.
+* **Edit**: authors edit their own replies and notes (Ctrl+Enter saves, Esc
+  cancels). The message shows **edited**; its earlier versions are kept and
+  shown to the author and to staff, never to a requester for a staff message.
+  Requesters cannot edit once the ticket is closed; editing a staff message
+  needs `tickets.manage`.
+* **Remove**: authors remove their own messages (requesters while the ticket
+  is not closed), and staff with `tickets.manage` remove any message. The
+  text, its earlier versions and its reactions are deleted from the database;
+  a "Message removed" line stays so the conversation keeps its order (staff
+  see who removed it). The first message of a ticket cannot be removed; close
+  the ticket instead.
+* **Reactions**: Agree, Thanks, Seen and Solved it, one of each per person and
+  message, toggled from the message's toolbar or the chips under it. Staff see
+  who reacted; requesters see staff as "Support team". Nobody can react on a
+  closed ticket or to a note they cannot read.
+* **Mentions** (internal notes only): type `@` and pick a colleague. The
+  mentioned account must be staff that can read the ticket, and it is
+  notified ("You were mentioned on RT-…"). Mentions in replies the requester
+  sees are refused.
+
+### Details, labels, saved replies and watchers
+
+* **Details**: the requester changes the subject, category and linked app
+  while the ticket is open or pending (and links only apps it can reach at
+  that moment); staff with `tickets.manage` change them at any time but can
+  only remove a linked app, not link one. Every change is recorded in the
+  conversation.
+* **Labels** (staff only): colored tags created under **Tools → Manage
+  labels** (`tickets.manage`; at most 200, 10 per ticket). Every staff
+  account sees them; requesters never do. Deleting a label removes it from
+  every ticket.
+* **Saved replies** (`tickets.manage`): reusable answers shared by the
+  support team, inserted from the reply box (the **Saved replies** button or
+  `/` in an empty box) and managed under **Tools → Saved replies** (at most
+  300).
+* **Watchers** (staff only): **Watch** follows a ticket without being
+  assigned. Watchers get the assignee's notifications (requester replies,
+  internal notes, status changes) for as long as they can still read the
+  ticket. Requesters never see watchers.
 
 ### Permissions
 
@@ -166,13 +241,18 @@ only). Messages carry a 300-character excerpt and a link to the ticket.
 ### Limits and audit
 
 * 10 open/pending tickets per account, 10 new tickets per hour, 60 replies
-  per 10 minutes per account, 500 messages per ticket, 10,000 characters per
-  message, 150-character subjects.
+  per 10 minutes per account, 60 edits or removals and 120 reactions per 10
+  minutes per account, 500 messages per ticket, 10,000 characters per
+  message, 150-character subjects, 10 mentions per note.
 * No attachments (deliberately left out: they would need bounded storage
   outside the web root, content sniffing and download-only serving).
 * Audited: `support.ticket_create`, `support.ticket_reply` (target notes
-  "internal note"), `support.ticket_update` (status/priority/assignee);
-  refused attempts are kept as `denied`. Message bodies are never recorded.
+  "internal note"), `support.ticket_update` (status/priority/assignee/
+  details), `support.message_edit`, `support.message_delete`,
+  `support.ticket_labels`, `support.label_create|update|delete` and
+  `support.saved_reply_create|update|delete`; refused attempts are kept as
+  `denied`. Message bodies are never recorded. Reactions and watching are not
+  audited.
 
 ## Knowledgebase (help center)
 

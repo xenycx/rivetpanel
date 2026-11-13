@@ -26,12 +26,33 @@ const (
 type TicketStore interface {
 	CreateTicket(ctx context.Context, t domain.Ticket, first domain.TicketMessage) (domain.Ticket, error)
 	GetTicket(ctx context.Context, id string) (domain.Ticket, error)
+	GetTicketByNumber(ctx context.Context, n int64) (domain.Ticket, error)
 	ListTickets(ctx context.Context, f domain.TicketFilter, withInternal bool) ([]domain.Ticket, error)
 	CountActiveTickets(ctx context.Context, userID string) (int, error)
 	TicketMessages(ctx context.Context, ticketID string, withInternal bool) ([]domain.TicketMessage, error)
 	CountTicketMessages(ctx context.Context, ticketID string) (int, error)
 	UpdateTicket(ctx context.Context, id string, ch domain.TicketChange, msgs []domain.TicketMessage, nowMS int64) error
 	GetUserByID(ctx context.Context, id string) (domain.User, error)
+
+	GetTicketMessage(ctx context.Context, id string) (domain.TicketMessage, error)
+	FirstTicketMessageID(ctx context.Context, ticketID string) (string, error)
+	EditTicketMessage(ctx context.Context, msgID, body string, rev domain.TicketRevision, editorID string, nowMS int64) error
+	RemoveTicketMessage(ctx context.Context, msgID, byID string, nowMS int64) error
+	TicketMessageRevisions(ctx context.Context, msgID string) ([]domain.TicketRevision, error)
+	SetTicketReaction(ctx context.Context, msgID, userID, kind string, on bool, nowMS int64) error
+	ListTicketLabels(ctx context.Context) ([]domain.TicketLabel, error)
+	CreateTicketLabel(ctx context.Context, l domain.TicketLabel) error
+	UpdateTicketLabel(ctx context.Context, l domain.TicketLabel) error
+	DeleteTicketLabel(ctx context.Context, id string) error
+	SetTicketLabels(ctx context.Context, ticketID string, labelIDs []string) error
+	ListSavedReplies(ctx context.Context) ([]domain.SavedReply, error)
+	CountSavedReplies(ctx context.Context) (int, error)
+	PutSavedReply(ctx context.Context, r domain.SavedReply) error
+	GetSavedReply(ctx context.Context, id string) (domain.SavedReply, error)
+	DeleteSavedReply(ctx context.Context, id string) error
+	SetTicketWatcher(ctx context.Context, ticketID, userID string, on bool, nowMS int64) error
+	TicketWatchers(ctx context.Context, ticketID string) ([]domain.Person, error)
+	WatchedTicketIDs(ctx context.Context, userID string) (map[string]bool, error)
 }
 
 // TicketService runs support tickets. Who sees what:
@@ -81,6 +102,9 @@ type TicketDetail struct {
 	Manage bool
 	// Requester is true when the reader opened the ticket.
 	Requester bool
+	// Staff view only: who follows the ticket, and whether the reader does.
+	Watchers []domain.Person
+	Watching bool
 }
 
 func scopedRefusal(actor domain.User) error {
@@ -115,10 +139,15 @@ func (s *TicketService) access(ctx context.Context, actor domain.User, id string
 	if err := scopedRefusal(actor); err != nil {
 		return domain.Ticket{}, TicketDetail{}, err
 	}
-	if u, err := uuid.Parse(id); err != nil || u.String() != id {
+	var t domain.Ticket
+	var err error
+	if n, ok := domain.ParseTicketKey(id); ok {
+		t, err = s.Store.GetTicketByNumber(ctx, n) // RT-000042
+	} else if validUUID(id) {
+		t, err = s.Store.GetTicket(ctx, id)
+	} else {
 		return domain.Ticket{}, TicketDetail{}, domain.ErrNotFound
 	}
-	t, err := s.Store.GetTicket(ctx, id)
 	if err != nil {
 		return t, TicketDetail{}, err
 	}
@@ -206,7 +235,7 @@ func (s *TicketService) Create(ctx context.Context, actor domain.User, in Ticket
 	if err != nil {
 		return t, err
 	}
-	s.notifyStaff(ctx, actor, t, fmt.Sprintf("New ticket #%d: %s", t.Number, t.Subject), clip(body, ticketExcerpt))
+	s.notifyStaff(ctx, actor, t, "New ticket "+domain.TicketKey(t.Number)+": "+t.Subject, clip(body, ticketExcerpt))
 	return t, nil
 }
 
@@ -271,13 +300,22 @@ func (s *TicketService) Get(ctx context.Context, actor domain.User, id string) (
 		return d, err
 	}
 	d.Messages, err = s.Store.TicketMessages(ctx, t.ID, d.Staff)
+	if err != nil || !d.Staff {
+		return d, err
+	}
+	d.Watchers, err = s.Store.TicketWatchers(ctx, t.ID)
+	for _, w := range d.Watchers {
+		if w.ID == actor.ID {
+			d.Watching = true
+		}
+	}
 	return d, err
 }
 
 // Reply adds a message (internal: a staff note the requester never sees).
 // A requester's reply reopens a pending or resolved ticket; a staff reply
 // marks an open ticket pending (waiting for the requester).
-func (s *TicketService) Reply(ctx context.Context, actor domain.User, id, body string, internal bool) (domain.TicketMessage, error) {
+func (s *TicketService) Reply(ctx context.Context, actor domain.User, id, body string, internal bool, mentions ...string) (domain.TicketMessage, error) {
 	t, d, err := s.access(ctx, actor, id)
 	if err != nil {
 		return domain.TicketMessage{}, err
@@ -297,6 +335,10 @@ func (s *TicketService) Reply(ctx context.Context, actor domain.User, id, body s
 	if !asStaff && t.Status == domain.TicketClosed {
 		return domain.TicketMessage{}, domain.Invalid("this ticket is closed; open a new ticket")
 	}
+	mentioned, err := s.mentioned(ctx, t, internal, mentions)
+	if err != nil {
+		return domain.TicketMessage{}, err
+	}
 	n, err := s.Store.CountTicketMessages(ctx, t.ID)
 	if err != nil {
 		return domain.TicketMessage{}, err
@@ -306,7 +348,7 @@ func (s *TicketService) Reply(ctx context.Context, actor domain.User, id, body s
 	}
 	now := s.now().UnixMilli()
 	m := domain.TicketMessage{ID: uuid.NewString(), TicketID: t.ID, AuthorID: &actor.ID, AuthorLabel: label(actor),
-		Kind: "message", Staff: asStaff, Internal: internal, Body: body, CreatedAtMS: now}
+		Kind: "message", Staff: asStaff, Internal: internal, Body: body, CreatedAtMS: now, Mentions: mentioned}
 	var ch domain.TicketChange
 	switch {
 	case internal:
@@ -318,17 +360,20 @@ func (s *TicketService) Reply(ctx context.Context, actor domain.User, id, body s
 	if err := s.Store.UpdateTicket(ctx, t.ID, ch, []domain.TicketMessage{m}, now); err != nil {
 		return m, err
 	}
-	title := fmt.Sprintf("#%d %s", t.Number, t.Subject)
+	title := domain.TicketKey(t.Number) + " " + t.Subject
+	if len(mentioned) > 0 {
+		s.notify(ctx, actor, mentioned, "You were mentioned on "+title, clip(body, ticketExcerpt), t)
+	}
+	followers := s.followers(ctx, t)
 	switch {
 	case internal:
-		if t.AssigneeID != nil {
-			s.notify(ctx, actor, []string{*t.AssigneeID}, "Internal note on "+title, clip(body, ticketExcerpt), t)
-		}
+		s.notify(ctx, actor, without(followers, mentioned), "Internal note on "+title, clip(body, ticketExcerpt), t)
 	case asStaff:
 		s.notify(ctx, actor, []string{t.UserID}, "New reply on your ticket "+title, clip(body, ticketExcerpt), t)
+		s.notify(ctx, actor, without(followers, []string{t.UserID}), "Staff reply on "+title, clip(body, ticketExcerpt), t)
 	default:
 		if t.AssigneeID != nil {
-			s.notify(ctx, actor, []string{*t.AssigneeID}, "Reply from the requester on "+title, clip(body, ticketExcerpt), t)
+			s.notify(ctx, actor, followers, "Reply from the requester on "+title, clip(body, ticketExcerpt), t)
 		} else {
 			s.notifyStaff(ctx, actor, t, "Reply from the requester on "+title, clip(body, ticketExcerpt))
 		}
@@ -344,6 +389,9 @@ type TicketUpdate struct {
 	Status   *string
 	Priority *string
 	Assignee *string
+	Subject  *string
+	Category *string
+	BotID    *string // "" unlinks
 }
 
 // Update changes status, priority or assignee. Staff with tickets.manage may
@@ -410,15 +458,75 @@ func (s *TicketService) Update(ctx context.Context, actor domain.User, id string
 			}
 		}
 	}
+	// Details: the requester while the ticket is open or pending, staff who
+	// manage tickets at any time.
+	if in.Subject != nil || in.Category != nil || in.BotID != nil {
+		mayEdit := d.Manage || (d.Requester && (t.Status == domain.TicketOpen || t.Status == domain.TicketPending))
+		if !mayEdit {
+			if d.Requester {
+				return t, domain.Invalid("this ticket is resolved or closed; reopen it or open a new ticket to change its details")
+			}
+			return t, domain.Denied(actor, domain.PermTicketsManage)
+		}
+	}
+	if in.Subject != nil {
+		subject := strings.Join(strings.Fields(*in.Subject), " ")
+		if subject == "" || len([]rune(subject)) > ticketSubjectMax {
+			return t, domain.Invalid(fmt.Sprintf("the subject must be 1 to %d characters", ticketSubjectMax))
+		}
+		if subject != t.Subject {
+			ch.Subject = &subject
+			event("Subject changed from “"+t.Subject+"” to “"+subject+"”", false)
+		}
+	}
+	if in.Category != nil && *in.Category != t.Category {
+		if !slices.Contains(domain.TicketCategories, *in.Category) {
+			return t, domain.Invalid("choose a category: " + strings.Join(domain.TicketCategories, ", "))
+		}
+		ch.Category = in.Category
+		event("Category changed from "+t.Category+" to "+*in.Category, false)
+	}
+	if in.BotID != nil {
+		cur := ""
+		if t.BotID != nil {
+			cur = *t.BotID
+		}
+		if *in.BotID != cur {
+			if *in.BotID == "" {
+				var none *string
+				ch.BotID, ch.BotName = &none, ptr("")
+				event("Linked app removed", false)
+			} else {
+				// Only the requester links an app, and only one it can reach now.
+				if !d.Requester {
+					return t, domain.Invalid("only the requester can link an app; staff can remove the link")
+				}
+				b, err := s.Bots.Get(ctx, actor, *in.BotID)
+				if err != nil {
+					var se *domain.ScopeError
+					if errors.Is(err, domain.ErrNotFound) || errors.Is(err, domain.ErrForbidden) || errors.As(err, &se) {
+						return t, domain.Invalid("choose an app you can access")
+					}
+					return t, err
+				}
+				bid := &b.ID
+				ch.BotID, ch.BotName = &bid, ptr(clip(b.Name, 190))
+				event("Linked app changed to "+clip(b.Name, 190), false)
+			}
+		}
+	}
 	if len(msgs) == 0 {
 		return t, nil
 	}
 	if err := s.Store.UpdateTicket(ctx, t.ID, ch, msgs, now); err != nil {
 		return t, err
 	}
-	title := fmt.Sprintf("#%d %s", t.Number, t.Subject)
+	title := domain.TicketKey(t.Number) + " " + t.Subject
 	if ch.Status != nil && actor.ID != t.UserID {
 		s.notify(ctx, actor, []string{t.UserID}, "Your ticket "+title+" is now "+*ch.Status, "", t)
+	}
+	if ch.Status != nil {
+		s.notify(ctx, actor, without(s.followers(ctx, t), []string{t.UserID}), "Ticket "+title+" is now "+*ch.Status, "", t)
 	}
 	if newAssignee != nil {
 		s.notify(ctx, actor, []string{newAssignee.ID}, "Ticket "+title+" was assigned to you", "", t)
