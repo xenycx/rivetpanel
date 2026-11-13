@@ -1108,6 +1108,78 @@ aside.sidebar {
 	width: auto;
 }
 
+/* The support triage desk (routes/support). Moving through the queue is not
+   a navigation: the page holds still, the selection slab glides to the new
+   row, and the thread pane hands over in the direction of travel (j: the
+   old thread lifts away and the next rises from below; k: the reverse). */
+:root[data-desk]::view-transition-old(root),
+:root[data-desk]::view-transition-new(root) {
+	animation: none;
+}
+:root[data-desk]::view-transition-group(vt-ticket-ink) {
+	animation-duration: 260ms;
+	animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+}
+::view-transition-old(vt-ticket-ink) {
+	display: none;
+}
+::view-transition-new(vt-ticket-ink) {
+	animation: none;
+}
+/* The pane keeps its box; only its content hands over, clipped to it. */
+:root[data-desk]::view-transition-group(vt-ticket-pane) {
+	animation: none;
+	overflow: clip;
+	border-radius: var(--radius-card);
+}
+:root[data-desk]::view-transition-image-pair(vt-ticket-pane) {
+	isolation: auto;
+}
+:root[data-desk]::view-transition-old(vt-ticket-pane) {
+	animation: 140ms cubic-bezier(0.4, 0, 1, 1) both desk-leave;
+	height: 100%;
+	object-fit: none;
+	object-position: top;
+}
+:root[data-desk]::view-transition-new(vt-ticket-pane) {
+	animation: 300ms cubic-bezier(0.16, 1, 0.3, 1) 40ms both desk-arrive;
+	height: 100%;
+	object-fit: none;
+	object-position: top;
+}
+:root[data-desk='up']::view-transition-old(vt-ticket-pane) {
+	animation-name: desk-leave-down;
+}
+:root[data-desk='up']::view-transition-new(vt-ticket-pane) {
+	animation-name: desk-arrive-down;
+}
+@keyframes desk-leave {
+	to {
+		opacity: 0;
+		transform: translateY(-14px);
+		filter: blur(2px);
+	}
+}
+@keyframes desk-arrive {
+	from {
+		opacity: 0;
+		transform: translateY(18px);
+	}
+}
+@keyframes desk-leave-down {
+	to {
+		opacity: 0;
+		transform: translateY(14px);
+		filter: blur(2px);
+	}
+}
+@keyframes desk-arrive-down {
+	from {
+		opacity: 0;
+		transform: translateY(-18px);
+	}
+}
+
 /* Reduced motion keeps every state change visible without movement: menus
    and dialogs fade in instead of rising or sliding up, switches, check marks
    and meters change in place, and looping pulses stop. Colour and opacity

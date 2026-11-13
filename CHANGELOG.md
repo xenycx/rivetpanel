@@ -6,6 +6,34 @@ authoritative current version.
 
 ## Unreleased
 
+## 1.7.0 - 2026-11-13
+
+### Added
+
+- **Support triage desk.** On a wide window the staff queue
+  (`/support?queue=all`) shows the tickets and the selected ticket's thread
+  side by side, without leaving the page, and keeps the selected ticket in
+  the address. It is driven from the keyboard: J/K to move, R to reply, N for
+  an internal note, 1–4 to set the status (with Undo), A to take the ticket,
+  / to search, Ctrl+Enter to send. Status, priority and assignment change on
+  screen at once and roll back if the server refuses. Moving between tickets
+  slides the selection and the thread in the direction of travel, or simply
+  swaps them with reduced motion or without View Transitions. Narrow windows
+  and phones keep the list-and-page flow.
+- Ticket lists (yours and the queue) have status tabs with live counts, an
+  instant search by subject, number, app and (for staff) email, and an
+  assignee filter (anyone, me, nobody). Open tickets show how long they have
+  had no activity, amber after 4 hours and red after 24.
+
+### Changed
+
+- The ticket reply box stays docked at the bottom of the window, sends with
+  Ctrl+Enter, shows a sent reply in the thread at once (restoring the text if
+  sending fails), keeps an unsent draft per ticket while the panel tab stays
+  open, and turns amber in internal-note mode so a note cannot be mistaken
+  for a reply. Threads are grouped by day. Staff set the status with a
+  four-way switch instead of a drop-down.
+
 ## 1.6.0 - 2026-11-09
 
 ### Added

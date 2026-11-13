@@ -649,6 +649,14 @@ items state exactly what remains.
     status change with events and requester notification, `/notifications`
     page, audit rows. Email delivery and node notices were covered by tests
     only.
+  - Triage desk (1.7.0, 2026-11-13): split queue view with keyboard
+    shortcuts, status tabs with counts, search, assignee filter, idle-time
+    colouring, docked composer with drafts and optimistic replies. Front end
+    only; every change still goes through the same ticket API and its
+    authorization (enforced by the application). Drafts live in the browser
+    tab only. Browser-verified on a scratch local panel (dark and light,
+    1440/1280/900 px wide, staff and requester accounts); no automated UI
+    test.
   - Not done: attachments, a push (SSE/WebSocket) channel for the bell,
     Discord fan-out of the new categories (only the existing bot alerts post
     to Discord). Knowledgebase and status page: support batch 2 below.

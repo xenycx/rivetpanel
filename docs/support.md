@@ -76,6 +76,49 @@ pending; a requester reply moves a pending or resolved ticket back to open.
 Requesters can close their ticket and reopen a resolved one; closed tickets
 take no more requester replies (staff can reopen them).
 
+The list has tabs for **Active** (open and pending), each status and **All**,
+each with its count, and a search box (`/`) that matches the subject, the
+ticket number, the linked app and, for staff, the requester and assignee
+addresses. A ticket page keeps the reply box docked at the bottom of the
+window; **Ctrl+Enter** (⌘+Enter) sends and **R** focuses it. A reply shows in
+the thread as soon as it is sent and is put back in the box if the server
+refuses it.
+
+### The triage desk
+
+Staff open the queue with **Queue** (`/support?queue=all`). On a wide window
+(a content area of at least 880 px) the queue becomes a desk: the tickets on
+the left, the selected ticket's thread on the right, with no page change. The
+address keeps the selected ticket (`&t=<id>`), so a reload or a shared link
+opens it. On narrower windows and phones the queue is a list and each ticket
+opens on its own page, as before.
+
+| Key | Action |
+|---|---|
+| `J` / `K` (↓ / ↑ on a row) | Next / previous ticket |
+| `Enter` on a row | Open the ticket on its own page |
+| `R` | Reply |
+| `N` | Internal note (the reply box turns amber) |
+| `1` – `4` | Status: open, pending, resolved, closed (with **Undo** in the confirmation) |
+| `A` | Assign to yourself ("Take it") |
+| `/` | Search; `Esc` clears it, then returns to the list |
+| `Ctrl+Enter` | Send the reply or note |
+
+Shortcuts are ignored while typing in a field or while a dialog is open; the
+single-letter ones need `tickets.manage` (status and assignment) or the right
+to reply. Status, priority and assignment change on screen at once and are
+rolled back with an error if the server refuses them. A ticket whose status
+no longer matches the tab stays in the list, dimmed, until the tab or filter
+changes. The assignee filter narrows the queue to tickets assigned to you or
+to nobody.
+
+Each row shows how long ago the ticket last changed. On an **open** ticket
+(waiting for staff) the time turns amber after 4 hours and red after 24.
+This is time since any activity on the thread, internal notes and staff
+changes included, not a measured response time. An unsent reply or note is
+kept per ticket while the panel stays open (rows show **Draft**); it is held
+in the browser tab only and is lost on reload.
+
 ### Permissions
 
 | Permission | Group | Allows |
