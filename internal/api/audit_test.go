@@ -74,3 +74,19 @@ func TestActivityRecordsChangesWithoutValues(t *testing.T) {
 		t.Fatalf("sign-ins recorded = %d, want the success and the failure", signIns)
 	}
 }
+
+// A delete records the name of what it removed: the name is read before the
+// row is gone.
+func TestDeleteRecordsTheRemovedAppName(t *testing.T) {
+	e := auditEnv(t)
+	owner := e.user("own@x.io", domain.RoleUser)
+	id := owner.createBot("doomed-app")
+	owner.mustStatus(204, "DELETE", "/api/v1/bots/"+id, nil)
+	var name *string
+	if err := e.db.QueryRowContext(t.Context(), `SELECT bot_name FROM audit_events WHERE action = 'bot.delete' AND bot_id = ?`, id).Scan(&name); err != nil {
+		t.Fatal(err)
+	}
+	if name == nil || *name != "doomed-app" {
+		t.Fatalf("bot.delete name = %v", name)
+	}
+}

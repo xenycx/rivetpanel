@@ -351,7 +351,7 @@ func (db *DB) ActivityStats(ctx context.Context, f ActivityFilter, bucketMS int6
 	if w, args, ok := auditWhere(f, false); ok {
 		parts = append(parts, part{where: w, args: args, from: activityAuditFrom, ts: "e.at_ms", src: "e.source", cat: auditCategorySQL,
 			outc: "e.outcome", actor: "e.actor_id", personOK: "e.source = 'person'", app: "COALESCE(e.bot_id, e.site_id)",
-			name: "COALESCE(e.bot_name, e.site_name)", kind: "CASE WHEN e.bot_id IS NULL THEN 'site' ELSE COALESCE(NULLIF(b.kind, ''), 'bot') END",
+			name: "COALESCE(e.bot_name, e.site_name, b.name, s.name)", kind: "CASE WHEN e.bot_id IS NULL THEN 'site' ELSE COALESCE(NULLIF(b.kind, ''), 'bot') END",
 			logoAt: "COALESCE(b.logo_updated_at_ms, 0)", discord: "COALESCE(b.discord_avatar_url, '')",
 			variant: "COALESCE(b.logo_variant, s.logo_variant, 0)"})
 	}
@@ -451,7 +451,10 @@ func (db *DB) ActivityStats(ctx context.Context, f ActivityFilter, bucketMS int6
 		}
 
 		// Apps and sites.
-		rows, err = db.QueryContext(ctx, `SELECT `+p.app+`, MAX(`+p.name+`), MAX(`+p.kind+`), MAX(`+p.logoAt+`), MAX(`+p.discord+`), MAX(`+p.variant+`),
+		// Every aggregate can be NULL (events of a removed app record no
+		// name), so each falls back to an empty value.
+		rows, err = db.QueryContext(ctx, `SELECT `+p.app+`, COALESCE(MAX(`+p.name+`), ''), COALESCE(MAX(`+p.kind+`), 'bot'), COALESCE(MAX(`+p.logoAt+`), 0),
+			COALESCE(MAX(`+p.discord+`), ''), COALESCE(MAX(`+p.variant+`), 0),
 			COUNT(*), SUM(`+p.outc+` IN ('failed','denied'))`+p.from+` WHERE `+p.where+` AND `+p.app+` IS NOT NULL GROUP BY 1`, p.args...)
 		if err != nil {
 			return st, err

@@ -3,6 +3,7 @@ package api
 import (
 	"errors"
 	"log/slog"
+	"strings"
 
 	"github.com/gofiber/fiber/v3"
 
@@ -97,7 +98,9 @@ func errorHandler(log *slog.Logger) fiber.ErrorHandler {
 			}
 		}
 		if status >= 500 {
-			log.Error("request failed", "method", c.Method(), "path", c.Path(), "status", status, "err", err)
+			// Fiber reuses the request buffers: a log record kept for the panel
+			// log must hold its own copy, or it later shows another request's path.
+			log.Error("request failed", "method", strings.Clone(c.Method()), "path", strings.Clone(c.Path()), "status", status, "err", err)
 		}
 		return c.Status(status).JSON(errorBody{errorDetail{Code: codeFor(status), Message: msg}})
 	}

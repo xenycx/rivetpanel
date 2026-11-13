@@ -854,7 +854,7 @@ func (inv *invocation) addons(ctx context.Context, name string, raw []byte) []by
 	}
 	r.Query.Mode = "read"
 	res, err := inv.svc.Addons.QueryAddon(ctx, b, r.Kind, r.Query)
-	inv.svc.recordQuery(ctx, u, b.ID, r.Kind, "read", queryHash(r.Kind, r.Query), err)
+	inv.svc.recordQuery(ctx, u, b, r.Kind, "read", queryHash(r.Kind, r.Query), err)
 	if err != nil {
 		return errReply(err)
 	}
@@ -888,7 +888,7 @@ func (s *ExtensionService) ConfirmAddonWrite(ctx context.Context, actor domain.U
 		return AddonQueryResult{}, domain.Invalid("this change is too long to show for confirmation")
 	}
 	res, err := s.Addons.QueryAddon(ctx, b, p.kind, p.q.ForKind(p.kind))
-	s.recordQuery(ctx, actor, b.ID, p.kind, "write", p.hash, err)
+	s.recordQuery(ctx, actor, b, p.kind, "write", p.hash, err)
 	return res, err
 }
 
@@ -914,13 +914,13 @@ func (s *ExtensionService) PendingAddonWrite(actor domain.User, token string) (m
 	return out, nil
 }
 
-func (s *ExtensionService) recordQuery(ctx context.Context, u domain.User, botID, kind, mode, hash string, err error) {
+func (s *ExtensionService) recordQuery(ctx context.Context, u domain.User, b domain.Bot, kind, mode, hash string, err error) {
 	if s.Audit == nil {
 		return
 	}
 	label := userName(u)
 	t := fmt.Sprintf("%s %s query %s", kind, mode, hash[:12])
-	e := domain.AuditEvent{ActorID: &u.ID, ActorLabel: &label, Action: "addon.query", BotID: &botID, Target: &t}
+	e := domain.AuditEvent{ActorID: &u.ID, ActorLabel: &label, Action: "addon.query", BotID: &b.ID, BotName: &b.Name, Target: &t}
 	if err != nil {
 		e.Outcome = "failed"
 	}

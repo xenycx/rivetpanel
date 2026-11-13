@@ -6,6 +6,22 @@ authoritative current version.
 
 ## Unreleased
 
+## 1.11.1 - 2026-11-13
+
+### Fixed
+
+- **The activity summary no longer fails with an error** when a time window
+  or filter holds only events without an app or site name (add-on queries,
+  deleted apps and sites). It now falls back to the app's current name, or
+  shows none, instead of returning a server error.
+- **Add-on query events now record the app's name**, like every other app
+  action, and **app and site deletions record the name of what was removed**.
+  Migration 0071 fills in the missing names on existing events whose app or
+  site still exists.
+- **Server error lines in the panel log show the right request path.** A kept
+  log line could later show the path of an unrelated request (for example a
+  static `/_app/immutable/...` file).
+
 ## 1.11.0 - 2026-11-13
 
 ### Added

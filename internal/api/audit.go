@@ -297,6 +297,22 @@ func envNames(c fiber.Ctx) string {
 // server errors are recorded as failed). Reads are not recorded, except the
 // explicit secret reveal, which is a POST.
 func (s *panel) auditMW(c fiber.Ctx) error {
+	// A delete removes the row the name is read from afterwards, so the
+	// name is captured before the handler runs.
+	var preName string
+	if c.Method() == fiber.MethodDelete && s.audit != nil {
+		// The matched route is not known yet, so the path is read directly.
+		p := strings.TrimSuffix(c.Path(), "/")
+		if id, ok := strings.CutPrefix(p, "/api/v1/bots/"); ok && id != "" && !strings.Contains(id, "/") {
+			if b, e := s.bots.Store.GetBot(c.Context(), id); e == nil {
+				preName = strings.Clone(b.Name)
+			}
+		} else if id, ok := strings.CutPrefix(p, "/api/v1/sites/"); ok && id != "" && !strings.Contains(id, "/") && s.sites != nil {
+			if st, e := s.sites.Store.GetSite(c.Context(), id); e == nil {
+				preName = strings.Clone(st.Name)
+			}
+		}
+	}
 	err := c.Next()
 	if s.audit == nil || isSafeMethod(c.Method()) {
 		return err
@@ -356,6 +372,8 @@ func (s *panel) auditMW(c fiber.Ctx) error {
 		ev.BotID = &botID
 		if b, e := s.bots.Store.GetBot(c.Context(), botID); e == nil {
 			ev.BotName = strPtr(b.Name)
+		} else if preName != "" {
+			ev.BotName = &preName
 		}
 	case strings.HasPrefix(c.Route().Path, "/api/v1/sites/:sid"):
 		siteID := strings.Clone(c.Params("sid"))
@@ -364,6 +382,9 @@ func (s *panel) auditMW(c fiber.Ctx) error {
 			if st, e := s.sites.Store.GetSite(c.Context(), siteID); e == nil {
 				ev.SiteName = strPtr(st.Name)
 			}
+		}
+		if ev.SiteName == nil && preName != "" {
+			ev.SiteName = &preName
 		}
 	case r.action == "access.invite_accept" && outcome == "ok":
 		var inv struct {

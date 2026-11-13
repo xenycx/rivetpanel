@@ -164,3 +164,52 @@ func pad(id int) string {
 	}
 	return string(n)
 }
+
+// Audit events can carry no app or site name: add-on queries never recorded
+// one, and deletes look the name up after the row is gone. The summary must
+// still answer, falling back to the live name or an empty one.
+func TestActivityStatsToleratesMissingNames(t *testing.T) {
+	db := open(t)
+	ctx := context.Background()
+	db.EnsureLocalNode(ctx)
+	if _, err := db.ExecContext(ctx, `INSERT INTO users (id,email,password_hash,created_at_ms,updated_at_ms) VALUES ('u','u@x','h',1,1)`); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.CreateBot(ctx, domain.Bot{ID: "b1", OwnerID: "u", NodeID: domain.LocalNodeID, Name: "live-name", Runtime: "nodejs", ImageRef: "i",
+		Argv: []string{"node"}, MemoryBytes: 1, NanoCPUs: 1, PidsLimit: 1, CreatedAtMS: 1, UpdatedAtMS: 1}); err != nil {
+		t.Fatal(err)
+	}
+	s := func(v string) *string { return &v }
+	for _, e := range []domain.AuditEvent{
+		{AtMS: 1000, ActorID: s("u"), Action: "addon.query", BotID: s("b1"), Outcome: "ok", Source: "person"},
+		{AtMS: 1100, ActorID: s("u"), Action: "bot.delete", BotID: s("gone"), Outcome: "ok", Source: "person"},
+		{AtMS: 1200, ActorID: s("u"), Action: "site.delete", SiteID: s("gone-site"), Outcome: "ok", Source: "person"},
+		{AtMS: 1300, ActorID: s("u"), Action: "account.sign_in", Outcome: "ok", Source: "person"},
+	} {
+		if err := db.InsertAudit(ctx, e); err != nil {
+			t.Fatal(err)
+		}
+	}
+	st, err := db.ActivityStats(ctx, ActivityFilter{FromMS: 0, ToMS: 2000}, 1000, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	names := map[string]string{}
+	for _, a := range st.Apps {
+		names[a.ID] = a.Name
+	}
+	if st.Total != 4 || len(st.Apps) != 3 || names["b1"] != "live-name" || names["gone"] != "" || names["gone-site"] != "" {
+		t.Fatalf("stats = %+v", st)
+	}
+
+	// The 0071 backfill fills the names that the live rows still know.
+	if _, err := db.ExecContext(ctx, `UPDATE audit_events SET bot_name = (SELECT substr(name, 1, 64) FROM bots WHERE bots.id = audit_events.bot_id)
+		WHERE bot_name IS NULL AND bot_id IS NOT NULL`); err != nil {
+		t.Fatal(err)
+	}
+	var got *string
+	db.QueryRowContext(ctx, `SELECT bot_name FROM audit_events WHERE action = 'addon.query'`).Scan(&got)
+	if got == nil || *got != "live-name" {
+		t.Fatalf("backfilled name = %v", got)
+	}
+}
