@@ -6,6 +6,8 @@ authoritative current version.
 
 ## Unreleased
 
+## 1.12.0 - 2026-11-14
+
 ### Added
 
 - **Ticket attachments.** Drop files on the new-ticket form or the reply box,

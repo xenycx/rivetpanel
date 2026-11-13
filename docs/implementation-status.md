@@ -670,7 +670,7 @@ items state exactly what remains.
     on a scratch local panel (dark and light, 1440/1280 px and the mobile
     preset; staff and requester accounts; drag to change status, mentions,
     saved replies, editing). Not automated in the browser suite.
-  - Attachments, editor, auto-reply (Unreleased, migration 0072): files on
+  - Attachments, editor, auto-reply (1.12.0, 2026-11-14, migration 0072): files on
     ticket messages (10 MB each, 10 per message; types sniffed from the bytes;
     `nosniff`, sandbox CSP, pictures-only inline; readable only by readers of
     the message, internal-note files by staff; unsent uploads private to the
@@ -682,7 +682,7 @@ items state exactly what remains.
     `internal/api/support_attach_test.go`. Browser-verified on a scratch local
     panel (1440 px, staff account; drop, viewer, resize, auto-reply); not
     automated in the browser suite.
-- [x] Live updates (Unreleased, no migration): `internal/live` hub and
+- [x] Live updates (1.12.0, 2026-11-14, no migration): `internal/live` hub and
   `GET /api/v1/live` (Server-Sent Events). Every successful mutating API
   request publishes a topic hint from its path, runner status changes publish
   `bots`, new notifications publish `notifications` to recipients only. Hints
