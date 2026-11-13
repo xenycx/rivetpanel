@@ -98,7 +98,7 @@
 				if (body !== site.max_body_bytes) sitePatch.max_body_bytes = body;
 			}
 			if (Object.keys(sitePatch).length) await api('PATCH', `/sites/${site.id}`, sitePatch);
-			toast(isApp ? 'Saved; start the app to use the new settings' : 'Saved; the next deployment uses them', 'success');
+			toast(isApp ? (stopped ? 'Saved; start the app to use the new settings' : 'Saved; restart the app to use the new settings') : 'Saved; the next deployment uses them', 'success');
 			onChanged();
 		} catch (err) {
 			toast(err instanceof ApiError ? err.message : 'The settings could not be saved.', 'fail');
@@ -163,7 +163,7 @@
 					<label class="block"><span class="label">Memory (MiB)</span><input class="field font-mono" type="number" min="64" step="64" bind:value={form.memory} /><span class="help">The app's size; it counts toward the workspace memory allowance.</span></label>
 					<label class="block"><span class="label">Request body limit (MiB)</span><input class="field font-mono" type="number" min="0" bind:value={form.body} /><span class="help">0: the panel default (RIVET_SITES_MAX_BODY_BYTES, 100 MiB unless set).</span></label>
 				{/if}
-				{#if isApp && !stopped}<Notice tone="info" class="sm:col-span-2">Stop the app to change its start command, port, memory or build; the address and health check can change any time.</Notice>{/if}
+				{#if isApp && !stopped}<Notice tone="info" class="sm:col-span-2">The app is running: a new start command, memory or build applies after a restart, and the port needs a stopped app. The address and health check change at once.</Notice>{/if}
 				<div class="sm:col-span-2 flex gap-2"><button class="btn btn-primary" disabled={saving}>{saving ? 'Saving…' : 'Save'}</button><button type="button" class="btn btn-quiet" onclick={reset}>Reset</button></div>
 			</form>
 		{:else}

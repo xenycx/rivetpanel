@@ -3,6 +3,7 @@ package sqlite
 import (
 	"context"
 	"encoding/json"
+	"slices"
 
 	"github.com/xenycx/rivetpanel/internal/domain"
 )
@@ -15,7 +16,8 @@ const botCols = `id, owner_id, node_id, name, runtime, image_ref, argv_json, mem
 	restart_count, next_retry_at_ms, state_reason, last_started_at_ms,
 	discord_user_id, discord_username, discord_avatar_url, COALESCE(workspace_id, ''), COALESCE(build_command, ''),
 	COALESCE(logo_updated_at_ms, 0), kind, COALESCE(blueprint_id, ''), COALESCE(blueprint_revision, 0), image_choice, install_state, installed_version,
-	jvm_args, jvm_args_updated_at_ms, jvm_args_generation, COALESCE(release_command, ''), logo_variant`
+	jvm_args, jvm_args_updated_at_ms, jvm_args_generation, COALESCE(release_command, ''), logo_variant,
+	config_pending_at_ms, config_pending_generation`
 
 func scanBot(row interface{ Scan(...any) error }) (domain.Bot, error) {
 	var b domain.Bot
@@ -30,7 +32,8 @@ func scanBot(row interface{ Scan(...any) error }) (domain.Bot, error) {
 		&b.RestartCount, &b.NextRetryAtMS, &b.StateReason, &b.LastStartedAtMS,
 		&b.DiscordUserID, &b.DiscordUsername, &b.DiscordAvatarURL, &b.WorkspaceID, &b.BuildCommand,
 		&b.LogoUpdatedMS, &b.Kind, &b.BlueprintID, &b.BlueprintRevision, &b.ImageChoice, &b.InstallState, &b.InstalledVersion,
-		&b.JVMArgs, &b.JVMArgsUpdatedMS, &b.JVMArgsGeneration, &b.ReleaseCommand, &b.LogoVariant)
+		&b.JVMArgs, &b.JVMArgsUpdatedMS, &b.JVMArgsGeneration, &b.ReleaseCommand, &b.LogoVariant,
+		&b.ConfigPendingAtMS, &b.ConfigPendingGeneration)
 	if err != nil {
 		return b, mapErr(err)
 	}
@@ -229,9 +232,22 @@ func (db *DB) ListBotsForUser(ctx context.Context, userID string) ([]domain.Bot,
 // stopped and the last observation is not an active state.
 const stoppedPredicate = `desired_state = 'stopped' AND observed_state IN ('stopped', 'failed', 'unknown')`
 
-// UpdateBotConfig applies the mutable configuration fields of b, bumping
-// generation. It succeeds only if the bot is stopped and still at
-// b.Generation (optimistic concurrency).
+// liveConfigSet is the SET fragment for a configuration or environment save:
+// a stopped bot advances its generation, a live one keeps it (its running
+// container is not replaced) and records the change as pending a restart.
+// The first two placeholders are both nowMS. SQLite evaluates every
+// expression against the old row, so config_pending_generation receives the
+// unchanged generation.
+const liveConfigSet = `generation = CASE WHEN ` + stoppedPredicate + ` THEN generation + 1 ELSE generation END,
+		config_pending_generation = CASE WHEN ` + stoppedPredicate + ` THEN config_pending_generation ELSE generation END,
+		config_pending_at_ms = CASE WHEN ` + stoppedPredicate + ` THEN config_pending_at_ms ELSE MAX(?, config_pending_at_ms + 1) END,
+		updated_at_ms = ?`
+
+// UpdateBotConfig applies the mutable configuration fields of b. A stopped
+// bot advances its generation; a live one keeps running its current
+// container and the change applies at the next start or restart (see
+// liveConfigSet). It succeeds only while the bot is still at b.Generation
+// with the same pending marker (optimistic concurrency).
 func (db *DB) UpdateBotConfig(ctx context.Context, b domain.Bot, nowMS int64) error {
 	argv, err := json.Marshal(b.Argv)
 	if err != nil {
@@ -241,23 +257,38 @@ func (db *DB) UpdateBotConfig(ctx context.Context, b domain.Bot, nowMS int64) er
 	if err != nil {
 		return err
 	}
+	// Only what shapes the container waits for a restart; a new name, restart
+	// policy or backup setting takes effect at once and leaves nothing pending.
+	set := liveConfigSet
+	args := []any{nowMS, nowMS}
+	if cur, err := db.GetBot(ctx, b.ID); err == nil && !containerChanged(cur, b) {
+		set, args = `updated_at_ms = ?`, []any{nowMS}
+	}
+	args = append([]any{b.Name, b.Runtime, b.ImageRef, string(argv), entry, b.MemoryBytes, b.NanoCPUs, b.PidsLimit,
+		boolInt(!b.NetworkDisabled), b.BandwidthKbps,
+		defaultStr(b.RestartPolicy, domain.RestartOnFailure), b.RestartMaxAttempts, b.RestartBackoffInitialMS, b.RestartBackoffMaxMS,
+		boolInt(!b.AutoBackupOff), b.BuildCommand, b.ReleaseCommand}, args...)
+	args = append(args, b.ID, b.Generation, b.ConfigPendingAtMS)
 	res, err := db.ExecContext(ctx, `UPDATE bots SET name = ?, runtime = ?, image_ref = ?, argv_json = ?, entrypoint_json = ?,
 		memory_bytes = ?, nano_cpus = ?, pids_limit = ?, network_enabled = ?, bandwidth_kbps = ?,
 		restart_policy = ?, restart_max_attempts = ?, restart_backoff_initial_ms = ?, restart_backoff_max_ms = ?,
 		auto_backup = ?, build_command = NULLIF(?, ''), release_command = NULLIF(?, ''),
-		generation = generation + 1, updated_at_ms = ?
-		WHERE id = ? AND generation = ? AND `+stoppedPredicate,
-		b.Name, b.Runtime, b.ImageRef, string(argv), entry, b.MemoryBytes, b.NanoCPUs, b.PidsLimit,
-		boolInt(!b.NetworkDisabled), b.BandwidthKbps,
-		defaultStr(b.RestartPolicy, domain.RestartOnFailure), b.RestartMaxAttempts, b.RestartBackoffInitialMS, b.RestartBackoffMaxMS,
-		boolInt(!b.AutoBackupOff), b.BuildCommand, b.ReleaseCommand, nowMS, b.ID, b.Generation)
+		`+set+`
+		WHERE id = ? AND generation = ? AND config_pending_at_ms = ? AND desired_state != 'deleted'`, args...)
 	if err != nil {
 		return mapErr(err)
 	}
 	if n, _ := res.RowsAffected(); n == 1 {
 		return nil
 	}
-	return db.explainFailedUpdate(ctx, b.ID)
+	cur, err := db.GetBot(ctx, b.ID)
+	if err != nil {
+		return err
+	}
+	if cur.DesiredState == domain.DesiredDeleted {
+		return domain.ErrNotFound
+	}
+	return domain.ErrConflict
 }
 
 // SetBotPorts replaces a bot's published ports and bumps its generation in one
@@ -288,6 +319,15 @@ func (db *DB) SetBotPorts(ctx context.Context, botID string, gen int64, ports []
 		}
 	}
 	return tx.Commit()
+}
+
+// containerChanged reports whether next differs from cur in anything that
+// shapes the bot's container or its build.
+func containerChanged(cur, next domain.Bot) bool {
+	return cur.Runtime != next.Runtime || cur.ImageRef != next.ImageRef || !slices.Equal(cur.Argv, next.Argv) ||
+		!slices.Equal(cur.Entrypoint, next.Entrypoint) || cur.MemoryBytes != next.MemoryBytes || cur.NanoCPUs != next.NanoCPUs ||
+		cur.PidsLimit != next.PidsLimit || cur.NetworkDisabled != next.NetworkDisabled ||
+		cur.BuildCommand != next.BuildCommand || cur.ReleaseCommand != next.ReleaseCommand
 }
 
 func (db *DB) explainFailedUpdate(ctx context.Context, id string) error {

@@ -123,6 +123,8 @@ export type Bot = {
 	observed_state: 'unknown' | 'stopped' | 'building' | 'starting' | 'running' | 'stopping' | 'failed';
 	generation: number;
 	observed_generation: number;
+	/** Configuration or variables saved while it ran; they apply when it restarts. */
+	restart_pending?: boolean;
 	last_exit_code: number | null;
 	last_error: string | null;
 	created_at_ms: number;

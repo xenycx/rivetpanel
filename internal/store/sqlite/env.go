@@ -40,8 +40,26 @@ func (db *DB) bumpStopped(ctx context.Context, exec func(string, ...any) (int64,
 	return domain.ErrNotStopped
 }
 
-// UpsertEnv stores variables and advances the bot generation in one
-// transaction; it fails with domain.ErrNotStopped unless the bot is stopped.
+// markConfigChanged records a configuration change in tx: a stopped bot
+// advances its generation, a live one is marked as pending a restart (see
+// liveConfigSet). A deleted bot reads as not found.
+func (db *DB) markConfigChanged(ctx context.Context, exec func(string, ...any) (int64, error), id string, nowMS int64) error {
+	n, err := exec(`UPDATE bots SET `+liveConfigSet+` WHERE id = ? AND desired_state != 'deleted'`, nowMS, nowMS, id)
+	if err != nil {
+		return err
+	}
+	if n == 1 {
+		return nil
+	}
+	if _, err := db.GetBot(ctx, id); err != nil {
+		return err
+	}
+	return domain.ErrNotFound
+}
+
+// UpsertEnv stores variables in one transaction. A stopped bot advances its
+// generation; a running one keeps its container and the variables apply at
+// the next start or restart.
 func (db *DB) UpsertEnv(ctx context.Context, botID string, vars []domain.EnvVar, nowMS int64) error {
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
@@ -55,7 +73,7 @@ func (db *DB) UpsertEnv(ctx context.Context, botID string, vars []domain.EnvVar,
 		}
 		return r.RowsAffected()
 	}
-	if err := db.bumpStopped(ctx, exec, botID, nowMS); err != nil {
+	if err := db.markConfigChanged(ctx, exec, botID, nowMS); err != nil {
 		return err
 	}
 	for _, v := range vars {
@@ -70,7 +88,8 @@ func (db *DB) UpsertEnv(ctx context.Context, botID string, vars []domain.EnvVar,
 	return tx.Commit()
 }
 
-// DeleteEnv removes a variable; domain.ErrNotFound if it does not exist.
+// DeleteEnv removes a variable; domain.ErrNotFound if it does not exist. Like
+// UpsertEnv it works on a running bot, applying at the next start.
 func (db *DB) DeleteEnv(ctx context.Context, botID, name string, nowMS int64) error {
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
@@ -84,7 +103,7 @@ func (db *DB) DeleteEnv(ctx context.Context, botID, name string, nowMS int64) er
 		}
 		return r.RowsAffected()
 	}
-	if err := db.bumpStopped(ctx, exec, botID, nowMS); err != nil {
+	if err := db.markConfigChanged(ctx, exec, botID, nowMS); err != nil {
 		return err
 	}
 	res, err := tx.ExecContext(ctx, `DELETE FROM bot_env_vars WHERE bot_id = ? AND name = ?`, botID, name)

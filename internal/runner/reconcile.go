@@ -315,7 +315,9 @@ func (r *Runner) doRun(ctx context.Context, bot domain.Bot) time.Duration {
 			if err := r.removeContainer(ctx, c); err != nil {
 				return r.fail(ctx, bot, "could not remove build container", err, st)
 			}
-		case run == nil && c.Generation() == bot.Generation && c.Labels[LabelSpec] == want:
+		case run == nil && c.Generation() == bot.Generation && (c.Labels[LabelSpec] == want || bot.RestartPending()):
+			// A change saved while the bot was live keeps this container
+			// until the next start, restart or crash recovery replaces it.
 			cc := c
 			run = &cc
 		default: // outdated specification or duplicate: replace deliberately

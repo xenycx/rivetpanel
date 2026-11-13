@@ -93,7 +93,8 @@ to them. [enforced: docker]
 ## Configuration
 
 **Configuration** edits the runtime, the start command and an optional
-entrypoint. The bot must be stopped.
+entrypoint. Changes to a running bot are saved at once and apply when it
+restarts; the bot shows **Restart to apply saved changes** until then.
 
 Only programs approved for the runtime in its recipe (`runtimes/*.yaml`) are
 accepted as the command, and the command runs directly, never through a

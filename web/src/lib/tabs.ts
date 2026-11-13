@@ -41,13 +41,15 @@ export type TabDef = {
 	when?: (c: TabContext) => boolean;
 	/** Changes need a stopped app; the page says so above the tab. */
 	needsStop?: boolean;
+	/** Changes save while the app runs and apply when it restarts; the page says so above the tab. */
+	appliesOnRestart?: boolean;
 	/** Extra search words for the command palette. */
 	words?: string;
 };
 
 /** A tab resolved for one app and viewer: what the tab bars render. */
 // disabled: shown greyed out and not clickable (unless it is the open tab); hint says why.
-export type Tab = { id: string; label: string; icon: IconName; group: TabGroupId; needsStop?: boolean; disabled?: boolean; hint?: string };
+export type Tab = { id: string; label: string; icon: IconName; group: TabGroupId; needsStop?: boolean; appliesOnRestart?: boolean; disabled?: boolean; hint?: string };
 
 const apps: readonly AppKind[] = ['bot', 'game', 'container'];
 const has = (c: TabContext, feature: string) => !!c.game?.spec.features?.includes(feature);
@@ -67,10 +69,10 @@ export const tabDefs: readonly TabDef[] = [
 	// A game server's configuration holds its server-type variables, which
 	// "Change server settings" (the variables permission) may edit. A bot's
 	// startup needs "Configuration and startup" (or full access).
-	{ id: 'startup', label: 'Configuration', icon: 'sliders', group: 'configuration', kinds: ['bot', 'game', 'web', 'container'], perm: (c) => (c.kind === 'game' ? Perm.env : c.kind === 'bot' ? Perm.configure : Perm.admin), needsStop: true, words: 'startup command entrypoint arguments restart policy build script version jvm port' },
+	{ id: 'startup', label: 'Configuration', icon: 'sliders', group: 'configuration', kinds: ['bot', 'game', 'web', 'container'], perm: (c) => (c.kind === 'game' ? Perm.env : c.kind === 'bot' ? Perm.configure : Perm.admin), appliesOnRestart: true, words: 'startup command entrypoint arguments restart policy build script version jvm port' },
 	{ id: 'properties', label: 'Properties', icon: 'list', group: 'configuration', kinds: ['game'], perm: Perm.files, when: (c) => has(c, 'minecraft-properties'), words: 'server.properties motd difficulty gamemode' },
-	{ id: 'env', label: 'Variables', icon: 'key', group: 'configuration', kinds: ['bot', 'web', 'container'], perm: Perm.env, needsStop: true, words: 'env environment secrets token config' },
-	{ id: 'network', label: 'Network', icon: 'network', group: 'configuration', kinds: apps, perm: Perm.admin, needsStop: true, words: 'ports publish outbound allocations' },
+	{ id: 'env', label: 'Variables', icon: 'key', group: 'configuration', kinds: ['bot', 'web', 'container'], perm: Perm.env, appliesOnRestart: true, words: 'env environment secrets token config' },
+	{ id: 'network', label: 'Network', icon: 'network', group: 'configuration', kinds: apps, perm: Perm.admin, appliesOnRestart: true, words: 'ports publish outbound allocations' },
 
 	// Companion database containers. A static site has nothing to connect them to.
 	{ id: 'addons', label: 'Services', icon: 'layers', group: 'services', kinds: ['bot', 'game', 'web', 'container'], when: (c) => c.kind !== 'web' || c.site?.mode === 'app', needsStop: true, words: 'postgres postgresql redis mongodb mariadb mysql database cache' },
@@ -83,7 +85,7 @@ export const tabDefs: readonly TabDef[] = [
 	{ id: 'alerts', label: 'Health', icon: 'activity', group: 'observability', kinds: ['bot'], perm: Perm.console, feature: 'health', words: 'probe heartbeat sdk uptime tcp http' },
 	{ id: 'usage', label: 'Analytics', icon: 'chart', group: 'observability', kinds: apps, perm: Perm.console, feature: 'usage', words: 'usage cpu memory network uptime crashes deployments backups history trends csv' },
 
-	{ id: 'settings', label: 'Settings', icon: 'gear', group: 'settings', kinds: apps, perm: Perm.admin, needsStop: true, words: 'rename memory cpu limits transfer delete notifications alerts discord email crash' },
+	{ id: 'settings', label: 'Settings', icon: 'gear', group: 'settings', kinds: apps, perm: Perm.admin, appliesOnRestart: true, words: 'rename memory cpu limits transfer delete notifications alerts discord email crash' },
 	{ id: 'users', label: 'Access', icon: 'shield', group: 'settings', kinds: apps, perm: -1, words: 'share invite permissions users' }
 ];
 
@@ -128,7 +130,7 @@ const resolve = (v: TabDef['label'] | TabDef['perm'], c: TabContext) => (typeof 
 export function tabsFor(c: TabContext): Tab[] {
 	return tabDefs
 		.filter((d) => d.kinds.includes(c.kind) && (!d.feature || c.features[d.feature]) && (!d.when || d.when(c)) && c.allow((resolve(d.perm, c) as number | undefined) ?? 0))
-		.map((d) => ({ id: d.id, label: resolve(d.label, c) as string, icon: d.icon, group: d.group, needsStop: d.needsStop }));
+		.map((d) => ({ id: d.id, label: resolve(d.label, c) as string, icon: d.icon, group: d.group, needsStop: d.needsStop, appliesOnRestart: d.appliesOnRestart }));
 }
 
 /**

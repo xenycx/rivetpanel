@@ -42,9 +42,10 @@ Discord server right away.
 
 ## Add secrets
 
-1. Open the bot's **Variables** tab. The bot must be stopped to change them.
+1. Open the bot's **Variables** tab.
 2. Add each secret, such as `DISCORD_TOKEN`, or use **Import .env**.
-3. Save, then start the bot again.
+3. Save, then start the bot, or restart it if it is running. A running bot
+   keeps its old values until it restarts.
 
 Values are encrypted at rest and masked in every list; **Reveal** shows one
 value for 30 seconds. See [Variables and network](../02-apps/03-environment.md).

@@ -11,7 +11,7 @@
 
 	// A container app's configuration: its image (changeable while it runs:
 	// the container is replaced), its command, and the folders it may write.
-	let { bot, stopped, onSaved }: { bot: Bot; stopped: boolean; onSaved: (b: Bot) => void } = $props();
+	let { bot, onSaved }: { bot: Bot; stopped?: boolean; onSaved: (b: Bot) => void } = $props();
 
 	type Policy = { registries: string[]; max_image_bytes: number; enabled: boolean };
 	const shortImage = (ref: string) => ref.replace(/^docker\.io\/library\//, '').replace(/^docker\.io\//, '');
@@ -65,15 +65,17 @@
 		error = '';
 		busy = true;
 		try {
-			let b = await api<Bot>('PUT', `/bots/${bot.id}/container`, {
+			// The command first: saving the container settings starts a new
+			// generation, which replaces a running container with all of them.
+			if (startupChanged) {
+				await api<Bot>('PATCH', `/bots/${bot.id}`, { argv: splitArgs(command), entrypoint: splitArgs(entrypoint), restart_policy: policy });
+			}
+			const b = await api<Bot>('PUT', `/bots/${bot.id}/container`, {
 				image,
 				user,
 				writable: writable.split('\n').map((s) => s.trim()).filter(Boolean),
 				volumes: volumes.filter((v) => v.name.trim() || v.path.trim()).map((v) => ({ name: v.name.trim(), path: v.path.trim() }))
 			});
-			if (startupChanged) {
-				b = await api<Bot>('PATCH', `/bots/${bot.id}`, { argv: splitArgs(command), entrypoint: splitArgs(entrypoint), restart_policy: policy });
-			}
 			onSaved(b);
 			base = snapshot();
 			toast(bot.desired_state === 'running' ? 'Saved. The container is replaced with the new settings.' : 'Configuration saved');
@@ -112,20 +114,20 @@
 		</div>
 	</SettingsSection>
 
-	<SettingsSection title="Command" description="Leave both empty to run the image's own entrypoint and command. Changes need a stopped app.">
+	<SettingsSection title="Command" description="Leave both empty to run the image's own entrypoint and command.">
 		<div class="grid gap-5">
 			<label class="block">
 				<span class="label">Command <span class="font-normal text-muted">(optional)</span></span>
-				<input class="field font-mono text-[13px]" bind:value={command} disabled={!stopped} spellcheck="false" placeholder="the image's command" />
+				<input class="field font-mono text-[13px]" bind:value={command} spellcheck="false" placeholder="the image's command" />
 				<span class="help">Arguments for the entrypoint, such as <code class="font-mono">redis-server --appendonly yes</code>. Quote arguments containing spaces; no shell runs them.</span>
 			</label>
 			<label class="block">
 				<span class="label">Entrypoint <span class="font-normal text-muted">(optional)</span></span>
-				<input class="field font-mono text-[13px]" bind:value={entrypoint} disabled={!stopped} spellcheck="false" placeholder="the image's entrypoint" />
+				<input class="field font-mono text-[13px]" bind:value={entrypoint} spellcheck="false" placeholder="the image's entrypoint" />
 			</label>
 			<label class="block">
 				<span class="label">When it exits</span>
-				<select class="field" bind:value={policy} disabled={!stopped}>
+				<select class="field" bind:value={policy}>
 					<option value="on_failure">Restart it after a crash (non-zero exit)</option>
 					<option value="never">Never restart it automatically</option>
 				</select>
@@ -164,7 +166,7 @@
 
 	{#if error}<Notice tone="fail" live>{error}</Notice>{/if}
 	<div class="sticky bottom-0 z-10 flex items-center gap-3 border-t border-rule-soft bg-paper/95 py-3 backdrop-blur-sm">
-		<button class="btn btn-primary" disabled={busy || !dirty || (startupChanged && !stopped)}>{busy ? 'Saving…' : 'Save configuration'}</button>
-		{#if startupChanged && !stopped}<span class="text-small text-warn">Stop the app to change its command</span>{:else if dirty}<span class="text-small text-warn">Unsaved changes</span>{/if}
+		<button class="btn btn-primary" disabled={busy || !dirty}>{busy ? 'Saving…' : 'Save configuration'}</button>
+		{#if dirty}<span class="text-small text-warn">Unsaved changes</span>{/if}
 	</div>
 </form>

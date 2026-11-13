@@ -350,6 +350,28 @@ func TestConfigChangeReplacesOutdatedSpec(t *testing.T) {
 	}
 }
 
+func TestLiveConfigChangeWaitsForRestart(t *testing.T) {
+	g := newRig(t)
+	g.desire("running", false)
+	g.pass()
+	first := *g.bot().ContainerID
+	// What the store records for an edit saved while the bot runs: new
+	// limits, same generation, a pending marker at that generation.
+	g.db.ExecContext(context.Background(), `UPDATE bots SET memory_bytes = ?, config_pending_at_ms = 1,
+		config_pending_generation = generation WHERE id = ?`, 128<<20, botID)
+	g.pass()
+	b := g.wantState("running")
+	if *b.ContainerID != first || len(g.fd.runtimeContainers(botID)) != 1 {
+		t.Fatalf("running container replaced before a restart: %+v", b)
+	}
+	b = g.desire("running", true) // restart
+	g.pass()
+	b = g.wantState("running")
+	if *b.ContainerID == first || g.fd.created[len(g.fd.created)-1].MemoryBytes != 128<<20 {
+		t.Fatalf("restart did not apply the change: %+v", b)
+	}
+}
+
 func TestUnexpectedExitBackoffAndRecovery(t *testing.T) {
 	g := newRig(t)
 	g.desire("running", false)

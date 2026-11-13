@@ -570,7 +570,9 @@ func (s *BotService) List(ctx context.Context, actor domain.User) ([]domain.Bot,
 	return out, nil
 }
 
-// Update changes configuration of a stopped bot.
+// Update changes a bot's configuration. On a stopped bot it applies at the
+// next start; a running bot keeps its container and is marked as pending a
+// restart (domain.Bot.RestartPending).
 func (s *BotService) Update(ctx context.Context, actor domain.User, id string, in UpdateBotInput) (domain.Bot, error) {
 	// A bot's startup configuration alone needs only PermConfigure; anything
 	// else here (name, limits, network, backups, release command) and every
@@ -862,7 +864,8 @@ func (s *BotService) ListEnv(ctx context.Context, actor domain.User, id string) 
 	return out, nil
 }
 
-// SetEnv encrypts and upserts variables on a stopped bot.
+// SetEnv encrypts and upserts variables. A running bot gets them at its next
+// start or restart.
 func (s *BotService) SetEnv(ctx context.Context, actor domain.User, id string, vars map[string]string) error {
 	b, err := s.loadPerm(ctx, actor, id, domain.PermManageEnv, false)
 	if err != nil {
@@ -919,7 +922,7 @@ func (s *BotService) putEnv(ctx context.Context, b domain.Bot, vars map[string]s
 	return s.Store.UpsertEnv(ctx, b.ID, rows, s.now())
 }
 
-// DeleteEnv removes one variable from a stopped bot.
+// DeleteEnv removes one variable; a running bot keeps it until it restarts.
 func (s *BotService) DeleteEnv(ctx context.Context, actor domain.User, id, name string) error {
 	if _, err := s.loadPerm(ctx, actor, id, domain.PermManageEnv, false); err != nil {
 		return err

@@ -167,7 +167,7 @@ and logos belong to their owners and are used only to identify the games.
 | `GET /api/v1/blueprints/{slug}/versions/{env}` | The provider's version list for a variable |
 | `POST /api/v1/games` | Create: `name`, `blueprint`, `variables`, `image`, `memory_bytes`, `nano_cpus`, `agreements`, `workspace_id` |
 | `GET /api/v1/bots/{id}/game` | Server type, variables with values, startup command, update availability |
-| `PUT /api/v1/bots/{id}/game/variables` | Change settings (stopped servers) |
+| `PUT /api/v1/bots/{id}/game/variables` | Change settings; a running server applies them at its next restart, and a setting that reinstalls needs a stopped server |
 | `PUT /api/v1/bots/{id}/game/jvm-args` | Set `args` (extra JVM options, `""` = none); applies at the next start; returns `bot` and `jvm` |
 | `POST /api/v1/bots/{id}/game/reinstall` | Install again on the next start |
 | `PUT /api/v1/bots/{id}/game/image` | Choose a Java image (`""` = automatic) |

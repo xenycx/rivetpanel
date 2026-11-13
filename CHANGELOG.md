@@ -6,6 +6,24 @@ authoritative current version.
 
 ## Unreleased
 
+## 1.10.0 - 2026-11-13
+
+### Changed
+
+- **Variables and configuration can change while an app runs.** Saving
+  environment variables, the start command, runtime, memory, CPU, process
+  limit, outbound network access, build or release command, game server
+  settings or a telemetry key no longer needs a stopped app. The change is
+  saved at once and the running container is kept; the app shows **Restart to
+  apply saved changes** next to its power controls until the next start,
+  restart or crash recovery applies it. A new name, restart policy or backup
+  setting takes effect immediately and leaves nothing to restart for.
+  Published ports, services (add-ons), backup restores, a site app's port and
+  game server settings that reinstall the server software still need a
+  stopped app. The bot API adds `restart_pending`. Migration `0069` adds two
+  columns to `bots`; remote nodes should run the same agent version so a
+  pending change is not applied early by an older agent.
+
 ## 1.9.1 - 2026-11-13
 
 ### Fixed

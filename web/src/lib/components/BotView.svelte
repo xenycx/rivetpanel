@@ -148,6 +148,7 @@
 	// Without a runner, lifecycle requests can only fail: offer none.
 	const canPower = $derived(bot ? can(bot, Perm.power) && session.features.runner : false);
 	const configSection = $derived(!!current?.needsStop);
+	const liveSection = $derived(!!current?.appliesOnRestart);
 
 	// Power controls that apply now. A bot that gave up or exited cleanly is
 	// wanted running but idle: the useful action is to start it again.
@@ -192,12 +193,24 @@
 					{isGame ? (game?.blueprint.name ?? 'Game server') : isContainer ? bot.image_ref.replace(/^docker\.io\/library\//, '').replace(/^docker\.io\//, '') : bot.runtime}, {fmtBytes(bot.memory_bytes)}, {fmtCpu(bot.nano_cpus)}{#if bot.node_name}, {bot.node_name}{#if bot.node_online === false}<span class="ml-1 text-warn" title="The node's agent is not connected. Status and output are the last ones it reported.">(node offline)</span>{/if}{/if}{#if bot.source_type === 'github'}, deployed from GitHub{/if}{#if bot.shared}, shared with you{/if}
 				</p>
 			</div>
-			{#if configSection && !stopped}
+			{#if bot.restart_pending}
+				<!-- Changes saved while it ran wait for a restart: say so beside
+				     the Restart button, on every tab. -->
+				<div class="flex min-w-0 items-center gap-2 rounded-control border border-warn/30 bg-warn/7 px-3 py-1.5 text-small max-sm:w-full" role="status">
+					<Icon name="alert" size={14} class="shrink-0 text-warn" />
+					<p class="min-w-0"><span class="font-medium text-ink">Restart to apply saved changes.</span> <span class="text-ink/75">The {noun} keeps its old settings until then.</span></p>
+				</div>
+			{:else if configSection && !stopped}
 				<!-- Settings tabs need a stopped app: say so beside the Stop button
 				     instead of pushing the section down. -->
 				<div class="flex min-w-0 items-center gap-2 rounded-control border border-warn/30 bg-warn/7 px-3 py-1.5 text-small max-sm:w-full" role="status">
 					<Icon name="alert" size={14} class="shrink-0 text-warn" />
 					<p class="min-w-0"><span class="font-medium text-ink">Stop the {noun} to change these settings.</span> <span class="text-ink/75">Changes apply the next time it starts.</span></p>
+				</div>
+			{:else if liveSection && !stopped}
+				<div class="flex min-w-0 items-center gap-2 rounded-control border border-rule px-3 py-1.5 text-small max-sm:w-full" role="status">
+					<Icon name="info" size={14} class="shrink-0 text-muted" />
+					<p class="min-w-0"><span class="font-medium text-ink">The {noun} is running.</span> <span class="text-ink/75">Changes save now and apply after a restart.</span></p>
 				</div>
 			{/if}
 			{#if canPower}

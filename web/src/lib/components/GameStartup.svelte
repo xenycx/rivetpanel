@@ -125,7 +125,7 @@
 		try {
 			const b = await api<Bot>('PUT', `/bots/${bot.id}/game/variables`, { variables: changed });
 			onSaved(b);
-			toast(reinstallOnSave ? 'Saved. The new version is installed on the next start; your worlds and settings stay.' : 'Variables saved. They apply on the next start.');
+			toast(reinstallOnSave ? 'Saved. The new version is installed on the next start; your worlds and settings stay.' : stopped ? 'Variables saved. They apply on the next start.' : 'Variables saved. Restart the server to apply them.');
 			await load();
 			return true;
 		} catch (err) {
@@ -213,7 +213,7 @@
 
 		<form class="card grid gap-4 p-5" onsubmit={save}>
 			<h2 class="text-section font-semibold">Variables</h2>
-			<fieldset class="grid gap-4" disabled={!stopped || !canEdit}>
+			<fieldset class="grid gap-4" disabled={!canEdit}>
 				{#each detail.variables as v (v.env)}
 					{@const list = versions[v.env]}
 					<label class="block">
@@ -240,8 +240,8 @@
 			{#if error}<Notice tone="fail" live>{error}</Notice>{/if}
 			{#if canEdit}
 				<div class="flex flex-wrap items-center gap-2">
-					<button class="btn btn-primary" disabled={!stopped || !dirty || busy || Object.keys(problems).length > 0}>Save variables</button>
-					{#if reinstallOnSave}<span class="text-small text-warn">Saving reinstalls the server software on the next start.</span>{/if}
+					<button class="btn btn-primary" disabled={!dirty || busy || Object.keys(problems).length > 0 || (reinstallOnSave && !stopped)}>Save variables</button>
+					{#if reinstallOnSave && !stopped}<span class="text-small text-warn">Stop the server to change this: it reinstalls the server software.</span>{:else if reinstallOnSave}<span class="text-small text-warn">Saving reinstalls the server software on the next start.</span>{:else if !stopped && dirty}<span class="text-small text-muted">The server is running: changes apply after a restart.</span>{/if}
 				</div>
 			{/if}
 		</form>

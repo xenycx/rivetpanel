@@ -942,10 +942,13 @@ func (s *SiteService) Update(ctx context.Context, actor domain.User, id string, 
 				}
 				// A container app listens where its image does: the site only
 				// changes where it sends traffic.
+				// Variables may change on a running app, but the site would
+				// send traffic to a port the running app does not listen on.
 				if !b.IsContainer() {
-					if err := s.Bots.putEnv(ctx, b, map[string]string{"PORT": strconv.Itoa(*in.AppPort)}, true); errors.Is(err, domain.ErrNotStopped) {
+					if requireStopped(b) != nil {
 						return domain.Site{}, domain.Invalid("stop the app before changing its port")
-					} else if err != nil {
+					}
+					if err := s.Bots.putEnv(ctx, b, map[string]string{"PORT": strconv.Itoa(*in.AppPort)}, true); err != nil {
 						return domain.Site{}, err
 					}
 				}

@@ -384,7 +384,7 @@ func TestBotValidation(t *testing.T) {
 	}
 }
 
-func TestUpdateBumpsGenerationAndRequiresStopped(t *testing.T) {
+func TestUpdateWorksLiveAndWaitsForRestart(t *testing.T) {
 	e := newEnv(t)
 	u := e.user("a@example.com", domain.RoleUser)
 	id := u.createBot("b")
@@ -403,21 +403,41 @@ func TestUpdateBumpsGenerationAndRequiresStopped(t *testing.T) {
 		t.Fatalf("runtime switch: %+v", sw)
 	}
 	u.mustStatus(200, "PATCH", "/api/v1/bots/"+id, map[string]any{"runtime": "nodejs"})
-	// running / starting bots cannot be edited
-	for _, st := range []string{"running", "starting", "building", "stopping"} {
-		e.db.Exec(`UPDATE bots SET observed_state = ? WHERE id = ?`, st, id)
-		u.mustStatus(409, "PATCH", "/api/v1/bots/"+id, map[string]any{"name": "x"})
-		u.mustStatus(409, "PUT", "/api/v1/bots/"+id+"/env", map[string]any{"vars": map[string]string{"A": "1"}})
+	// A live bot can still be edited: its generation stays (the running
+	// container is not replaced) and the change waits for a restart.
+	for i, st := range []string{"running", "starting", "building", "stopping"} {
+		e.db.Exec(`UPDATE bots SET observed_state = ?, desired_state = 'running' WHERE id = ?`, st, id)
+		json.Unmarshal(u.mustStatus(200, "PATCH", "/api/v1/bots/"+id, map[string]any{"name": "live-" + st, "pids_limit": 100 + i}), &b)
+		if b.Generation != 3 || b.Name != "live-"+st || !b.RestartPending {
+			t.Fatalf("%s: live edit: %+v", st, b)
+		}
+		u.mustStatus(200, "PUT", "/api/v1/bots/"+id+"/env", map[string]any{"vars": map[string]string{"A": "1"}})
 	}
-	e.db.Exec(`UPDATE bots SET observed_state = 'stopped', desired_state = 'running' WHERE id = ?`, id)
-	u.mustStatus(409, "PATCH", "/api/v1/bots/"+id, map[string]any{"name": "x"})
-	u.mustStatus(409, "DELETE", "/api/v1/bots/"+id+"/env/A", nil)
-	json.Unmarshal(func() []byte {
-		e.db.Exec(`UPDATE bots SET desired_state='stopped' WHERE id=?`, id)
-		return u.mustStatus(200, "GET", "/api/v1/bots/"+id, nil)
-	}(), &b)
-	if b.Generation != 3 || b.Name != "renamed" {
-		t.Fatalf("rejected edits leaked: %+v", b)
+	u.mustStatus(204, "DELETE", "/api/v1/bots/"+id+"/env/A", nil)
+	json.Unmarshal(u.mustStatus(200, "GET", "/api/v1/bots/"+id, nil), &b)
+	if b.Generation != 3 || !b.RestartPending {
+		t.Fatalf("env edits on a live bot: %+v", b)
+	}
+	// Restarting advances the generation, which applies the change.
+	e.db.Exec(`UPDATE bots SET generation = generation + 1 WHERE id = ?`, id)
+	json.Unmarshal(u.mustStatus(200, "GET", "/api/v1/bots/"+id, nil), &b)
+	if b.RestartPending {
+		t.Fatalf("still pending after a restart: %+v", b)
+	}
+	// A rename or restart policy takes effect at once: nothing to restart for.
+	json.Unmarshal(u.mustStatus(200, "PATCH", "/api/v1/bots/"+id, map[string]any{"name": "live", "restart_policy": "never"}), &b)
+	if b.Generation != 4 || b.Name != "live" || b.RestartPending {
+		t.Fatalf("rename while running: %+v", b)
+	}
+	json.Unmarshal(u.mustStatus(200, "PATCH", "/api/v1/bots/"+id, map[string]any{"memory_bytes": 256 << 20}), &b)
+	if b.Generation != 4 || !b.RestartPending {
+		t.Fatalf("limits while running: %+v", b)
+	}
+	// A stopped bot advances its generation and has nothing pending.
+	e.db.Exec(`UPDATE bots SET observed_state = 'stopped', desired_state = 'stopped' WHERE id = ?`, id)
+	json.Unmarshal(u.mustStatus(200, "PATCH", "/api/v1/bots/"+id, map[string]any{"name": "renamed", "memory_bytes": 128 << 20}), &b)
+	if b.Generation != 5 || b.Name != "renamed" || b.RestartPending {
+		t.Fatalf("stopped edit: %+v", b)
 	}
 }
 

@@ -82,13 +82,16 @@ type botDTO struct {
 	ObservedState      string   `json:"observed_state"`
 	Generation         int64    `json:"generation"`
 	ObservedGeneration int64    `json:"observed_generation"`
-	LastExitCode       *int64   `json:"last_exit_code"`
-	LastError          *string  `json:"last_error"`
-	CreatedAtMS        int64    `json:"created_at_ms"`
-	UpdatedAtMS        int64    `json:"updated_at_ms"`
-	DiscordUserID      string   `json:"discord_user_id"`
-	DiscordUsername    string   `json:"discord_username"`
-	DiscordAvatarURL   string   `json:"discord_avatar_url"`
+	// RestartPending: configuration or variables were saved while the bot
+	// ran; they apply when it restarts.
+	RestartPending   bool    `json:"restart_pending"`
+	LastExitCode     *int64  `json:"last_exit_code"`
+	LastError        *string `json:"last_error"`
+	CreatedAtMS      int64   `json:"created_at_ms"`
+	UpdatedAtMS      int64   `json:"updated_at_ms"`
+	DiscordUserID    string  `json:"discord_user_id"`
+	DiscordUsername  string  `json:"discord_username"`
+	DiscordAvatarURL string  `json:"discord_avatar_url"`
 	// Permissions is the caller's domain.Perm* mask on this bot; Shared is true
 	// when the caller is a sub-user rather than the owner or an administrator.
 	Permissions int  `json:"permissions"`
@@ -289,7 +292,7 @@ func toBotBase(b domain.Bot) botDTO {
 	return botDTO{
 		ID: b.ID, OwnerID: b.OwnerID, WorkspaceID: b.WorkspaceID, NodeID: b.NodeID, Name: b.Name, Runtime: b.Runtime, ImageRef: b.ImageRef, Argv: b.Argv,
 		MemoryBytes: b.MemoryBytes, NanoCPUs: b.NanoCPUs, PidsLimit: b.PidsLimit, DesiredState: b.DesiredState,
-		ObservedState: b.ObservedState, Generation: b.Generation, ObservedGeneration: b.ObservedGeneration,
+		ObservedState: b.ObservedState, Generation: b.Generation, ObservedGeneration: b.ObservedGeneration, RestartPending: b.RestartPending(),
 		LastExitCode: b.LastExitCode, LastError: b.LastError, CreatedAtMS: b.CreatedAtMS, UpdatedAtMS: b.UpdatedAtMS,
 		DiscordUserID: b.DiscordUserID, DiscordUsername: b.DiscordUsername, DiscordAvatarURL: b.DiscordAvatarURL,
 		Permissions: domain.PermAll,

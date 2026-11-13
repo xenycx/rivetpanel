@@ -57,15 +57,18 @@
 		try {
 			// Ports first: they cannot be added while networking is off, and networking
 			// cannot be switched off while ports exist.
+			// Published ports need a stopped bot; outbound access and bandwidth
+			// can change while it runs and apply when it restarts.
+			const portsChanged = JSON.stringify(ports) !== JSON.stringify(saved.ports);
 			let b = bot;
-			if (!outbound) b = await api<Bot>('PUT', `/bots/${bot.id}/ports`, { ports: [] });
+			if (!outbound && saved.ports.length) b = await api<Bot>('PUT', `/bots/${bot.id}/ports`, { ports: [] });
 			b = await api<Bot>('PATCH', `/bots/${bot.id}`, { network_enabled: outbound, bandwidth_kbps: bandwidth || 0 });
-			if (outbound && owner) b = await api<Bot>('PUT', `/bots/${bot.id}/ports`, { ports });
+			if (outbound && owner && portsChanged) b = await api<Bot>('PUT', `/bots/${bot.id}/ports`, { ports });
 			bot = b;
 			ports = b.ports.map((p) => ({ ...p }));
 			onSaved(b);
 			base = snapshot();
-			toast('Network settings saved. They apply the next time the bot starts.');
+			toast(b.restart_pending ? 'Network settings saved. Restart the bot to apply them.' : 'Network settings saved. They apply the next time the bot starts.');
 			return true;
 		} catch (err) {
 			error = msg(err);
@@ -75,7 +78,7 @@
 </script>
 
 <form class="grid max-w-3xl gap-6" onsubmit={save}>
-	<fieldset class="grid gap-3" disabled={!stopped}>
+	<fieldset class="grid gap-3">
 		<legend class="mb-1 text-title font-semibold">Outbound internet access</legend>
 		<label class="flex items-start gap-2"><input type="checkbox" class="mt-1" bind:checked={outbound} /><span>Allow the bot to connect to the internet.<span class="help">Discord bots need this to reach Discord. Turning it off also disables published ports.</span></span></label>
 		<label class="block max-w-xs">
@@ -87,7 +90,7 @@
 
 	<fieldset class="grid gap-3" disabled={!stopped || !outbound || !owner}>
 		<legend class="mb-1 text-title font-semibold">Published ports</legend>
-		{#if !owner}<Notice>Only the bot's owner or an administrator can publish host ports.</Notice>{/if}
+		{#if !owner}<Notice>Only the bot's owner or an administrator can publish host ports.</Notice>{:else if !stopped}<p class="text-small text-warn">Stop the bot to change published ports.</p>{/if}
 		{#if ports.length}
 			<div class="overflow-x-auto">
 				<table class="w-full text-left">
@@ -114,7 +117,7 @@
 
 	{#if error}<Notice tone="fail" live>{error}</Notice>{/if}
 	<div class="sticky bottom-0 flex items-center gap-3 border-t border-rule-soft bg-paper/95 py-3 backdrop-blur-sm">
-		<button class="btn btn-primary" disabled={!stopped || !dirty}>Save network settings</button>
+		<button class="btn btn-primary" disabled={!dirty}>Save network settings</button>
 		{#if dirty}<span class="text-small text-warn">Unsaved changes</span>{/if}
 	</div>
 </form>

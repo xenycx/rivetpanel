@@ -26,14 +26,13 @@ measures itself is in [Usage analytics](05-usage.md).
 A full administrator of the bot sets this up.
 
 1. Open the bot's **Public page → Private insights**.
-2. Stop the bot. The key is stored in the bot's environment, so it can only be
-   generated while the bot is stopped.
-3. Select **Generate key**. The key is shown once and added to the bot as
+2. Select **Generate key**. The key is shown once and added to the bot as
    `RIVET_TELEMETRY_KEY`, together with `RIVET_URL` when the panel's public
    address is configured.
-4. Copy the SDK snippet for your language into the bot and call it as shown at
+3. Copy the SDK snippet for your language into the bot and call it as shown at
    the top of the file.
-5. Start the bot. Stats appear within a minute.
+4. Start the bot, or restart it if it is running: a running bot gets the key
+   only when it restarts. Stats appear within a minute.
 
 **Revoke key** on the same page stops the bot's pushes. **Generate a new key**
 replaces the old one.

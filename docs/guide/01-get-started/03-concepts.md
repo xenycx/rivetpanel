@@ -86,8 +86,16 @@ overwrite newer intent.
 | `DELETE /bots/{id}` | desired `deleted`, then the containers, the workspace files and only then the row |
 
 All lifecycle calls answer `202` at once; nothing waits for a pull or a
-build. A bot's configuration can only be edited while it is stopped: desired
-`stopped` and observed `stopped`, `failed` or `unknown`.
+build.
+
+A bot's configuration and variables can be edited at any time. On a stopped
+bot (desired `stopped`, observed `stopped`, `failed` or `unknown`) a change
+that shapes the container raises the generation. On a live bot it does not:
+the running container is kept, the bot reports `restart_pending: true`, and
+the next start, restart or crash recovery creates the container with the new
+settings. A new name, restart policy or backup setting takes effect at once
+and leaves nothing pending. Published ports, services, restores and game
+server reinstalls still need a stopped app.
 
 ### Phases
 

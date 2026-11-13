@@ -8,7 +8,7 @@
 	import Notice from '$lib/components/ui/Notice.svelte';
 	import SettingsSection from '$lib/components/ui/SettingsSection.svelte';
 
-	let { bot, stopped, onSaved }: { bot: Bot; stopped: boolean; onSaved: (b: Bot) => void } = $props();
+	let { bot, onSaved }: { bot: Bot; stopped?: boolean; onSaved: (b: Bot) => void } = $props();
 
 	// The form is a draft of the saved settings: it starts from them and
 	// follows later changes of the bot (a save, another tab) while it has no
@@ -82,9 +82,10 @@
 		if (!(changedRuntime && command === joinArgs(bot.argv))) body.argv = argv;
 		if (changedRuntime) body.runtime = runtime;
 		try {
-			onSaved(await api<Bot>('PATCH', `/bots/${bot.id}`, body));
+			const b = await api<Bot>('PATCH', `/bots/${bot.id}`, body);
+			onSaved(b);
 			base = snapshot();
-			toast('Configuration saved');
+			toast(b.restart_pending ? 'Configuration saved. Restart the bot to apply it.' : 'Configuration saved');
 			return true;
 		} catch (err) {
 			error = err instanceof ApiError ? err.message : 'The configuration could not be saved.';
@@ -94,11 +95,11 @@
 </script>
 
 <form onsubmit={save}>
-	<SettingsSection title="Command" description="What the container runs when the bot starts. Changes need a stopped bot and apply at the next start.">
+	<SettingsSection title="Command" description="What the container runs when the bot starts. Changes apply at the next start or restart.">
 		<div class="grid gap-5">
 			<label class="block">
 				<span class="label">Runtime</span>
-				<select class="field" bind:value={runtime} disabled={!stopped}>
+				<select class="field" bind:value={runtime}>
 					{#each runtimes as r (r.id)}<option value={r.id}>{r.display_name}</option>{/each}
 				</select>
 				{#if changedRuntime}<span class="help text-warn!">Changing the runtime switches the image and resets the start command to its default unless you edit it.</span>{/if}
@@ -106,14 +107,14 @@
 
 			<label class="block">
 				<span class="label">Start command</span>
-				<input class="field font-mono text-[13px]" bind:value={command} disabled={!stopped} spellcheck="false" placeholder="node index.js" />
+				<input class="field font-mono text-[13px]" bind:value={command} spellcheck="false" placeholder="node index.js" />
 				<span class="help">Program and arguments, for example <code class="font-mono">node index.js</code>, <code class="font-mono">python bot.py</code> or <code class="font-mono">./app</code>. Quote arguments containing spaces. It runs directly, not through a shell, and only programs approved for the runtime are accepted.</span>
-				{#if chosen}<button type="button" class="btn btn-quiet mt-1 px-0 text-action" onclick={useDefault} disabled={!stopped}>Use the default: {joinArgs(chosen.default_argv)}</button>{/if}
+				{#if chosen}<button type="button" class="btn btn-quiet mt-1 px-0 text-action" onclick={useDefault}>Use the default: {joinArgs(chosen.default_argv)}</button>{/if}
 			</label>
 
 			<label class="block">
 				<span class="label">Custom entrypoint <span class="font-normal text-muted">(optional)</span></span>
-				<input class="field font-mono text-[13px]" bind:value={entrypoint} disabled={!stopped} spellcheck="false" placeholder="node --enable-source-maps" />
+				<input class="field font-mono text-[13px]" bind:value={entrypoint} spellcheck="false" placeholder="node --enable-source-maps" />
 				<span class="help">Overrides the container entrypoint; the start command above then becomes its arguments. Leave empty to run the command directly.</span>
 			</label>
 		</div>
@@ -122,14 +123,14 @@
 	<SettingsSection title="Build" description="Runs before every start in a separate, resource-limited container with internet access but without the bot's variables. Files it writes into the workspace stay for the bot.">
 		<label class="block">
 			<span class="label">Custom build command <span class="font-normal text-muted">(optional)</span></span>
-			<textarea class="field min-h-28 font-mono text-[13px]" bind:value={buildCommand} disabled={!stopped} spellcheck="false" maxlength="4096"
+			<textarea class="field min-h-28 font-mono text-[13px]" bind:value={buildCommand} spellcheck="false" maxlength="4096"
 				placeholder={chosen?.has_build ? 'Leave empty to use the default build for ' + chosen.display_name : 'cd cmd/mybot && go build -o /workspace/app .'}></textarea>
 			<span class="help">Shell commands, one per line, run with <code class="font-mono">sh</code> in <code class="font-mono">/workspace</code>; the build stops at the first failing line. Leave empty to use the runtime's default (for example <code class="font-mono">npm ci</code> or installing <code class="font-mono">requirements.txt</code>).</span>
 		</label>
 	</SettingsSection>
 
 	<SettingsSection title="Auto-restart" description="What happens when the process exits. The delay doubles after every crash, up to the longest delay, and starts over after the bot runs stably for a minute.">
-		<fieldset class="grid min-w-0 gap-4 sm:grid-cols-2 xl:grid-cols-4" disabled={!stopped}>
+		<fieldset class="grid min-w-0 gap-4 sm:grid-cols-2 xl:grid-cols-4">
 			<legend class="sr-only">Auto-restart</legend>
 			<label class="block sm:col-span-2 xl:col-span-4">
 				<span class="label">When the bot exits</span>
@@ -147,7 +148,7 @@
 
 	{#if error}<Notice tone="fail" live>{error}</Notice>{/if}
 	<div class="sticky bottom-0 z-10 flex items-center gap-3 border-t border-rule-soft bg-paper/95 py-3 backdrop-blur-sm">
-		<button class="btn btn-primary" disabled={!stopped || !dirty}>Save configuration</button>
+		<button class="btn btn-primary" disabled={!dirty}>Save configuration</button>
 		{#if dirty}<span class="text-small text-warn">Unsaved changes</span>{/if}
 	</div>
 </form>

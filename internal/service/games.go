@@ -647,15 +647,13 @@ func (g *GameService) Detail(ctx context.Context, actor domain.User, id string) 
 	return out, nil
 }
 
-// SetVariables changes editable settings of a stopped server. Changing a
-// setting marked "reinstall" (such as the version) reinstalls the server
-// software on the next start; files and worlds are kept.
+// SetVariables changes editable settings. On a running server they apply at
+// the next start or restart. Changing a setting marked "reinstall" (such as
+// the version) reinstalls the server software on the next start, so it needs
+// a stopped server; files and worlds are kept.
 func (g *GameService) SetVariables(ctx context.Context, actor domain.User, id string, in map[string]string) (domain.Bot, error) {
 	b, err := g.loadGame(ctx, actor, id, domain.PermManageEnv)
 	if err != nil {
-		return b, err
-	}
-	if err := requireStopped(b); err != nil {
 		return b, err
 	}
 	s, err := g.spec(ctx, b)
@@ -678,6 +676,11 @@ func (g *GameService) SetVariables(ctx context.Context, actor domain.User, id st
 		vr, _ := s.Variable(k)
 		if vr.Reinstall && cur[k] != v {
 			reinstall = true
+		}
+	}
+	if reinstall {
+		if err := requireStopped(b); err != nil {
+			return b, domain.Invalid("stop the server first: this setting reinstalls the server software")
 		}
 	}
 	if err := g.Bots.putEnv(ctx, b, vars, false); err != nil {

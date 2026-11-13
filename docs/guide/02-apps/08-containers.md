@@ -50,7 +50,8 @@ app when it runs.
 
 Under **Configuration**, the image, volumes, writable paths and user can be
 changed at any time: a running app gets a new container with the new
-settings. The command and the restart policy need a stopped app.
+settings. The command and the restart policy can change at any time too;
+saved on their own while the app runs, they apply at its next restart.
 
 Variables of a container app may use any name except `RIVET_*`, including
 `PATH` and `LD_*`, which are reserved for bots because a bot's runtime limits
@@ -236,7 +237,8 @@ also under **Templates → Apps** and **New → Container → One-click app**.
   [enforced: docker]
 - The stored Compose file keeps its `${VAR}` placeholders; the values live
   only in each container's encrypted variables. Change them under the
-  container's **Variables** while it is stopped, like any app's.
+  container's **Variables**, like any app's; a running container gets them
+  when it restarts.
 - Images are pinned to exact versions. To update an app, change a container's
   image under **Configuration**; read the app's upgrade notes first.
 - Data lives in the containers' volumes (**Files → volumes/…**) and is part

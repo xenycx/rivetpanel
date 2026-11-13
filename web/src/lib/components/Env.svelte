@@ -108,7 +108,7 @@
 			await api('DELETE', `${path}/${encodeURIComponent(n)}`);
 			hide(n);
 			await load();
-			toast(`Removed ${n}`);
+			toast(`Removed ${n}${running ? ". Restart the bot to apply it." : ""}`);
 		} catch (e) {
 			toast(msg(e), 'fail');
 		}
@@ -175,7 +175,7 @@
 	}
 </script>
 
-{#if missing.length && !running}
+{#if missing.length}
 	<Notice tone="warn" class="mb-4" title="Values this template needs">
 		<ul class="mt-1 space-y-2">
 			{#each missing as m (m.name)}
@@ -187,9 +187,9 @@
 			{/each}
 		</ul>
 	</Notice>
-{:else if missing.length}
-	<Notice tone="warn" class="mb-4">Missing {missing.map((m) => m.name).join(', ')}. Stop the bot to add {missing.length === 1 ? 'it' : 'them'}.</Notice>
 {/if}
+
+{#if running}<p class="mb-3 text-small text-muted">The bot is running: changes are saved now and apply after a restart.</p>{/if}
 
 <div class="flex flex-wrap items-center gap-2">
 	<label class="relative min-w-0 flex-1 basis-48">
@@ -197,8 +197,8 @@
 		<Icon name="search" class="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-muted" />
 		<input class="field pl-8" type="search" placeholder="Search by name" bind:value={search} />
 	</label>
-	<button class="btn btn-primary" onclick={() => openAdd()} disabled={running}><Icon name="plus" />Add variable</button>
-	<button class="btn" onclick={() => { importStep = 'paste'; importOpen = true; }} disabled={running}>Import .env</button>
+	<button class="btn btn-primary" onclick={() => openAdd()}><Icon name="plus" />Add variable</button>
+	<button class="btn" onclick={() => { importStep = 'paste'; importOpen = true; }}>Import .env</button>
 </div>
 
 {#if error}<Notice tone="fail" class="mt-3">{error}</Notice>{/if}
@@ -233,8 +233,8 @@
 										<button class="btn btn-sm" onclick={() => { delete editing[v.name]; hide(v.name); }}>Cancel</button>
 									{:else}
 										<button class="btn btn-sm btn-quiet" onclick={() => reveal(v.name)} aria-pressed={v.name in revealed} aria-label="{v.name in revealed ? 'Hide' : 'Reveal'} {v.name}"><Icon name={v.name in revealed ? 'eyeOff' : 'eye'} size={14} />{v.name in revealed ? 'Hide' : 'Reveal'}</button>
-										<button class="btn btn-sm btn-quiet" onclick={() => startEdit(v.name)} disabled={running} aria-label="Edit {v.name}"><Icon name="pencil" size={14} />Edit</button>
-										<button class="btn btn-sm btn-quiet text-fail" onclick={() => remove(v.name)} disabled={running} aria-label="Remove {v.name}"><Icon name="trash" size={14} /></button>
+										<button class="btn btn-sm btn-quiet" onclick={() => startEdit(v.name)} aria-label="Edit {v.name}"><Icon name="pencil" size={14} />Edit</button>
+										<button class="btn btn-sm btn-quiet text-fail" onclick={() => remove(v.name)} aria-label="Remove {v.name}"><Icon name="trash" size={14} /></button>
 									{/if}
 								</span>
 							</td>

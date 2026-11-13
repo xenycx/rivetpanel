@@ -12,7 +12,9 @@ related: [apps/services, apps/containers, game-servers/ports, operate/configurat
 ## Environment variables
 
 The **Variables** tab holds the app's environment: tokens, API keys and
-settings. The app must be stopped to change them.
+settings. You can change them while the app runs: the change is saved at
+once and applies when the app restarts. Until then the app shows **Restart to
+apply saved changes** beside its power controls. [enforced: panel]
 
 - Values are encrypted at rest with AES-256-GCM. [enforced: panel]
 - Values are masked in every list. **Reveal** fetches one value on request

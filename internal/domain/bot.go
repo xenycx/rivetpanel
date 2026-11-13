@@ -51,29 +51,35 @@ type Bot struct {
 	// JVMArgs are the server's validated extra JVM options (SERVER_JVM_ARGS)
 	// and JVMArgsUpdatedMS when they last changed (0 = never set);
 	// JVMArgsGeneration is the generation they were saved at.
-	JVMArgs            string
-	JVMArgsUpdatedMS   int64
-	JVMArgsGeneration  int64
-	Allocations        []Allocation // game servers; loaded by GetBot only
-	Runtime            string
-	ImageRef           string
-	Argv               []string
-	MemoryBytes        int64
-	NanoCPUs           int64
-	PidsLimit          int64
-	DesiredState       string
-	ObservedState      string
-	Generation         int64
-	ObservedGeneration int64
-	ContainerID        *string
-	LastExitCode       *int64
-	LastError          *string
-	ObservedAtMS       *int64
-	CreatedAtMS        int64
-	UpdatedAtMS        int64
-	DiscordUserID      string
-	DiscordUsername    string
-	DiscordAvatarURL   string
+	JVMArgs           string
+	JVMArgsUpdatedMS  int64
+	JVMArgsGeneration int64
+	// ConfigPendingAtMS is when configuration or environment was last saved
+	// while the bot was live (0 = never) and ConfigPendingGeneration the
+	// generation it was saved at: such a save keeps the running container,
+	// so the change applies at the next start or restart.
+	ConfigPendingAtMS       int64
+	ConfigPendingGeneration int64
+	Allocations             []Allocation // game servers; loaded by GetBot only
+	Runtime                 string
+	ImageRef                string
+	Argv                    []string
+	MemoryBytes             int64
+	NanoCPUs                int64
+	PidsLimit               int64
+	DesiredState            string
+	ObservedState           string
+	Generation              int64
+	ObservedGeneration      int64
+	ContainerID             *string
+	LastExitCode            *int64
+	LastError               *string
+	ObservedAtMS            *int64
+	CreatedAtMS             int64
+	UpdatedAtMS             int64
+	DiscordUserID           string
+	DiscordUsername         string
+	DiscordAvatarURL        string
 
 	// Startup. When Entrypoint is set it is the container entrypoint (its first
 	// element must be a permitted command) and Argv are its arguments; otherwise
@@ -129,6 +135,14 @@ type Bot struct {
 
 // IsGame reports whether the resource is a game server.
 func (b Bot) IsGame() bool { return b.Kind == KindGame }
+
+// RestartPending reports a configuration or environment change saved while
+// the bot was live that its current container does not have yet. A bot that
+// is stopped picks it up when it next starts (starting advances the
+// generation), so only a bot meant to run reports it.
+func (b Bot) RestartPending() bool {
+	return b.ConfigPendingAtMS > 0 && b.ConfigPendingGeneration == b.Generation && b.DesiredState == DesiredRunning
+}
 
 // IsWeb reports whether the resource is the web unit of a site.
 func (b Bot) IsWeb() bool { return b.Kind == KindWeb }

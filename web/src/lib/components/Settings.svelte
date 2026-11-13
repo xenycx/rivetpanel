@@ -18,7 +18,7 @@
 	import { logoSeed } from '$lib/avatar';
 	import { creatable, loadWorkspaces, workspaceName, wsName } from '$lib/workspaces.svelte';
 
-	let { bot, stopped, onSaved }: { bot: Bot; stopped: boolean; onSaved: (b: Bot) => void } = $props();
+	let { bot, onSaved }: { bot: Bot; stopped?: boolean; onSaved: (b: Bot) => void } = $props();
 	const isGame = $derived(bot.kind === 'game');
 	const noun = $derived(isGame ? 'server' : 'bot');
 
@@ -141,7 +141,7 @@
 			});
 			onSaved(b);
 			base = { ...form };
-			toast('Settings saved');
+			toast(b.restart_pending ? `Settings saved. Restart the ${noun} to apply them.` : 'Settings saved');
 			return true;
 		} catch (err) {
 			error = err instanceof ApiError ? err.message : 'The settings could not be saved.';
@@ -172,9 +172,9 @@
 	}
 </script>
 
-<SettingsSection title="Name and resources" description="The host enforces these limits. A {noun} that uses more memory than its limit is stopped and restarted according to its restart policy. Changes need a stopped {noun}.">
+<SettingsSection title="Name and resources" description="The host enforces these limits. A {noun} that uses more memory than its limit is stopped and restarted according to its restart policy. Changes to a running {noun} apply after a restart.">
 	<form onsubmit={save}>
-		<fieldset class="grid min-w-0 gap-5" disabled={!stopped}>
+		<fieldset class="grid min-w-0 gap-5">
 			<label class="block">
 				<span class="label">Name</span>
 				<input class="field" required maxlength="64" bind:value={form.name} />
@@ -182,12 +182,12 @@
 			<div class="grid gap-4">
 				<div>
 					<span class="label" id="settings-memory-label">Memory</span>
-					<ResourcePicker kind="memory" id="settings-memory" labelledby="settings-memory-label" value={form.memory} onchange={(v) => (form.memory = v)} min={minMem} max={maxMem} disabled={!stopped} />
+					<ResourcePicker kind="memory" id="settings-memory" labelledby="settings-memory-label" value={form.memory} onchange={(v) => (form.memory = v)} min={minMem} max={maxMem} />
 					<span class="help">{#if limits}{fmtBytes(minMem)} to {fmtBytes(maxMem ?? limits.max_memory_bytes)}.{/if}{#if memBound}<span class="block">{memBound}</span>{/if}</span>
 				</div>
 				<div>
 					<span class="label" id="settings-cpu-label">CPU</span>
-					<ResourcePicker kind="cpu" id="settings-cpu" labelledby="settings-cpu-label" value={form.cpu} onchange={(v) => (form.cpu = v)} min={minCpu} max={maxCpu} disabled={!stopped} />
+					<ResourcePicker kind="cpu" id="settings-cpu" labelledby="settings-cpu-label" value={form.cpu} onchange={(v) => (form.cpu = v)} min={minCpu} max={maxCpu} />
 					<span class="help">{#if limits}{fmtCpu(minCpu)} to {fmtCpu(maxCpu ?? limits.max_nano_cpus)}.{/if}{#if cpuBound}<span class="block">{cpuBound}</span>{/if}</span>
 				</div>
 				<label class="block max-w-xs">
@@ -200,7 +200,7 @@
 		</fieldset>
 		{#if error}<Notice tone="fail" class="mt-4" live>{error}</Notice>{/if}
 		<div class="mt-5 flex flex-wrap items-center gap-3">
-			<button class="btn btn-primary" disabled={!stopped || !dirty || !complete || saving}>Save settings</button>
+			<button class="btn btn-primary" disabled={!dirty || !complete || saving}>Save settings</button>
 			{#if dirty}<button type="button" class="btn btn-quiet" onclick={() => (form = { ...base })}>Discard changes</button><span class="text-small text-warn">Unsaved changes</span>{/if}
 		</div>
 	</form>
