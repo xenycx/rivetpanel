@@ -25,7 +25,7 @@ import (
 const (
 	cspHead = "default-src 'self'; script-src 'self'"
 	cspTail = "; style-src 'self' 'unsafe-inline'; " +
-		"img-src 'self' data: https:; connect-src 'self'; frame-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
+		"img-src 'self' data: blob: https:; connect-src 'self'; frame-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
 )
 
 var inlineScriptRe = regexp.MustCompile(`(?is)<script(\s[^>]*)?>(.*?)</script>`)

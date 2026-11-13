@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { onLive } from '$lib/live.svelte';
 	import { onMount, type Snippet } from 'svelte';
 	import type { GameDetail } from '$lib/api/games';
 	import { api, ApiError } from '$lib/api/client';
@@ -58,6 +59,8 @@
 		}
 		await Promise.allSettled(jobs);
 	}
+	// Live: re-fetch as soon as what this view shows changes anywhere.
+	onMount(() => onLive(['bots'], () => void load()));
 	onMount(() => {
 		load();
 		const t = setInterval(() => document.visibilityState === 'visible' && load(), 10_000);

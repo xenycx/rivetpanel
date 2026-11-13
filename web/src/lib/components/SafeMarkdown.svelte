@@ -8,7 +8,7 @@
 	const reAbs = new RegExp(String.raw`(\x60[^\x60\n]+\x60|\[[^\]\n]+\]\((https?:\/\/[^\s)]+)\)` + tail, 'gi');
 	const reRel = new RegExp(String.raw`(\x60[^\x60\n]+\x60|\[[^\]\n]+\]\((https?:\/\/[^\s)]+|\/(?![\/\\])[^\s)"'<>\\\x60]*)\)` + tail, 'gi');
 	type Inline = { kind: 'text' | 'code' | 'link' | 'strong' | 'em'; text: string; href?: string };
-	type Block = { kind: 'p' | 'h' | 'code' | 'list' | 'quote' | 'table'; text?: string; lang?: string; items?: string[]; rows?: string[][] };
+	type Block = { kind: 'p' | 'h' | 'code' | 'list' | 'quote' | 'table'; text?: string; lang?: string; items?: string[]; ordered?: boolean; rows?: string[][] };
 	function inline(text: string): Inline[] {
 		const out: Inline[] = [];
 		// Earliest match wins, so emphasis markers inside `code` stay literal.
@@ -41,7 +41,7 @@
 			}
 			if (/^#{1,6}\s/.test(line)) { out.push({ kind: 'h', text: line.replace(/^#{1,6}\s+/, '') }); i++; continue; }
 			if (/^>\s?/.test(line)) { const q: string[] = []; while (i < lines.length && /^>\s?/.test(lines[i])) q.push(lines[i++].replace(/^>\s?/, '')); out.push({ kind: 'quote', text: q.join(' ') }); continue; }
-			if (/^\s*(?:[-*]|\d+\.)\s+/.test(line)) { const items: string[] = []; while (i < lines.length && /^\s*(?:[-*]|\d+\.)\s+/.test(lines[i])) items.push(lines[i++].replace(/^\s*(?:[-*]|\d+\.)\s+/, '')); out.push({ kind: 'list', items }); continue; }
+			if (/^\s*(?:[-*]|\d+\.)\s+/.test(line)) { const ordered = /^\s*\d+\.\s/.test(line); const items: string[] = []; while (i < lines.length && /^\s*(?:[-*]|\d+\.)\s+/.test(lines[i])) items.push(lines[i++].replace(/^\s*(?:[-*]|\d+\.)\s+/, '')); out.push({ kind: 'list', items, ordered }); continue; }
 			if (tableStart(lines, i)) { const raw = [line]; i += 2; while (i < lines.length && lines[i].includes('|')) raw.push(lines[i++]); const rows = raw.map((r) => r.replace(/^\||\|$/g, '').split('|').map((c) => c.trim())); out.push({ kind: 'table', rows: rows.slice(0, 40) }); continue; }
 			const p: string[] = [line]; i++; while (i < lines.length && lines[i].trim() && !/^(?:```|#{1,6}\s|>\s?|\s*(?:[-*]|\d+\.)\s+)/.test(lines[i]) && !tableStart(lines, i)) p.push(lines[i++]); out.push({ kind: 'p', text: p.join(' ') });
 		}
@@ -65,6 +65,7 @@
 	{#each blocks as b}
 		{#if b.kind === 'h'}<h3 class="pt-1 font-semibold text-ink">{@render spans(b.text ?? '')}</h3>
 		{:else if b.kind === 'code'}<pre class="max-h-96 overflow-auto rounded-control border border-rule-soft bg-paper-2 p-3 font-mono text-small"><code data-language={b.lang}>{b.text}</code></pre>
+		{:else if b.kind === 'list' && b.ordered}<ol class="list-decimal space-y-1 pl-5">{#each b.items ?? [] as item}<li>{@render spans(item)}</li>{/each}</ol>
 		{:else if b.kind === 'list'}<ul class="list-disc space-y-1 pl-5">{#each b.items ?? [] as item}<li>{@render spans(item)}</li>{/each}</ul>
 		{:else if b.kind === 'quote'}<blockquote class="border-l-2 border-action/50 pl-3 text-muted">{@render spans(b.text ?? '')}</blockquote>
 		{:else if b.kind === 'table'}<div class="overflow-x-auto"><table class="w-full border-collapse text-left text-small">{#if b.rows?.length}<thead><tr class="border-b border-rule">{#each b.rows[0] as cell}<th class="px-2 py-1.5 font-semibold">{@render spans(cell)}</th>{/each}</tr></thead>{/if}<tbody>{#each (b.rows ?? []).slice(1) as row}<tr class="border-b border-rule-soft">{#each row as cell}<td class="px-2 py-1.5">{@render spans(cell)}</td>{/each}</tr>{/each}</tbody></table></div>

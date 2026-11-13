@@ -12,6 +12,8 @@
 	import TicketMessageItem from '$lib/components/support/TicketMessageItem.svelte';
 	import TicketComposer from '$lib/components/support/TicketComposer.svelte';
 	import LabelManager from '$lib/components/support/LabelManager.svelte';
+	import { support, loadDesk } from '$lib/supportData.svelte';
+	import { onLive } from '$lib/live.svelte';
 
 	// One ticket: header, details, conversation and reply box.
 	//   page  the ticket's own page: conversation beside a details sidebar
@@ -89,12 +91,18 @@
 			known = new Set(view.messages.map((m) => m.id));
 			settleToEnd(false);
 		}
+		loadDesk();
 		load().then(async () => {
 			if (!(await toHash()) && !initial) settleToEnd(false);
 		});
 		const back = () => document.visibilityState === 'visible' && !sending && load();
+		// Live: replies, notes and changes from others appear without a reload.
+		const unlive = onLive(['tickets'], () => !sending && load());
 		document.addEventListener('visibilitychange', back);
-		return () => document.removeEventListener('visibilitychange', back);
+		return () => {
+			unlive();
+			document.removeEventListener('visibilitychange', back);
+		};
 	});
 
 	const t = $derived(view?.ticket);
@@ -105,7 +113,7 @@
 	let composer = $state<{ compose: (note?: boolean) => void; quote: (a: string, b: string) => void }>();
 	let sending = $state(false);
 	let pending = $state<TicketMessage | null>(null);
-	async function send({ body, internal, mentions }: { body: string; internal: boolean; mentions: string[] }) {
+	async function send({ body, internal, mentions, attachments }: { body: string; internal: boolean; mentions: string[]; attachments: string[] }) {
 		if (!view) return false;
 		sending = true;
 		error = '';
@@ -116,14 +124,14 @@
 			kind: 'message',
 			staff: view.manage && !(view.requester && !internal),
 			internal,
-			body,
+			body: body || `Sending ${attachments.length} file${attachments.length === 1 ? '' : 's'}…`,
 			created_at_ms: Date.now(),
 			person: null,
 			reactions: []
 		};
 		settleToEnd();
 		try {
-			const v = await api<TicketView>('POST', `/tickets/${id}/messages`, { body, internal, mentions });
+			const v = await api<TicketView>('POST', `/tickets/${id}/messages`, { body, internal, mentions, attachments });
 			pending = null;
 			accept(v);
 			settleToEnd();
@@ -287,6 +295,21 @@
 	});
 
 	let labelsOpen = $state(false);
+
+	// The requester waits for a first answer: say how long it usually takes.
+	const awaiting = $derived(
+		!!view && view.requester && !view.manage && t?.status === 'open' && !view.messages.some((m) => m.kind === 'message' && m.staff && !m.auto)
+	);
+	const rel = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' });
+	function ago(ms: number) {
+		const min = Math.round((ms - Date.now()) / 60000);
+		if (Math.abs(min) < 60) return rel.format(min, 'minute');
+		const h = Math.round(min / 60);
+		if (Math.abs(h) < 24) return rel.format(h, 'hour');
+		const d = Math.round(h / 24);
+		if (Math.abs(d) < 31) return rel.format(d, 'day');
+		return rel.format(Math.round(d / 30), 'month');
+	}
 </script>
 
 <svelte:window onkeydown={keydown} />
@@ -318,7 +341,7 @@
 				</h1>
 			{/if}
 			<p class="mt-1 text-small text-muted">
-				Opened {fmtWhen(t!.created_at_ms)}{#if view?.staff}{' '}by {t?.requester?.name ?? t?.requester_email}{/if}{#if t?.bot_name}{' '}· about {t.bot_name}{/if}
+				Opened <time datetime={new Date(t!.created_at_ms).toISOString()} title={fmtWhen(t!.created_at_ms)}>{fmtWhen(t!.created_at_ms)}</time> <span class="text-muted/80">({ago(t!.created_at_ms)})</span>{#if view?.staff}{' '}by {t?.requester?.name ?? t?.requester_email}{/if}{#if t?.bot_name}{' '}· about {t.bot_name}{/if}
 			</p>
 		</div>
 		{#if mode !== 'page' && view?.manage && t?.assignee_id !== me}
@@ -371,6 +394,12 @@
 {/snippet}
 
 {#snippet reply()}
+	{#if awaiting && support.desk.response_hours > 0}
+		<p class="awaiting {embedded ? 'mx-5 mb-0 mt-2' : 'mt-4'} flex items-center gap-2 text-small text-muted" role="status">
+			<Icon name="clock" size={13} class="shrink-0 text-action" />
+			<span>The support team usually answers <strong class="font-medium text-ink">{support.desk.response_time}</strong>. You'll get a notification under the bell when they do.</span>
+		</p>
+	{/if}
 	{#if view && canReply}
 		<TicketComposer bind:this={composer} {id} {view} {embedded} {sending} onsend={send} {onescape} />
 		{#if view.requester && !view.manage}

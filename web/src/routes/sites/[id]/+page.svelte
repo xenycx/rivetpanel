@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { onLive } from '$lib/live.svelte';
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
@@ -79,6 +80,8 @@
 		settings = { name: d.site.name, slug: d.site.slug, domain_id: d.site.domain_id ?? '', spa: d.site.spa, clean_urls: d.site.clean_urls, workspace_id: d.site.workspace_id };
 		repoForm = { full_name: d.site.repo_full_name ?? '', branch: d.site.repo_branch ?? '', root_dir: d.site.repo_root };
 	}
+	// Live: re-fetch as soon as what this view shows changes anywhere.
+	onMount(() => onLive(['sites'], () => void load()));
 	onMount(() => {
 		load().then(syncForms);
 		loadWorkspaces();

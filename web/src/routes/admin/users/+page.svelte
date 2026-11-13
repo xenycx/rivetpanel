@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { onLive } from '$lib/live.svelte';
 	import { onMount } from 'svelte';
 	import { api, ApiError } from '$lib/api/client';
 	import type { Role, User } from '$lib/api/types';
@@ -56,6 +57,8 @@
 			error = msg(e);
 		}
 	}
+	// Live: re-fetch as soon as what this view shows changes anywhere.
+	onMount(() => onLive(['admin/users', 'users', 'admin/roles'], () => void load()));
 	onMount(() => {
 		load();
 		// Opened from the "New" menu: start with the invitation form.

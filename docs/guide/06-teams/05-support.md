@@ -6,6 +6,7 @@ aliases: [support]
 glance:
   - 10 open tickets per account
   - 10,000 characters per message
+  - 10 files of up to 10 MB per message
   - 90 days of public uptime history
 related: [observe/notifications, teams/roles-and-permissions, teams/appearance]
 ---
@@ -21,10 +22,15 @@ A ticket has:
 | Category | General, technical, billing, account, abuse |
 | Priority | Low, normal, high, urgent |
 | App | Optional: a bot or server you can access right now |
-| Message | Up to 10,000 characters of Markdown |
+| Message | Up to 10,000 characters of Markdown, and up to 10 files |
 
 Replies are threaded. Staff answers show as "Support team", and staff
-addresses are not revealed to requesters. Attachments are not supported.
+addresses are not revealed to requesters. The ticket shows when it was opened
+(date, time and how long ago); list rows and the table's **Opened** column
+show the date too.
+
+When the support team has set a usual response time, the new-ticket form and
+an unanswered open ticket say so ("Usually answered within 2 days").
 
 While you type a subject, up to five related [help articles](#help-center)
 are suggested.
@@ -67,6 +73,41 @@ time turns amber after 4 hours and red after 24. This is time since any
 activity on the thread, internal notes and staff changes included; it is not a
 measured response time.
 
+## Writing messages and attaching files
+
+The new-ticket form, the reply box and internal notes share one editor:
+
+- **Formatting bar:** bold, italic, code, link, quote, bulleted and numbered
+  lists, and code blocks (for logs and errors). **Preview** shows the message
+  as it will appear. Keys: `Ctrl+B`, `Ctrl+I`, `Ctrl+E` (code), `Ctrl+K`
+  (link), `Ctrl+Shift+8` and `Ctrl+Shift+7` (lists), `Ctrl+Shift+.` (quote);
+  ⌘ on a Mac. `Enter` in a list starts the next item; `Enter` on an empty item
+  ends the list.
+- **Files:** drop files anywhere on the editor, paste a screenshot, or use
+  **Attach**. Each file uploads at once with a progress bar; pictures show as
+  thumbnails, other files as chips, and a refused file says why. Sending waits
+  until every file has finished. A message may be files only; its text then
+  names them.
+- **Viewing files:** one picture shows large, several form a strip. A click
+  opens the viewer: arrow keys move between the message's pictures, `Z`
+  switches to actual size, `Esc` closes. Other files download.
+
+| Accepted files | |
+|---|---|
+| Pictures (shown inline) | PNG, JPEG, GIF, WebP |
+| Downloads | PDF, text and log files, ZIP and GZIP archives, MP4 and WebM videos |
+
+The type is read from the file's bytes, not its name or what the browser
+claims; anything else, including SVG and HTML, is refused. Files are served
+with `nosniff`, a sandboxing content policy, and as downloads except pictures,
+so an attachment cannot run in the panel. [enforced: panel]
+
+Who can open a file follows its message: the requester and staff for replies,
+staff only for internal notes. An uploaded file stays private to its uploader
+until it is sent; unsent uploads are deleted after a day. Removing a message
+deletes its files. [enforced: panel] Files live in the panel database, so
+they count toward its size and its backups.
+
 ## Layouts
 
 **Settings → Appearance → Support tickets**, or the switcher at the top of the
@@ -81,7 +122,17 @@ choice is kept per browser, like the theme.
 | **Classic list** | A full-width list; a ticket opens on its own page |
 
 The Support page uses the whole width of the window; other pages keep a
-readable column. Windows with a content area under 880 px, and phones, always show the classic
+readable column.
+
+**Resize panes** by dragging the line between the ticket list and the open
+ticket (split), or the left edge of the ticket panel (table and board). With
+the handle focused, the arrow keys resize it (`Shift` for bigger steps),
+`Home`/`End` jump to the limits, and `Enter` or a double-click restores the
+default. Widths are kept per browser.
+
+**Live updates:** new tickets, replies, notes, status and assignment changes
+made by anyone appear without reloading, in the list, the open ticket and the
+bell. See [Live updates](../05-observe/07-notifications.md#live-updates). Windows with a content area under 880 px, and phones, always show the classic
 list.
 
 A ticket's own page shows the conversation beside a **Details** sidebar:
@@ -165,6 +216,28 @@ Notes (`N`) are visible to staff only. Notes and assignment events are never
 returned to a requester, and requester views leave out the assignee and the
 requester's address. [enforced: panel]
 
+### Automatic reply and response time
+
+*Needs `tickets.manage`.* **Tools → Automatic reply and response time** on the
+staff queue sets what requesters hear before someone picks up their ticket:
+
+- **Usual time to a first answer**, in hours or days (0 hides it). Requesters
+  see it on the new-ticket form and on their open ticket until staff first
+  answer.
+- **Automatic reply:** when on, every new ticket gets this message at once,
+  from "Support team" and marked **automatic reply**. It leaves the ticket
+  open and waiting for staff, does not notify anyone and does not count as a
+  reply in lists. The dialog previews it.
+
+| Placeholder | Becomes |
+|---|---|
+| `{name}` | The requester's display name ("there" without one) |
+| `{ticket}` | The ticket key, `RT-000042` |
+| `{subject}` | The subject |
+| `{response_time}` | "within 2 days", "within 4 hours", or "as soon as possible" |
+
+The reply is at most 4,000 characters of Markdown.
+
 ### Labels, saved replies and watchers
 
 - **Labels** (staff only): colored tags created under **Tools → Manage labels**
@@ -235,17 +308,17 @@ recipient's **Support tickets** preference and goes to verified addresses only
 | Messages | 500 per ticket; 10,000 characters each | [enforced: panel] |
 | Subject | 150 characters | [enforced: panel] |
 | Mentions | 10 per note | [enforced: panel] |
-| Attachments | None | [enforced: panel] |
-
-Attachments are deliberately left out: they would need bounded storage outside
-the web root, content sniffing and download-only serving.
+| Attachments | 10 MB each, 10 per message | [enforced: panel] |
+| Unsent uploads | 20 per account, deleted after a day | [enforced: panel] |
+| Uploads | 60 per 10 minutes per account | [enforced: panel] |
 
 The activity log records `support.ticket_create`, `support.ticket_reply` (the
 target notes "internal note"), `support.ticket_update` (status, priority,
 assignee, details), `support.message_edit`, `support.message_delete`,
 `support.ticket_labels`, `support.label_create|update|delete` and
-`support.saved_reply_create|update|delete`, and keeps refused attempts as
-`denied`. Message bodies are never recorded. Reactions and watching are not
+`support.saved_reply_create|update|delete` and `support.settings`, and keeps
+refused attempts as `denied`. Message bodies and files are never recorded;
+uploads are not audited until sent with a message. Reactions and watching are not
 audited.
 
 ## Help center

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { onLive } from '$lib/live.svelte';
 	import { onMount } from 'svelte';
 	import { api, ApiError } from '$lib/api/client';
 	import type { OidcProvider, Role } from '$lib/api/types';
@@ -46,6 +47,8 @@
 			roles = []; // without users.view the built-in User role is the only choice shown
 		}
 	}
+	// Live: re-fetch as soon as what this view shows changes anywhere.
+	onMount(() => onLive(['admin/sign-in', 'sign-in'], () => void load()));
 	onMount(load);
 
 	function openNew() {

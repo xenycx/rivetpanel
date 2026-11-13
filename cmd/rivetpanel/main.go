@@ -70,6 +70,7 @@ import (
 	"github.com/xenycx/rivetpanel/internal/github"
 	"github.com/xenycx/rivetpanel/internal/hostmon"
 	"github.com/xenycx/rivetpanel/internal/logarchive"
+	"github.com/xenycx/rivetpanel/internal/live"
 	"github.com/xenycx/rivetpanel/internal/logbuf"
 	"github.com/xenycx/rivetpanel/internal/migrations"
 	"github.com/xenycx/rivetpanel/internal/noderoute"
@@ -591,7 +592,8 @@ func serve(log *slog.Logger, logs *logbuf.Buffer) error {
 	verifySvc := &service.EmailVerificationService{Auth: authSvc, Mail: mailSvc, Settings: settingsSvc}
 	// In-panel notifications (and their email) for alerts, deployments,
 	// backups, sharing, nodes, announcements and support tickets.
-	notices := &service.NotificationService{Store: db, Mail: mailSvc, Settings: settingsSvc, Log: log}
+	liveHub := live.NewHub() // change hints for open browser tabs
+	notices := &service.NotificationService{Store: db, Mail: mailSvc, Settings: settingsSvc, Log: log, Live: liveHub}
 	alerts := &service.AlertService{Store: db, Keys: keys, Bots: db, Log: log, Prefs: db.GetAlertPrefs, Mail: mailSvc, Users: db, Notices: notices}
 	botSvc.Notices = notices
 	tickets := &service.TicketService{Store: db, Bots: botSvc, Notices: notices}
@@ -1000,7 +1002,7 @@ func serve(log *slog.Logger, logs *logbuf.Buffer) error {
 	}
 	go scheduler.Run(ctx)
 	mfaSvc := &service.MFAService{Store: db, Keys: keys, Auth: authSvc}
-	app := api.New(api.Deps{Diagnostics: diagnostics, Log: log, Deploy: deploySvc, Backups: backupSvc, Stats: statsSrc, SFTP: sftpInfo, Analytics: analytics, PublicURL: cfg.PublicURL, DB: db, UI: webui.FS(), Auth: authSvc, Bots: botSvc, OAuth: oauthSvc,
+	app := api.New(api.Deps{Live: liveHub, Diagnostics: diagnostics, Log: log, Deploy: deploySvc, Backups: backupSvc, Stats: statsSrc, SFTP: sftpInfo, Analytics: analytics, PublicURL: cfg.PublicURL, DB: db, UI: webui.FS(), Auth: authSvc, Bots: botSvc, OAuth: oauthSvc,
 		Catalog: catalog, SecureCookies: cfg.Production, ProxyHeader: cfg.ProxyHeader, MetricsToken: cfg.MetricsToken, Modules: cfg.Modules, Checks: checks, Nodes: db, Files: wsm, MaxUpload: cfg.MaxUploadBytes,
 		Console: consoleSvc, BaseCtx: ctx, RunnerReady: runnerReady, Ops: ops, Audit: audit, Schedules: scheduler,
 		MFA: mfaSvc, Tokens: &service.TokenService{Store: db, Bots: botSvc}, Clients: &service.APIClientService{Store: db, Bots: botSvc}, Passkeys: &service.PasskeyService{Store: db, Auth: authSvc, MFA: mfaSvc, PublicURL: oauthSvc.CurrentPublicURL}, OIDC: &service.OIDCService{Store: db, Auth: authSvc, Keys: keys, PublicURL: oauthSvc.CurrentPublicURL, States: oauthSvc.States, Log: log}, Enrollment: enrollmentSvc, AgentControl: agentControl, GameAddress: gameAddress, Games: gameSvc, Containers: containerSvc, Router: router, Health: health,

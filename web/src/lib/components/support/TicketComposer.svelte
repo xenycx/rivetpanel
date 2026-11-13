@@ -6,6 +6,8 @@
 	import PersonAvatar from './PersonAvatar.svelte';
 	import Picker from './Picker.svelte';
 	import SavedReplyManager from './SavedReplyManager.svelte';
+	import MarkdownEditor from './MarkdownEditor.svelte';
+	import { uploadsFor } from '$lib/support/uploads.svelte';
 
 	// The reply box. Staff switch between a reply and an internal note (the
 	// box turns amber); in a note, @ mentions a colleague (they are notified).
@@ -23,7 +25,7 @@
 		view: TicketView;
 		embedded?: boolean;
 		sending?: boolean;
-		onsend: (msg: { body: string; internal: boolean; mentions: string[] }) => Promise<boolean>;
+		onsend: (msg: { body: string; internal: boolean; mentions: string[]; attachments: string[] }) => Promise<boolean>;
 		onescape?: () => void;
 	} = $props();
 
@@ -32,6 +34,10 @@
 	let reply = $state(saved?.body ?? '');
 	let internal = $state(saved?.internal ?? false);
 	let box = $state<HTMLTextAreaElement>();
+	let editor = $state<{ focus: () => Promise<void> }>();
+	// Files stay with the ticket's draft while the panel is open.
+	const uploads = untrack(() => uploadsFor(id));
+	const ready = $derived((reply.trim().length > 0 || uploads.ids.length > 0) && !uploads.busy);
 	$effect(() => {
 		const body = reply;
 		const note = internal;
@@ -47,14 +53,14 @@
 	/** Focus the box, as a reply or as an internal note. */
 	export function compose(note = false) {
 		internal = note && view.manage;
-		box?.focus();
+		editor?.focus();
 	}
 	/** Quote a message: its lines as a Markdown quote, then the caret. */
 	export async function quote(author: string, body: string) {
 		const q = `> **${author}** wrote:\n` + body.split('\n').map((l) => `> ${l}`).join('\n') + '\n\n';
 		reply = reply.trim() ? `${reply.trimEnd()}\n\n${q}` : q;
 		await tick();
-		box?.focus();
+		await editor?.focus();
 		box?.setSelectionRange(reply.length, reply.length);
 	}
 
@@ -97,20 +103,22 @@
 		if (!r) return;
 		reply = reply.trim() ? `${reply.trimEnd()}\n\n${r.body}` : r.body;
 		await tick();
-		box?.focus();
+		await editor?.focus();
 	}
 	let savedPicker = $state<{ show?: () => void }>();
 
 	async function send(e?: SubmitEvent) {
 		e?.preventDefault();
 		const body = reply.trim();
-		if (!body || sending) return;
+		if (!ready || sending) return;
 		const ids = internal ? [...mentions].filter(([tok]) => body.includes(tok)).map(([, id]) => id) : [];
 		const note = internal;
+		const files = uploads.ids;
 		reply = '';
 		internal = false;
-		if (await onsend({ body, internal: note, mentions: ids })) {
+		if (await onsend({ body, internal: note, mentions: ids, attachments: files })) {
 			mentions = new Map();
+			uploads.sent();
 		} else {
 			reply = body;
 			internal = note;
@@ -149,7 +157,7 @@
 </script>
 
 <form class="composer {embedded ? 'border-t border-rule-soft px-5 pt-3 pb-4' : 'sticky bottom-0 z-10 -mx-1 mt-4 px-1 pt-3 pb-4'}" data-note={internal} data-embedded={embedded} onsubmit={send}>
-	<div class="composer-box relative rounded-tile border" data-idle={embedded && !reply.trim()}>
+	<div class="composer-box relative rounded-tile border" data-idle={embedded && !reply.trim() && !uploads.count}>
 		{#if view.manage}
 			<div class="flex flex-wrap items-center gap-2 px-3 pt-2.5">
 				<div role="group" aria-label="Write" class="seg">
@@ -159,33 +167,36 @@
 				{#if internal}<span class="text-small text-warn">The requester never sees it. Type @ to mention a colleague.</span>{/if}
 			</div>
 		{/if}
-		<label class="sr-only" for="reply-{id}">{internal ? 'Internal note' : 'Reply'}</label>
-		<textarea
-			id="reply-{id}"
-			bind:this={box}
+		<MarkdownEditor
+			bind:this={editor}
 			bind:value={reply}
+			bind:textarea={box}
+			id="reply-{id}"
+			label={internal ? 'Internal note' : 'Reply'}
+			bare
+			{uploads}
+			maxlength={10000}
+			autocomplete={internal ? 'list' : undefined}
+			inputClass="composer-input"
 			onkeydown={key}
 			oninput={caretWord}
 			onclick={caretWord}
-			class="composer-input block w-full resize-none bg-transparent px-3 py-2.5 outline-none"
-			rows="3"
-			maxlength="10000"
-			aria-autocomplete={internal ? 'list' : undefined}
-			placeholder={internal ? 'Note for the support team… @ to mention' : view.manage ? `Reply to ${t.requester?.name ?? t.requester_email ?? 'the requester'}… ${support.replies.length ? '/ for a saved reply' : ''}` : 'Write a reply…'}
-		></textarea>
-		{#if mq !== null && mentionHits.length}
-			<ul class="mention-list" role="listbox" aria-label="Mention a colleague">
-				{#each mentionHits as p, i (p.id)}
-					<li role="option" aria-selected={i === mi}>
-						<button type="button" class="mention-opt" class:on={i === mi} onmousedown={(e) => (e.preventDefault(), insertMention(p))}>
-							<PersonAvatar person={p} size={20} /><span class="truncate">{p.name}</span><span class="ml-auto truncate text-label text-muted">{p.email}</span>
-						</button>
-					</li>
-				{/each}
-			</ul>
-		{/if}
+			placeholder={internal ? 'Note for the support team… @ to mention' : view.manage ? `Reply to ${t.requester?.name ?? t.requester_email ?? 'the requester'}… ${support.replies.length ? '/ for a saved reply' : ''}` : 'Write a reply… drop or paste screenshots and logs'}
+		>
+			{#if mq !== null && mentionHits.length}
+				<ul class="mention-list" role="listbox" aria-label="Mention a colleague">
+					{#each mentionHits as p, i (p.id)}
+						<li role="option" aria-selected={i === mi}>
+							<button type="button" class="mention-opt" class:on={i === mi} onmousedown={(e) => (e.preventDefault(), insertMention(p))}>
+								<PersonAvatar person={p} size={20} /><span class="truncate">{p.name}</span><span class="ml-auto truncate text-label text-muted">{p.email}</span>
+							</button>
+						</li>
+					{/each}
+				</ul>
+			{/if}
+		</MarkdownEditor>
 		<div class="composer-actions flex flex-wrap items-center gap-2 px-3 pb-2.5">
-			<button class="btn btn-primary h-8 px-3" disabled={sending || !reply.trim()}><Icon name="send" size={14} />{internal ? 'Add note' : 'Send reply'}</button>
+			<button class="btn btn-primary h-8 px-3" disabled={sending || !ready} title={uploads.busy ? 'Waiting for files to finish uploading' : undefined}><Icon name="send" size={14} />{uploads.busy ? 'Uploading…' : internal ? 'Add note' : 'Send reply'}</button>
 			{#if view.manage}
 				<Picker
 					bind:this={savedPicker}
@@ -205,7 +216,7 @@
 					{/snippet}
 				</Picker>
 			{/if}
-			<span class="ml-auto hidden text-small text-muted md:inline">Markdown: **bold**, `code`, &gt; quote · <kbd class="key-hint">Ctrl</kbd> <kbd class="key-hint">Enter</kbd></span>
+			<span class="ml-auto hidden text-small text-muted md:inline"><kbd class="key-hint">Ctrl</kbd> <kbd class="key-hint">Enter</kbd> sends</span>
 		</div>
 	</div>
 </form>
@@ -235,21 +246,18 @@
 	.composer[data-note='true'] .composer-box:focus-within {
 		box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-warn) 16%, transparent);
 	}
-	.composer-input {
-		field-sizing: content;
+	.composer-box :global(.composer-input) {
 		min-height: 4.5rem;
 		max-height: 16rem;
 	}
-	.composer-box[data-idle='true']:not(:focus-within) .composer-input {
+	.composer-box[data-idle='true']:not(:focus-within) :global(.composer-input) {
 		min-height: 2.6rem;
 		height: 2.6rem;
 		overflow: hidden;
 	}
-	.composer-box[data-idle='true']:not(:focus-within) .composer-actions {
+	.composer-box[data-idle='true']:not(:focus-within) .composer-actions,
+	.composer-box[data-idle='true']:not(:focus-within) :global(.md-bar) {
 		display: none;
-	}
-	.composer-input::placeholder {
-		color: var(--color-muted);
 	}
 	.mention-list {
 		position: absolute;

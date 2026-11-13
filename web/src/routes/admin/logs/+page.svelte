@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { onLive } from '$lib/live.svelte';
 	import { onMount } from 'svelte';
 	import { api, ApiError, fmtBytes } from '$lib/api/client';
 	import { can } from '$lib/session.svelte';
@@ -86,6 +87,8 @@
 			loadError = e instanceof ApiError ? e.message : 'The log settings could not be loaded.';
 		}
 	}
+	// Live: re-fetch as soon as what this view shows changes anywhere.
+	onMount(() => onLive(['admin/logs', 'logs'], () => void load()));
 	onMount(() => {
 		if (manage || viewSystem) void load();
 	});

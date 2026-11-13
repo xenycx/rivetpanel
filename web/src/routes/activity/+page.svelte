@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { onLive } from '$lib/live.svelte';
 	import { onMount, untrack } from 'svelte';
 	import { page } from '$app/state';
 	import { api, ApiError } from '$lib/api/client';
@@ -131,6 +132,8 @@
 	});
 
 	// ---- Live refresh ----------------------------------------------------------------
+	// Live: re-fetch as soon as what this view shows changes anywhere.
+	onMount(() => onLive(['*'], () => void loadFirst(true)));
 	onMount(() => {
 		api<{ bots: Bot[] }>('GET', '/bots').then((r) => (bots = r.bots)).catch(() => {});
 		api<{ sites: Site[] }>('GET', '/sites').then((r) => (sites = r.sites)).catch(() => {});

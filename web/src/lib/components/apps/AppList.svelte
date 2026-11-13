@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { onLive } from '$lib/live.svelte';
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
 	import { api, ApiError } from '$lib/api/client';
@@ -63,6 +64,8 @@
 			error = e instanceof ApiError ? e.message : 'The list could not be loaded. Check your connection.';
 		}
 	}
+	// Live: re-fetch as soon as what this view shows changes anywhere.
+	onMount(() => onLive(['bots', 'sites', 'stacks', 'containers', 'servers', 'workspaces'], () => void refresh()));
 	onMount(() => {
 		refresh();
 		api<{ runtimes: RuntimeInfo[] }>('GET', '/runtimes').then((r) => (runtimes = r.runtimes)).catch(() => {});

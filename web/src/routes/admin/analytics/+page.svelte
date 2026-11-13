@@ -24,7 +24,7 @@
 			error = e instanceof ApiError ? e.message : 'Analytics are unavailable right now.';
 		}
 	}
-	onMount(() => poll(load, 120_000));
+	onMount(() => poll(load, 120_000, ['*']));
 	let shown = '7d';
 	$effect(() => {
 		if (range === shown) return;

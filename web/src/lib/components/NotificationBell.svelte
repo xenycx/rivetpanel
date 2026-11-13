@@ -6,8 +6,8 @@
 	import Icon from '$lib/components/ui/Icon.svelte';
 	import { inbox, refreshUnread, listNotifications, markRead, deleteNotification, categoryLabels, type Notification } from '$lib/notifications.svelte';
 
-	// The top-bar bell: unread count (polled every 30 s while the tab is
-	// visible, and after every navigation) and the latest notifications.
+	// The top-bar bell: unread count (live, polled every 30 s as a fallback,
+	// and after every navigation) and the latest notifications.
 	let open = $state(false);
 	let items = $state<Notification[]>([]);
 	let loading = $state(false);
@@ -15,7 +15,8 @@
 	let root: HTMLDivElement | undefined = $state();
 	let btn: HTMLButtonElement | undefined = $state();
 
-	onMount(() => poll(refreshUnread, 30_000));
+	// Live: a new notification shows at once (the poll is the fallback).
+	onMount(() => poll(() => (open && load(), refreshUnread()), 30_000, ['notifications']));
 	afterNavigate(() => {
 		open = false;
 		refreshUnread();

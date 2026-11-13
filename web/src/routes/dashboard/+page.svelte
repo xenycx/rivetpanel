@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { onLive } from '$lib/live.svelte';
 	import { onMount } from 'svelte';
 	import { api, ApiError, fmtBytes } from '$lib/api/client';
 	import type { Bot, Capacity, RuntimeInfo, Sample, Site } from '$lib/api/types';
@@ -56,6 +57,8 @@
 			.catch(() => {});
 	}
 
+	// Live: re-fetch as soon as what this view shows changes anywhere.
+	onMount(() => onLive(['*'], () => void refresh()));
 	onMount(() => {
 		refresh().then(loadPlayers);
 		api<{ runtimes: RuntimeInfo[] }>('GET', '/runtimes').then((r) => (runtimes = r.runtimes)).catch(() => {});

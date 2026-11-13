@@ -6,6 +6,41 @@ authoritative current version.
 
 ## Unreleased
 
+### Added
+
+- **Ticket attachments.** Drop files on the new-ticket form or the reply box,
+  paste a screenshot, or use **Attach**: each file uploads at once with a
+  progress bar. Pictures (PNG, JPEG, GIF, WebP) show in the thread and open in
+  a full-window viewer with arrow-key navigation; PDF, text and log files,
+  ZIP/GZIP archives and MP4/WebM videos download. Up to 10 files of 10 MB per
+  message. Migration 0072 adds the attachment table.
+- **A formatting bar and preview for ticket messages**: bold, italic, code,
+  links, quotes, lists and code blocks, with `Ctrl+B`/`I`/`E`/`K` shortcuts
+  and lists that continue on `Enter`. Numbered lists now render as numbered.
+- **Automatic reply and usual response time** (staff queue → **Tools**, needs
+  `tickets.manage`). New tickets can get an instant reply from the support
+  team with `{name}`, `{ticket}`, `{subject}` and `{response_time}`
+  placeholders; requesters see "usually answered within …" on the new-ticket
+  form and on their unanswered ticket. Audited as `support.settings`.
+- **Resizable support panes.** Drag the divider between the ticket list and
+  the open ticket, or the edge of the ticket panel; widths are kept per
+  browser, with keyboard resizing and double-click to reset.
+- **When a ticket was opened** now shows in list rows, a sortable **Opened**
+  table column and board card tooltips, and as relative time on the ticket.
+- **Live updates across the panel.** Tickets, replies, app status, sites,
+  stacks, the activity log, analytics, administration lists and the
+  notification bell update without a reload, through one Server-Sent Events
+  stream per tab (`GET /api/v1/live`). Hints carry no data; pages re-fetch
+  through the normal, permission-checked API. Timed refreshes stay as a
+  fallback.
+
+### Security
+
+- Attachment types are read from the file's bytes (SVG and HTML are refused),
+  files are served with `nosniff` and a sandboxing content policy, only
+  pictures display inline, and a file is readable only by those who can read
+  its message (internal notes' files by staff only).
+
 ## 1.11.1 - 2026-11-13
 
 ### Fixed

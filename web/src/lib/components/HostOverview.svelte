@@ -43,7 +43,7 @@
 		}
 	}
 	onMount(() => {
-		const stopNode = poll(loadNode, 15_000);
+		const stopNode = poll(loadNode, 15_000, ['bots', 'admin/nodes']);
 		const stopHist = poll(loadHistory, 30_000);
 		return () => {
 			stopNode();

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { onLive } from '$lib/live.svelte';
 	import { onMount } from 'svelte';
 	import { api, ApiError } from '$lib/api/client';
 	import { type StatusPage, type StatusComponent, type StatusIncident, stateLabel, stateTone, incidentStatuses, maintenanceStatuses, impacts, words } from '$lib/api/kb';
@@ -27,6 +28,8 @@
 			error = msg(e);
 		}
 	}
+	// Live: re-fetch as soon as what this view shows changes anywhere.
+	onMount(() => onLive(['admin/status', 'status'], () => void load()));
 	onMount(load);
 
 	async function saveConfig(e: SubmitEvent) {

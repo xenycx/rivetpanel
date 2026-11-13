@@ -72,6 +72,9 @@ type TicketMessage struct {
 	Internal    bool
 	Body        string
 	CreatedAtMS int64
+	// Auto marks the panel's automatic reply on the support team's behalf
+	// (a staff message without an author account).
+	Auto bool
 	// Filled by queries.
 	Author      Person // zero when the author account is gone
 	EditedAtMS  *int64
@@ -79,6 +82,52 @@ type TicketMessage struct {
 	DeletedBy   string // label of the account that removed it
 	Mentions    []string
 	Reactions   []TicketReaction
+	// Attachments are the files sent with the message (no bytes). On a new
+	// message only the IDs are read: pending uploads of the author to bind.
+	Attachments []TicketAttachment
+}
+
+// TicketAttachment is a file sent with a ticket message. Data is filled
+// only when the file is downloaded.
+type TicketAttachment struct {
+	ID          string
+	UploaderID  string
+	TicketID    string
+	MessageID   string
+	Name        string
+	ContentType string
+	Size        int64
+	Data        []byte
+	CreatedAtMS int64
+}
+
+// Attachment limits.
+const (
+	TicketAttachmentMax        = 10 << 20 // bytes per file
+	TicketAttachmentsPerMsg    = 10
+	TicketAttachmentsPending   = 20 // unsent uploads per account
+	TicketAttachmentPendingTTL = 24 * 60 * 60 * 1000
+)
+
+// TicketAttachmentImage reports whether a stored content type is shown
+// inline as a picture (raster formats only; never SVG).
+func TicketAttachmentImage(contentType string) bool {
+	switch contentType {
+	case "image/png", "image/jpeg", "image/gif", "image/webp":
+		return true
+	}
+	return false
+}
+
+// SupportSettings is how the support desk answers new tickets.
+type SupportSettings struct {
+	// AutoReply sends AutoReplyBody to the requester as soon as a ticket is
+	// opened, before anyone on the team picks it up.
+	AutoReply     bool
+	AutoReplyBody string
+	// ResponseHours is the usual time to a first answer, shown to
+	// requesters (0: not shown) and offered to the automatic reply.
+	ResponseHours int
 }
 
 // Person is how an account appears on a ticket: id, name and picture.

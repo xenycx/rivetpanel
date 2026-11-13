@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { onLive } from '$lib/live.svelte';
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
@@ -31,6 +32,8 @@
 			error = e instanceof ApiError ? e.message : 'The stack could not be loaded.';
 		}
 	}
+	// Live: re-fetch as soon as what this view shows changes anywhere.
+	onMount(() => onLive(['stacks', 'bots'], () => void load()));
 	onMount(() => {
 		load();
 		const t = setInterval(() => {

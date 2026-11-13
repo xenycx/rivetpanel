@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { onLive } from '$lib/live.svelte';
 	import { onMount } from 'svelte';
 	import { api, ApiError } from '$lib/api/client';
 	import { type StatusPage, type StatusIncident, stateLabel, overallLabel, stateTone, words } from '$lib/api/kb';
@@ -20,6 +21,8 @@
 			else error = e instanceof ApiError ? e.message : 'The status could not be loaded.';
 		}
 	}
+	// Live: re-fetch as soon as what this view shows changes anywhere.
+	onMount(() => onLive(['bots', 'status', 'admin/status'], () => void load()));
 	onMount(() => {
 		load();
 		const t = setInterval(() => document.visibilityState === 'visible' && load(), 60_000);

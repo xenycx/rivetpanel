@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { onLive } from '$lib/live.svelte';
 	import { onMount } from 'svelte';
 	import { api, ApiError } from '$lib/api/client';
 	import type { KBCategory, KBIndex } from '$lib/api/kb';
@@ -23,6 +24,8 @@
 			error = msg(e);
 		}
 	}
+	// Live: re-fetch as soon as what this view shows changes anywhere.
+	onMount(() => onLive(['admin/kb', 'kb'], () => void load()));
 	onMount(load);
 
 	let publicOn = $state(false);

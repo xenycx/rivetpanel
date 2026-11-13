@@ -10,6 +10,7 @@
 	import { pulse } from '$lib/ui/glide';
 	import PersonAvatar from './PersonAvatar.svelte';
 	import Popover from './Popover.svelte';
+	import AttachmentList from './AttachmentList.svelte';
 
 	// One reply or internal note: picture, author, role, time and body
 	// (Markdown, never HTML), with an action bar on hover or focus: react,
@@ -48,7 +49,7 @@
 	const timeFmt = new Intl.DateTimeFormat(undefined, { timeStyle: 'short' });
 	const iso = (ms: number) => new Date(ms).toISOString();
 	const team = $derived(m.staff && !m.person && !m.mine);
-	const name = $derived(m.mine ? 'You' : (m.person?.name ?? m.author));
+	const name = $derived(m.mine ? 'You' : m.auto ? 'Support team' : (m.person?.name ?? m.author));
 	const mentioned = $derived((m.mentions ?? []).map((id) => support.staff.find((s) => s.id === id)?.display_name || support.staff.find((s) => s.id === id)?.email || 'a colleague'));
 
 	// A message removed while it is on screen fades to its "removed" line;
@@ -143,6 +144,7 @@
 			<div class="flex flex-wrap items-center gap-x-2 gap-y-1 text-small">
 				<span class="font-semibold">{name}</span>
 				{#if m.staff && !m.internal}<span class="rounded-pill border border-action/30 px-1.5 text-label text-action">support</span>{/if}
+				{#if m.auto}<span class="flex items-center gap-1 rounded-pill border border-rule px-1.5 text-label text-muted" title="Sent automatically when the ticket was opened"><Icon name="bolt" size={10} />automatic reply</span>{/if}
 				{#if m.internal}<span class="flex items-center gap-1 rounded-pill border border-warn/40 px-1.5 text-label text-warn"><Icon name="lock" size={10} />internal note · staff only</span>{/if}
 				<span class="text-muted tabular-nums">
 					{#if pending}Sending…{:else}<a class="hover:underline" href="#m-{m.id}" title={fmtWhen(m.created_at_ms)}><time datetime={iso(m.created_at_ms)}>{timeFmt.format(m.created_at_ms)}</time></a>{/if}
@@ -185,6 +187,7 @@
 			{:else}
 				<div class="msg-body mt-1.5 max-w-[75ch] break-words"><SafeMarkdown source={m.body} relativeLinks /></div>
 			{/if}
+			{#if m.attachments?.length}<AttachmentList files={m.attachments} />{/if}
 
 			{#if mentioned.length}
 				<p class="mt-2 flex flex-wrap items-center gap-1 text-small text-muted">Mentioned {#each mentioned as n, i (i)}<span class="mention">@{n}</span>{/each}</p>

@@ -3,6 +3,7 @@ package api
 
 import (
 	"context"
+	"fmt"
 	"io/fs"
 	"log/slog"
 	"strings"
@@ -17,6 +18,7 @@ import (
 	"github.com/xenycx/rivetpanel/internal/domain"
 	"github.com/xenycx/rivetpanel/internal/filesystem"
 	"github.com/xenycx/rivetpanel/internal/hostmon"
+	"github.com/xenycx/rivetpanel/internal/live"
 	"github.com/xenycx/rivetpanel/internal/logbuf"
 	"github.com/xenycx/rivetpanel/internal/modules"
 	"github.com/xenycx/rivetpanel/internal/noderoute"
@@ -74,6 +76,7 @@ type Deps struct {
 	Settings      *service.SettingsService          // nil disables the setup wizard and panel settings
 	Mail          *service.MailService              // nil disables email (alerts, invitations, notices)
 	Notifications *service.NotificationService      // nil disables the in-panel notification inbox
+	Live          *live.Hub                         // nil disables live update hints (tabs fall back to polling)
 	Tickets       *service.TicketService            // nil disables support tickets
 	KB            *service.KBService                // nil disables the knowledgebase (help center)
 	Status        *service.StatusService            // nil disables the status page
@@ -120,6 +123,7 @@ type Check struct {
 }
 
 type panel struct {
+	live          *live.Hub
 	log           *slog.Logger
 	files         *filesystem.Manager
 	maxUpload     int64
@@ -259,7 +263,7 @@ func New(d Deps) *fiber.App {
 	if d.Auth != nil && d.Bots != nil {
 		s := &panel{log: d.Log, auth: d.Auth, bots: d.Bots, oauth: d.OAuth, sftp: d.SFTP, analytics: d.Analytics, publicURL: d.PublicURL, registry: d.Registry, stats: d.Stats, backups: d.Backups, deploy: d.Deploy, ops: d.Ops, audit: d.Audit, schedules: d.Schedules, mfa: d.MFA, tokens: d.Tokens, clients: d.Clients, oidc: d.OIDC, passkeys: d.Passkeys, enrollment: d.Enrollment, agentControl: d.AgentControl, gameAddress: d.GameAddress, games: d.Games, containers: d.Containers, extensions: d.Extensions, router: d.Router, health: d.Health, settings: d.Settings, mail: d.Mail, notifications: d.Notifications, tickets: d.Tickets, kb: d.KB, status: d.Status, usage: d.Usage, resets: d.Resets, verify: d.Verify, mailPrefs: d.MailPrefs, sites: d.Sites, ai: d.AI, env: d.Env, host: d.Host, logs: d.Logs, logArchive: d.LogArchive, setupCodeFile: d.SetupCodeFile, onSetupDone: d.OnSetupDone, statsLimit: console.NewLimiter(0, 0, 0), catalog: d.Catalog, secureCookies: d.SecureCookies, modules: d.Modules,
 			console: d.Console, consoleLimit: d.ConsoleLimit, baseCtx: d.BaseCtx, nodes: d.Nodes, files: d.Files, maxUpload: d.MaxUpload,
-			runnerReady: d.RunnerReady, buildMemory: d.BuildMemory, diagnostics: d.Diagnostics}
+			runnerReady: d.RunnerReady, buildMemory: d.BuildMemory, diagnostics: d.Diagnostics, live: d.Live}
 		if s.buildMemory == 0 {
 			s.buildMemory = 768 << 20
 		}
@@ -276,6 +280,7 @@ func New(d Deps) *fiber.App {
 			s.consoleLimit = console.NewLimiter(0, 0, 0)
 		}
 		s.routes(v1)
+		s.relayBotStatus()
 	}
 	// Unknown API paths are JSON errors, never the HTML fallback.
 	app.All("/api/v1/*", func(c fiber.Ctx) error { return fiber.ErrNotFound })
@@ -298,6 +303,16 @@ func smallBody(c fiber.Ctx) error {
 		(c.Method() == fiber.MethodPost && strings.HasSuffix(p, "/files/extract")) ||
 		(c.Method() == fiber.MethodPost && strings.HasPrefix(p, "/api/v1/sites/") && strings.HasSuffix(p, "/upload")) ||
 		(c.Method() == fiber.MethodPost && p == "/api/v1/admin/extensions/upload") { // capped at 16 MiB by its handler
+		return c.Next()
+	}
+	// Ticket attachments: at most 10 MiB, still with a known length.
+	if c.Method() == fiber.MethodPost && p == "/api/v1/tickets/attachments" {
+		switch n := c.RequestCtx().Request.Header.ContentLength(); {
+		case n < 0:
+			return fiber.NewError(fiber.StatusLengthRequired, "a Content-Length is required")
+		case n > domain.TicketAttachmentMax:
+			return fiber.NewError(fiber.StatusRequestEntityTooLarge, fmt.Sprintf("the file is too large (at most %d MB)", domain.TicketAttachmentMax>>20))
+		}
 		return c.Next()
 	}
 	switch n := c.RequestCtx().Request.Header.ContentLength(); {
@@ -457,7 +472,8 @@ func (s *panel) routes(v1 fiber.Router) {
 		s.automationRoutes(v1)
 	}
 	s.extensionPublicRoutes(v1)
-	authed := v1.Group("", s.requireAuth, clientLimit(), s.auditMW)
+	authed := v1.Group("", s.requireAuth, clientLimit(), s.auditMW, s.liveMW)
+	authed.Get("/live", s.liveStream)
 	if s.ai != nil {
 		s.aiRoutes(authed)
 	}

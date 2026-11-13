@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/xenycx/rivetpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/live"
 	"github.com/xenycx/rivetpanel/internal/mail"
 )
 
@@ -60,6 +61,7 @@ type NotificationService struct {
 	Settings *SettingsService // panel address for links in emails; nil = no link
 	Log      *slog.Logger
 	Now      func() time.Time
+	Live     *live.Hub // nil: open tabs learn about new notifications by polling
 }
 
 func (n *NotificationService) now() time.Time {
@@ -179,6 +181,14 @@ func (n *NotificationService) deliver(ctx context.Context, us []domain.User, x N
 	}
 	if err := n.Store.InsertNotifications(ctx, rows, notificationKeep); err != nil {
 		n.warn("store notifications", err)
+		return
+	}
+	if len(rows) > 0 {
+		to := make([]string, len(rows))
+		for i, r := range rows {
+			to[i] = r.UserID
+		}
+		n.Live.Publish(live.Event{Topic: "notifications", Users: to})
 	}
 }
 

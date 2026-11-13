@@ -26,7 +26,7 @@
 			error = e instanceof ApiError ? e.message : 'Usage analytics are unavailable right now.';
 		}
 	}
-	onMount(() => poll(load, 60_000));
+	onMount(() => poll(load, 60_000, ['bots', 'workspaces']));
 	// A new range reloads at once (the poll loaded the first one).
 	let shown = '24h';
 	$effect(() => {

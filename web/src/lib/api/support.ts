@@ -46,6 +46,23 @@ export type TicketMessage = {
 	deleted_by?: string;
 	mentions?: string[];
 	reactions?: Reaction[];
+	/** The automatic reply sent on the support team's behalf. */
+	auto?: boolean;
+	attachments?: Attachment[];
+};
+
+/** A file sent with a message; url downloads it (pictures open inline). */
+export type Attachment = { id: string; name: string; content_type: string; size: number; image: boolean; url: string };
+
+/** How the desk answers: the usual response time, upload limits and (managers) the automatic reply. */
+export type DeskSettings = {
+	auto_reply: boolean;
+	auto_reply_body?: string;
+	response_hours: number;
+	/** "within 2 days" */
+	response_time: string;
+	max_files: number;
+	max_file_bytes: number;
 };
 
 export type Reaction = { kind: ReactionKind; count: number; mine: boolean; names: string[] };
@@ -153,6 +170,15 @@ export function fmtIdle(ms: number, now = Date.now()): string {
 	return new Date(ms).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
+/** When a ticket was opened, compact: "14:05" today, "Nov 5" this year, then "Nov 5, 2025". */
+export function fmtOpened(ms: number, now = Date.now()): string {
+	const d = new Date(ms);
+	const n = new Date(now);
+	if (d.toDateString() === n.toDateString()) return d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+	if (d.getFullYear() === n.getFullYear()) return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+	return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
 /** True when a key event comes from a place that takes typing. */
 export function typingIn(e: KeyboardEvent): boolean {
 	const el = e.target;
@@ -185,6 +211,8 @@ export function sortTickets(list: Ticket[], key: string, desc: boolean): Ticket[
 				return name(t.requester) || (t.requester_email ?? '');
 			case 'assignee':
 				return name(t.assignee);
+			case 'created':
+				return t.created_at_ms;
 			default:
 				return t.updated_at_ms;
 		}

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { onLive } from '$lib/live.svelte';
 	import { onMount } from 'svelte';
 	import { api, ApiError, fmtBytes } from '$lib/api/client';
 	import type { Stack } from '$lib/api/types';
@@ -21,6 +22,8 @@
 			error = e instanceof ApiError ? e.message : 'Stacks could not be loaded.';
 		}
 	}
+	// Live: re-fetch as soon as what this view shows changes anywhere.
+	onMount(() => onLive(['stacks', 'bots'], () => void load()));
 	onMount(() => {
 		load();
 		const t = setInterval(() => document.visibilityState === 'visible' && load(), 5000);

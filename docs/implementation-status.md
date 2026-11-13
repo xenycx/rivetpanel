@@ -670,6 +670,27 @@ items state exactly what remains.
     on a scratch local panel (dark and light, 1440/1280 px and the mobile
     preset; staff and requester accounts; drag to change status, mentions,
     saved replies, editing). Not automated in the browser suite.
+  - Attachments, editor, auto-reply (Unreleased, migration 0072): files on
+    ticket messages (10 MB each, 10 per message; types sniffed from the bytes;
+    `nosniff`, sandbox CSP, pictures-only inline; readable only by readers of
+    the message, internal-note files by staff; unsent uploads private to the
+    uploader and pruned after a day), a Markdown formatting bar with preview,
+    resizable split and peek panes (per browser), ticket opened dates, and a
+    configurable automatic reply plus usual response time
+    (`tickets.manage`). All enforced by the application
+    (`internal/service/support_attach.go`). Tests:
+    `internal/api/support_attach_test.go`. Browser-verified on a scratch local
+    panel (1440 px, staff account; drop, viewer, resize, auto-reply); not
+    automated in the browser suite.
+- [x] Live updates (Unreleased, no migration): `internal/live` hub and
+  `GET /api/v1/live` (Server-Sent Events). Every successful mutating API
+  request publishes a topic hint from its path, runner status changes publish
+  `bots`, new notifications publish `notifications` to recipients only. Hints
+  carry no data; views re-fetch through the permission-checked API (enforced
+  by the application). At most 20 streams per account; sessions re-checked
+  every minute. Changes made outside the API are not announced. Tests:
+  `internal/live/hub_test.go`, `internal/api/live_test.go`. Browser-verified
+  (ticket list and open thread update from another tab's changes).
   - Not done: attachments, a push (SSE/WebSocket) channel for the bell,
     Discord fan-out of the new categories (only the existing bot alerts post
     to Discord). Knowledgebase and status page: support batch 2 below.
@@ -1339,6 +1360,7 @@ Migrations added since 0.2.0 (the schema-version assertion in
 | `0069_live_config.sql` | Additive: `bots.config_pending_at_ms` and `bots.config_pending_generation` (both default 0, so existing bots read as nothing pending). A configuration or variable save on a live bot keeps its generation and records the marker; `restart_pending` is true while the marker's generation equals the bot's and it is wanted running. Covered by `TestMigrateIdempotentAndSchema` (70 versions), `TestUpdateWorksLiveAndWaitsForRestart` and `TestLiveConfigChangeWaitsForRestart` |
 | `0070_impersonation.sql` | Additive: `sessions.impersonator_id` (`users` `ON DELETE CASCADE`, NULL for ordinary sign-ins, so existing sessions keep their meaning) and the partial index `sessions_impersonator_idx`. Covered by `TestMigrateIdempotentAndSchema` (71 versions) and the impersonation API tests |
 | `0071_audit_names.sql` | Data only, no schema change: fills `audit_events.bot_name`/`site_name` where NULL from the live `bots`/`sites` row (truncated to the column limits of 64/80); rows of removed apps or sites stay NULL, which the activity summary tolerates. Idempotent. Covered by `TestMigrateIdempotentAndSchema` (72 versions) and `TestActivityStatsToleratesMissingNames` |
+| `0072_support_attachments.sql` | Additive: new table `support_ticket_attachments` (bytes in a BLOB of at most 10 MiB, pending while `ticket_id`/`message_id` are NULL, cascading with the ticket and message, uploader `ON DELETE SET NULL`) with a message index and a partial pending index; `support_ticket_messages.auto` (0/1, default 0) marks the automatic reply. Existing rows keep their meaning. Covered by `TestMigrateIdempotentAndSchema` (73 versions) and the attachment API tests |
 | `0054_web_apps.sql` | Rebuilds `bots` (kind gains `web`, runtime gains `php`, new `release_command`) and `sites` (mode gains `app`; `app_id`, `framework`, `build_output_dir`, `app_port`, `health_path`, `max_body_bytes`) with explicit column lists and foreign keys off (checked with `PRAGMA foreign_key_check`; all indexes recreated); additive `site_releases.source_ref` and `bot_health_probes.target` (`host`/`app`). Covered by `apps_migration_test.go` |
 | `0030_ai_global_chat.sql` | Rebuilds `ai_conversations` so a chat may have no target; `ai_runs.bot_id`/`site_id`, `ai_messages.context_json` (the conversation subtree is stashed and restored, rows preserved) |
 

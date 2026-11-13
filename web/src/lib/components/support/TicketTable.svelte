@@ -2,7 +2,7 @@
 	import Icon from '$lib/components/ui/Icon.svelte';
 	import { fmtWhen } from '$lib/args';
 	import { session } from '$lib/session.svelte';
-	import { type Ticket, ticketKey, idleTone, fmtIdle, categoryLabel, drafts } from '$lib/api/support';
+	import { type Ticket, ticketKey, idleTone, fmtIdle, fmtOpened, categoryLabel, drafts } from '$lib/api/support';
 	import { labelById } from '$lib/supportData.svelte';
 	import { supportView, setSupportSort, type SortKey } from '$lib/ui/supportLayout.svelte';
 	import { glideList } from '$lib/ui/glide';
@@ -33,6 +33,7 @@
 					{ key: 'assignee' as SortKey, label: 'Assignee', cls: 'w-44' }
 				]
 			: []),
+		{ key: 'created', label: 'Opened', cls: 'w-28 text-right' },
 		{ key: 'updated', label: 'Updated', cls: 'w-24 text-right' }
 	]);
 	const me = $derived(session.user?.id);
@@ -86,6 +87,9 @@
 							</span>
 						</td>
 					{/if}
+					<td class="text-right">
+						<time class="text-small text-muted tabular-nums" datetime={new Date(t.created_at_ms).toISOString()} title={fmtWhen(t.created_at_ms)}>{fmtOpened(t.created_at_ms, now)}</time>
+					</td>
 					<td class="text-right">
 						<time class="idle text-small tabular-nums" data-tone={tone} datetime={new Date(t.updated_at_ms).toISOString()} title={fmtWhen(t.updated_at_ms)}>{fmtIdle(t.updated_at_ms, now)}</time>
 					</td>

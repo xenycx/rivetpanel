@@ -53,6 +53,15 @@ type TicketStore interface {
 	SetTicketWatcher(ctx context.Context, ticketID, userID string, on bool, nowMS int64) error
 	TicketWatchers(ctx context.Context, ticketID string) ([]domain.Person, error)
 	WatchedTicketIDs(ctx context.Context, userID string) (map[string]bool, error)
+
+	PutTicketAttachment(ctx context.Context, a domain.TicketAttachment) error
+	CountPendingTicketAttachments(ctx context.Context, uploaderID string) (int, error)
+	PrunePendingTicketAttachments(ctx context.Context, beforeMS int64) error
+	PendingTicketAttachments(ctx context.Context, uploaderID string, ids []string) ([]domain.TicketAttachment, error)
+	DeletePendingTicketAttachment(ctx context.Context, id, uploaderID string) error
+	GetTicketAttachment(ctx context.Context, ticketID, id string) (domain.TicketAttachment, error)
+	Settings(ctx context.Context) (map[string]domain.Setting, error)
+	PutSettings(ctx context.Context, set []domain.Setting, nowMS int64) error
 }
 
 // TicketService runs support tickets. Who sees what:
@@ -90,6 +99,8 @@ type TicketInput struct {
 	Priority string
 	BotID    string
 	Body     string
+	// Attachments are ids of the actor's pending uploads.
+	Attachments []string
 }
 
 // TicketDetail is a ticket as one reader sees it.
@@ -203,7 +214,11 @@ func (s *TicketService) Create(ctx context.Context, actor domain.User, in Ticket
 	if !slices.Contains(domain.TicketPriorities, in.Priority) {
 		return domain.Ticket{}, domain.Invalid("choose a priority: " + strings.Join(domain.TicketPriorities, ", "))
 	}
-	body, err := validBody(in.Body)
+	files, err := s.pendingFor(ctx, actor, in.Attachments)
+	if err != nil {
+		return domain.Ticket{}, err
+	}
+	body, err := validBody(bodyWithFiles(in.Body, files))
 	if err != nil {
 		return domain.Ticket{}, err
 	}
@@ -230,10 +245,17 @@ func (s *TicketService) Create(ctx context.Context, actor domain.User, in Ticket
 		return domain.Ticket{}, domain.Invalid(fmt.Sprintf("you already have %d open tickets; wait for an answer or close one first", n))
 	}
 	first := domain.TicketMessage{ID: uuid.NewString(), TicketID: t.ID, AuthorID: &actor.ID, AuthorLabel: label(actor),
-		Kind: "message", Body: body, CreatedAtMS: now}
+		Kind: "message", Body: body, CreatedAtMS: now, Attachments: files}
 	t, err = s.Store.CreateTicket(ctx, t, first)
 	if err != nil {
 		return t, err
+	}
+	// The automatic reply answers at once, before anyone picks the ticket
+	// up; it leaves the ticket open (waiting for staff).
+	if m, ok := s.autoReply(ctx, actor, t, now); ok {
+		if err := s.Store.UpdateTicket(ctx, t.ID, domain.TicketChange{}, []domain.TicketMessage{m}, now); err != nil {
+			return t, err
+		}
 	}
 	s.notifyStaff(ctx, actor, t, "New ticket "+domain.TicketKey(t.Number)+": "+t.Subject, clip(body, ticketExcerpt))
 	return t, nil
@@ -316,11 +338,29 @@ func (s *TicketService) Get(ctx context.Context, actor domain.User, id string) (
 // A requester's reply reopens a pending or resolved ticket; a staff reply
 // marks an open ticket pending (waiting for the requester).
 func (s *TicketService) Reply(ctx context.Context, actor domain.User, id, body string, internal bool, mentions ...string) (domain.TicketMessage, error) {
+	return s.ReplyWith(ctx, actor, id, ReplyInput{Body: body, Internal: internal, Mentions: mentions})
+}
+
+// ReplyInput is a new message with its files.
+type ReplyInput struct {
+	Body        string
+	Internal    bool
+	Mentions    []string
+	Attachments []string // ids of the actor's pending uploads
+}
+
+// ReplyWith is Reply with attachments.
+func (s *TicketService) ReplyWith(ctx context.Context, actor domain.User, id string, in ReplyInput) (domain.TicketMessage, error) {
+	internal, mentions := in.Internal, in.Mentions
 	t, d, err := s.access(ctx, actor, id)
 	if err != nil {
 		return domain.TicketMessage{}, err
 	}
-	body, err = validBody(body)
+	files, err := s.pendingFor(ctx, actor, in.Attachments)
+	if err != nil {
+		return domain.TicketMessage{}, err
+	}
+	body, err := validBody(bodyWithFiles(in.Body, files))
 	if err != nil {
 		return domain.TicketMessage{}, err
 	}
@@ -348,7 +388,7 @@ func (s *TicketService) Reply(ctx context.Context, actor domain.User, id, body s
 	}
 	now := s.now().UnixMilli()
 	m := domain.TicketMessage{ID: uuid.NewString(), TicketID: t.ID, AuthorID: &actor.ID, AuthorLabel: label(actor),
-		Kind: "message", Staff: asStaff, Internal: internal, Body: body, CreatedAtMS: now, Mentions: mentioned}
+		Kind: "message", Staff: asStaff, Internal: internal, Body: body, CreatedAtMS: now, Mentions: mentioned, Attachments: files}
 	var ch domain.TicketChange
 	switch {
 	case internal:

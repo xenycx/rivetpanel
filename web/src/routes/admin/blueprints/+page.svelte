@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { onLive } from '$lib/live.svelte';
 	import { onMount } from 'svelte';
 	import { api, ApiError } from '$lib/api/client';
 	import type { Blueprint, EggDraft } from '$lib/api/games';
@@ -83,6 +84,8 @@
 			error = msg(e);
 		}
 	}
+	// Live: re-fetch as soon as what this view shows changes anywhere.
+	onMount(() => onLive(['admin/blueprints', 'blueprints'], () => void load()));
 	onMount(() => {
 		load();
 		// From the Templates page: /admin/blueprints?import=egg opens the egg import.

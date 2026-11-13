@@ -96,9 +96,26 @@ func insertTicketMessage(ctx context.Context, tx execer, m domain.TicketMessage)
 		mentions = []string{}
 	}
 	mj, _ := json.Marshal(mentions)
-	_, err := tx.ExecContext(ctx, `INSERT INTO support_ticket_messages (id, ticket_id, author_id, author_label, kind, staff, internal, body, created_at_ms, mentions_json)
-		VALUES (?,?,?,?,?,?,?,?,?,?)`, m.ID, m.TicketID, m.AuthorID, m.AuthorLabel, m.Kind, boolInt(m.Staff), boolInt(m.Internal), m.Body, m.CreatedAtMS, string(mj))
-	return mapErr(err)
+	_, err := tx.ExecContext(ctx, `INSERT INTO support_ticket_messages (id, ticket_id, author_id, author_label, kind, staff, internal, body, created_at_ms, mentions_json, auto)
+		VALUES (?,?,?,?,?,?,?,?,?,?,?)`, m.ID, m.TicketID, m.AuthorID, m.AuthorLabel, m.Kind, boolInt(m.Staff), boolInt(m.Internal), m.Body, m.CreatedAtMS, string(mj), boolInt(m.Auto))
+	if err != nil {
+		return mapErr(err)
+	}
+	// Bind the author's pending uploads sent with the message.
+	for _, a := range m.Attachments {
+		if m.AuthorID == nil {
+			return domain.Invalid("attachments need an author")
+		}
+		res, err := tx.ExecContext(ctx, `UPDATE support_ticket_attachments SET ticket_id = ?, message_id = ?
+			WHERE id = ? AND uploader_id = ? AND message_id IS NULL`, m.TicketID, m.ID, a.ID, *m.AuthorID)
+		if err != nil {
+			return mapErr(err)
+		}
+		if n, _ := res.RowsAffected(); n != 1 {
+			return domain.Invalid("an attachment is no longer available; attach the file again")
+		}
+	}
+	return nil
 }
 
 // GetTicket returns one ticket.
@@ -125,7 +142,7 @@ func (db *DB) GetTicketByNumber(ctx context.Context, n int64) (domain.Ticket, er
 // the number of messages a reader sees (internal notes counted only when
 // withInternal).
 func (db *DB) ListTickets(ctx context.Context, f domain.TicketFilter, withInternal bool) ([]domain.Ticket, error) {
-	q := `SELECT ` + ticketCols + `, (SELECT count(*) FROM support_ticket_messages m WHERE m.ticket_id = t.id AND m.kind = 'message'`
+	q := `SELECT ` + ticketCols + `, (SELECT count(*) FROM support_ticket_messages m WHERE m.ticket_id = t.id AND m.kind = 'message' AND m.auto = 0`
 	if !withInternal {
 		q += ` AND m.internal = 0`
 	}
@@ -181,7 +198,7 @@ func (db *DB) CountActiveTickets(ctx context.Context, userID string) (int, error
 }
 
 var messageCols = `m.id, m.ticket_id, m.author_id, m.author_label, m.kind, m.staff, m.internal, m.body, m.created_at_ms,
-	m.edited_at_ms, m.deleted_at_ms, COALESCE(NULLIF(d.display_name, ''), d.email, ''), m.mentions_json, ` + personCols("p")
+	m.edited_at_ms, m.deleted_at_ms, COALESCE(NULLIF(d.display_name, ''), d.email, ''), m.mentions_json, m.auto, ` + personCols("p")
 
 const messageFrom = ` FROM support_ticket_messages m LEFT JOIN users p ON p.id = m.author_id LEFT JOIN users d ON d.id = m.deleted_by`
 
@@ -189,7 +206,7 @@ func scanMessage(row interface{ Scan(...any) error }) (domain.TicketMessage, err
 	var m domain.TicketMessage
 	var mj string
 	dst := append([]any{&m.ID, &m.TicketID, &m.AuthorID, &m.AuthorLabel, &m.Kind, &m.Staff, &m.Internal, &m.Body, &m.CreatedAtMS,
-		&m.EditedAtMS, &m.DeletedAtMS, &m.DeletedBy, &mj}, personDst(&m.Author)...)
+		&m.EditedAtMS, &m.DeletedAtMS, &m.DeletedBy, &mj, &m.Auto}, personDst(&m.Author)...)
 	if err := row.Scan(dst...); err != nil {
 		return m, mapErr(err)
 	}
@@ -242,7 +259,26 @@ func (db *DB) TicketMessages(ctx context.Context, ticketID string, withInternal 
 			out[i].Reactions = append(out[i].Reactions, r)
 		}
 	}
-	return out, rr.Err()
+	if err := rr.Err(); err != nil {
+		return nil, err
+	}
+	rr.Close()
+	ar, err := db.QueryContext(ctx, `SELECT id, COALESCE(uploader_id, ''), ticket_id, message_id, name, content_type, size, created_at_ms
+		FROM support_ticket_attachments WHERE ticket_id = ? ORDER BY created_at_ms, rowid`, ticketID)
+	if err != nil {
+		return nil, err
+	}
+	defer ar.Close()
+	for ar.Next() {
+		var a domain.TicketAttachment
+		if err := ar.Scan(&a.ID, &a.UploaderID, &a.TicketID, &a.MessageID, &a.Name, &a.ContentType, &a.Size, &a.CreatedAtMS); err != nil {
+			return nil, err
+		}
+		if i, ok := at[a.MessageID]; ok {
+			out[i].Attachments = append(out[i].Attachments, a)
+		}
+	}
+	return out, ar.Err()
 }
 
 // GetTicketMessage returns one thread row (no reactions).
@@ -294,7 +330,8 @@ func (db *DB) RemoveTicketMessage(ctx context.Context, msgID, byID string, nowMS
 	if n, _ := res.RowsAffected(); n == 0 {
 		return domain.ErrNotFound
 	}
-	for _, q := range []string{`DELETE FROM support_message_revisions WHERE message_id = ?`, `DELETE FROM support_message_reactions WHERE message_id = ?`} {
+	for _, q := range []string{`DELETE FROM support_message_revisions WHERE message_id = ?`, `DELETE FROM support_message_reactions WHERE message_id = ?`,
+		`DELETE FROM support_ticket_attachments WHERE message_id = ?`} {
 		if _, err := tx.ExecContext(ctx, q, msgID); err != nil {
 			return err
 		}
@@ -570,4 +607,74 @@ func (db *DB) UpdateTicket(ctx context.Context, id string, ch domain.TicketChang
 		}
 	}
 	return tx.Commit()
+}
+
+// ---- Attachments ----
+
+// PutTicketAttachment stores a pending upload.
+func (db *DB) PutTicketAttachment(ctx context.Context, a domain.TicketAttachment) error {
+	_, err := db.ExecContext(ctx, `INSERT INTO support_ticket_attachments (id, uploader_id, name, content_type, size, data, created_at_ms)
+		VALUES (?,?,?,?,?,?,?)`, a.ID, a.UploaderID, a.Name, a.ContentType, a.Size, a.Data, a.CreatedAtMS)
+	return mapErr(err)
+}
+
+// CountPendingTicketAttachments counts an account's unsent uploads.
+func (db *DB) CountPendingTicketAttachments(ctx context.Context, uploaderID string) (int, error) {
+	var n int
+	err := db.QueryRowContext(ctx, `SELECT count(*) FROM support_ticket_attachments WHERE uploader_id = ? AND message_id IS NULL`, uploaderID).Scan(&n)
+	return n, err
+}
+
+// PrunePendingTicketAttachments deletes unsent uploads created before beforeMS.
+func (db *DB) PrunePendingTicketAttachments(ctx context.Context, beforeMS int64) error {
+	_, err := db.ExecContext(ctx, `DELETE FROM support_ticket_attachments WHERE message_id IS NULL AND created_at_ms < ?`, beforeMS)
+	return err
+}
+
+// PendingTicketAttachments returns the account's unsent uploads among ids
+// (no bytes).
+func (db *DB) PendingTicketAttachments(ctx context.Context, uploaderID string, ids []string) ([]domain.TicketAttachment, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	args := []any{uploaderID}
+	for _, id := range ids {
+		args = append(args, id)
+	}
+	rows, err := db.QueryContext(ctx, `SELECT id, name, content_type, size, created_at_ms FROM support_ticket_attachments
+		WHERE uploader_id = ? AND message_id IS NULL AND id IN (`+strings.TrimSuffix(strings.Repeat("?,", len(ids)), ",")+`)`, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []domain.TicketAttachment{}
+	for rows.Next() {
+		a := domain.TicketAttachment{UploaderID: uploaderID}
+		if err := rows.Scan(&a.ID, &a.Name, &a.ContentType, &a.Size, &a.CreatedAtMS); err != nil {
+			return nil, err
+		}
+		out = append(out, a)
+	}
+	return out, rows.Err()
+}
+
+// DeletePendingTicketAttachment deletes one of the account's unsent uploads.
+func (db *DB) DeletePendingTicketAttachment(ctx context.Context, id, uploaderID string) error {
+	res, err := db.ExecContext(ctx, `DELETE FROM support_ticket_attachments WHERE id = ? AND uploader_id = ? AND message_id IS NULL`, id, uploaderID)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return domain.ErrNotFound
+	}
+	return nil
+}
+
+// GetTicketAttachment returns a sent attachment of a ticket with its bytes.
+func (db *DB) GetTicketAttachment(ctx context.Context, ticketID, id string) (domain.TicketAttachment, error) {
+	var a domain.TicketAttachment
+	err := db.QueryRowContext(ctx, `SELECT id, COALESCE(uploader_id, ''), ticket_id, message_id, name, content_type, size, data, created_at_ms
+		FROM support_ticket_attachments WHERE id = ? AND ticket_id = ?`, id, ticketID).
+		Scan(&a.ID, &a.UploaderID, &a.TicketID, &a.MessageID, &a.Name, &a.ContentType, &a.Size, &a.Data, &a.CreatedAtMS)
+	return a, mapErr(err)
 }

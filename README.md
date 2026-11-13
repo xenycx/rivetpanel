@@ -60,6 +60,8 @@ on the smallest VPS you have.
 - Any **Node.js, Python, Rust, Go, Java, Ruby or PHP** project from GitHub.
   *Analyze repository* detects the language, commands, variables and databases
   for you.
+- **Live pages:** tickets, app status, activity, analytics and the
+  notification bell update without a reload.
 - **Live console** with input, reconnect and resume, plus live CPU, memory,
   disk and network gauges.
 - Private **PostgreSQL, Redis, MongoDB or MariaDB** per bot on an internal
@@ -124,9 +126,11 @@ on the smallest VPS you have.
   with two-step codes and scoped **API clients** for automation. Switch
   between several signed-in accounts, and let administrators **sign in as a
   user** in one step to see exactly what they see.
-- Support tickets with `RT-000042` keys, split, table and board layouts,
-  Markdown conversations (edit, remove, reactions, @mentions in internal
-  notes), labels, saved replies and watchers; a Markdown **help center** at
+- Support tickets with `RT-000042` keys, resizable split, table and board
+  layouts, Markdown conversations with a formatting bar and file attachments
+  (drag and drop, pasted screenshots, a picture viewer), edit, remove,
+  reactions, @mentions in internal notes, labels, saved replies, watchers and
+  an optional automatic reply; a Markdown **help center** at
   `/help` and a public **status page** at `/status`.
 
 ### 🧩 Extensions and remote nodes <sub>preview</sub>

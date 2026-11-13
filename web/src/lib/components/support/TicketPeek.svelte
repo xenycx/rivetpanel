@@ -2,6 +2,8 @@
 	import TicketThread from '$lib/components/TicketThread.svelte';
 	import type { TicketView } from '$lib/api/support';
 	import { shortcutAllowed } from '$lib/api/support';
+	import { supportView, setSupportSize } from '$lib/ui/supportLayout.svelte';
+	import Resizer from './Resizer.svelte';
 
 	// The slide-over panel of the table and board layouts: the ticket opens
 	// beside the list without hiding it (not modal). It slides in from the
@@ -10,6 +12,11 @@
 	let { id, initial = null, onview, onclose }: { id: string; initial?: TicketView | null; onview?: (v: TicketView) => void; onclose: () => void } = $props();
 
 	let panel = $state<HTMLElement>();
+	// The panel's width: dragged from its left edge, kept per browser.
+	let vw = $state(typeof innerWidth === 'number' ? innerWidth : 1200);
+	const peekMin = 360;
+	const peekMax = $derived(Math.max(peekMin, Math.round(vw * 0.94)));
+	const peekW = $derived(Math.min(peekMax, Math.max(peekMin, supportView.sizes.peek ?? Math.min(736, Math.round(vw * 0.94)))));
 	let closing = false;
 	function close() {
 		if (closing) return;
@@ -41,9 +48,10 @@
 	}
 </script>
 
-<svelte:window onkeydown={key} />
+<svelte:window onkeydown={key} bind:innerWidth={vw} />
 
-<aside bind:this={panel} class="peek" aria-label="Ticket">
+<aside bind:this={panel} class="peek" aria-label="Ticket" style:width="{peekW}px">
+	<Resizer width={peekW} min={peekMin} max={peekMax} grows="right" label="Resize the ticket panel" onresize={(px) => setSupportSize('peek', px)} class="peek-resizer" />
 	{#key id}
 		<div class="peek-body h-full">
 			<TicketThread {id} mode="peek" {initial} {onview} onclose={close} />
@@ -58,7 +66,7 @@
 		right: 0;
 		bottom: 0;
 		z-index: 25;
-		width: min(46rem, 94vw);
+		max-width: 94vw;
 		border-left: 1px solid var(--color-rule);
 		background: var(--color-panel);
 		box-shadow: -18px 0 40px -18px rgb(20 18 16 / 0.28);
@@ -69,6 +77,9 @@
 			transform: translateX(3rem);
 			opacity: 0;
 		}
+	}
+	.peek :global(.peek-resizer) {
+		left: -0.5rem;
 	}
 	/* Another ticket in the open panel: the content fades through. */
 	.peek-body {

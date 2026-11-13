@@ -185,7 +185,7 @@
 		<span class="ticket-key">{ticketKey(t)}</span>
 		<span class="flex-1"></span>
 		{#if drafts.get(t.id)}<span class="text-action" title="Unsent draft"><Icon name="pencil" size={11} /></span>{/if}
-		<time class="idle text-label tabular-nums" data-tone={tone} title={fmtWhen(t.updated_at_ms)}>{fmtIdle(t.updated_at_ms, now)}</time>
+		<time class="idle text-label tabular-nums" data-tone={tone} title="Opened {fmtWhen(t.created_at_ms)} · last activity {fmtWhen(t.updated_at_ms)}">{fmtIdle(t.updated_at_ms, now)}</time>
 	</p>
 	<p class="mt-1 line-clamp-2 text-small font-medium break-words">{t.subject}</p>
 	{#if labels.length}<p class="mt-1.5 flex flex-wrap gap-1">{#each labels as l (l.id)}<LabelChip label={l} />{/each}</p>{/if}

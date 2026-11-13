@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { onLive } from '$lib/live.svelte';
 	import { onMount, untrack } from 'svelte';
 	import { page } from '$app/state';
 	import { api, ApiError, fmtBytes, fmtCpu } from '$lib/api/client';
@@ -92,6 +93,8 @@
 		void tab;
 		if (hasPackagesTab) untrack(checkPackages);
 	});
+	// Live: re-fetch as soon as what this view shows changes anywhere.
+	onMount(() => onLive(['bots'], () => void refresh()));
 	onMount(() => {
 		const onFiles = (e: Event) => {
 			if ((e as CustomEvent<{ botId: string }>).detail?.botId === id && hasPackagesTab) checkPackages();

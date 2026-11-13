@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { onLive } from '$lib/live.svelte';
 	import { onMount } from 'svelte';
 	import { api, ApiError, fmtBytes } from '$lib/api/client';
 	import type { Site, SiteBaseDomain, SitesInfo } from '$lib/api/types';
@@ -128,6 +129,8 @@
 		{ type: b.record_type, why: 'The domain itself (optional)', name: b.domain, value: b.record_target }
 	];
 	const copy = (v: string) => navigator.clipboard?.writeText(v).then(() => toast('Copied'));
+	// Live: re-fetch as soon as what this view shows changes anywhere.
+	onMount(() => onLive(['admin/sites', 'sites'], () => void load()));
 	onMount(load);
 	const shown = $derived(
 		(sites ?? []).filter(

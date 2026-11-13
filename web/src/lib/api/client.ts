@@ -12,6 +12,11 @@ let csrf = '';
 export function setCsrf(token: string) {
 	csrf = token;
 }
+/** This tab's id: changes it makes come back as live hints it ignores. */
+export const tabId = typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : Math.random().toString(36).slice(2);
+
+/** The CSRF token, for requests made outside api() (uploads with progress). */
+export const getCsrf = () => csrf;
 
 /** Called when the server says the session is gone (401 on an authenticated call). */
 let onUnauthorized: () => void = () => {};
@@ -30,7 +35,10 @@ async function toError(res: Response): Promise<ApiError> {
 
 export async function api<T = unknown>(method: string, path: string, body?: unknown, signal?: AbortSignal): Promise<T> {
 	const headers: Record<string, string> = { accept: 'application/json' };
-	if (method !== 'GET') headers['x-csrf-token'] = csrf;
+	if (method !== 'GET') {
+		headers['x-csrf-token'] = csrf;
+		headers['x-tab-id'] = tabId;
+	}
 	let payload: BodyInit | undefined;
 	if (body !== undefined) {
 		headers['content-type'] = 'application/json';
@@ -47,7 +55,7 @@ export async function api<T = unknown>(method: string, path: string, body?: unkn
 export async function upload(path: string, data: Blob | ArrayBuffer | string, contentType = 'application/octet-stream'): Promise<Response> {
 	const res = await fetch('/api/v1' + path, {
 		method: path.includes('/extract') || path.endsWith('/upload') ? 'POST' : 'PUT',
-		headers: { 'x-csrf-token': csrf, 'content-type': contentType },
+		headers: { 'x-csrf-token': csrf, 'x-tab-id': tabId, 'content-type': contentType },
 		body: data
 	});
 	if (res.status === 401) onUnauthorized();

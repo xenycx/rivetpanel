@@ -1,7 +1,9 @@
 package api
 
 import (
+	"bytes"
 	"fmt"
+	"net/url"
 	"slices"
 	"strconv"
 	"strings"
@@ -99,6 +101,28 @@ type ticketMessageDTO struct {
 	DeletedBy  string        `json:"deleted_by,omitempty"` // staff view only
 	Mentions   []string      `json:"mentions,omitempty"`   // staff view only
 	Reactions  []reactionDTO `json:"reactions"`
+	// Auto marks the automatic reply sent on the support team's behalf.
+	Auto        bool            `json:"auto,omitempty"`
+	Attachments []attachmentDTO `json:"attachments"`
+}
+
+// attachmentDTO is a file sent with a message. URL downloads it (pictures
+// are served inline).
+type attachmentDTO struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	ContentType string `json:"content_type"`
+	Size        int64  `json:"size"`
+	Image       bool   `json:"image"`
+	URL         string `json:"url,omitempty"`
+}
+
+func toAttachment(a domain.TicketAttachment) attachmentDTO {
+	d := attachmentDTO{ID: a.ID, Name: a.Name, ContentType: a.ContentType, Size: a.Size, Image: domain.TicketAttachmentImage(a.ContentType)}
+	if a.TicketID != "" {
+		d.URL = "/api/v1/tickets/" + a.TicketID + "/attachments/" + a.ID
+	}
+	return d
 }
 
 type reactionDTO struct {
@@ -116,12 +140,16 @@ func toTicketMessage(m domain.TicketMessage, me string, staffView bool) ticketMe
 	}
 	d := ticketMessageDTO{ID: m.ID, Author: author, Mine: m.AuthorID != nil && *m.AuthorID == me, Kind: m.Kind,
 		Staff: m.Staff, Internal: m.Internal, Body: m.Body, CreatedAtMS: m.CreatedAtMS, EditedAtMS: m.EditedAtMS,
-		Deleted: m.DeletedAtMS != nil, Reactions: []reactionDTO{}}
+		Deleted: m.DeletedAtMS != nil, Reactions: []reactionDTO{}, Auto: m.Auto, Attachments: []attachmentDTO{}}
 	if !hide {
 		d.Person = toPerson(m.Author)
 	}
 	if d.Deleted {
 		d.Body = ""
+	} else {
+		for _, a := range m.Attachments {
+			d.Attachments = append(d.Attachments, toAttachment(a))
+		}
 	}
 	if staffView {
 		d.DeletedBy = m.DeletedBy
@@ -174,7 +202,13 @@ func (s *panel) ticketRoutes(authed fiber.Router) {
 	authed.Post("/tickets/replies", s.requirePerm(domain.PermTicketsManage), s.putSavedReply)
 	authed.Patch("/tickets/replies/:rid", s.requirePerm(domain.PermTicketsManage), s.putSavedReply)
 	authed.Delete("/tickets/replies/:rid", s.requirePerm(domain.PermTicketsManage), s.deleteSavedReply)
+	authed.Get("/tickets/settings", anyTicket, s.supportSettings)
+	authed.Put("/tickets/settings", s.requirePerm(domain.PermTicketsManage), s.putSupportSettings)
+	authed.Post("/tickets/attachments", anyTicket,
+		perUserLimit("ticket-upload", 60, 10*time.Minute, "too many uploads; try again in a few minutes"), s.uploadTicketAttachment)
+	authed.Delete("/tickets/attachments/:aid", anyTicket, s.discardTicketAttachment)
 	authed.Get("/tickets/:tid", anyTicket, s.getTicket)
+	authed.Get("/tickets/:tid/attachments/:aid", anyTicket, s.ticketAttachment)
 	authed.Post("/tickets/:tid/messages", anyTicket,
 		perUserLimit("ticket-reply", 60, 10*time.Minute, "too many replies; try again in a few minutes"), s.replyTicket)
 	authed.Patch("/tickets/:tid", anyTicket, s.updateTicket)
@@ -213,17 +247,18 @@ func (s *panel) listTickets(c fiber.Ctx) error {
 
 func (s *panel) createTicket(c fiber.Ctx) error {
 	var in struct {
-		Subject  string `json:"subject"`
-		Category string `json:"category"`
-		Priority string `json:"priority"`
-		BotID    string `json:"bot_id"`
-		Body     string `json:"body"`
+		Subject  string   `json:"subject"`
+		Category string   `json:"category"`
+		Priority string   `json:"priority"`
+		BotID    string   `json:"bot_id"`
+		Body     string   `json:"body"`
+		Files    []string `json:"attachments"`
 	}
 	if err := decode(c, &in); err != nil {
 		return err
 	}
 	t, err := s.tickets.Create(c.Context(), currentUser(c), service.TicketInput{Subject: in.Subject, Category: in.Category,
-		Priority: in.Priority, BotID: in.BotID, Body: in.Body})
+		Priority: in.Priority, BotID: in.BotID, Body: in.Body, Attachments: in.Files})
 	if err != nil {
 		return err
 	}
@@ -263,13 +298,14 @@ func (s *panel) replyTicket(c fiber.Ctx) error {
 		Body     string   `json:"body"`
 		Internal bool     `json:"internal"`
 		Mentions []string `json:"mentions"`
+		Files    []string `json:"attachments"`
 	}
 	if err := decode(c, &in); err != nil {
 		return err
 	}
 	id := strings.Clone(c.Params("tid"))
 	u := currentUser(c)
-	if _, err := s.tickets.Reply(c.Context(), u, id, in.Body, in.Internal, in.Mentions...); err != nil {
+	if _, err := s.tickets.ReplyWith(c.Context(), u, id, service.ReplyInput{Body: in.Body, Internal: in.Internal, Mentions: in.Mentions, Attachments: in.Files}); err != nil {
 		return err
 	}
 	d, err := s.tickets.Get(c.Context(), u, id)
@@ -532,4 +568,106 @@ func (s *panel) deleteSavedReply(c fiber.Ctx) error {
 		return err
 	}
 	return c.SendStatus(fiber.StatusNoContent)
+}
+
+// ---- Attachments ----
+
+// uploadTicketAttachment stores a pending file: the raw body, its name in
+// ?name=. It is sent with the next message that lists its id.
+func (s *panel) uploadTicketAttachment(c fiber.Ctx) error {
+	data := c.Body()
+	if len(data) > domain.TicketAttachmentMax {
+		return domain.Invalid(fmt.Sprintf("the file is too large (at most %d MB)", domain.TicketAttachmentMax>>20))
+	}
+	a, err := s.tickets.Upload(c.Context(), currentUser(c), c.Query("name"), bytes.Clone(data))
+	if err != nil {
+		return err
+	}
+	return c.Status(fiber.StatusCreated).JSON(toAttachment(a))
+}
+
+func (s *panel) discardTicketAttachment(c fiber.Ctx) error {
+	if err := s.tickets.DiscardUpload(c.Context(), currentUser(c), strings.Clone(c.Params("aid"))); err != nil {
+		return err
+	}
+	return c.SendStatus(fiber.StatusNoContent)
+}
+
+// ticketAttachment downloads a sent file. Pictures open inline; every other
+// type downloads. Nothing served here may run: no sniffing, a sandbox and
+// no sources.
+func (s *panel) ticketAttachment(c fiber.Ctx) error {
+	a, err := s.tickets.Attachment(c.Context(), currentUser(c), strings.Clone(c.Params("tid")), strings.Clone(c.Params("aid")))
+	if err != nil {
+		return err
+	}
+	disp := "attachment"
+	ct := "application/octet-stream"
+	if domain.TicketAttachmentImage(a.ContentType) {
+		disp, ct = "inline", a.ContentType
+	} else if c.Query("inline") == "1" && (a.ContentType == "text/plain" || strings.HasPrefix(a.ContentType, "video/")) {
+		disp, ct = "inline", a.ContentType
+		if ct == "text/plain" {
+			ct = "text/plain; charset=utf-8"
+		}
+	}
+	c.Set(fiber.HeaderContentType, ct)
+	c.Set(fiber.HeaderContentDisposition, disp+"; filename=\""+asciiName(a.Name)+"\"; filename*=UTF-8''"+url.PathEscape(a.Name))
+	c.Set("X-Content-Type-Options", "nosniff")
+	c.Set("Content-Security-Policy", "default-src 'none'; img-src 'self'; media-src 'self'; style-src 'unsafe-inline'; sandbox")
+	c.Set(fiber.HeaderCacheControl, "private, max-age=31536000, immutable")
+	return c.Send(a.Data)
+}
+
+// asciiName is a file name for the plain filename parameter.
+func asciiName(name string) string {
+	return strings.Map(func(r rune) rune {
+		if r < 0x20 || r > 0x7e || r == '"' || r == '\\' {
+			return '_'
+		}
+		return r
+	}, name)
+}
+
+// ---- Desk settings ----
+
+type supportSettingsDTO struct {
+	AutoReply     bool   `json:"auto_reply"`
+	AutoReplyBody string `json:"auto_reply_body,omitempty"` // staff who manage tickets only
+	ResponseHours int    `json:"response_hours"`
+	ResponseTime  string `json:"response_time"` // "within 2 days"
+	// Upload limits for the interface.
+	MaxFileBytes int `json:"max_file_bytes"`
+	MaxFiles     int `json:"max_files"`
+}
+
+func (s *panel) supportSettingsOut(c fiber.Ctx, set domain.SupportSettings) error {
+	d := supportSettingsDTO{AutoReply: set.AutoReply, ResponseHours: set.ResponseHours, ResponseTime: service.ResponseTime(set.ResponseHours),
+		MaxFileBytes: domain.TicketAttachmentMax, MaxFiles: domain.TicketAttachmentsPerMsg}
+	if currentUser(c).Can(domain.PermTicketsManage) {
+		d.AutoReplyBody = set.AutoReplyBody
+	}
+	return c.JSON(d)
+}
+
+func (s *panel) supportSettings(c fiber.Ctx) error {
+	return s.supportSettingsOut(c, s.tickets.SupportSettings(c.Context()))
+}
+
+func (s *panel) putSupportSettings(c fiber.Ctx) error {
+	var in struct {
+		AutoReply     bool   `json:"auto_reply"`
+		AutoReplyBody string `json:"auto_reply_body"`
+		ResponseHours int    `json:"response_hours"`
+	}
+	if err := decode(c, &in); err != nil {
+		return err
+	}
+	set, err := s.tickets.PutSupportSettings(c.Context(), currentUser(c), domain.SupportSettings{AutoReply: in.AutoReply,
+		AutoReplyBody: in.AutoReplyBody, ResponseHours: in.ResponseHours})
+	if err != nil {
+		return err
+	}
+	c.Locals(keyAuditTarget, "support desk")
+	return s.supportSettingsOut(c, set)
 }

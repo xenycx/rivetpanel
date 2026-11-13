@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { onLive } from '$lib/live.svelte';
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
 	import { api } from '$lib/api/client';
@@ -23,6 +24,8 @@
 			ops = [];
 		}
 	}
+	// Live: re-fetch as soon as what this view shows changes anywhere.
+	onMount(() => onLive(['*'], () => void load()));
 	onMount(() => {
 		load();
 		const t = setInterval(() => {

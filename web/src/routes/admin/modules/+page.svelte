@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { onLive } from '$lib/live.svelte';
 	import { onMount } from 'svelte';
 	import { api, ApiError } from '$lib/api/client';
 	import type { EnvView } from '$lib/api/admin';
@@ -42,6 +43,8 @@
 			error = e instanceof ApiError ? e.message : 'The module catalog could not be loaded.';
 		}
 	}
+	// Live: re-fetch as soon as what this view shows changes anywhere.
+	onMount(() => onLive(['admin/modules', 'modules'], () => void load()));
 	onMount(load);
 
 	// Only modules that differ from the built-in state are written.

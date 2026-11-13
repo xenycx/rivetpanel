@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { onLive } from '$lib/live.svelte';
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { api, ApiError } from '$lib/api/client';
@@ -29,6 +30,8 @@
 			loaded = true;
 		}
 	}
+	// Live: re-fetch as soon as what this view shows changes anywhere.
+	onMount(() => onLive(['notifications'], () => void load()));
 	onMount(() => load());
 
 	async function open(n: Notification) {

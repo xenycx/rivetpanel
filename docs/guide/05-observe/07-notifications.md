@@ -5,7 +5,7 @@ icon: bell
 glance:
   - 200 notifications kept per account
   - Kept for 90 days
-  - Bell refreshes every 30 seconds
+  - The bell and open pages update live
 related: [observe/health, teams/support, operate/email]
 ---
 
@@ -84,12 +84,36 @@ Encryption does not hide it from someone with root on the host.
 | One notice to every holder of a permission | Reaches at most 1,000 accounts | [enforced: panel] |
 | Email | Best effort within the mail limits: 2 sends at a time, 20 per recipient per hour, 300 per hour | [enforced: panel] |
 
-- The bell **polls**. It asks for the unread count every 30 seconds while the
-  tab is visible, and after every page change. A hidden tab does not poll, and
-  there is no account-wide event stream.
+- The bell updates **live**: a new notification shows within a second (see
+  [Live updates](#live-updates)). It also checks every 30 seconds while the
+  tab is visible and after every page change, in case the live stream is
+  down.
 - Email that cannot start is dropped and logged, never queued.
 - Notifications are plain text with an optional link to a panel page. The
   interface never renders them as HTML.
+
+## Live updates
+
+Open pages follow changes without a reload: tickets and replies, apps
+starting, stopping or crashing, sites, stacks, workspaces, the activity log,
+analytics, administration lists and the bell.
+
+- Each tab keeps one stream open (`GET /api/v1/live`, Server-Sent Events).
+  Every successful change made through the panel or the API sends a short
+  hint naming what changed (`tickets`, `bots`, `admin/users`…); app status
+  changes seen by the runner send `bots`, and new notifications send
+  `notifications` to their recipients only.
+- A hint carries no data. The page re-fetches through the normal API, so it
+  shows only what your permissions already allow. [enforced: panel]
+- A tab ignores hints about its own changes, and bunches a burst of hints into
+  one refresh. A hidden tab refreshes when it becomes visible. After the
+  stream drops and reconnects, open views refresh once.
+- Pages that already refreshed on a timer keep it as a fallback.
+- At most 20 streams per account; the session is re-checked every minute, so
+  signing out or revoking a session ends its streams. [enforced: panel]
+
+Changes made outside the panel's API (for example editing the database by
+hand) are not announced; they show at the next timed refresh or reload.
 
 ## Who can see what
 

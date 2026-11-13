@@ -21,6 +21,10 @@
 	import Picker from '$lib/components/support/Picker.svelte';
 	import LabelManager from '$lib/components/support/LabelManager.svelte';
 	import SavedReplyManager from '$lib/components/support/SavedReplyManager.svelte';
+	import DeskSettings from '$lib/components/support/DeskSettings.svelte';
+	import MarkdownEditor from '$lib/components/support/MarkdownEditor.svelte';
+	import Resizer from '$lib/components/support/Resizer.svelte';
+	import { Uploads } from '$lib/support/uploads.svelte';
 	import type { KBArticle } from '$lib/api/kb';
 	import {
 		type Ticket,
@@ -36,8 +40,9 @@
 		sortTickets,
 		shortcutAllowed
 	} from '$lib/api/support';
-	import { support, loadLabels } from '$lib/supportData.svelte';
-	import { supportLayouts, supportView, setSupportLayout, type SupportLayout } from '$lib/ui/supportLayout.svelte';
+	import { support, loadLabels, loadDesk } from '$lib/supportData.svelte';
+	import { onLive } from '$lib/live.svelte';
+	import { supportLayouts, supportView, setSupportLayout, setSupportSize, type SupportLayout } from '$lib/ui/supportLayout.svelte';
 	import { glide, crossfade, guard } from '$lib/ui/glide';
 	import { fly } from 'svelte/transition';
 	import { cubicOut } from 'svelte/easing';
@@ -83,6 +88,12 @@
 	let deskWidth = $state(0);
 	const narrow = $derived(deskWidth > 0 && deskWidth < 880);
 	const layout = $derived(narrow ? 'list' : supportView.layout);
+	// The split's list column: dragged to any width between a readable list
+	// and a readable ticket; the default follows the window.
+	const listMin = 256;
+	const listMax = $derived(Math.max(listMin, Math.min(760, deskWidth - 440)));
+	const listDefault = $derived(Math.round(Math.min(512, Math.max(368, deskWidth * 0.3))));
+	const listW = $derived(Math.min(listMax, Math.max(listMin, supportView.sizes.list ?? listDefault)));
 
 	// ---- Filters -------------------------------------------------------------------
 	type Tab = 'active' | 'open' | 'pending' | 'resolved' | 'closed' | 'any';
@@ -336,6 +347,8 @@
 		else searchEl?.blur();
 	}
 
+	// Live: tickets opened, answered or moved by anyone appear at once.
+	onMount(() => onLive(['tickets'], () => load()));
 	onMount(() => {
 		const clock = setInterval(() => (now = Date.now()), 30_000);
 		const back = () => document.visibilityState === 'visible' && ((now = Date.now()), load());
@@ -349,9 +362,11 @@
 	// ---- Staff tools ------------------------------------------------------------------
 	let labelsOpen = $state(false);
 	let repliesOpen = $state(false);
+	let deskOpen = $state(false);
 	const toolItems = $derived<MenuItem[]>([
 		{ label: 'Manage labels…', icon: 'sliders', onselect: () => (labelsOpen = true) },
-		{ label: 'Saved replies…', icon: 'file', onselect: () => (repliesOpen = true) }
+		{ label: 'Saved replies…', icon: 'file', onselect: () => (repliesOpen = true) },
+		{ label: 'Automatic reply and response time…', icon: 'bolt', onselect: () => (deskOpen = true) }
 	]);
 
 	// ---- New ticket ------------------------------------------------------------------
@@ -359,11 +374,14 @@
 	let bots = $state<Bot[]>([]);
 	let form = $state({ subject: '', category: 'general', priority: 'normal', bot_id: '', body: '' });
 	let sending = $state(false);
+	const newFiles = new Uploads();
+	const canSubmit = $derived(!!form.subject.trim() && (!!form.body.trim() || newFiles.ids.length > 0) && !newFiles.busy);
 	$effect(() => {
 		if (canOpen && !queue && untrack(() => !composing) && page.url.searchParams.get('new') === '1') untrack(() => startNew());
 	});
 	async function startNew() {
 		composing = true;
+		loadDesk();
 		try {
 			bots = (await api<{ bots: Bot[] }>('GET', '/bots')).bots;
 		} catch {
@@ -375,7 +393,8 @@
 		sending = true;
 		error = '';
 		try {
-			const t = await api<Ticket>('POST', '/tickets', form);
+			const t = await api<Ticket>('POST', '/tickets', { ...form, attachments: newFiles.ids });
+			newFiles.sent();
 			goto(`/support/${ticketKey(t)}`);
 		} catch (err) {
 			error = msg(err);
@@ -461,11 +480,24 @@
 				</select>
 			</label>
 		</div>
-		<label class="block"><span class="label">Message</span><textarea class="field min-h-36" required maxlength="10000" bind:value={form.body} placeholder="What happened, what you expected, and what you already tried. Markdown works."></textarea></label>
+		<div>
+			<span class="label" aria-hidden="true">Message</span>
+			<MarkdownEditor
+				bind:value={form.body}
+				id="new-ticket-body"
+				label="Message"
+				uploads={newFiles}
+				placeholder={'What happened, what you expected, and what you already tried.\nDrop screenshots or logs here, or paste a screenshot.'}
+				onkeydown={(e) => e.key === 'Enter' && (e.ctrlKey || e.metaKey) && (e.preventDefault(), canSubmit && !sending && (e.currentTarget as HTMLElement).closest('form')?.requestSubmit())}
+			/>
+		</div>
 		<p class="text-small text-muted">Do not paste passwords, tokens or other secrets. Staff can see the linked bot's name, not its files.</p>
-		<div class="flex gap-2">
-			<button class="btn btn-primary" disabled={sending}>{sending ? 'Sending…' : 'Open ticket'}</button>
-			<button type="button" class="btn btn-quiet" onclick={() => (composing = false)}>Cancel</button>
+		<div class="flex flex-wrap items-center gap-2">
+			<button class="btn btn-primary" disabled={sending || !canSubmit} title={newFiles.busy ? 'Waiting for files to finish uploading' : undefined}>{sending ? 'Sending…' : newFiles.busy ? 'Uploading…' : 'Open ticket'}</button>
+			<button type="button" class="btn btn-quiet" onclick={() => ((composing = false), newFiles.discard())}>Cancel</button>
+			{#if support.desk.response_hours > 0}
+				<p class="ml-auto flex items-center gap-1.5 text-small text-muted"><Icon name="clock" size={13} class="text-action" />Usually answered {support.desk.response_time}</p>
+			{/if}
 		</div>
 	</form>
 {/if}
@@ -519,7 +551,7 @@
 			</EmptyState>
 		</div>
 	{:else if layout === 'split'}
-		<div bind:this={deskBody} style:--desk-top="{deskTop}px" class="desk-body mt-3 grid grid-cols-[minmax(18rem,clamp(23rem,24vw,32rem))_minmax(0,1fr)] gap-4">
+		<div bind:this={deskBody} style:--desk-top="{deskTop}px" style:grid-template-columns="{listW}px minmax(0, 1fr)" style:--list-w="{listW}px" class="desk-body mt-3 grid gap-4">
 			<div class="list-col card flex min-h-0 flex-col overflow-hidden">
 				<ul bind:this={listEl} class="list-scroll min-h-0 flex-1 divide-y divide-rule-soft overflow-y-auto" aria-label="Tickets">
 					{#each shown as t (t.id)}
@@ -531,6 +563,7 @@
 					<span><kbd>J</kbd> <kbd>K</kbd> move</span><span><kbd>R</kbd> reply</span>{#if canManage}<span><kbd>N</kbd> note</span><span><kbd>1</kbd>–<kbd>4</kbd> status</span><span><kbd>A</kbd> take</span>{/if}<span><kbd>E</kbd> subject</span><span><kbd>/</kbd> search</span>
 				</p>
 			</div>
+			<Resizer width={listW} min={listMin} max={listMax} label="Resize the ticket list" onresize={(px) => setSupportSize('list', px)} class="split-resizer" />
 			<section class="desk-pane card min-h-0 overflow-hidden" aria-label="Selected ticket">
 				{#if selected}
 					{#key selected}
@@ -562,6 +595,7 @@
 {#if queue && canManage}
 	<LabelManager bind:open={labelsOpen} />
 	<SavedReplyManager bind:open={repliesOpen} />
+	<DeskSettings bind:open={deskOpen} />
 {/if}
 
 <style>
@@ -614,6 +648,9 @@
 		position: sticky;
 		top: calc(3.5rem + 1px + 1rem);
 		height: max(30rem, min(calc(100dvh - var(--desk-top, 0px) - 1.5rem), calc(100dvh - 3.5rem - 1px - 2rem)));
+	}
+	.desk-body :global(.split-resizer) {
+		left: calc(var(--list-w, 0px));
 	}
 	.list-scroll {
 		scrollbar-width: thin;

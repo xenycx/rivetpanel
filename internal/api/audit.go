@@ -164,6 +164,7 @@ var auditRoutes = map[string]auditRoute{
 	"POST /api/v1/tickets/replies":                            {"support.saved_reply_create", nil},
 	"PATCH /api/v1/tickets/replies/:rid":                      {"support.saved_reply_update", param("rid")},
 	"DELETE /api/v1/tickets/replies/:rid":                     {"support.saved_reply_delete", param("rid")},
+	"PUT /api/v1/tickets/settings":                            {"support.settings", nil},
 	"POST /api/v1/kb/manage/articles":                         {"kb.article_create", nil},
 	"PATCH /api/v1/kb/manage/articles/:aid":                   {"kb.article_update", param("aid")},
 	"DELETE /api/v1/kb/manage/articles/:aid":                  {"kb.article_delete", param("aid")},

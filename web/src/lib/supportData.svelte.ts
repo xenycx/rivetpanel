@@ -1,13 +1,30 @@
 import { api } from '$lib/api/client';
-import type { Label, SavedReply, StaffMember } from '$lib/api/support';
+import type { Label, SavedReply, StaffMember, DeskSettings } from '$lib/api/support';
 
 // Support data shared by the ticket views: labels, the staff who can be
 // assigned or mentioned, and saved replies. Loaded once per page session and
 // refreshed after changes; every list is optional (empty for requesters).
 
-export const support = $state<{ labels: Label[]; staff: StaffMember[]; replies: SavedReply[] }>({ labels: [], staff: [], replies: [] });
+export const support = $state<{ labels: Label[]; staff: StaffMember[]; replies: SavedReply[]; desk: DeskSettings }>({
+	labels: [],
+	staff: [],
+	replies: [],
+	desk: { auto_reply: false, response_hours: 0, response_time: '', max_files: 10, max_file_bytes: 10 << 20 }
+});
 
-let loaded = { labels: false, staff: false, replies: false };
+let loaded = { labels: false, staff: false, replies: false, desk: false };
+
+/** The desk settings: usual response time, upload limits (and, for managers, the automatic reply). */
+export async function loadDesk(force = false) {
+	if (loaded.desk && !force) return support.desk;
+	loaded.desk = true;
+	try {
+		support.desk = await api<DeskSettings>('GET', '/tickets/settings');
+	} catch {
+		loaded.desk = false; // keep the defaults; try again next time
+	}
+	return support.desk;
+}
 
 export async function loadLabels(force = false) {
 	if (loaded.labels && !force) return support.labels;

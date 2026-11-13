@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { onLive } from '$lib/live.svelte';
 	import { onMount } from 'svelte';
 	import { api, ApiError } from '$lib/api/client';
 	import type { Bot } from '$lib/api/types';
@@ -47,6 +48,8 @@
 			}
 		}
 	}
+	// Live: re-fetch as soon as what this view shows changes anywhere.
+	onMount(() => onLive(['bots', 'servers'], () => void load()));
 	onMount(() => {
 		load().then(loadStatus);
 		loadBlueprints();

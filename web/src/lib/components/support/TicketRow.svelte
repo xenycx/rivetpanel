@@ -2,7 +2,7 @@
 	import Icon from '$lib/components/ui/Icon.svelte';
 	import { fmtWhen } from '$lib/args';
 	import { session } from '$lib/session.svelte';
-	import { type Ticket, ticketKey, idleTone, fmtIdle, categoryLabel, drafts } from '$lib/api/support';
+	import { type Ticket, ticketKey, idleTone, fmtIdle, fmtOpened, categoryLabel, drafts } from '$lib/api/support';
 	import { labelById } from '$lib/supportData.svelte';
 	import StatusLozenge from './StatusLozenge.svelte';
 	import PriorityIcon from './PriorityIcon.svelte';
@@ -74,6 +74,7 @@
 		<span class="flex-1"></span>
 		{#if draft}<span class="flex shrink-0 items-center gap-1 text-action" title="You have an unsent {draft.internal ? 'note' : 'reply'}"><Icon name="pencil" size={11} />Draft</span>{/if}
 		{#if t.watching}<span class="shrink-0" title="You watch this ticket"><Icon name="eye" size={12} /></span>{/if}
+		<time class="opened shrink-0 tabular-nums" datetime={new Date(t.created_at_ms).toISOString()} title="Opened {fmtWhen(t.created_at_ms)}">{fmtOpened(t.created_at_ms, now)}</time>
 		{#if staff}<PersonAvatar person={t.assignee ?? null} size={18} />{/if}
 		{#if showStatus}<StatusLozenge status={t.status} {staff} class="shrink-0" />{/if}
 	</span>
@@ -122,6 +123,9 @@
 	}
 	.idle {
 		color: var(--color-muted);
+	}
+	.opened {
+		font-size: 11.5px;
 	}
 	.idle[data-tone='warn'] {
 		color: var(--color-warn);

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { onLive } from '$lib/live.svelte';
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { api, ApiError, upload } from '$lib/api/client';
@@ -40,6 +41,8 @@
 			error = e instanceof ApiError ? e.message : 'Extensions could not be loaded.';
 		}
 	}
+	// Live: re-fetch as soon as what this view shows changes anywhere.
+	onMount(() => onLive(['admin/extensions', 'extensions'], () => void load()));
 	onMount(load);
 
 	async function onUpload(e: Event) {
