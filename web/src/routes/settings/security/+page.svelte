@@ -12,7 +12,7 @@
 	import TwoStep from '$lib/components/TwoStep.svelte';
 	import Passkeys from '$lib/components/Passkeys.svelte';
 
-	type Sess = { id: string; device: string; created_at_ms: number; last_seen_at_ms: number; expires_at_ms: number; current: boolean };
+	type Sess = { id: string; device: string; created_at_ms: number; last_seen_at_ms: number; expires_at_ms: number; current: boolean; impersonated_by?: string };
 	let sessions = $state<Sess[] | null>(null);
 	let error = $state('');
 	let current = $state('');
@@ -136,7 +136,7 @@
 					<li class="flex flex-wrap items-center gap-3 px-4 py-3">
 						<span class="grid size-9 shrink-0 place-items-center rounded-tile bg-paper-2 {s.current ? 'text-run' : 'text-muted'}"><Icon name={deviceIcon(s.device)} /></span>
 						<div class="min-w-0 flex-1 basis-56">
-							<p class="truncate font-medium">{s.device || 'Unknown device'}{#if s.current}<span class="pill ml-2 align-middle" data-tone="run">This browser</span>{/if}</p>
+							<p class="truncate font-medium">{s.device || 'Unknown device'}{#if s.current}<span class="pill ml-2 align-middle" data-tone="run">This browser</span>{/if}{#if s.impersonated_by}<span class="pill ml-2 align-middle" data-tone="warn" title="An administrator opened this session to see and use the panel as your account">Administrator {s.impersonated_by}</span>{/if}</p>
 							<p class="text-small text-muted">Active {fmtAgo(s.last_seen_at_ms)} · signed in {fmtWhen(s.created_at_ms)} · expires {fmtWhen(s.expires_at_ms)}</p>
 						</div>
 						{#if !s.current}<button class="btn btn-sm" onclick={() => revoke(s)}>Sign out</button>{/if}

@@ -406,6 +406,18 @@ func (s *panel) routes(v1 fiber.Router) {
 		v1.Post("/auth/password-reset/confirm", resetLimit, s.confirmPasswordReset)
 	}
 	v1.Get("/auth/providers", s.oauthProviders)
+	// The account switcher works without an active session (the sign-in
+	// page offers the accounts still signed in on this browser).
+	accountsLimit := newLimiter(limiter.Config{
+		Max: 120, Expiration: time.Minute,
+		KeyGenerator: func(c fiber.Ctx) string { return c.IP() },
+		LimitReached: func(c fiber.Ctx) error {
+			return fiber.NewError(fiber.StatusTooManyRequests, "too many account switches; try again in a minute")
+		},
+	})
+	v1.Get("/auth/accounts", accountsLimit, s.listAccounts)
+	v1.Post("/auth/accounts/switch", accountsLimit, s.switchAccount)
+	v1.Delete("/auth/accounts/:sid", accountsLimit, s.forgetAccount)
 	v1.Get("/registration", s.registrationStatus)
 	v1.Post("/registration/preview", oauthLimit, s.previewAccountInvite)
 	v1.Post("/registration", oauthLimit, s.registerAccount)
@@ -517,6 +529,9 @@ func (s *panel) routes(v1 fiber.Router) {
 	authed.Post("/me/connections/:provider/start", s.startConnection)
 	authed.Delete("/me/connections/:provider", s.deleteConnection)
 	authed.Post("/auth/logout", s.logout)
+	authed.Post("/auth/accounts/park", s.parkAccount)
+	authed.Post("/auth/impersonation/stop", s.stopImpersonation)
+	authed.Post("/admin/users/:id/impersonate", s.requireAdmin, s.impersonate)
 	passwordLimit := newLimiter(limiter.Config{
 		Max: 10, Expiration: time.Minute,
 		KeyGenerator: func(c fiber.Ctx) string { return "pw:" + currentUser(c).ID },

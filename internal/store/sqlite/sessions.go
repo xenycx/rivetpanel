@@ -17,24 +17,33 @@ func (db *DB) CreateSession(ctx context.Context, tokenHash []byte, s domain.Sess
 		return err
 	}
 	defer tx.Rollback()
-	if _, err := tx.ExecContext(ctx, `INSERT INTO sessions (token_hash, user_id, created_at_ms, expires_at_ms, id, last_seen_at_ms, device, auth_at_ms)
-		VALUES (?,?,?,?,?,?,?,?)`, tokenHash, s.UserID, s.CreatedAtMS, s.ExpiresAtMS, s.ID, s.CreatedAtMS, nullStr(s.Device), s.AuthAtMS); err != nil {
+	if s.ImpersonatorID != "" {
+		// One impersonation per administrator: a new one replaces the last.
+		if _, err := tx.ExecContext(ctx, `DELETE FROM sessions WHERE impersonator_id = ?`, s.ImpersonatorID); err != nil {
+			return err
+		}
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO sessions (token_hash, user_id, created_at_ms, expires_at_ms, id, last_seen_at_ms, device, auth_at_ms, impersonator_id)
+		VALUES (?,?,?,?,?,?,?,?,?)`, tokenHash, s.UserID, s.CreatedAtMS, s.ExpiresAtMS, s.ID, s.CreatedAtMS, nullStr(s.Device), s.AuthAtMS, nullStr(s.ImpersonatorID)); err != nil {
 		return mapErr(err)
 	}
-	if _, err := tx.ExecContext(ctx, `DELETE FROM sessions WHERE user_id = ? AND token_hash NOT IN
-		(SELECT token_hash FROM sessions WHERE user_id = ? ORDER BY created_at_ms DESC, rowid DESC LIMIT ?)`, s.UserID, s.UserID, MaxSessionsPerUser); err != nil {
+	// The cap counts the account's own sign-ins: an administrator acting as
+	// the account never pushes one of them out.
+	if _, err := tx.ExecContext(ctx, `DELETE FROM sessions WHERE user_id = ? AND impersonator_id IS NULL AND token_hash NOT IN
+		(SELECT token_hash FROM sessions WHERE user_id = ? AND impersonator_id IS NULL ORDER BY created_at_ms DESC, rowid DESC LIMIT ?)`, s.UserID, s.UserID, MaxSessionsPerUser); err != nil {
 		return err
 	}
 	return tx.Commit()
 }
 
 const sessionCols = `s.id, s.user_id, s.created_at_ms, s.expires_at_ms, COALESCE(s.last_seen_at_ms, s.created_at_ms),
-	COALESCE(s.auth_at_ms, s.created_at_ms), COALESCE(s.device, '')`
+	COALESCE(s.auth_at_ms, s.created_at_ms), COALESCE(s.device, ''), COALESCE(s.impersonator_id, ''),
+	COALESCE((SELECT iu.email FROM users iu WHERE iu.id = s.impersonator_id), '')`
 
 func scanSession(row interface{ Scan(...any) error }) (domain.Session, error) {
 	var s domain.Session
 	var id *string
-	err := row.Scan(&id, &s.UserID, &s.CreatedAtMS, &s.ExpiresAtMS, &s.LastSeenAtMS, &s.AuthAtMS, &s.Device)
+	err := row.Scan(&id, &s.UserID, &s.CreatedAtMS, &s.ExpiresAtMS, &s.LastSeenAtMS, &s.AuthAtMS, &s.Device, &s.ImpersonatorID, &s.ImpersonatorEmail)
 	if id != nil {
 		s.ID = *id
 	}
@@ -42,19 +51,26 @@ func scanSession(row interface{ Scan(...any) error }) (domain.Session, error) {
 }
 
 // GetSession returns the user and session for an unexpired session whose user
-// is not disabled; otherwise domain.ErrNotFound.
+// is not disabled; otherwise domain.ErrNotFound. An impersonation session
+// also needs its administrator to be enabled and still an administrator;
+// the user then carries domain.Impersonator.
 func (db *DB) GetSession(ctx context.Context, tokenHash []byte, nowMS int64) (domain.User, domain.Session, error) {
 	row := db.QueryRowContext(ctx, `SELECT `+userSelect("u")+`, `+sessionCols+`
 		FROM sessions s JOIN users u ON u.id = s.user_id
-		WHERE s.token_hash = ? AND s.expires_at_ms > ? AND u.disabled = 0`, tokenHash, nowMS)
+		LEFT JOIN users i ON i.id = s.impersonator_id
+		WHERE s.token_hash = ? AND s.expires_at_ms > ? AND u.disabled = 0
+		AND (s.impersonator_id IS NULL OR (i.disabled = 0 AND i.role = 'admin'))`, tokenHash, nowMS)
 	var u domain.User
 	var s domain.Session
 	var id *string
 	dest, done := userScanDest(&u)
-	err := row.Scan(append(dest, &id, &s.UserID, &s.CreatedAtMS, &s.ExpiresAtMS, &s.LastSeenAtMS, &s.AuthAtMS, &s.Device)...)
+	err := row.Scan(append(dest, &id, &s.UserID, &s.CreatedAtMS, &s.ExpiresAtMS, &s.LastSeenAtMS, &s.AuthAtMS, &s.Device, &s.ImpersonatorID, &s.ImpersonatorEmail)...)
 	done()
 	if id != nil {
 		s.ID = *id
+	}
+	if err == nil && s.ImpersonatorID != "" {
+		u.Impersonator = &domain.Impersonator{ID: s.ImpersonatorID, Email: s.ImpersonatorEmail}
 	}
 	return u, s, mapErr(err)
 }

@@ -41,6 +41,17 @@ type User struct {
 	// client's list (intersected with the role), and the account never acts
 	// as an administrator.
 	Client *ClientScope
+	// Impersonator is set when an administrator opened this session to act
+	// as the account (see AuthService.Impersonate). The request then has the
+	// account's own permissions, never more; credential and identity changes
+	// are refused (see the API's impersonation guard).
+	Impersonator *Impersonator
+}
+
+// Impersonator names the administrator acting as an account.
+type Impersonator struct {
+	ID    string
+	Email string
 }
 
 // IsAdmin reports whether the request acts as a built-in administrator. An
@@ -57,4 +68,8 @@ type Session struct {
 	LastSeenAtMS int64
 	AuthAtMS     int64 // when the user last proved their identity in this session
 	Device       string
+	// ImpersonatorID is the administrator who opened this session to act as
+	// UserID ("" for an ordinary sign-in); ImpersonatorEmail is read with it.
+	ImpersonatorID    string
+	ImpersonatorEmail string
 }

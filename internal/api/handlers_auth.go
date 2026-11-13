@@ -48,10 +48,30 @@ func (s *panel) login(c fiber.Ctx) error {
 	return c.JSON(fiber.Map{"user": toUser(sess.User), "csrf_token": sess.CSRF})
 }
 
+// logout signs out the active account. While impersonating it ends the
+// impersonation (back to the administrator's account). With ?all=1 every
+// account signed in on this browser is signed out; otherwise the next one
+// becomes active and is returned like a sign-in.
 func (s *panel) logout(c fiber.Ctx) error {
+	u := currentUser(c)
+	if u.Impersonator != nil && c.Query("all") != "1" {
+		return s.endImpersonation(c, u)
+	}
 	if err := s.auth.Logout(c.Context(), currentToken(c)); err != nil {
 		return err
 	}
+	list := s.resolveStash(c, u.ID)
+	if c.Query("all") == "1" {
+		for _, x := range list {
+			_ = s.auth.Logout(c.Context(), x.token)
+		}
+		list = nil
+	}
+	if len(list) > 0 {
+		s.writeStash(c, list[1:])
+		return s.activate(c, list[0].token, list[0].user, list[0].sess.ExpiresAtMS)
+	}
+	s.setStash(c, nil)
 	s.setSessionCookie(c, "", time.Unix(0, 0))
 	return c.SendStatus(fiber.StatusNoContent)
 }
@@ -77,7 +97,7 @@ func (s *panel) me(c fiber.Ctx) error {
 		// Effective role permissions (after the unverified-email policy); the
 		// interface uses them to show what the server will allow.
 		"permissions": nonNil(u.EffectivePermissions()), "email_verification": s.emailVerification(c, u),
-		"api_client": clientInfo(u)})
+		"api_client": clientInfo(u), "impersonator": impersonatorInfo(u)})
 }
 
 // clientInfo names the API client a request was authenticated by (nil for a
@@ -168,6 +188,9 @@ type sessionDTO struct {
 	LastSeenAtMS int64  `json:"last_seen_at_ms"`
 	ExpiresAtMS  int64  `json:"expires_at_ms"`
 	Current      bool   `json:"current"`
+	// ImpersonatedBy names the administrator acting as the account in this
+	// session ("" for the account's own sign-ins).
+	ImpersonatedBy string `json:"impersonated_by,omitempty"`
 }
 
 func (s *panel) listSessions(c fiber.Ctx) error {
@@ -181,7 +204,7 @@ func (s *panel) listSessions(c fiber.Ctx) error {
 	}
 	out := make([]sessionDTO, len(ss))
 	for i, x := range ss {
-		out[i] = sessionDTO{x.ID, x.Device, x.CreatedAtMS, x.LastSeenAtMS, x.ExpiresAtMS, x.ID == cur.ID}
+		out[i] = sessionDTO{x.ID, x.Device, x.CreatedAtMS, x.LastSeenAtMS, x.ExpiresAtMS, x.ID == cur.ID, x.ImpersonatorEmail}
 	}
 	return c.JSON(fiber.Map{"sessions": out})
 }

@@ -15,6 +15,8 @@ export const session = $state<{
 	/** Effective role permissions; the server enforces them, the interface only follows. */
 	permissions: string[];
 	verification: EmailVerification;
+	/** The administrator acting as this account (null for an ordinary sign-in). */
+	impersonator: { id: string; email: string } | null;
 }>({
 	user: null,
 	loaded: false,
@@ -23,7 +25,8 @@ export const session = $state<{
 	emailNews: true,
 	features: allOn,
 	permissions: [],
-	verification: { verified: true, withheld: [], available: false, pending_email: '', sent_at_ms: 0 }
+	verification: { verified: true, withheld: [], available: false, pending_email: '', sent_at_ms: 0 },
+	impersonator: null
 });
 
 /** Whether the signed-in account holds a permission (administrators hold all). */
@@ -55,7 +58,7 @@ setUnauthorizedHandler(() => {
 
 export async function loadSession() {
 	try {
-		const r = await api<{ user: User; csrf_token: string; has_password: boolean; email_alerts: boolean; email_news: boolean; features: Features; permissions?: string[]; email_verification?: EmailVerification }>('GET', '/auth/me');
+		const r = await api<{ user: User; csrf_token: string; has_password: boolean; email_alerts: boolean; email_news: boolean; features: Features; permissions?: string[]; email_verification?: EmailVerification; impersonator?: { id: string; email: string } | null }>('GET', '/auth/me');
 		setCsrf(r.csrf_token);
 		session.user = r.user;
 		session.hasPassword = r.has_password;
@@ -64,6 +67,7 @@ export async function loadSession() {
 		session.features = { ...allOn, ...r.features };
 		session.permissions = r.permissions ?? [];
 		if (r.email_verification) session.verification = r.email_verification;
+		session.impersonator = r.impersonator ?? null;
 	} catch {
 		session.user = null;
 	} finally {
@@ -85,12 +89,73 @@ export async function verifyMFA(code: string) {
 	await loadSession();
 }
 
-export async function logout() {
+/**
+ * Signs out the active account. With other accounts signed in on this
+ * browser the next one takes over; `all` signs out every one of them. While
+ * impersonating, it returns to the administrator's own account.
+ */
+export async function logout(all = false) {
+	let next: { user: User | null } | null = null;
 	try {
-		await api('POST', '/auth/logout');
+		next = await api<{ user: User | null } | null>('POST', all ? '/auth/logout?all=1' : '/auth/logout');
 	} finally {
+		if (next?.user) enter('/dashboard');
+		else {
+			session.user = null;
+			setCsrf('');
+			goto('/login');
+		}
+	}
+}
+
+/**
+ * Opens the panel as the account that is now active. A full page load drops
+ * everything the previous account had loaded (lists, chats, workspace
+ * choice), so nothing of one account shows under another; the interface
+ * itself comes from the browser cache.
+ */
+function enter(path: string) {
+	try {
+		localStorage.removeItem('rivetpanel.workspace');
+	} catch {
+		/* optional */
+	}
+	location.assign(path);
+}
+
+export type SignedInAccount = { session_id: string; user: User };
+
+/** The other accounts signed in on this browser (the switcher). */
+export async function listAccounts(): Promise<SignedInAccount[]> {
+	return (await api<{ accounts: SignedInAccount[] }>('GET', '/auth/accounts')).accounts;
+}
+
+/** Makes another signed-in account the active one. */
+export async function switchAccount(sessionID: string, path = '/dashboard') {
+	await api('POST', '/auth/accounts/switch', { session_id: sessionID });
+	enter(path);
+}
+
+/** Keeps this account signed in and opens the sign-in page for another. */
+export async function addAccount() {
+	await api('POST', '/auth/accounts/park');
+	setCsrf('');
+	location.assign('/login?add=1');
+}
+
+/** Administrators: act as another account in one step. */
+export async function impersonate(userID: string) {
+	await api('POST', `/admin/users/${userID}/impersonate`);
+	enter('/dashboard');
+}
+
+/** Ends an impersonation and returns to the administrator's account (on the page of the account that was impersonated). */
+export async function stopImpersonating() {
+	const was = session.user?.id;
+	const r = await api<{ user: User | null }>('POST', '/auth/impersonation/stop');
+	if (r.user) enter(was ? `/admin/users/${was}` : '/admin/users');
+	else {
 		session.user = null;
-		setCsrf('');
 		goto('/login');
 	}
 }

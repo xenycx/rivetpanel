@@ -11,7 +11,7 @@
 	import Notice from '$lib/components/ui/Notice.svelte';
 	import Skeleton from '$lib/components/ui/Skeleton.svelte';
 	import { wsName } from '$lib/workspaces.svelte';
-	import { can } from '$lib/session.svelte';
+	import { can, impersonate, session } from '$lib/session.svelte';
 	import { toast } from '$lib/ui/toast.svelte';
 
 	type View = { user: User; has_password: boolean; workspaces: Workspace[]; bots: (Bot & { owner_email: string })[]; operations: Operation[] };
@@ -39,6 +39,18 @@
 			shuffling = false;
 		}
 	}
+	let opening = $state(false);
+	const impersonable = $derived(!!v && session.user?.role === 'admin' && !session.impersonator && v.user.id !== session.user?.id && v.user.role !== 'admin' && !v.user.disabled);
+	async function signInAs() {
+		if (!v) return;
+		opening = true;
+		try {
+			await impersonate(v.user.id);
+		} catch (e) {
+			opening = false;
+			toast(e instanceof ApiError ? e.message : 'Signing in as this account failed.', 'fail');
+		}
+	}
 	const memory = $derived(v?.bots.filter((b) => b.desired_state === 'running').reduce((n, b) => n + b.memory_bytes, 0) ?? 0);
 </script>
 
@@ -56,6 +68,7 @@
 			<p class="text-small text-muted">{v.user.display_name ? `${v.user.email} · ` : ''}{v.user.role === 'admin' ? 'Administrator' : v.user.role_name || 'User'} · email {v.user.email_verified ? 'verified' : 'not verified'} · joined {fmtWhen(v.user.created_at_ms)} · {v.has_password ? 'password' : 'provider sign-in only'}</p>
 		</div>
 		{#if !v.user.avatar_url && can('users.manage')}<button class="btn btn-sm btn-quiet" disabled={shuffling} onclick={shuffle} title="Draw a different generated profile picture for this account"><Icon name="shuffle" size={14} />New picture</button>{/if}
+		{#if impersonable}<button class="btn btn-sm" disabled={opening} onclick={signInAs} title="See and use the panel as this account; your own account stays signed in"><Icon name="eye" size={14} />{opening ? 'Opening…' : 'Sign in as this user'}</button>{/if}
 		{#if v.user.disabled}<span class="pill" data-tone="fail">Disabled</span>{:else}<span class="pill" data-tone="run">Active</span>{/if}
 	</header>
 

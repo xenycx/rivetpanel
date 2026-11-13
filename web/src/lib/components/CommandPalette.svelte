@@ -5,7 +5,10 @@
 	import type { Bot, Site, SiteTemplate } from '$lib/api/types';
 	import type { EnvView } from '$lib/api/admin';
 	import { describe } from '$lib/status';
-	import { session, logout, can } from '$lib/session.svelte';
+	import { session, logout, can, impersonate, listAccounts, switchAccount, addAccount, stopImpersonating, type SignedInAccount } from '$lib/session.svelte';
+	import { picker } from '$lib/accounts.svelte';
+	import { toast } from '$lib/ui/toast.svelte';
+	import { ApiError } from '$lib/api/client';
 	import { adminLinks } from '$lib/adminNav';
 	import { createOptions } from '$lib/create';
 	import { resourceHref } from '$lib/api/games';
@@ -33,7 +36,8 @@
 	let bots = $state<Bot[]>([]);
 	let sites = $state<Site[]>([]);
 	let siteTemplates = $state<SiteTemplate[]>([]);
-	let people = $state<{ id: string; email: string; display_name?: string; role: string }[]>([]);
+	let people = $state<{ id: string; email: string; display_name?: string; role: string; disabled?: boolean }[]>([]);
+	let accounts = $state<SignedInAccount[]>([]);
 	let envNames = $state<{ name: string; description: string }[]>([]);
 	let chats = $state<Conversation[]>([]);
 	// Enter pressed before the lists arrived waits for them, so fast typing
@@ -56,6 +60,7 @@
 		if (session.features.sites) jobs.push(api<{ sites: Site[] }>('GET', '/sites').then((r) => (sites = r.sites)));
 		if (session.features.sites && can('sites.create')) jobs.push(api<{ templates: SiteTemplate[] }>('GET', '/site-templates').then((r) => (siteTemplates = r.templates)));
 		if (aiOn) jobs.push(api<{ conversations: Conversation[] }>('GET', '/ai/conversations').then((r) => (chats = r.conversations)));
+		jobs.push(listAccounts().then((a) => (accounts = a)));
 		if (isAdmin) {
 			jobs.push(api<{ users: typeof people }>('GET', '/users').then((r) => (people = r.users)));
 			jobs.push(api<EnvView>('GET', '/admin/environment').then((r) => (envNames = r.vars.map((v) => ({ name: v.name, description: v.description })))));
@@ -74,8 +79,14 @@
 			// One action per site template: opens the new-site form with it chosen.
 			...siteTemplates.map((t) => ({ key: `x-site-tpl-${t.id}`, group: 'action', label: `New site from ${t.name}`, hint: `Site template · ${t.description}`, icon: 'globe' as const, href: `/templates?tab=sites&create=${t.id}`, words: `create add site template starter ${t.tags.join(' ')}` })),
 			{ key: 'x-theme', group: 'action', label: 'Switch theme', hint: `Now: ${theme.pref === 'system' ? 'follow system' : theme.pref}. Light, dark, system`, icon: 'moon', run: cycleTheme, words: 'dark light mode appearance' },
-			{ key: 'x-logout', group: 'action', label: 'Sign out', hint: session.user?.email ?? '', icon: 'logout', run: () => void logout(), words: 'log out exit' }
+			...(session.impersonator
+				? [{ key: 'x-unimpersonate', group: 'action', label: `Return to ${session.impersonator.email}`, hint: `Stop acting as ${session.user?.email ?? ''}`, icon: 'logout' as const, run: () => void stopImpersonating().catch(failed), words: 'stop impersonating back admin own account exit', pinned: true }]
+				: [{ key: 'x-logout', group: 'action', label: 'Sign out', hint: session.user?.email ?? '', icon: 'logout' as const, run: () => void logout(), words: 'log out exit' }]),
+			// The account switcher.
+			...accounts.filter((a) => a.user.id !== session.impersonator?.id).map((a) => ({ key: `x-acct-${a.session_id}`, group: 'action', label: `Switch to ${a.user.display_name || a.user.email}`, hint: `Signed in on this browser · ${a.user.email}`, icon: 'users' as const, run: () => void switchAccount(a.session_id).catch(failed), words: `account switch change ${a.user.email}` })),
+			...(session.impersonator ? [] : [{ key: 'x-add-account', group: 'action', label: 'Add another account', hint: 'Stay signed in here and sign in to a second account', icon: 'plus' as const, run: () => void addAccount().catch(failed), words: 'account switch login sign in second' }])
 		];
+		if (isAdmin) a.push({ key: 'x-impersonate', group: 'action', label: 'Sign in as a user…', hint: 'Act as another account; your own stays signed in', icon: 'users', run: () => (picker.open = true), words: 'impersonate switch view as login become support' });
 		if (aiOn) {
 			a.unshift(
 				{ key: 'x-ai', group: 'action', label: 'Ask AI', hint: 'Open the assistant (Ctrl+.)', icon: 'sparkle', run: () => chat.show(), words: 'assistant chat help gpt llm question', pinned: true },
@@ -118,11 +129,20 @@
 		for (const l of adminLinks()) if (!known.has(l.href)) out.push({ key: `a-${l.href}`, group: 'admin', label: l.label, hint: 'Administration', icon: l.icon, href: l.href });
 		if (isAdmin) {
 			out.push(...adminPages);
-			for (const p of people) out.push({ key: `u-${p.id}`, group: 'person', label: p.display_name || p.email, hint: `${p.email} · ${p.role}`, icon: 'users', href: `/admin/users/${p.id}`, words: p.email });
+			for (const p of people) {
+				out.push({ key: `u-${p.id}`, group: 'person', label: p.display_name || p.email, hint: `${p.email} · ${p.role}`, icon: 'users', href: `/admin/users/${p.id}`, words: p.email });
+				// "as bob" or "impersonate bob" finds this before the profile.
+				if (p.role !== 'admin' && !p.disabled && p.id !== session.user?.id)
+					out.push({ key: `ui-${p.id}`, group: 'person', label: `Sign in as ${p.display_name || p.email}`, hint: `${p.email} · act as this account`, icon: 'eye', run: () => void impersonate(p.id).catch(failed), words: `${p.email} impersonate as become view`, boost: -3 });
+			}
 			for (const v of envNames) out.push({ key: `e-${v.name}`, group: 'env', label: v.name, hint: v.description, icon: 'sliders', href: `/admin/environment?find=${v.name}`, boost: -70 });
 		}
 		return out;
 	});
+
+	function failed(e: unknown) {
+		toast(e instanceof ApiError ? e.message.charAt(0).toUpperCase() + e.message.slice(1) + '.' : 'That did not work.', 'fail');
+	}
 
 	const inScope = (e: Entry, sc: Scope) => sc === 'all' || groups.find((g) => g.id === e.group)?.scope === sc;
 	const groupOrder = (e: Entry) => groups.findIndex((g) => g.id === e.group);

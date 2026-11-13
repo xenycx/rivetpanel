@@ -338,6 +338,10 @@ func (s *panel) auditMW(c fiber.Ctx) error {
 		// The record names the credential that acted.
 		ev.ActorLabel = strPtr(u.Email + " via API client " + u.Client.Name)
 	}
+	if u.Impersonator != nil {
+		// An administrator acting as the account: the record names who acted.
+		ev.ActorID, ev.ActorLabel = strPtr(u.Impersonator.ID), strPtr(u.Impersonator.Email+" as "+u.Email)
+	}
 	ip := c.IP()
 	ev.IP = &ip
 	if r.target != nil {

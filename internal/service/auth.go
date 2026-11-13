@@ -405,6 +405,57 @@ func (s *AuthService) IssueSessionFor(ctx context.Context, u domain.User, device
 	return Session{Token: token, CSRF: auth.CSRFToken(token), ExpiresAtMS: exp, User: u}, nil
 }
 
+// ImpersonationTTL bounds how long an administrator can act as an account
+// from one start (never past the administrator's own session).
+const ImpersonationTTL = 2 * time.Hour
+
+// Impersonate opens a session in which the administrator acts as the
+// account targetID: the panel shows and allows exactly what that account
+// sees and may do. Only built-in administrators (signed in through a browser
+// session, not themselves impersonating) may start one, and only for an
+// enabled account that is not an administrator. A new impersonation by the
+// same administrator replaces the previous one. The session never counts as
+// a recent proof of identity, so sensitive account changes stay refused.
+func (s *AuthService) Impersonate(ctx context.Context, actor domain.User, actorSess domain.Session, targetID, device string) (Session, error) {
+	if !actor.IsAdmin() || actor.Impersonator != nil {
+		return Session{}, domain.ErrForbidden
+	}
+	if targetID == actor.ID {
+		return Session{}, domain.Invalid("you are already signed in as yourself")
+	}
+	t, err := s.Store.GetUserByID(ctx, targetID)
+	if err != nil {
+		return Session{}, err
+	}
+	switch {
+	case t.Disabled:
+		return Session{}, domain.Invalid("this account is disabled; enable it first to sign in as it")
+	case t.Role == domain.RoleAdmin:
+		return Session{}, domain.Invalid("administrators cannot be impersonated; change the role first if you need their view")
+	}
+	token, th, err := auth.NewToken()
+	if err != nil {
+		return Session{}, err
+	}
+	now := s.now()
+	exp := now.Add(ImpersonationTTL).UnixMilli()
+	if actorSess.ExpiresAtMS > 0 && actorSess.ExpiresAtMS < exp {
+		exp = actorSess.ExpiresAtMS
+	}
+	if exp <= now.UnixMilli() {
+		return Session{}, domain.ErrUnauthorized
+	}
+	if len(device) > 64 {
+		device = device[:64]
+	}
+	if err := s.Store.CreateSession(ctx, th, domain.Session{ID: uuid.NewString(), UserID: t.ID, CreatedAtMS: now.UnixMilli(),
+		ExpiresAtMS: exp, AuthAtMS: 1, Device: device, ImpersonatorID: actor.ID}); err != nil {
+		return Session{}, err
+	}
+	t.Impersonator = &domain.Impersonator{ID: actor.ID, Email: actor.Email}
+	return Session{Token: token, CSRF: auth.CSRFToken(token), ExpiresAtMS: exp, User: t}, nil
+}
+
 // Authenticate resolves a session token to an active user.
 func (s *AuthService) Authenticate(ctx context.Context, token string) (domain.User, error) {
 	u, _, err := s.AuthenticateSession(ctx, token)

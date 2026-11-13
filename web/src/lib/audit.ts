@@ -83,6 +83,8 @@ export const actionText: Record<string, string> = {
 	'admin.user_update': 'changed a user',
 	'admin.user_delete': 'deleted a user',
 	'admin.user_role': "changed a user's role",
+	'admin.impersonate_start': 'signed in as',
+	'admin.impersonate_stop': 'stopped acting as',
 	'admin.role_create': 'created a role',
 	'admin.role_update': 'changed a role',
 	'admin.role_delete': 'deleted a role',

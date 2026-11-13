@@ -7,6 +7,7 @@ glance:
   - 20 sessions per account
   - 10 recovery codes for two-step sign-in
   - API clients expire after 1–366 days, or never
+  - Up to 9 accounts signed in on one browser
 related: [teams/roles-and-permissions, teams/workspaces, operate/email]
 ---
 
@@ -33,6 +34,28 @@ sign-in. A disabled account cannot sign in by any method.
   through an emailed one-use link (see [Email](../07-operate/06-email.md)).
 - Every password or two-step change sends a security notice by email.
 - On the host, `rivetpanel reset-password EMAIL` is the recovery path.
+
+### Switch between accounts
+
+The account menu (your picture, top right) switches between accounts without
+signing out:
+
+1. Choose **Add another account**. The account you were using stays signed in
+   on this browser, and the sign-in page opens.
+2. Sign in to the second account with any method, including GitHub, Discord,
+   single sign-on and passkeys.
+3. Your other accounts are listed in the account menu and in Ctrl+K (**Switch
+   to …**). Choose one to make it active.
+
+Up to 9 accounts stay signed in on one browser. [enforced: panel] **Sign out**
+signs out only the active account and moves to the next one; **Sign out of all
+accounts** signs out every account on this browser. The sign-in page also lists
+the accounts that are still signed in, so one click continues as one of them.
+
+The other accounts' sessions are kept in an `HttpOnly`, `SameSite=Strict`
+cookie that page scripts cannot read, and every one is checked on use: a
+session that was signed out, expired or belongs to a disabled account drops
+out of the list. [enforced: panel]
 
 ### Two-step sign-in
 
@@ -89,6 +112,43 @@ providers to your account. A connected identity then signs you in.
 - The GitHub access token and the Discord webhook URL are encrypted with the
   panel's key (`RIVET_KEY_DIR`); Discord's access token is not stored.
   Encryption does not hide them from someone with root on the host.
+
+## Sign in as a user (administrators)
+
+An administrator can see and use the panel exactly as another account does,
+for example to reproduce what a user reports. There is no password, code or
+confirmation to enter:
+
+- **Administration → Users**: **Sign in as** on the account's row, or **Sign
+  in as this user** on its page.
+- The account menu or Ctrl+K: **Sign in as a user…** opens a search; type a
+  name or email and press Enter. Typing `as bob` in Ctrl+K also offers **Sign
+  in as Bob** directly.
+
+A banner stays at the top of every page while you act as the account. **Return
+to your account** in the banner, in the account menu or in Ctrl+K ends it and
+opens that user's page under **Administration → Users**. Your own session stays
+signed in on the browser the whole time.
+
+| Rule | Enforced by |
+|---|---|
+| Only built-in administrators can start it, from a browser session (not an API client) | [enforced: panel] |
+| Administrators and disabled accounts cannot be impersonated, and an impersonation cannot start another | [enforced: panel] |
+| You get the account's own permissions, never more | [enforced: panel] |
+| The account's password, two-step sign-in, passkeys, connected accounts, sessions, API keys and clients, automation tokens, email address, profile, email preferences and invitations cannot be changed | [enforced: panel] |
+| It ends after 2 hours, or earlier when your own session ends | [enforced: panel] |
+| It stops at once when you are disabled, deleted or lose the administrator role | [enforced: panel] |
+| One at a time per administrator: starting another ends the previous one | [enforced: panel] |
+
+Starting and ending are recorded in **Activity** for both accounts, and every
+change made meanwhile names you, as `admin@example.com as bob@example.com`.
+The account's owner sees the session under **Settings → Security**, marked
+with your address, and can sign it out.
+
+> [!NOTE]
+> Only Activity names you. Anything else that records an author, such as a
+> support ticket reply, an AI chat or an app's owner, shows the account you
+> are acting as.
 
 ## API clients
 

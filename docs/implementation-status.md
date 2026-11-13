@@ -995,6 +995,29 @@ items state exactly what remains.
   game settings stay stop-only (application level). An agent older than this
   version on a remote node replaces the container as soon as its spec
   differs, so remote nodes need the same agent version.
+- [x] Administrator impersonation and account switcher (1.11.0, migration
+  0070). Built-in administrators act as a non-administrator, enabled account
+  in one request (**Sign in as** on Administration → Users, a search picker
+  in the account menu and Ctrl+K). Enforcement, all application level: the
+  session row carries `impersonator_id`, and every request re-checks that the
+  administrator is still enabled and an administrator (the session stops
+  otherwise; deleting the administrator cascades it away); impersonation
+  sessions last at most 2 hours and never past the administrator's own
+  session, one per administrator; the request has only the account's own
+  permissions; nested impersonation and API clients are refused; changes to
+  the account's password, two-step sign-in, passkeys, connections, sessions,
+  API keys and clients, tokens, email, profile, email preferences and
+  invitation acceptance are refused (`impersonationGuard`); the session never
+  counts as a recent proof of identity. Activity names the administrator
+  (`admin as user`) for audited changes and records start and end for both
+  accounts; other author fields (ticket replies, AI chats, ownership) record
+  the impersonated account. The account switcher keeps up to 8 other
+  sessions in an `HttpOnly`, `SameSite=Strict` cookie, re-validated on every
+  use; signing out moves to the next account, `?all=1` signs out all. Covered
+  by `TestImpersonationStartsInOneStepAndReturns`,
+  `TestImpersonationEndsWhenAdministratorLosesRole` and
+  `TestAccountSwitcher`; the UI was browser-checked on a scratch panel; no
+  automated UI test.
 - [x] Administrator oversight of every workspace and account: members, bots
   with owners and state, sites, and the latest 40 operations (deployments,
   builds, backups, restores, GitHub pushes).
@@ -1265,7 +1288,7 @@ items state exactly what remains.
   Docker-runtime-level.
 
 Migrations added since 0.2.0 (the schema-version assertion in
-`internal/store/sqlite/db_test.go` checks 60 applied migrations):
+`internal/store/sqlite/db_test.go` checks 71 applied migrations):
 
 | Migration | Purpose |
 | --- | --- |
@@ -1314,6 +1337,7 @@ Migrations added since 0.2.0 (the schema-version assertion in
 | `0067_support_collab.sql` | Additive: `support_ticket_messages` gains `edited_at_ms`, `deleted_at_ms`, `deleted_by` and `mentions_json` (a JSON array, default `[]`); new tables `support_message_revisions`, `support_message_reactions` (kinds `ack`/`thanks`/`seen`/`solved`), `support_labels` (palette colors), `support_ticket_labels`, `support_saved_replies` and `support_ticket_watchers`, all cascading with their ticket or message. Existing rows keep their meaning. Covered by `TestMigrateIdempotentAndSchema` (68 versions) and the support collaboration API tests |
 | `0068_activity_source.sql` | Additive: `audit_events.source` (`person`/`schedule`/`system`/`ai`, default `person`, so existing rows keep their meaning), existing `ai.file_apply`/`ai.diagnostic`/`ai.restart`/`ai.env_input` rows backfilled to `ai`, index `audit_source_idx(source, at_ms)`. Covered by `TestMigrateIdempotentAndSchema` (69 versions) and `TestActivityTimelineMergesFiltersAndPages` |
 | `0069_live_config.sql` | Additive: `bots.config_pending_at_ms` and `bots.config_pending_generation` (both default 0, so existing bots read as nothing pending). A configuration or variable save on a live bot keeps its generation and records the marker; `restart_pending` is true while the marker's generation equals the bot's and it is wanted running. Covered by `TestMigrateIdempotentAndSchema` (70 versions), `TestUpdateWorksLiveAndWaitsForRestart` and `TestLiveConfigChangeWaitsForRestart` |
+| `0070_impersonation.sql` | Additive: `sessions.impersonator_id` (`users` `ON DELETE CASCADE`, NULL for ordinary sign-ins, so existing sessions keep their meaning) and the partial index `sessions_impersonator_idx`. Covered by `TestMigrateIdempotentAndSchema` (71 versions) and the impersonation API tests |
 | `0054_web_apps.sql` | Rebuilds `bots` (kind gains `web`, runtime gains `php`, new `release_command`) and `sites` (mode gains `app`; `app_id`, `framework`, `build_output_dir`, `app_port`, `health_path`, `max_body_bytes`) with explicit column lists and foreign keys off (checked with `PRAGMA foreign_key_check`; all indexes recreated); additive `site_releases.source_ref` and `bot_health_probes.target` (`host`/`app`). Covered by `apps_migration_test.go` |
 | `0030_ai_global_chat.sql` | Rebuilds `ai_conversations` so a chat may have no target; `ai_runs.bot_id`/`site_id`, `ai_messages.context_json` (the conversation subtree is stashed and restored, rows preserved) |
 

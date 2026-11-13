@@ -6,6 +6,36 @@ authoritative current version.
 
 ## Unreleased
 
+## 1.11.0 - 2026-11-13
+
+### Added
+
+- **Administrators can sign in as any user in one step.** **Sign in as** on
+  **Administration → Users** (each row and each account's page), **Sign in as
+  a user…** in the account menu and Ctrl+K (a search: type a name, press
+  Enter), and `as bob` in Ctrl+K open the panel as that account at once, with
+  no password or confirmation. A banner stays on every page with **Return to
+  your account**, which ends it and opens that user's administration page.
+  The administrator's own session stays signed in meanwhile.
+- **Account switcher.** **Add another account** in the account menu keeps the
+  current account signed in and opens the sign-in page; up to 9 accounts stay
+  signed in on one browser and switch from the account menu, Ctrl+K or the
+  sign-in page. **Sign out** now signs out only the active account and moves
+  to the next; **Sign out of all accounts** signs out every one.
+
+### Security
+
+- Impersonation is limited to built-in administrators using a browser session,
+  never targets administrators or disabled accounts, gives only the account's
+  own permissions, cannot change the account's password, two-step sign-in,
+  passkeys, connections, sessions, keys, tokens, email, profile or email
+  preferences, lasts at most 2 hours, and stops at once when the
+  administrator is disabled, deleted or loses the role. Start and end are
+  recorded in both accounts' Activity, audited changes name the
+  administrator (`admin as user`), and the account's owner sees and can sign
+  out the session under **Settings → Security**. Migration `0070` adds
+  `sessions.impersonator_id`.
+
 ## 1.10.0 - 2026-11-13
 
 ### Changed

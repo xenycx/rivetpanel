@@ -4,7 +4,7 @@
 	import type { Role, User } from '$lib/api/types';
 	import { fmtWhen } from '$lib/args';
 	import { adminPermissions } from '$lib/permissions';
-	import { can, canGrantRole, session } from '$lib/session.svelte';
+	import { can, canGrantRole, impersonate, session } from '$lib/session.svelte';
 	import { confirmDialog, confirmWithOption } from '$lib/ui/dialogs.svelte';
 	import { toast } from '$lib/ui/toast.svelte';
 	import InviteDialog from '$lib/components/InviteDialog.svelte';
@@ -167,6 +167,19 @@
 			busy = false;
 		}
 	}
+	// Administrators act as an account in one click (not other
+	// administrators, disabled accounts or themselves).
+	const impersonable = (u: AdminUser) => isAdmin && !session.impersonator && u.id !== session.user?.id && u.role !== 'admin' && !u.disabled;
+	let opening = $state('');
+	async function signInAs(u: AdminUser) {
+		opening = u.id;
+		try {
+			await impersonate(u.id);
+		} catch (err) {
+			opening = '';
+			toast(msg(err), 'fail');
+		}
+	}
 	function menu(u: AdminUser): MenuItem[] {
 		const self = u.id === session.user?.id;
 		const lastAdmin = u.role === 'admin' && !u.disabled && admins <= 1;
@@ -219,6 +232,7 @@
 							{u.display_name ? `${u.email} · ` : ''}{roleLabel(u)}{u.disabled ? ', disabled' : ''}. {u.bots} app{u.bots === 1 ? '' : 's'}. {u.has_password ? 'Password' : 'Provider sign-in only'}. Joined {fmtWhen(u.created_at_ms)}.
 						</p>
 					</div>
+					{#if impersonable(u)}<button class="btn btn-sm" disabled={!!opening} onclick={() => signInAs(u)} title="See and use the panel as {u.email}; your own account stays signed in"><Icon name="eye" size={14} />{opening === u.id ? 'Opening…' : 'Sign in as'}</button>{/if}
 					<a class="btn btn-sm hidden sm:inline-flex" href="/admin/users/{u.id}">Workspaces and apps<Icon name="chevronRight" size={13} /></a>
 					{#if manage}<Menu label="Actions for {u.email}" items={menu(u)} />{/if}
 				</li>

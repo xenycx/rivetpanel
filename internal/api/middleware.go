@@ -74,6 +74,9 @@ func (s *panel) requireAuth(c fiber.Ctx) error {
 	if !isSafeMethod(c.Method()) && !auth.CSRFValid(token, c.Get(csrfHeader)) {
 		return fiber.NewError(fiber.StatusForbidden, "invalid or missing CSRF token")
 	}
+	if err := impersonationGuard(c, u); err != nil {
+		return err
+	}
 	c.Locals(keyUser, u)
 	c.Locals(keyToken, token)
 	return c.Next()

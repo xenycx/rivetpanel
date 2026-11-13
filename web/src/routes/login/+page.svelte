@@ -2,7 +2,9 @@
 	import Notice from '$lib/components/ui/Notice.svelte';
 	import AuthFrame from '$lib/components/AuthFrame.svelte';
 	import { goto } from '$app/navigation';
-	import { loadSession, login, session, takeNext, verifyMFA } from '$lib/session.svelte';
+	import { listAccounts, loadSession, login, session, switchAccount, takeNext, verifyMFA, type SignedInAccount } from '$lib/session.svelte';
+	import Logo from '$lib/components/ui/Logo.svelte';
+	import { logoSeed } from '$lib/avatar';
 	import { passkeySecondStep, passkeySignIn, passkeysSupported } from '$lib/passkeys';
 	import { page } from '$app/state';
 	import { onMount } from 'svelte';
@@ -27,11 +29,29 @@
 	let useRecovery = $state(false);
 	let codeEl: HTMLInputElement | undefined = $state();
 	const labels: Record<string, string> = { github: 'GitHub', discord: 'Discord' };
+	// "Add another account" from the account menu, and the accounts still
+	// signed in on this browser (one click to continue as one of them).
+	const adding = page.url.searchParams.get('add') === '1';
+	let others = $state<SignedInAccount[]>([]);
+	async function continueAs(a: SignedInAccount) {
+		busy = true;
+		error = '';
+		try {
+			await switchAccount(a.session_id, takeNext());
+		} catch (err) {
+			error = err instanceof ApiError ? err.message.charAt(0).toUpperCase() + err.message.slice(1) + '.' : 'Switching accounts failed.';
+			others = others.filter((o) => o.session_id !== a.session_id);
+			busy = false;
+		}
+	}
 
 	onMount(async () => {
 		const ecode = page.url.searchParams.get('error');
 		if (ecode) error = oauthErrors[ecode] ?? 'Sign-in failed.';
 		if (page.url.searchParams.get('step') === 'mfa') showMFA();
+		listAccounts()
+			.then((a) => (others = a))
+			.catch(() => {});
 		try {
 			canReset = (await api<{ available: boolean }>('GET', '/auth/password-reset')).available;
 		} catch {
@@ -132,8 +152,25 @@
 
 <AuthFrame>
 		{#if step === 'mfa'}<p class="eyebrow">Step 2 of 2</p>{/if}
-		<h1 class="text-page font-semibold">{step === 'mfa' ? 'Two-step verification' : 'Sign in'}</h1>
-		<p class="mt-1 text-muted">{step === 'mfa' ? (useRecovery ? 'Enter one of your recovery codes. Each works once.' : 'Enter the 6-digit code from your authenticator app.') : 'Run Discord bots and Minecraft servers on this machine.'}</p>
+		<h1 class="text-page font-semibold">{step === 'mfa' ? 'Two-step verification' : adding ? 'Add another account' : 'Sign in'}</h1>
+		<p class="mt-1 text-muted">{step === 'mfa' ? (useRecovery ? 'Enter one of your recovery codes. Each works once.' : 'Enter the 6-digit code from your authenticator app.') : adding ? 'Your other accounts stay signed in on this browser; switch between them from the account menu.' : 'Run Discord bots and Minecraft servers on this machine.'}</p>
+		{#if step === 'password' && others.length}
+			<div class="mt-5">
+				<p class="eyebrow">{adding ? 'Or go back to' : 'Signed in on this browser'}</p>
+				<ul class="mt-1.5 grid gap-1.5">
+					{#each others as a (a.session_id)}
+						<li>
+							<button class="flex w-full items-center gap-2.5 rounded-tile border border-rule-soft px-3 py-2 text-left transition-colors hover:border-rule disabled:opacity-60" disabled={busy} onclick={() => continueAs(a)}>
+								<Logo kind="user" seed={logoSeed(a.user.id, a.user.logo_variant)} class="size-7 rounded-pill" />
+								<span class="min-w-0 flex-1"><span class="block truncate font-medium">{a.user.display_name || a.user.email}</span>{#if a.user.display_name}<span class="block truncate text-small text-muted">{a.user.email}</span>{/if}</span>
+								<Icon name="chevronRight" size={14} class="text-muted" />
+							</button>
+						</li>
+					{/each}
+				</ul>
+				<div class="mt-5 flex items-center gap-3 text-small text-muted"><hr class="flex-1 border-rule" />or sign in to {adding ? 'another' : 'an'} account<hr class="flex-1 border-rule" /></div>
+			</div>
+		{/if}
 
 		{#if !reachable}<Notice tone="warn" class="mt-4">The panel does not respond right now. It may be restarting; try again in a minute.</Notice>{/if}
 		{#if error}<p bind:this={errorEl} tabindex="-1" class="mt-4 rounded-tile border border-fail/30 bg-fail/7 px-3.5 py-2.5 text-fail outline-none" role="alert">{error}</p>{/if}

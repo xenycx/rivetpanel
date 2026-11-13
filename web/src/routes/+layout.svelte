@@ -6,7 +6,11 @@
 	import { page } from '$app/state';
 	import { api } from '$lib/api/client';
 	import type { Bot } from '$lib/api/types';
-	import { session, loadSession, logout, rememberNext, canAdminister, can } from '$lib/session.svelte';
+	import { session, loadSession, logout, rememberNext, canAdminister, can, listAccounts, switchAccount, addAccount, stopImpersonating, type SignedInAccount } from '$lib/session.svelte';
+	import { picker } from '$lib/accounts.svelte';
+	import ImpersonatePicker from '$lib/components/ImpersonatePicker.svelte';
+	import { toast } from '$lib/ui/toast.svelte';
+	import { ApiError } from '$lib/api/client';
 	import { adminLinks } from '$lib/adminNav';
 	import { describePermissions } from '$lib/permissions';
 	import { confirmLeave, dirtyEntries } from '$lib/ui/guard.svelte';
@@ -201,13 +205,41 @@
 	const bare = $derived((PUBLIC.includes(path) && path !== '/docs') || (!session.user && session.loaded));
 	const who = $derived(session.user?.display_name || session.user?.email.split('@')[0] || '');
 	const themeLabel = $derived(theme.pref === 'system' ? `System theme (${theme.dark ? 'dark' : 'light'})` : theme.pref === 'dark' ? 'Dark theme' : 'Light theme');
-	const accountItems = $derived([
-		{ heading: session.user?.email ?? '' },
+	// The account switcher: the other accounts signed in on this browser.
+	let others = $state<SignedInAccount[]>([]);
+	let othersFor = '';
+	$effect(() => {
+		const uid = session.user?.id ?? '';
+		if (!uid || uid === othersFor) return;
+		othersFor = uid;
+		listAccounts()
+			.then((a) => (others = a))
+			.catch(() => (others = []));
+	});
+	const failed = (e: unknown, what: string) => toast(e instanceof ApiError ? e.message.charAt(0).toUpperCase() + e.message.slice(1) + '.' : what, 'fail');
+	const isAdmin = $derived(session.user?.role === 'admin' && !session.impersonator);
+	const accountItems = $derived<MenuItem[]>([
+		{ heading: session.impersonator ? `Acting as ${session.user?.email ?? ''}` : (session.user?.email ?? '') },
+		...(session.impersonator ? [{ label: `Return to ${session.impersonator.email}`, icon: 'logout' as IconName, onselect: () => void stopImpersonating().catch((e) => failed(e, 'Returning to your account failed.')) }] : []),
+		'separator' as const,
+		// While impersonating, the administrator's own account is "Return to …" above.
+		...others.filter((a) => a.user.id !== session.impersonator?.id).map((a) => ({
+			label: a.user.display_name || a.user.email,
+			hint: a.user.display_name ? a.user.email : 'Switch to this account',
+			detail: true,
+			image: { src: a.user.avatar_url, kind: 'user' as const, seed: logoSeed(a.user.id, a.user.logo_variant) },
+			onselect: () => void switchAccount(a.session_id).catch((e) => failed(e, 'Switching accounts failed.'))
+		})),
+		...(session.impersonator ? [] : [{ label: 'Add another account', icon: 'plus' as IconName, onselect: () => void addAccount().catch((e) => failed(e, 'Adding an account failed.')) }]),
+		...(isAdmin ? [{ label: 'Sign in as a user…', icon: 'users' as IconName, onselect: () => (picker.open = true) }] : []),
 		'separator' as const,
 		{ label: 'Profile', onselect: () => goto('/settings/profile') },
 		{ label: 'Appearance', onselect: () => goto('/settings/appearance') },
 		'separator' as const,
-		{ label: 'Sign out', onselect: logout }
+		...(session.impersonator
+			? []
+			: [{ label: 'Sign out', hint: others.length ? `Then ${others[0].user.display_name || others[0].user.email} is active` : undefined, onselect: () => void logout() }]),
+		...(others.length || session.impersonator ? [{ label: 'Sign out of all accounts', onselect: () => void logout(true) }] : [])
 	]);
 </script>
 
@@ -281,6 +313,13 @@
 		</aside>
 		<div class="min-w-0">
 			<header class="topbar sticky top-0 z-30 border-b border-rule-soft backdrop-blur-md">
+				{#if session.impersonator}
+					<div class="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-warn/30 bg-warn/12 px-4 py-1.5 text-small sm:px-6 lg:px-8" role="status">
+						<Icon name="eye" size={15} class="shrink-0" />
+						<span class="min-w-0 flex-1">Acting as <strong>{who}</strong>{session.user?.display_name ? ` (${session.user.email})` : ''}. Changes are recorded as {session.impersonator.email}; sign-in and security settings stay with the owner.</span>
+						<button class="btn btn-sm" onclick={() => void stopImpersonating().catch((e) => failed(e, 'Returning to your account failed.'))}>Return to your account</button>
+					</div>
+				{/if}
 				<div class="flex h-14 items-center gap-2 px-4 sm:px-6 lg:px-8">
 					<button class="btn btn-quiet btn-icon lg:hidden" aria-label="Open menu" aria-haspopup="dialog" aria-controls="nav-drawer" aria-expanded={drawer} onclick={() => (drawer = true)}><Icon name="menu" size={18} /></button>
 					<a href="/dashboard" class="flex items-center gap-2 lg:hidden" aria-label="RivetPanel overview"><img src="/favicon.svg" alt="" width="24" height="24" class="rounded-control" /></a>
@@ -324,12 +363,17 @@
 		<div class="sidebar pb-safe relative flex h-full flex-col overflow-y-auto border-r border-rule-soft px-3 py-4 shadow-overlay">
 			<button class="btn btn-quiet btn-icon absolute top-3 right-3" aria-label="Close menu" onclick={() => (drawer = false)}><Icon name="x" size={18} /></button>
 			{@render sidebar()}
-			<button class="side-link mt-0.5" onclick={logout}><Icon name="logout" class="side-icon" />Sign out</button>
+			{#if session.impersonator}
+				<button class="side-link mt-0.5" onclick={() => void stopImpersonating()}><Icon name="logout" class="side-icon" />Return to your account</button>
+			{:else}
+				<button class="side-link mt-0.5" onclick={() => void logout()}><Icon name="logout" class="side-icon" />Sign out</button>
+			{/if}
 		</div>
 	</dialog>
 
 	<OperationShelf />
 	<CommandPalette bind:open={palette} />
+	{#if isAdmin}<ImpersonatePicker />{/if}
 	<AIChat />
 {:else if session.loaded && isPublic(path)}
 	{@render children()}

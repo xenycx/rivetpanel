@@ -121,7 +121,9 @@ on the smallest VPS you have.
   Bots, sites and workspaces take an uploaded logo; anything without one gets
   a generated picture you can re-roll with **New picture**.
 - Sign in with **GitHub, Discord, any OpenID Connect provider or a passkey**,
-  with two-step codes and scoped **API clients** for automation.
+  with two-step codes and scoped **API clients** for automation. Switch
+  between several signed-in accounts, and let administrators **sign in as a
+  user** in one step to see exactly what they see.
 - Support tickets with `RT-000042` keys, split, table and board layouts,
   Markdown conversations (edit, remove, reactions, @mentions in internal
   notes), labels, saved replies and watchers; a Markdown **help center** at
