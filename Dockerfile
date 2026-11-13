@@ -4,6 +4,10 @@ WORKDIR /src/web
 COPY web/package.json web/package-lock.json ./
 RUN npm ci
 COPY web/ ./
+# The documentation pages are generated at build time from the guide and the
+# changelog at the repository root (web/scripts/docs.ts).
+COPY docs/guide /src/docs/guide
+COPY CHANGELOG.md /src/CHANGELOG.md
 RUN npm run build
 
 FROM --platform=$BUILDPLATFORM golang:1.27-alpine AS build

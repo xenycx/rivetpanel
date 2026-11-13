@@ -6,6 +6,16 @@ authoritative current version.
 
 ## Unreleased
 
+## 1.9.1 - 2026-11-13
+
+### Fixed
+
+- **The container image builds again.** 1.9.0 generates its documentation
+  pages from `docs/guide/` and `CHANGELOG.md` at build time, but the
+  Dockerfile's web stage copied only `web/`, so the image build failed and no
+  1.9.0 image was published. The web stage now copies both. 1.9.1 contains
+  everything listed under 1.9.0.
+
 ## 1.9.0 - 2026-11-13
 
 ### Added
