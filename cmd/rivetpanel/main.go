@@ -596,6 +596,7 @@ func serve(log *slog.Logger, logs *logbuf.Buffer) error {
 	botSvc.Notices = notices
 	tickets := &service.TicketService{Store: db, Bots: botSvc, Notices: notices}
 	go alerts.Watch(ctx, bus)
+	go audit.WatchCrashes(ctx, bus)
 	deploySvc := &service.DeployService{Bots: botSvc, OAuth: oauthSvc, Files: wsm, GH: &github.Client{}, Keys: keys,
 		Alerts: alerts, PublicURL: cfg.PublicURL, Log: log, Ops: ops}
 	deploySvc.Limits = filesystem.DefaultBackupLimits
@@ -729,7 +730,7 @@ func serve(log *slog.Logger, logs *logbuf.Buffer) error {
 	backupSvc.Limits = filesystem.DefaultBackupLimits
 	backupSvc.Limits.MaxBytes = cfg.BackupMaxBytes
 	botSvc.OnDelete = func(id string) { backupSvc.PurgeBot(id); logArchive.PurgeBot(id) }
-	scheduler := &service.Scheduler{Store: db, Bots: botSvc, Backups: backupSvc, Deploy: deploySvc, Log: log}
+	scheduler := &service.Scheduler{Store: db, Bots: botSvc, Backups: backupSvc, Deploy: deploySvc, Audit: audit, Log: log}
 	health := &service.HealthService{Store: db, Bots: botSvc, Alerts: alerts, Log: log}
 	if dk != nil && appsNetwork(cfg) != "" {
 		health.AppAddr = func(ctx context.Context, botID string, port int) (string, bool) {

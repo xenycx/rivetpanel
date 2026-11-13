@@ -86,7 +86,7 @@
 	<p class="mt-3 text-small text-muted">
 		The process state in the header only says whether the container runs. A heartbeat says the bot's code is alive and connected; a probe catches a process that hangs without exiting.
 		Who is told about crashes, deployments and a silent bot is set in <a class="link" href="/bots/{bot.id}?tab=settings#notifications">Settings → Notifications</a>{health.alerts.heartbeat_after_s ? ` (currently after ${quiet(health.alerts.heartbeat_after_s)} without a heartbeat)` : ''}.
-		<a class="link" href="/docs#health">How health and alerts work</a>
+		<a class="link" href="/docs/observe/health">How health and alerts work</a>
 	</p>
 
 	<div class="mt-6">

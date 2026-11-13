@@ -207,7 +207,7 @@ type BotTab struct {
 }
 
 // BotCard is a card on the bot overview. Route (a "bot" route) returns
-// widget JSON in the docs/widgets.md format.
+// widget JSON in the docs/guide/05-observe/01-widgets.md format.
 type BotCard struct {
 	ID    string `json:"id"`
 	Title string `json:"title"`

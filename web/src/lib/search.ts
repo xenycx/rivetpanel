@@ -99,13 +99,23 @@ export const adminPages: Entry[] = [
 	{ key: 'a-diag', group: 'admin', label: 'Diagnostics', hint: 'Administration · health checks', icon: 'shield', href: '/admin/diagnostics', words: 'doctor status checks problems docker keys backups report' }
 ];
 
-/** Sections of /docs, linked by anchor. */
-export const docs: Entry[] = [
-	['version', 'Version and implementation status'], ['quickstart', 'Quick start'], ['containers', 'Containers and Compose stacks'], ['deploy', 'Deployment and GitHub'], ['publish', 'Publishing a bot to GitHub'],
-	['workspaces', 'Workspaces and roles'], ['sites', 'Bot Sites and public pages'], ['appearance', 'Appearance'], ['ai', 'AI assistant'], ['widgets', 'Dashboard and public widgets'],
-	['widget-data', 'Widget data shapes'], ['telemetry', 'Telemetry limits'], ['health', 'Health and alerts'], ['usage', 'Usage analytics'], ['security', 'Security and isolation'], ['backups', 'Backups and restore'],
-	['automation', 'Automation API'], ['admin-tools', 'Host, logs and environment'], ['log-archive', 'Log archive and retention'], ['operations', 'Operations guide']
-].map(([id, title]) => ({ key: `d-${id}`, group: 'docs', label: title, hint: 'Documentation', icon: 'book' as IconName, href: `/docs#${id}` }));
+/** Pages of the documentation, from the docs/guide manifest (headings are
+ * searchable words, so "probe" finds Health and alerts). Loaded when the
+ * palette opens, so the manifest stays out of every other page. */
+export async function loadDocs(): Promise<Entry[]> {
+	const { manifest } = await import('virtual:docs');
+	return manifest.categories.flatMap((c) =>
+		c.pages.map((p) => ({
+			key: `d-${p.slug}`,
+			group: 'docs',
+			label: p.title,
+			hint: `Documentation · ${c.title}`,
+			icon: p.icon as IconName,
+			href: `/docs/${p.slug}`,
+			words: [p.lede, ...p.headings.map((h) => h.text)].join(' ')
+		}))
+	);
+}
 
 /** The sections an app of a kind can have, from the tab registry (labels and
  * search words stay in one place); BotView falls back to Overview for ones

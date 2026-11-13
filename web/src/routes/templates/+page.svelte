@@ -310,7 +310,7 @@
 		{:else if sitesInfo && !sitesInfo.enabled}
 			<div class="rows"><div class="rows-empty">
 				<span>Site hosting is not enabled on this panel{session.user?.role === 'admin' ? '. Set RIVET_SITES_LISTEN and RIVET_SITES_BASE_URL and restart the panel to use site templates.' : '. An administrator has to turn it on first.'}</span>
-				<a class="link" href="/docs#sites">Read the hosting guide</a>
+				<a class="link" href="/docs/websites">Read the hosting guide</a>
 			</div></div>
 		{:else if sites.list.length === 0 && !sites.error}
 			<div class="rows"><div class="rows-empty">No site templates are available. Create an empty site and upload your files instead.</div></div>

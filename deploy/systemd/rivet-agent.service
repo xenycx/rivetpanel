@@ -1,6 +1,6 @@
 [Unit]
 Description=RivetPanel remote execution agent
-Documentation=file:///usr/share/doc/rivetpanel/docs/agents.md
+Documentation=file:///usr/share/doc/rivetpanel/docs/guide/07-operate/04-remote-nodes.md
 After=network-online.target docker.service
 Wants=network-online.target docker.service
 

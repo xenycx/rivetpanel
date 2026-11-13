@@ -780,6 +780,10 @@ func (s *panel) routes(v1 fiber.Router) {
 	}
 	if s.audit != nil {
 		authed.Get("/activity/changes", s.visibleAudit)
+		authed.Get("/activity", s.activityTimeline)
+		authed.Get("/activity/stats", s.activityStats)
+		authed.Get("/activity/people", s.activityPeople)
+		authed.Get("/activity/export", s.activityExport)
 		authed.Get("/bots/:id/changes", s.botAudit)
 	}
 	authed.Post("/bots/:id/transfer", s.requirePerm(domain.PermBotsShare), s.transferBot)

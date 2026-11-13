@@ -5,6 +5,7 @@
 	import { type Ticket, ticketKey, idleTone, fmtIdle, categoryLabel, drafts } from '$lib/api/support';
 	import { labelById } from '$lib/supportData.svelte';
 	import { supportView, setSupportSort, type SortKey } from '$lib/ui/supportLayout.svelte';
+	import { glideList } from '$lib/ui/glide';
 	import StatusLozenge from './StatusLozenge.svelte';
 	import PriorityIcon from './PriorityIcon.svelte';
 	import PersonAvatar from './PersonAvatar.svelte';
@@ -35,6 +36,9 @@
 		{ key: 'updated', label: 'Updated', cls: 'w-24 text-right' }
 	]);
 	const me = $derived(session.user?.id);
+	let body = $state<HTMLElement>();
+	// Re-sorting slides the rows to their new places.
+	const sortBy = (k: SortKey) => glideList(body ?? null, 'tr[data-ticket]', (el) => el.dataset.ticket ?? '', () => setSupportSort(k));
 </script>
 
 <div class="table-wrap card overflow-auto">
@@ -44,14 +48,14 @@
 				{#each cols as c (c.key)}
 					{@const on = supportView.sort.key === c.key}
 					<th scope="col" class={c.cls} aria-sort={on ? (supportView.sort.desc ? 'descending' : 'ascending') : 'none'}>
-						<button type="button" class="sort-btn" class:on onclick={() => setSupportSort(c.key)}>
+						<button type="button" class="sort-btn" class:on onclick={() => sortBy(c.key)}>
 							{c.label}{#if on}<Icon name="chevronDown" size={12} class={supportView.sort.desc ? '' : 'rotate-180'} />{/if}
 						</button>
 					</th>
 				{/each}
 			</tr>
 		</thead>
-		<tbody>
+		<tbody bind:this={body}>
 			{#each tickets as t (t.id)}
 				{@const tone = idleTone(t, now)}
 				{@const labels = (t.labels ?? []).map(labelById).filter((l) => !!l)}

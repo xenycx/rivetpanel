@@ -75,7 +75,7 @@
 	const PUBLIC = ['/', '/login', '/register', '/reset', '/verify-email', '/welcome', '/setup', '/docs', '/status'];
 	// The help center answers anonymous visitors itself (only while the
 	// public help center is on; otherwise it asks them to sign in).
-	const isPublic = (p: string) => PUBLIC.includes(p) || p === '/help' || p.startsWith('/help/');
+	const isPublic = (p: string) => PUBLIC.includes(p) || p === '/help' || p.startsWith('/help/') || p.startsWith('/docs/');
 
 	onMount(async () => {
 		await loadSession();
@@ -162,6 +162,9 @@
 		}
 	});
 	const path = $derived(page.url.pathname);
+	// Work surfaces that use the whole window width (the support desk, table
+	// and board); every other page keeps the readable 1360px column.
+	const fullBleed = $derived(path === '/support');
 	const adminHome = $derived(session.user && canAdminister() ? (adminLinks()[0]?.href ?? '') : '');
 	const withheld = $derived(session.verification.withheld ?? []);
 	type NavItem = { href: string; label: string; icon: IconName; active: boolean };
@@ -298,7 +301,7 @@
 					</div>
 				</div>
 			</header>
-			<main id="main" tabindex="-1" class="mx-auto max-w-[1360px] px-4 pt-5 pb-16 outline-none sm:px-6 lg:px-8 lg:pt-6">
+			<main id="main" tabindex="-1" class="mx-auto px-4 pt-5 pb-16 outline-none sm:px-6 lg:px-8 lg:pt-6" class:max-w-[1360px]={!fullBleed}>
 				{#if withheld.length && !path.startsWith('/settings/profile')}
 					<p class="mb-5 rounded-tile border border-warn/30 bg-warn/7 px-3.5 py-2.5 text-small" role="status">
 						Verify your email address to unlock {describePermissions(withheld)}. <a class="link" href="/settings/profile#email">Verify now</a>

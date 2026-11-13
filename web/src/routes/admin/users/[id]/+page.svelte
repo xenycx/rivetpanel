@@ -71,7 +71,7 @@
 		<p class="max-w-3xl text-small text-muted">
 			Allowances belong to workspaces, not accounts: every member's apps and sites in a workspace count together.
 			{#if personal}Set an allowance for <a class="link" href="/admin/workspaces/{personal.id}#quota-h">their personal workspace</a>; team workspaces have their own.{/if}
-			<a class="link" href="/docs#workspace-limits">How limits work</a>
+			<a class="link" href="/docs/teams/limits">How limits work</a>
 		</p>
 	</section>
 

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { api } from '$lib/api/client';
 	import type { Bot, Site, SiteTemplate } from '$lib/api/types';
@@ -13,7 +14,7 @@
 	import { selectWorkspace, workspaces, wsName } from '$lib/workspaces.svelte';
 	import { logoSeed } from '$lib/avatar';
 	import { page } from '$app/state';
-	import { adminPages, appTabs, docs, groups, pages, score, scopes, type Entry, type Scope } from '$lib/search';
+	import { adminPages, appTabs, loadDocs, groups, pages, score, scopes, type Entry, type Scope } from '$lib/search';
 	import Dialog from '$lib/components/ui/Dialog.svelte';
 	import Icon from '$lib/components/ui/Icon.svelte';
 	import Logo from '$lib/components/ui/Logo.svelte';
@@ -38,6 +39,7 @@
 	// Enter pressed before the lists arrived waits for them, so fast typing
 	// still lands on the right thing.
 	let loading: Promise<unknown> = Promise.resolve();
+	let docs = $state<Entry[]>([]);
 
 	const isAdmin = $derived(session.user?.role === 'admin');
 	const aiOn = $derived(session.features.ai);
@@ -48,6 +50,9 @@
 		scope = 'all';
 		active = 0;
 		const jobs: Promise<unknown>[] = [api<{ bots: Bot[] }>('GET', '/bots').then((r) => (bots = r.bots))];
+		// Read without tracking: the docs arriving must not re-run this (it
+		// would clear what was typed meanwhile).
+		if (!untrack(() => docs.length)) jobs.push(loadDocs().then((d) => (docs = d)));
 		if (session.features.sites) jobs.push(api<{ sites: Site[] }>('GET', '/sites').then((r) => (sites = r.sites)));
 		if (session.features.sites && can('sites.create')) jobs.push(api<{ templates: SiteTemplate[] }>('GET', '/site-templates').then((r) => (siteTemplates = r.templates)));
 		if (aiOn) jobs.push(api<{ conversations: Conversation[] }>('GET', '/ai/conversations').then((r) => (chats = r.conversations)));

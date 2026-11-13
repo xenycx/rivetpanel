@@ -20,4 +20,4 @@
 		</div>
 	{/each}
 </dl>
-{#if note}<p class="mt-2 text-small text-muted">Built-in administrators are never refused by a workspace allowance; every other member is, even in a workspace an administrator owns. Disk is not counted. <a class="link" href="/docs#workspace-limits">How limits work</a></p>{/if}
+{#if note}<p class="mt-2 text-small text-muted">Built-in administrators are never refused by a workspace allowance; every other member is, even in a workspace an administrator owns. Disk is not counted. <a class="link" href="/docs/teams/limits">How limits work</a></p>{/if}

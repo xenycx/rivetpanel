@@ -3,7 +3,7 @@
 # repository root (after `make build`) or from an unpacked release archive; both
 # keep the binaries in bin/. It never generates or overwrites secrets: create
 # keys with `rivetpanel keygen`. rivet-agent is not installed here: it runs on
-# remote nodes, see deploy/install-agent.sh and docs/agents.md.
+# remote nodes, see deploy/install-agent.sh and docs/guide/07-operate/04-remote-nodes.md.
 set -eu
 [ "$(id -u)" = 0 ] || { echo "run as root" >&2; exit 1; }
 [ -x bin/rivetpanel ] || { echo "bin/rivetpanel not found: run make build, or run this from an unpacked release archive" >&2; exit 1; }

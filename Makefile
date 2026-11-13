@@ -4,7 +4,7 @@ BIN := bin
 # it explicitly (for example `make release VERSION=1.2.3-rc.1`).
 VERSION ?= $(shell tr -d '\r\n' < VERSION)
 
-.PHONY: all web extensions build test check integration e2e run-dev clean release version-check namespace-check
+.PHONY: all web extensions build test check integration e2e run-dev clean release version-check namespace-check docs-check docs-index docs-figures
 
 all: build
 
@@ -34,8 +34,21 @@ test:
 integration:
 	$(GO) test -tags integration -count=1 -timeout 60m -v ./tests/integration
 
-check: version-check namespace-check test
+check: version-check namespace-check docs-check test
 	cd web && npm run check
+
+# The documentation guide (docs/guide): frontmatter, icons, figures and links.
+docs-check:
+	cd web && node scripts/docs-check.ts
+
+# Regenerates docs/README.md (the GitHub index) from docs/guide.
+docs-index:
+	cd web && node scripts/docs-check.ts --index
+
+# Pictures of the guide's figures for GitHub (docs/guide/figures). Needs the
+# docs served: `npm run dev` in web/, or DOCS_URL=http://127.0.0.1:8080.
+docs-figures:
+	cd web && node scripts/docs-figures.ts
 
 # Historical release notes retain the former identity; active source,
 # deployment files and documentation must use the RivetPanel namespace. The

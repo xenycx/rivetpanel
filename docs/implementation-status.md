@@ -37,7 +37,7 @@ items state exactly what remains.
   out of the backlog on 2026-11-06 and are now a default-off preview module
   (see below).
 - [x] Panel extensions (preview module `extensions`, default off; migration
-  `0060`; `docs/extensions.md`). Signed `.rpx` bundles (Ed25519 over every
+  `0060`; `docs/guide/07-operate/09-extensions.md`). Signed `.rpx` bundles (Ed25519 over every
   file's SHA-256; administrator-trusted publisher keys, revocation fails
   running extensions; unsigned only with `RIVET_ENV=development`; built-ins
   trusted because they ship in the binary), strict manifest v1, `rivet-ext`
@@ -123,7 +123,7 @@ items state exactly what remains.
   private bind mounts from its data root). If its own container cannot be
   identified it only warns and assumes identical paths. `rivet-agent` has no
   such translation and is supported directly on the node, not in a container.
-  The image runs as root by design (documented in `docs/container.md`) and has
+  The image runs as root by design (documented in `docs/guide/07-operate/01-install.md`) and has
   a `HEALTHCHECK` (`rivetpanel health`).
 - [x] Agent CA creation moved out of the systemd sandbox: `rivetpanel keygen`
   (or `keygen --agent-ca`) creates it; the unit keeps `/etc/rivetpanel`
@@ -616,7 +616,7 @@ items state exactly what remains.
     other clients.
 - [x] Support batch 1: in-panel notifications and support tickets
   (migrations `0048`-`0049`, schema assertion 50, no agent protocol change).
-  Guide: `docs/support.md`.
+  Guide: `docs/guide/06-teams/05-support.md`.
   - Notifications (`notifications`, `notification_prefs`): produced by the
     existing paths (`AlertService.Notify` for crash/heartbeat/deploy/backup,
     `BotService` sharing/transfer/workspace/invitation hooks, agent hub
@@ -675,7 +675,7 @@ items state exactly what remains.
     to Discord). Knowledgebase and status page: support batch 2 below.
 - [x] Support batch 2: knowledgebase (help center) and public status page
   (migrations `0050`-`0051`, schema assertion 52, tables assertion 44, no
-  agent protocol change, no new dependency). Guide: `docs/support.md`.
+  agent protocol change, no new dependency). Guide: `docs/guide/06-teams/05-support.md`.
   - Knowledgebase (`kb_categories`, `kb_articles`): permission `kb.manage`
     (administration; built-in administrators, delegable). Enforced by the
     application in `service.KBService`: drafts only for `kb.manage`;
@@ -741,7 +741,7 @@ items state exactly what remains.
 
 - [x] Usage analytics (migration `0052`, schema assertion 53, tables
   assertion 47, no agent protocol change, no new dependency). Guide:
-  `docs/features.md` ("Usage analytics").
+  `docs/guide/05-observe/05-usage.md`.
   - Data reused: Docker stats (local) and agent stats (connected remote
     nodes) through the existing `StatsStream` sources, bot rows
     (`observed_state`, `desired_state`, `restart_count`,
@@ -845,6 +845,29 @@ items state exactly what remains.
   server pages with power controls in the header, a width-aware tab bar
   ("More" menu) and a console that fills the window; aligned wizard footers.
   Visual only: no access-control or enforcement boundary changed.
+- [x] Documentation guide, phases 0–1 of `docs/docs-overhaul-plan.md`
+  (documentation only, no API or schema change): `docs/guide/` (7 sections,
+  52 pages) is the single source of the in-panel `/docs` pages, their search
+  index, the Ctrl+K docs entries and the generated `docs/README.md`. Build:
+  `web/scripts/docs.ts` (Markdown to block trees with `marked` at build time)
+  served as `virtual:docs*` modules by the plugin in `web/vite.config.ts`;
+  renderer `web/src/lib/docs`; routes `web/src/routes/docs`. Checks:
+  `make docs-check` (front matter, icons, figures, links and heading
+  anchors, the 31 old `/docs#` ids, `/docs/...` links in the UI, the index
+  is current), part of `make check`. Enforcement badges in the guide are
+  documentation of where a control is enforced; they enforce nothing.
+  Phase 3 (Unreleased): ten drawn figures (`web/src/lib/docs/figures`:
+  system map, services and stack networks, game ports, site releases, SSO and
+  node-enrollment sequences, app restore, sites flow, security layers) built
+  from HTML boxes, zones and arrows that reflow under 34–36rem (container
+  queries), with a screen-reader list for sequence charts. GitHub gets a
+  picture of each (`docs/guide/figures/*.png`, `make docs-figures` against a
+  running dev server); `make docs-check` refuses images that are not figure
+  pictures and missing pictures. Figures describe behaviour; they enforce
+  nothing.
+  Not done (phases 2, 4 and 5 of the plan): the interactive figures (widget
+  playground, limits calculator, health timeline, permission matrix, log
+  ruler) and scroll-driven reveals; no e2e test covers the docs routes yet.
 
 ## Completed in 0.4.0, 0.3.0 and since 0.2.0
 
@@ -897,7 +920,7 @@ items state exactly what remains.
   sign-out of every session on reset and the sending caps (20 per recipient,
   300 per hour) are application level; delivery and reputation are Mailgun's.
   No queue, pool or background goroutine, so idle memory is unchanged
-  (`footprint.md`). Limits: no Mailgun webhooks (bounces and complaints are not
+  (`docs/guide/07-operate/12-diagnostics.md`). Limits: no Mailgun webhooks (bounces and complaints are not
   tracked), no retries, one sender, plain text plus simple HTML, no templates
   or attachments. Announcements (Administration → Announcements): administrators
   email sanitized HTML as a notice or opt-out news to all accounts or admins
@@ -935,10 +958,31 @@ items state exactly what remains.
 - [x] Team workspaces with owner/admin/developer/viewer roles, a personal
   workspace per account, moving bots between workspaces, and a sidebar
   switcher. Enforcement: application level, on every bot, site, operation,
-  activity, SFTP and automation request (`docs/workspaces.md`). The
+  activity, SFTP and automation request (`docs/guide/06-teams/01-workspaces.md`). The
   switcher's choice is a per-browser view filter in the web UI only (Overview
   list and numbers, Apps, default create target), not an access boundary;
   Activity is not filtered by it and says so.
+- [x] Unified Activity timeline (1.9.0, migration 0068): one stream of
+  recorded changes and operations (`GET /api/v1/activity`, keyset cursor of
+  time and key), a report of the window (`/activity/stats`: buckets, sources,
+  results, kinds, top people and apps, weekday-by-hour), the people filter
+  list (`/activity/people`) and CSV export (`/activity/export`, at most 10,000
+  rows, formula-prefixed cells). Every change carries who performed it
+  (person, schedule, system, AI operator); operations map their trigger to
+  person, schedule, GitHub push or the panel. New records: automatic schedule
+  runs (`scheduled.*`, including skipped, missed and denied), schedule **Run
+  now** (`schedule.run_now`), crashes (`bot.crash`, at most one per app per
+  minute) and giving up after the restart budget (`bot.gave_up`).
+  Visibility is enforced by the application on every one of these endpoints
+  with the same rule as before (administrators see everything; others see
+  apps they own, were granted or share through a workspace, plus their own
+  account events). Retention unchanged: 180 days / 200,000 changes, 200
+  operations per app (application). The web UI has a brushable chart, filters
+  kept in the URL, avatars and agent marks, and a report rail.
+  Browser-verified on a scratch local panel with seeded data (dark and light,
+  1440 px and 375 px); store, service and API tests cover merging, cursor
+  paging, filters, visibility, stats and the new records; no automated UI
+  test.
 - [x] Administrator oversight of every workspace and account: members, bots
   with owners and state, sites, and the latest 40 operations (deployments,
   builds, backups, restores, GitHub pushes).
@@ -948,7 +992,7 @@ items state exactly what remains.
   changed files only, never forced, recorded as `publish` operations.
 - [x] Static site hosting on a separate listener with ZIP and GitHub
   publishing, five immutable releases and rollback, SPA/clean-URL options and
-  custom 404 pages (`docs/sites.md`).
+  custom 404 pages (`docs/guide/04-websites/`).
 - [x] Site templates: five built-in static starters (landing, docs and blog,
   portfolio, coming soon, game server community with a live status section),
   `GET /api/v1/site-templates`, a sandboxed preview and `template_id` on
@@ -1007,7 +1051,7 @@ items state exactly what remains.
   parents/subdomains, overlapping sites domains, and custom domains under a
   sites domain are refused. Routing and certificates per sites domain are
   **not** managed by RivetPanel: the reverse proxy needs a catch-all route and
-  a certificate for each domain (`docs/sites.md`).
+  a certificate for each domain (`docs/guide/04-websites/`).
 - [x] Custom domains for sites with DNS TXT ownership verification and
   six-hourly re-checks. Enforcement: the sites listener serves a custom domain
   only after verification (application level). TLS is **not** terminated by
@@ -1177,7 +1221,7 @@ items state exactly what remains.
   mount, capability and network isolation are Docker-runtime-level. AI file
   tools route through `rivet-agent` for remote bots (protocol 5); isolated
   diagnostics run on the remote server's node with the same sandbox
-  (protocol 7, `docs/ai-operator.md`).
+  (protocol 7, `docs/guide/07-operate/10-ai-assistant.md`).
 - [x] AI operator follow-ups: every run limit (rounds, wall time, diagnostics,
   apply attempts, lifecycle actions, changed files/bytes, retained output) is
   enforced per run in both modes; model-initiated file applies, diagnostics,
@@ -1256,6 +1300,7 @@ Migrations added since 0.2.0 (the schema-version assertion in
 | `0065_configure_share.sql` | Rebuild (foreign keys off, checked after): `bot_subusers` and `bot_invites` widen `permissions` from 1..31 to 1..63 so a share or invitation can hold the Configuration bit (32); every column copied by name, indexes recreated, existing grants unchanged. Covered by `TestMigration0065WidensSharePermissions` and `TestMigrateIdempotentAndSchema` (66 versions) |
 | `0066_workspace_logos.sql` | Additive: `workspaces` gains `logo` (BLOB ≤ 256 KiB), `logo_type` (`image/png`/`image/jpeg`) and `logo_updated_at_ms`; `workspaces`, `bots`, `sites` and `users` gain `logo_variant INTEGER NOT NULL DEFAULT 0` (≥ 0), so existing generated pictures are unchanged. Covered by `TestMigration0066WorkspaceLogosAndVariants` and `TestMigrateIdempotentAndSchema` (67 versions) |
 | `0067_support_collab.sql` | Additive: `support_ticket_messages` gains `edited_at_ms`, `deleted_at_ms`, `deleted_by` and `mentions_json` (a JSON array, default `[]`); new tables `support_message_revisions`, `support_message_reactions` (kinds `ack`/`thanks`/`seen`/`solved`), `support_labels` (palette colors), `support_ticket_labels`, `support_saved_replies` and `support_ticket_watchers`, all cascading with their ticket or message. Existing rows keep their meaning. Covered by `TestMigrateIdempotentAndSchema` (68 versions) and the support collaboration API tests |
+| `0068_activity_source.sql` | Additive: `audit_events.source` (`person`/`schedule`/`system`/`ai`, default `person`, so existing rows keep their meaning), existing `ai.file_apply`/`ai.diagnostic`/`ai.restart`/`ai.env_input` rows backfilled to `ai`, index `audit_source_idx(source, at_ms)`. Covered by `TestMigrateIdempotentAndSchema` (69 versions) and `TestActivityTimelineMergesFiltersAndPages` |
 | `0054_web_apps.sql` | Rebuilds `bots` (kind gains `web`, runtime gains `php`, new `release_command`) and `sites` (mode gains `app`; `app_id`, `framework`, `build_output_dir`, `app_port`, `health_path`, `max_body_bytes`) with explicit column lists and foreign keys off (checked with `PRAGMA foreign_key_check`; all indexes recreated); additive `site_releases.source_ref` and `bot_health_probes.target` (`host`/`app`). Covered by `apps_migration_test.go` |
 | `0030_ai_global_chat.sql` | Rebuilds `ai_conversations` so a chat may have no target; `ai_runs.bot_id`/`site_id`, `ai_messages.context_json` (the conversation subtree is stashed and restored, rows preserved) |
 
@@ -1411,7 +1456,7 @@ network, filesystem, or container-runtime mechanism.
 - [ ] .NET, Deno/Bun and opt-in custom Dockerfile runtimes (PHP is available
   since site apps; see above).
 - [x] Container apps (preview module `containers`, default on; migration
-  `0061`; `docs/containers.md`): `bots.kind = 'container'` runs an image its
+  `0061`; `docs/guide/02-apps/08-containers.md`): `bots.kind = 'container'` runs an image its
   owner chose, with settings in `bot_containers` (user, writable paths,
   volumes, stack membership, dependencies). Enforcement: the registry
   allowlist (`RIVET_CONTAINER_REGISTRIES`) is checked by the application at
@@ -1432,7 +1477,7 @@ network, filesystem, or container-runtime mechanism.
   shared between services are copied per service, not shared; health check
   conditions are treated as started.
 - [x] One-click apps (migration `0062`; `internal/apptemplates`,
-  `docs/containers.md`): a catalog of reviewed Compose templates installed
+  `docs/guide/02-apps/08-containers.md`): a catalog of reviewed Compose templates installed
   through the same Compose import, with variables resolved and secrets
   generated server-side (`crypto/rand`), stored only as sealed variables;
   `stacks.template_id` records the template. Every catalog app was installed,
@@ -1462,8 +1507,8 @@ network, filesystem, or container-runtime mechanism.
   stack network, and the runner's resync removes idle stack networks of this
   installation whose stack has no service meant to run. Each network takes a
   subnet from the Docker daemon's address pools (about 30 with Docker's
-  defaults); see `docs/containers.md` for raising `default-address-pools`.
-- [x] Site backups (migration `0063`; `docs/backup.md`): sites with an app
+  defaults); see `docs/guide/02-apps/08-containers.md` for raising `default-address-pools`.
+- [x] Site backups (migration `0063`; `docs/guide/07-operate/07-backups.md`): sites with an app
   unit use the app Backups tab and its switch; files sites get archives of the
   serving release on the panel schedule (only when it changed) or on demand,
   a per-site switch, download, and restore as a new release. Enforced by the
@@ -1479,7 +1524,7 @@ network, filesystem, or container-runtime mechanism.
   Services, …) and groups pages with more than seven tabs.
 - [ ] Signed callback action widgets, dashboard filters, and drill-down.
 - [~] Email-backed password reset, invitations, email verification, alerts
-  and announcements exist through Mailgun (`email.md`); an SMTP transport
+  and announcements exist through Mailgun (`docs/guide/07-operate/06-email.md`); an SMTP transport
   remains.
 
 ## Remaining: governance and compliance

@@ -130,7 +130,7 @@
 					<span class="font-semibold">{meta[c.provider].name}</span>
 					<span class="pill" data-tone={c.linked ? 'run' : undefined}>{c.linked ? 'Linked' : c.configured ? 'Not linked' : 'Not set up on this panel'}</span>
 				</p>
-				<p class="text-small text-muted">{c.configured ? description(c) : `The administrator has to configure ${meta[c.provider].name} sign-in first (docs/oauth.md).`}</p>
+				<p class="text-small text-muted">{c.configured ? description(c) : `The administrator has to configure ${meta[c.provider].name} sign-in first.`}</p>
 			</div>
 			<div class="flex flex-wrap gap-2">
 				{#if c.linked && c.provider === 'discord' && !c.notifications}

@@ -104,6 +104,9 @@ on the smallest VPS you have.
   restore, plus whole-installation backup and restore from the command line.
 - **Schedules** for backups, restarts, deploys and console command chains.
 - **Notifications** in the panel, by email (Mailgun) or to Discord.
+- **Activity**: one timeline of who changed what and what ran automatically
+  (schedules, GitHub pushes, crashes), with a zoomable chart, filters by
+  person, app, kind and result, a report and CSV export.
 - An **AI assistant** on every page (bring an OpenAI-compatible provider) that
   reads console output, build logs and files to answer *"why did it crash?"*,
   and only changes things after you approve.
@@ -154,7 +157,7 @@ docker compose up -d
 
 Open `http://127.0.0.1:8080`, sign in, and pick **New** to create your first
 app. Put the panel behind Caddy, nginx or a Cloudflare Tunnel to reach it from
-outside. Read [the container guide](docs/container.md) before you mount the
+outside. Read [the container install guide](docs/guide/07-operate/01-install.md) before you mount the
 Docker socket: whoever controls it controls the host.
 
 ### As a single binary with systemd
@@ -168,7 +171,7 @@ rivetpanel                                 # serves on RIVET_LISTEN (default 127
 Skip `create-admin` if you prefer: the panel prints a one-time setup code in
 its log, and `/setup` in the browser takes it from there. The full production
 walkthrough (reverse proxy, upgrades, rollback) is in
-[docs/deployment.md](docs/deployment.md).
+[the install guide](docs/guide/07-operate/01-install.md).
 
 > [!NOTE]
 > RivetPanel is a clean break from its predecessor, BotPanel. It does not read
@@ -182,13 +185,13 @@ We would rather you know the limits up front than find them in production.
 - **The panel holds the Docker socket**, which is root-equivalent on the host.
   Its systemd sandbox limits the blast radius but does not remove that
   privilege. Run it as root via systemd in production
-  ([why](docs/deployment.md)).
+  ([why](docs/guide/07-operate/02-configuration.md#workspace-ownership)).
 - **Egress and disk quotas are not enforced** by RivetPanel. Of the four
   limits, only an app's size (memory, CPU, processes) is a kernel limit, set
   by Docker; the workspace allowance, node budget and node maximum are
   admission rules in the application
-  ([how limits work](docs/features.md#capacity-and-admission)). Read
-  [docs/isolation.md](docs/isolation.md) before hosting people you don't trust.
+  ([how limits work](docs/guide/06-teams/04-limits.md)). Read
+  [Security and isolation](docs/guide/07-operate/08-security.md) before hosting people you don't trust.
 - **Remote placement is manual.** You choose the node (or a default); there is
   no capacity-based scheduler, live migration or high availability. Panel and
   agents must be upgraded together.
@@ -200,7 +203,7 @@ We would rather you know the limits up front than find them in production.
 
 Everything that is a *preview* above is opt-in and still settling. The
 [implementation status](docs/implementation-status.md) lists what is done and
-what is not, and [docs/features.md](docs/features.md) lists every feature
+what is not, and [the guide](docs/README.md) covers every feature
 with its limits.
 
 <details>
@@ -218,7 +221,7 @@ Last full run: 2026-09-30, Linux 7.2.5 x86_64, Go 1.27.1, Node 26.8.1.
 | Every bot template built and run in real containers | discord.js, discord.py, DiscordGo, JDA and Poise each reached Discord's login |
 | Real browser (Playwright, Chromium), 30 checks | pass, including phone width with no horizontal scroll |
 | Real OpenSSH `sftp` client | file operations work; traversal, foreign folders and shell commands are refused |
-| Idle memory, panel and runner | 36.6–38.6 MiB over three starts ([footprint](docs/footprint.md)) |
+| Idle memory, panel and runner | 36.6–38.6 MiB over three starts ([footprint](docs/guide/07-operate/12-diagnostics.md#memory-footprint)) |
 
 Not verified against the live services (no accounts were available): the
 GitHub and Discord OAuth exchanges, GitHub webhooks and API, and Discord
@@ -230,15 +233,18 @@ container uid 65532, other CPU architectures, and load with many bots.
 
 ## 📚 Documentation
 
+The same guide is built into the panel at `/docs`, with search; on GitHub
+start at [docs/README.md](docs/README.md).
+
 | Get it running | Use it | Understand it |
 | --- | --- | --- |
-| [Deployment](docs/deployment.md) | [Features](docs/features.md) | [Architecture](docs/architecture.md) |
-| [Container install](docs/container.md) | [Game servers](docs/game-servers.md) | [Isolation](docs/isolation.md) |
-| [Backups](docs/backup.md) | [Containers and stacks](docs/containers.md) | [Remote nodes](docs/agents.md) |
-| [OAuth sign-in](docs/oauth.md) | [Websites](docs/sites.md) | [Footprint](docs/footprint.md) |
-| [SSO, passkeys, API clients](docs/auth.md) | [Workspaces](docs/workspaces.md) | [Implementation status](docs/implementation-status.md) |
-| [Email](docs/email.md) | [Roles and permissions](docs/permissions.md) | [Changelog](CHANGELOG.md) |
-| [Logs and retention](docs/logs.md) | [Extensions](docs/extensions.md) · [AI operator](docs/ai-operator.md) | [All guides](docs/README.md) |
+| [Install](docs/guide/07-operate/01-install.md) | [Quick start](docs/guide/01-get-started/02-quick-start.md) | [Core concepts](docs/guide/01-get-started/03-concepts.md) |
+| [Configuration](docs/guide/07-operate/02-configuration.md) | [Bots](docs/guide/02-apps/01-bots.md) | [Security and isolation](docs/guide/07-operate/08-security.md) |
+| [Upgrades](docs/guide/07-operate/03-upgrades.md) | [Game servers](docs/guide/03-game-servers/01-overview.md) | [How limits work](docs/guide/06-teams/04-limits.md) |
+| [Backups](docs/guide/07-operate/07-backups.md) | [Containers and stacks](docs/guide/02-apps/08-containers.md) | [Remote nodes](docs/guide/07-operate/04-remote-nodes.md) |
+| [Sign-in](docs/guide/06-teams/03-sign-in.md) | [Websites](docs/guide/04-websites/01-bot-sites.md) | [Diagnostics and footprint](docs/guide/07-operate/12-diagnostics.md) |
+| [Email](docs/guide/07-operate/06-email.md) | [Workspaces](docs/guide/06-teams/01-workspaces.md) · [Roles](docs/guide/06-teams/02-roles-and-permissions.md) | [Implementation status](docs/implementation-status.md) |
+| [Logs and retention](docs/guide/05-observe/06-logs.md) | [Extensions](docs/guide/07-operate/09-extensions.md) · [AI assistant](docs/guide/07-operate/10-ai-assistant.md) | [Changelog](CHANGELOG.md) · [All pages](docs/README.md) |
 
 The panel also ships its own guide at `/docs`.
 
@@ -254,7 +260,7 @@ make integration  # real-Docker tests; needs a DISPOSABLE Docker daemon (see the
 ```
 
 Other commands: `backup`, `backup-verify`, `restore` and `verify`
-([docs/backup.md](docs/backup.md)). The version lives in [`VERSION`](VERSION)
+([Backups](docs/guide/07-operate/07-backups.md)). The version lives in [`VERSION`](VERSION)
 and every change is recorded in the [changelog](CHANGELOG.md).
 
 ---

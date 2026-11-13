@@ -76,8 +76,8 @@ with "this is a BotPanel 0.4.0 backup; RivetPanel cannot restore it".
 
 ## 5. Install RivetPanel
 
-Follow [`deployment.md`](deployment.md) (systemd) or
-[`container.md`](container.md) (container). Create a new encryption key with
+Follow [Install](guide/07-operate/01-install.md) (systemd) or
+the container section of the same page (container). Create a new encryption key with
 `rivetpanel keygen`; the old key cannot decrypt anything RivetPanel stores.
 
 * **SFTP:** RivetPanel creates a new SSH host key

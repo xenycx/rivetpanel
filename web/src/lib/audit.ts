@@ -62,6 +62,7 @@ export const actionText: Record<string, string> = {
 	'schedule.create': 'added a schedule',
 	'schedule.update': 'changed a schedule',
 	'schedule.delete': 'removed a schedule',
+	'schedule.run_now': 'ran a schedule now',
 	'account.sign_in': 'signed in',
 	'account.logout': 'signed out',
 	'account.password': 'changed their password',

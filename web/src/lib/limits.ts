@@ -24,7 +24,7 @@ export const sourceText: Record<LimitSource, string> = {
 export const NO_LIMIT = 'No limit';
 
 /** Where "How limits work" is explained. */
-export const LIMITS_HELP = '/docs#workspace-limits';
+export const LIMITS_HELP = '/docs/teams/limits';
 
 type CountKey = 'apps' | 'bots' | 'games' | 'web_apps' | 'sites';
 

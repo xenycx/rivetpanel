@@ -297,7 +297,7 @@
 			{/if}
 			{#if settingsOpen}
 				{#if !signIn}
-					<Notice class="mt-3">Any public repository works; the branch is checked every few minutes. Private repositories, instant webhook deployments and publishing need GitHub sign-in to be configured on this panel (see docs/oauth.md).</Notice>
+					<Notice class="mt-3">Any public repository works; the branch is checked every few minutes. Private repositories, instant webhook deployments and publishing need GitHub sign-in to be configured on this panel (see <a class="link" href="/docs/teams/sign-in">Sign-in</a>).</Notice>
 				{:else if !conn?.linked}
 					<Notice class="mt-3">Any public repository works. To use private ones and have pushes deploy instantly through a webhook, <a href="/settings/connected-accounts">connect GitHub</a>; otherwise the branch is checked every few minutes.</Notice>
 				{:else if !conn.repo_access}

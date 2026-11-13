@@ -98,7 +98,7 @@
 			{:else}
 				<p>An administrator has to turn on site hosting first.</p>
 			{/if}
-			{#snippet actions()}<a class="btn" href="/docs#sites"><Icon name="book" size={14} />Read the hosting guide</a>{/snippet}
+			{#snippet actions()}<a class="btn" href="/docs/websites"><Icon name="book" size={14} />Read the hosting guide</a>{/snippet}
 		</EmptyState>
 	</div>
 {:else if info}

@@ -76,5 +76,5 @@ export type ExtensionView = {
 export type ExtPublisher = { key_id: string; name: string; public_key: string; created_at_ms: number; revoked_at_ms?: number };
 export type BotExtension = { id: string; name: string; explanation: string; enabled: boolean };
 
-/** A widget in the docs/widgets.md format, as extension cards return them. */
+/** A widget in the docs/guide/05-observe/01-widgets.md format, as extension cards return them. */
 export type ExtWidget = { key: string; kind: string; title: string; data: Record<string, unknown> };

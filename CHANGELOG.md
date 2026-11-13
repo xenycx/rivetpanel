@@ -6,6 +6,122 @@ authoritative current version.
 
 ## Unreleased
 
+## 1.9.0 - 2026-11-13
+
+### Added
+
+- **A new documentation guide.** The in-panel docs (`/docs`) are rebuilt
+  from one Markdown source, `docs/guide/`, which GitHub shows as well: 53
+  pages in seven sections (Get started, Apps, Game servers, Websites,
+  Observe, Teams and access, Operate) instead of one 30-section page. Each
+  page has its own address (`/docs/<section>/<page>`), headings, tables,
+  numbered steps, callouts and figures, a section rail, an "On this page"
+  list that follows your reading, previous and next links, and an Edit this
+  page link. The hub has a search field (also `/` from any docs page) that
+  finds sections, not just pages; Ctrl+K finds every page by its title and
+  headings. Security controls and limits carry a badge saying which layer
+  enforces them (panel, Docker, host, or not enforced). What's new is built
+  from this changelog. The docs work signed out too, at every address.
+  `docs/README.md` is generated from the guide (`make docs-index`), and
+  `docs/guide/WRITING.md` describes the conventions.
+- **Diagrams in the documentation.** Eight new figures explain how things fit
+  together, where reading it in prose is hard. The new figures cover how the
+  panel, Docker, the sites listener and remote nodes connect (Core concepts),
+  a service's private network (Services) and a stack's network (Containers),
+  and how a game server's port reaches players (Ports). They also show a
+  site's releases and rollback (Publishing), the single sign-on exchange
+  (Sign-in), node enrollment (Remote nodes) and the safe order of an app
+  restore (Backups). The bot page and security figures are redrawn to match.
+  The figures are drawn from the panel's own colours, follow light and dark
+  theme, and lay out vertically on narrow screens instead of shrinking.
+  On GitHub each figure shows a picture of itself (`docs/guide/figures`,
+  refreshed with `make docs-figures`).
+
+- While merging the old guides, about thirty statements were checked against
+  the code and corrected, for example the telemetry push limit (64 KiB, not
+  16), the starting port of each game type, current tab names (Overview,
+  Services, Variables, Deployments) and that GitHub and Discord sign-in are
+  configured under Administration → Panel settings without a restart.
+
+- **Activity is one timeline.** The Activity page merges what people changed
+  and long-running work (builds, deployments, backups, restores) into one
+  stream grouped by day, and every entry says who did it: people show their
+  picture, while schedules, GitHub pushes, the panel and the AI operator have
+  their own marks, so automatic activity is never mistaken for a person. Apps
+  and sites show their logos. Entries read as sentences ("Nino restarted
+  music-bot"), failures and running work are marked, and build output opens
+  in place.
+- **Time windows and a zoomable chart.** Choose 1 hour to 90 days or exact
+  dates; a chart of the window stacks what people did over what happened
+  automatically, with failures underneath. Drag across it (or click a bar,
+  or use the arrow keys and Enter) to zoom in, and step back out.
+- **Activity filters**: everyone, people only or automatic only; by person,
+  app or site, kind (power and crashes, deployments, backups, files,
+  variables, settings, sharing, accounts, administration, AI operator,
+  extensions), result (succeeded, failed, refused, in progress, cancelled)
+  and free-text search. Filters combine and stay in the address, so a view
+  can be bookmarked or shared.
+- **Activity report.** Beside the timeline: how much was done by people
+  versus automatically (by schedules, GitHub pushes, the panel and the AI
+  operator), most active people, busiest apps, what kind of activity, and a
+  weekday-by-hour grid. Any row narrows the timeline.
+- **Activity CSV export** of the filtered timeline, up to 10,000 rows.
+- **More is recorded.** Automatic schedule runs (including skipped, missed
+  and refused runs), schedule **Run now**, app crashes (at most once a minute
+  per app) and an app giving up after repeated crashes now appear in
+  Activity. The new endpoints are `GET /api/v1/activity`,
+  `/activity/stats`, `/activity/people` and `/activity/export`; the existing
+  `/operations` and `/activity/changes` are unchanged.
+- A new guide page, **Observe → Activity**, documents the timeline, filters,
+  report, export, visibility and retention.
+
+### Fixed
+
+- **Board cards can be dragged again everywhere.** Cards are now picked up
+  with the mouse, a pen or a touch long-press (native drag did not work on
+  touch screens), and the board works in My tickets too: requesters can drag
+  their own ticket to Closed or a resolved one back to Open, staff who manage
+  tickets can move it anywhere. Columns a card cannot go to are dimmed while
+  it is carried, Esc or a drop elsewhere returns it, and the board scrolls
+  sideways near its edges.
+- The ticket panel of the table and board layouts always closes, even in a
+  background tab, and layout switches and re-sorts are never held back by a
+  tab that is not painting.
+
+### Changed
+
+- Database migration `0068` records who performed each change (person,
+  schedule, panel or AI operator). It is additive; existing entries count as
+  people's, except AI operator actions, which are marked as such.
+- **Support uses the whole window.** The Support page (split, table and
+  board) is no longer held to the centered 1360 px column, the split list
+  grows a little on wide screens, and the page header is smaller.
+- **Motion pass.** A dropped card glides into its new column, Undo glides it
+  back, and the column count ticks; table rows slide to their new order when
+  re-sorted; switching layouts fades through; the ticket panel slides in and
+  out; status badges change color smoothly; reactions pop, a saved edit
+  flashes and a removed message fades to its line. Every animation has a
+  reduced-motion alternative and is skipped where the browser has no View
+  Transitions.
+- `make check` now also runs `make docs-check`, which checks the guide's
+  front matter, icons, figures and links. Building the web interface needs
+  the new development dependencies `marked` and `@types/node` (build time
+  only; nothing is added to what the browser loads).
+- Comments in the deployment and systemd examples, and links inside the
+  panel, now point at the matching guide pages.
+- Links to the old single page (`/docs#sites`, `/docs#health` and the rest)
+  open the page that took the section over.
+
+### Removed
+
+- The separate guides `docs/features.md`, `deployment.md`, `container.md`,
+  `containers.md`, `agents.md`, `sites.md`, `game-servers.md`, `isolation.md`,
+  `auth.md`, `oauth.md`, `email.md`, `backup.md`, `logs.md`, `widgets.md`,
+  `workspaces.md`, `permissions.md`, `support.md`, `extensions.md`,
+  `ai-operator.md`, `automation.md`, `architecture.md` and `footprint.md`:
+  their content is in `docs/guide/` (see `docs/README.md` for the map). The
+  notes on testing one-click apps moved to `tests/apps/README.md`.
+
 ## 1.8.0 - 2026-11-13
 
 ### Added

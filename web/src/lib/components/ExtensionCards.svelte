@@ -11,7 +11,7 @@
 	import Menu from '$lib/components/ui/Menu.svelte';
 
 	// Cards that enabled extensions put on a bot's overview. Their content is
-	// declarative widget JSON (docs/widgets.md), rendered here as text: no
+	// declarative widget JSON (docs/guide/05-observe/01-widgets.md), rendered here as text: no
 	// extension HTML reaches the panel page. Extensions that read the bot's own
 	// secrets (its Discord token) only work once switched on for this bot.
 	let { bot }: { bot: Bot } = $props();

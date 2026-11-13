@@ -163,7 +163,7 @@
 
 {#if info && !info.enabled}
 	<Notice class="mt-4" title="Site hosting is off">
-		Set <code>RIVET_SITES_LISTEN</code> (for example <code>127.0.0.1:8081</code>) and <code>RIVET_SITES_BASE_URL</code> (for example <code>https://sites.example.com</code>), route <code>*.sites.example.com</code> and custom domains to that listener in your reverse proxy, then restart. See <a href="/docs#sites">the hosting guide</a>.
+		Set <code>RIVET_SITES_LISTEN</code> (for example <code>127.0.0.1:8081</code>) and <code>RIVET_SITES_BASE_URL</code> (for example <code>https://sites.example.com</code>), route <code>*.sites.example.com</code> and custom domains to that listener in your reverse proxy, then restart. See <a href="/docs/websites/domains">the hosting guide</a>.
 	</Notice>
 {:else if sites === null && !error}
 	<div class="mt-4"><Skeleton rows={3} /></div>
@@ -176,7 +176,7 @@
 
 	<section class="card mt-5 p-5" aria-labelledby="bases-h">
 		<h3 id="bases-h" class="text-title font-semibold">Sites domains</h3>
-		<p class="mt-1 max-w-3xl text-small text-muted">A site's address is <code>&lt;name&gt;.&lt;sites domain&gt;</code>, and each name is unique per domain. New sites use the primary domain unless their creator picks another. A domain you add serves nothing until a TXT record proves you control it; the reverse proxy also has to route it and present a certificate for it (see <a class="link" href="/docs#sites">the hosting guide</a>).</p>
+		<p class="mt-1 max-w-3xl text-small text-muted">A site's address is <code>&lt;name&gt;.&lt;sites domain&gt;</code>, and each name is unique per domain. New sites use the primary domain unless their creator picks another. A domain you add serves nothing until a TXT record proves you control it; the reverse proxy also has to route it and present a certificate for it (see <a class="link" href="/docs/websites/domains">the hosting guide</a>).</p>
 		<ul class="mt-4 grid gap-3">
 			{#each bases as b (b.id)}
 				<li class="rounded-tile border px-4 py-3 {b.serving || !b.enabled ? 'border-rule-soft' : 'border-warn/40'}">

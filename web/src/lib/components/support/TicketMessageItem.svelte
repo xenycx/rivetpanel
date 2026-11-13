@@ -6,6 +6,8 @@
 	import SafeMarkdown from '$lib/components/SafeMarkdown.svelte';
 	import { type TicketMessage, type ReactionKind, reactionKinds } from '$lib/api/support';
 	import { support } from '$lib/supportData.svelte';
+	import { untrack } from 'svelte';
+	import { pulse } from '$lib/ui/glide';
 	import PersonAvatar from './PersonAvatar.svelte';
 	import Popover from './Popover.svelte';
 
@@ -49,6 +51,17 @@
 	const name = $derived(m.mine ? 'You' : (m.person?.name ?? m.author));
 	const mentioned = $derived((m.mentions ?? []).map((id) => support.staff.find((s) => s.id === id)?.display_name || support.staff.find((s) => s.id === id)?.email || 'a colleague'));
 
+	// A message removed while it is on screen fades to its "removed" line;
+	// one saved after an edit flashes once.
+	const wasLive = untrack(() => !m.deleted);
+	let item = $state<HTMLElement>();
+	function flash() {
+		item?.classList.remove('flash');
+		void item?.offsetWidth;
+		item?.classList.add('flash');
+		setTimeout(() => item?.classList.remove('flash'), 1700);
+	}
+
 	// Editing in place.
 	let editing = $state(false);
 	let draft = $state('');
@@ -65,7 +78,10 @@
 	async function save() {
 		if (!draft.trim() || saving) return;
 		saving = true;
-		if (await onedit(draft)) editing = false;
+		if (await onedit(draft)) {
+			editing = false;
+			flash();
+		}
 		saving = false;
 	}
 	function editKey(e: KeyboardEvent) {
@@ -110,11 +126,12 @@
 </script>
 
 {#if m.deleted}
-	<li id="m-{m.id}" class="flex items-center gap-2 px-1 text-small text-muted italic">
+	<li id="m-{m.id}" class="flex items-center gap-2 px-1 text-small text-muted italic" class:just-removed={wasLive}>
 		<Icon name="trash" size={13} />Message removed{#if m.deleted_by}{' '}by {m.deleted_by}{/if}{#if m.internal}<span class="rounded-pill border border-warn/30 px-1.5 text-label text-warn not-italic">internal</span>{/if}
 	</li>
 {:else}
 	<li
+		bind:this={item}
 		id="m-{m.id}"
 		class="msg group relative flex gap-3 rounded-card border p-3.5 {m.internal ? 'border-warn/40 bg-warn/6' : m.staff ? 'border-action/25 bg-action/4' : 'border-rule-soft bg-raised'}"
 		class:msg-new={isNew || pending}
@@ -177,7 +194,7 @@
 				<div class="mt-2 flex flex-wrap gap-1" aria-label="Reactions">
 					{#each reactionKinds.filter((k) => reacted(k.kind)) as k (k.kind)}
 						{@const r = reacted(k.kind)!}
-						<button type="button" class="react-chip" aria-pressed={r.mine} disabled={!canReact} onclick={() => onreact(k.kind, !r.mine)} title="{k.label}: {r.names.join(', ') || `${r.count}`}">
+						<button type="button" class="react-chip" aria-pressed={r.mine} disabled={!canReact} onclick={(e) => (pulse(e.currentTarget), onreact(k.kind, !r.mine))} title="{k.label}: {r.names.join(', ') || `${r.count}`}">
 							<Icon name={k.icon} size={12} /><span class="tabular-nums">{r.count}</span>
 						</button>
 					{/each}
@@ -223,6 +240,26 @@
 			box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-action) 45%, transparent);
 		}
 	}
+	.just-removed {
+		animation: removed 420ms cubic-bezier(0.16, 1, 0.3, 1) both;
+	}
+	@keyframes removed {
+		from {
+			opacity: 0;
+			transform: scaleY(0.6);
+			filter: blur(3px);
+		}
+	}
+	/* A reaction that appears or changes count pops once. */
+	.react-chip {
+		animation: chip-in 260ms cubic-bezier(0.16, 1, 0.3, 1) both;
+	}
+	@keyframes chip-in {
+		from {
+			opacity: 0;
+			transform: scale(0.7);
+		}
+	}
 	.msg-new {
 		animation: settle 380ms cubic-bezier(0.16, 1, 0.3, 1) both;
 	}
@@ -234,7 +271,9 @@
 		}
 	}
 	@media (prefers-reduced-motion: reduce) {
-		.msg-new {
+		.msg-new,
+		.just-removed,
+		.react-chip {
 			animation: fade 200ms ease-out both;
 		}
 	}

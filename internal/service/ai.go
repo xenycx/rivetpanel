@@ -2059,7 +2059,7 @@ func (s *AIService) audit(ctx context.Context, actor domain.User, run *domain.AI
 	if run != nil && run.Mode == AIAuto {
 		label += " (Auto)"
 	}
-	ev := domain.AuditEvent{Action: action, Outcome: outcome, ActorID: &actor.ID, ActorLabel: &label}
+	ev := domain.AuditEvent{Action: action, Outcome: outcome, ActorID: &actor.ID, ActorLabel: &label, Source: domain.SourceAI}
 	if target != "" {
 		t := clipService(target, 300)
 		ev.Target = &t

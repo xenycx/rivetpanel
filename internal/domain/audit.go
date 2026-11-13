@@ -15,4 +15,15 @@ type AuditEvent struct {
 	Target        *string // a name or path, never a value
 	Outcome       string  // ok | denied | failed
 	IP            *string
+	// Source is who or what performed it: person (default), schedule,
+	// system or ai.
+	Source string
 }
+
+// Audit sources.
+const (
+	SourcePerson   = "person"
+	SourceSchedule = "schedule"
+	SourceSystem   = "system"
+	SourceAI       = "ai"
+)

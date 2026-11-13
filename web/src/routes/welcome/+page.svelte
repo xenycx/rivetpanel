@@ -6,7 +6,7 @@
 	import { toast } from '$lib/ui/toast.svelte';
 
 	// What the product does today. Keep every claim in line with
-	// docs/features.md; "Preview" marks modules that are opt-in previews.
+	// docs/guide; "Preview" marks modules that are opt-in previews.
 	const repo = 'https://github.com/xenycx/rivetpanel';
 	type Feature = { icon: IconName; title: string; text: string };
 	type Pillar = { id: string; eyebrow: string; title: string; lead: string; preview?: boolean; features: Feature[] };

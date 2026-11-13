@@ -9,8 +9,8 @@ import (
 
 func (db *DB) InsertAudit(ctx context.Context, e domain.AuditEvent) error {
 	_, err := db.ExecContext(ctx, `INSERT INTO audit_events (at_ms, actor_id, actor_label, bot_id, bot_name, site_id, site_name, subject_user_id,
-		action, target, outcome, ip) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
-		e.AtMS, e.ActorID, e.ActorLabel, e.BotID, e.BotName, e.SiteID, e.SiteName, e.SubjectUserID, e.Action, e.Target, e.Outcome, e.IP)
+		action, target, outcome, ip, source) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		e.AtMS, e.ActorID, e.ActorLabel, e.BotID, e.BotName, e.SiteID, e.SiteName, e.SubjectUserID, e.Action, e.Target, e.Outcome, e.IP, e.Source)
 	return err
 }
 
@@ -50,7 +50,7 @@ func (db *DB) ListAudit(ctx context.Context, f AuditFilter) ([]domain.AuditEvent
 	if f.Limit <= 0 || f.Limit > 200 {
 		f.Limit = 50
 	}
-	q := `SELECT id, at_ms, actor_id, actor_label, bot_id, bot_name, site_id, site_name, subject_user_id, action, target, outcome, ip FROM audit_events`
+	q := `SELECT id, at_ms, actor_id, actor_label, bot_id, bot_name, site_id, site_name, subject_user_id, action, target, outcome, ip, source FROM audit_events`
 	if len(where) > 0 {
 		q += " WHERE " + strings.Join(where, " AND ")
 	}
@@ -62,7 +62,7 @@ func (db *DB) ListAudit(ctx context.Context, f AuditFilter) ([]domain.AuditEvent
 	var out []domain.AuditEvent
 	for rows.Next() {
 		var e domain.AuditEvent
-		if err := rows.Scan(&e.ID, &e.AtMS, &e.ActorID, &e.ActorLabel, &e.BotID, &e.BotName, &e.SiteID, &e.SiteName, &e.SubjectUserID, &e.Action, &e.Target, &e.Outcome, &e.IP); err != nil {
+		if err := rows.Scan(&e.ID, &e.AtMS, &e.ActorID, &e.ActorLabel, &e.BotID, &e.BotName, &e.SiteID, &e.SiteName, &e.SubjectUserID, &e.Action, &e.Target, &e.Outcome, &e.IP, &e.Source); err != nil {
 			return nil, err
 		}
 		out = append(out, e)

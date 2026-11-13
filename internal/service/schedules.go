@@ -80,7 +80,9 @@ type Scheduler struct {
 	Bots    *BotService
 	Backups *BackupService // nil: backup schedules are refused
 	Deploy  *DeployService // nil: deploy schedules are refused
-	Log     *slog.Logger
+	// Audit, when set, records every automatic run on the activity timeline.
+	Audit *Audit
+	Log   *slog.Logger
 	Now     func() time.Time
 	// Sleep waits between chain tasks (nil = a real timer); tests replace it.
 	Sleep func(ctx context.Context, d time.Duration) bool
@@ -420,7 +422,7 @@ func (s *Scheduler) RunNow(ctx context.Context, actor domain.User, botID, id str
 	if !s.canManage(ctx, actor, b, sc) {
 		return "", "", domain.ErrForbidden
 	}
-	status, msg := s.execute(ctx, sc)
+	status, msg := s.execute(ctx, sc, false)
 	var next *int64
 	if sc.NextRunMS != nil {
 		n := *sc.NextRunMS
@@ -430,6 +432,25 @@ func (s *Scheduler) RunNow(ctx context.Context, actor domain.User, botID, id str
 	defer cancel()
 	_ = s.Store.RecordScheduleRun(fctx, sc.ID, s.now().UnixMilli(), status, msg, next, status == "denied")
 	return status, msg, nil
+}
+
+// recordRun puts an automatic run on the activity timeline, performed by the
+// schedule on its owner's behalf.
+func (s *Scheduler) recordRun(ctx context.Context, sc domain.Schedule, status, msg string) {
+	if s.Audit == nil {
+		return
+	}
+	ctx, cancel := bg(ctx)
+	defer cancel()
+	owner, _ := s.Bots.Store.GetUserByID(ctx, sc.OwnerID)
+	if owner.ID == "" {
+		owner.ID = sc.OwnerID
+	}
+	b, err := s.Bots.Store.GetBot(ctx, sc.BotID)
+	if err != nil {
+		b = domain.Bot{ID: sc.BotID}
+	}
+	s.Audit.RecordScheduled(ctx, owner, b, sc.Action, status, msg)
 }
 
 func (s *Scheduler) poke() {
@@ -497,10 +518,14 @@ func (s *Scheduler) runOne(ctx context.Context, sc domain.Schedule, now time.Tim
 		// The panel was not running at the due time: record it, do not catch up.
 		status, msg = "missed", "the panel was not running at "+time.UnixMilli(*sc.NextRunMS).In(loc).Format("2006-01-02 15:04 MST")
 	default:
-		status, msg = s.execute(ctx, sc)
+		status, msg = s.execute(ctx, sc, true)
 		if status == "denied" {
 			disable = true
 		}
+	}
+	// A chain records its outcome when it ends (startChain).
+	if sc.Action != domain.ScheduleChain || status != "ok" {
+		s.recordRun(ctx, sc, status, msg)
 	}
 	fctx, cancel := bg(ctx)
 	defer cancel()
@@ -511,7 +536,7 @@ func (s *Scheduler) runOne(ctx context.Context, sc domain.Schedule, now time.Tim
 
 // execute performs the action as the schedule's owner with their current
 // permissions. A disabled account or removed permission is "denied".
-func (s *Scheduler) execute(ctx context.Context, sc domain.Schedule) (status, msg string) {
+func (s *Scheduler) execute(ctx context.Context, sc domain.Schedule, auto bool) (status, msg string) {
 	owner, err := s.Bots.Store.GetUserByID(ctx, sc.OwnerID)
 	if err != nil || owner.Disabled {
 		return "denied", "the schedule's owner can no longer sign in, so the schedule was paused"
@@ -531,7 +556,7 @@ func (s *Scheduler) execute(ctx context.Context, sc domain.Schedule) (status, ms
 		return "failed", runMessage(err)
 	}
 	if sc.Action == domain.ScheduleChain {
-		return s.startChain(ctx, owner, sc)
+		return s.startChain(ctx, owner, sc, auto)
 	}
 	switch sc.Action {
 	case "backup":
@@ -598,7 +623,7 @@ func trimMsg(s string) string {
 // hour and must not hold up other schedules. The run is recorded as started
 // now and updated with the outcome when the chain ends. A chain still running
 // from its previous trigger is skipped.
-func (s *Scheduler) startChain(ctx context.Context, owner domain.User, sc domain.Schedule) (string, string) {
+func (s *Scheduler) startChain(ctx context.Context, owner domain.User, sc domain.Schedule, auto bool) (string, string) {
 	s.runMu.Lock()
 	if s.running == nil {
 		s.running = map[string]bool{}
@@ -621,6 +646,9 @@ func (s *Scheduler) startChain(ctx context.Context, owner domain.User, sc domain
 		status, msg := s.runChain(cctx, owner, sc)
 		fctx, cancel := bg(cctx)
 		defer cancel()
+		if auto {
+			s.recordRun(fctx, sc, status, msg)
+		}
 		cur, err := s.Store.GetSchedule(fctx, sc.BotID, sc.ID)
 		if err != nil {
 			return // deleted meanwhile

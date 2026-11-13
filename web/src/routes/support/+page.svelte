@@ -37,7 +37,10 @@
 		shortcutAllowed
 	} from '$lib/api/support';
 	import { support, loadLabels } from '$lib/supportData.svelte';
-	import { supportLayouts, supportView, setSupportLayout } from '$lib/ui/supportLayout.svelte';
+	import { supportLayouts, supportView, setSupportLayout, type SupportLayout } from '$lib/ui/supportLayout.svelte';
+	import { glide, crossfade, guard } from '$lib/ui/glide';
+	import { fly } from 'svelte/transition';
+	import { cubicOut } from 'svelte/easing';
 
 	const isStaff = $derived(can('tickets.view_all') || can('tickets.manage'));
 	const canManage = $derived(can('tickets.manage'));
@@ -193,11 +196,13 @@
 		} else {
 			root.dataset.desk = dir > 0 ? 'down' : dir < 0 ? 'up' : 'swap';
 			tagDesk();
-			const vt = document.startViewTransition(async () => {
-				untagDesk();
-				await swap();
-				tagDesk();
-			});
+			const vt = guard(
+				document.startViewTransition(async () => {
+					untagDesk();
+					await swap();
+					tagDesk();
+				})
+			);
 			vt.ready.catch(() => {});
 			vt.updateCallbackDone.catch(() => {});
 			vt.finished
@@ -266,21 +271,32 @@
 		});
 	});
 
-	// Board: change a ticket's status by dragging or 1–4, with an undo.
-	async function move(id: string, status: string) {
+	// Board: change a ticket's status by dragging or 1–4, with an undo. The
+	// board animates its own moves; an undo glides the card back from here.
+	function move(id: string, status: string) {
 		const i = tickets.findIndex((t) => t.id === id);
 		if (i < 0) return;
 		const before = tickets[i];
 		tickets[i] = { ...before, status };
-		try {
-			const v = await api<TicketView>('PATCH', `/tickets/${id}`, { status });
-			onview(v);
-			toast(`${ticketKey(before)} is now ${staffStatusLabel[status].toLowerCase()}`, 'success', { label: 'Undo', run: () => move(id, before.status) });
-		} catch (e) {
-			tickets[i] = before;
-			toast(msg(e), 'fail');
-		}
+		api<TicketView>('PATCH', `/tickets/${id}`, { status })
+			.then((v) => {
+				onview(v);
+				toast(`${ticketKey(before)} is now ${(queue ? staffStatusLabel : statusLabel)[status].toLowerCase()}`, 'success', {
+					label: 'Undo',
+					run: () => {
+						const el = rowEl(id);
+						glide('vt-card', el, () => move(id, before.status), () => rowEl(id));
+					}
+				});
+			})
+			.catch((e) => {
+				const j = tickets.findIndex((t) => t.id === id);
+				if (j >= 0) tickets[j] = before;
+				toast(msg(e), 'fail');
+			});
 	}
+	const boardMode = $derived<'manage' | 'requester' | 'none'>(canManage ? 'manage' : !queue && canOpen ? 'requester' : 'none');
+	const switchLayout = (l: SupportLayout) => crossfade(() => setSupportLayout(l));
 
 	function key(e: KeyboardEvent) {
 		if (e.key === '/' && shortcutAllowed(e)) {
@@ -395,15 +411,15 @@
 <svelte:window onkeydown={key} />
 <svelte:head><title>{queue ? 'Support queue' : 'Support'} · RivetPanel</title></svelte:head>
 
-<header class="flex flex-wrap items-end gap-3 border-b border-rule-soft pb-5">
+<header class="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-rule-soft pb-3">
 	<div class="min-w-0 flex-[1_1_18rem]">
-		<h1 class="text-page">{queue ? 'Support queue' : 'Support'}</h1>
-		<p class="mt-0.5 text-muted">{queue ? 'Every ticket you may answer or read.' : 'Ask the people who run this panel for help. Only you and the support team see your tickets.'}</p>
+		<h1 class="text-title font-semibold">{queue ? 'Support queue' : 'Support'}</h1>
+		<p class="text-small text-muted">{queue ? 'Every ticket you may answer or read.' : 'Ask the people who run this panel for help. Only you and the support team see your tickets.'}</p>
 	</div>
 	{#if !narrow}
 		<div role="radiogroup" aria-label="Layout" class="seg">
 			{#each supportLayouts as l (l.id)}
-				<button type="button" role="radio" class="seg-item !px-2" aria-checked={supportView.layout === l.id} title="{l.name}: {l.text}" onclick={() => setSupportLayout(l.id)}>
+				<button type="button" role="radio" class="seg-item !px-2" aria-checked={supportView.layout === l.id} title="{l.name}: {l.text}" onclick={() => switchLayout(l.id)}>
 					<LayoutIcon layout={l.id} /><span class="sr-only">{l.name}</span>
 				</button>
 			{/each}
@@ -416,11 +432,11 @@
 		</nav>
 	{/if}
 	{#if queue && canManage}<Menu label="Support tools" items={toolItems} icon="sliders" text="Tools" />{/if}
-	{#if canOpen && !queue}<button class="btn btn-primary" onclick={startNew}><Icon name="plus" />New ticket</button>{/if}
+	{#if canOpen && !queue}<button class="btn btn-primary h-8" onclick={startNew}><Icon name="plus" />New ticket</button>{/if}
 </header>
 
 {#if composing}
-	<form class="card mt-6 grid gap-4 p-5" onsubmit={submit}>
+	<form class="card mt-4 grid gap-4 p-5" onsubmit={submit}>
 		<h2 class="text-title font-semibold">New ticket</h2>
 		<label class="block"><span class="label">Subject</span><input class="field" required maxlength="150" bind:value={form.subject} oninput={suggest} placeholder="My server does not start after the update" /></label>
 		{#if related.length}
@@ -457,12 +473,12 @@
 {#if error}<Notice tone="fail" class="mt-4" live>{error}</Notice>{/if}
 
 <div class="desk" bind:clientWidth={deskWidth}>
-	<div class="mt-6 flex flex-wrap items-center gap-x-3 gap-y-2">
+	<div class="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2">
 		{#if layout !== 'board'}
 			<div role="tablist" aria-label="Status" class="seg">
 				{#each tabs as k (k)}
 					<button role="tab" type="button" class="seg-item" aria-selected={tab === k} onclick={() => setTab(k)}>
-						{tabLabel(k)}<span class="tab-count tabular-nums" class:zero={!counts[k]}>{counts[k]}</span>
+						{tabLabel(k)}<span class="tab-count tabular-nums" class:zero={!counts[k]}>{#key counts[k]}<span class="inline-block" in:fly={{ y: -5, duration: 200, easing: cubicOut }}>{counts[k]}</span>{/key}</span>
 					</button>
 				{/each}
 			</div>
@@ -503,7 +519,7 @@
 			</EmptyState>
 		</div>
 	{:else if layout === 'split'}
-		<div bind:this={deskBody} style:--desk-top="{deskTop}px" class="desk-body mt-4 grid grid-cols-[minmax(18rem,23rem)_minmax(0,1fr)] gap-4">
+		<div bind:this={deskBody} style:--desk-top="{deskTop}px" class="desk-body mt-3 grid grid-cols-[minmax(18rem,clamp(23rem,24vw,32rem))_minmax(0,1fr)] gap-4">
 			<div class="list-col card flex min-h-0 flex-col overflow-hidden">
 				<ul bind:this={listEl} class="list-scroll min-h-0 flex-1 divide-y divide-rule-soft overflow-y-auto" aria-label="Tickets">
 					{#each shown as t (t.id)}
@@ -528,11 +544,11 @@
 			</section>
 		</div>
 	{:else if layout === 'table'}
-		<div class="mt-4"><TicketTable tickets={shown} staff={queue} {now} {selected} onopen={(id) => select(id)} /></div>
+		<div class="mt-3"><TicketTable tickets={shown} staff={queue} {now} {selected} onopen={(id) => select(id)} /></div>
 	{:else if layout === 'board'}
-		<div class="mt-4"><TicketBoard tickets={narrowed} staff={queue} {now} canMove={queue && canManage} keys={!selected} {selected} onopen={(id) => select(id)} onmove={move} /></div>
+		<div class="mt-3"><TicketBoard tickets={narrowed} staff={queue} {now} mode={boardMode} keys={!selected} {selected} onopen={(id) => select(id)} onmove={move} /></div>
 	{:else}
-		<ul class="list-card mt-4" aria-label="Tickets">
+		<ul class="list-card mt-3" aria-label="Tickets">
 			{#each shown as t (t.id)}<li><TicketRow {t} staff={queue} {now} dim={kept.has(t.id) && !inTab(t, tab)} showStatus={tab === 'any' || tab === 'active' || kept.has(t.id)} /></li>{/each}
 			{#if loaded && !shown.length}<li class="px-4 py-10 text-center text-small text-muted">{query ? `Nothing matches “${query}”.` : 'Nothing here. Pick another tab.'}</li>{/if}
 		</ul>

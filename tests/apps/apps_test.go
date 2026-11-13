@@ -5,8 +5,7 @@
 // reaches running, the web interface answers, it survives a restart, and it
 // is removed cleanly.
 //
-// Run against a disposable panel (see docs/containers.md, "Testing one-click
-// apps"):
+// Run against a disposable panel (see tests/apps/README.md):
 //
 //	RIVET_APPS_PANEL=http://127.0.0.1:8080 RIVET_APPS_EMAIL=admin@example.com \
 //	RIVET_APPS_PASSWORD=... RIVET_APPS=all|miniflux,ntfy \
