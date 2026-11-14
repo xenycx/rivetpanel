@@ -106,7 +106,8 @@ const workVerb: Record<Operation['kind'], [done: string, active: string]> = {
 	rollback: ['rolled back', 'is rolling back'],
 	backup: ['backed up', 'is backing up'],
 	restore: ['restored', 'is restoring'],
-	publish: ['pushed to GitHub', 'is pushing to GitHub']
+	publish: ['pushed to GitHub', 'is pushing to GitHub'],
+	move: ['moved to another node', 'is moving to another node']
 };
 
 /** The display name of whoever performed an item. */
@@ -167,11 +168,12 @@ const workNoun: Record<Operation['kind'], string> = {
 	rollback: 'a rollback',
 	backup: 'a backup',
 	restore: 'a restore',
-	publish: 'a push'
+	publish: 'a push',
+	move: 'a move'
 };
 
 function baseVerb(k: Operation['kind']): string {
-	return { build: 'build', deploy: 'deploy', rollback: 'roll back', backup: 'back up', restore: 'restore', publish: 'push' }[k];
+	return { build: 'build', deploy: 'deploy', rollback: 'roll back', backup: 'back up', restore: 'restore', publish: 'push', move: 'move' }[k];
 }
 
 /** A scheduled run's target is "status: message"; split it. */

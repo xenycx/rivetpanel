@@ -7,7 +7,8 @@ export const kindNoun: Record<Operation['kind'], string> = {
 	rollback: 'Rollback',
 	backup: 'Backup',
 	restore: 'Restore',
-	publish: 'Push to GitHub'
+	publish: 'Push to GitHub',
+	move: 'Move to another node'
 };
 /** "Deploying music-bot", used while an operation is active. */
 export const kindVerb: Record<Operation['kind'], string> = {
@@ -16,7 +17,8 @@ export const kindVerb: Record<Operation['kind'], string> = {
 	rollback: 'Rolling back',
 	backup: 'Backing up',
 	restore: 'Restoring',
-	publish: 'Pushing'
+	publish: 'Pushing',
+	move: 'Moving'
 };
 /** Game servers install instead of building: their "build" is the installation. */
 export const opNoun = (o: Operation) => (o.kind === 'build' && o.bot_kind === 'game' ? 'Installation' : kindNoun[o.kind]);

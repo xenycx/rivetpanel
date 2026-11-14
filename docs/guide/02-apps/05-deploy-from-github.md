@@ -40,10 +40,11 @@ When the connection exists, it is used for public repositories as well.
 
 ## Analyze a repository
 
-**Analyze repository** downloads the branch once and suggests the language,
-start command, build command, variables (with descriptions, required and
-secret flags, and safe defaults), databases and resources, plus setup steps
-such as privileged intents. Its sources, in order:
+**Analyze repository** downloads the branch once and fills in every field of
+the form: the name, language, start command, build command, databases,
+variables (with descriptions, required and secret flags, and values for the
+ones that are not secret), memory and CPU, plus setup steps such as
+privileged intents. Its sources, in order:
 
 1. **Verified recipes** for well-known bots (Red-DiscordBot, YAGPDB), tested
    on a real panel. They are offered as one-click buttons under
@@ -54,6 +55,20 @@ such as privileged intents. Its sources, in order:
    files, the README) and the detected plan are sent to the provider, which
    returns a plan as JSON. Repository text is treated as untrusted data in
    the prompt.
+
+The analysis runs in two passes. The form is filled from the files within
+seconds, then the AI pass refines it; the downloaded branch is kept for a
+few minutes, so the second pass does not download it again. Each filled field
+carries an **AI**, **Detected** or **Recipe** tag until you change it, and the
+**Filled in** list sums up the form, including the values that still need
+you (usually the bot token).
+
+The AI pass asks for a JSON object and gives the reply at least 16,384
+output tokens, whatever the provider's own output cap, because reasoning
+models spend part of the budget thinking. A reply that is cut off, empty or
+not a plan is asked for once more. If the AI still cannot produce a plan,
+the form keeps the detected values and says why; variables the files show
+but the AI left out are kept as optional.
 
 | Detected from | Gives |
 |---|---|

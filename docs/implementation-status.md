@@ -167,6 +167,25 @@ items state exactly what remains.
   hardening are enforced by Docker on the node. Capability reports are stored
   evidence only, not attestation or kernel/network enforcement. The control
   plane still holds its Docker socket when the local runner is enabled.
+- [~] Moving an existing bot between nodes (migration `0075`,
+  `NodeMoveService`, `POST /api/v1/bots/:id/node`, Settings → Node): stop,
+  spool the workspace archive (and, with add-ons, an add-on data archive)
+  on the panel, write both on the target, then a conditional
+  `MoveBotNode` update (still stopped, same generation, same old node)
+  switches the bot; only then is the old node purged and the bot restarted.
+  A failure before the switch purges the target and resumes the old intent.
+  Enforced by the panel (exclusive claim, conditional SQLite update) and the
+  agent (staged add-on data extraction with path, link and size checks,
+  ownership set to the node's workspace owner). Tests: `TestMoveBotBetweenNodes`
+  (local → remote → local with files and add-on data, refusals) and
+  `TestRemoteAddonDataMove` (real hub and agents, modes, replace semantics,
+  unsafe archive refused). Not done: game servers (their port allocations
+  are per node), a cross-node check of published bot host ports before the
+  restart (Docker refuses a taken port at start), and removing the old copy
+  of an agent that is offline after the switch (its containers are swept on
+  reconnect, its files are not; the operation message says so). Remote
+  add-on copies need the updated agent; an older one answers 404 and the
+  move is refused with an update message.
 - [~] Game hosting (Preview 2, migration `0040`): Minecraft Java server types
   (Paper, Purpur, Vanilla, Fabric, Forge, NeoForge, Folia, Velocity) defined by
   validated YAML blueprints with immutable revisions; provider version lists;
@@ -1377,6 +1396,7 @@ Migrations added since 0.2.0 (the schema-version assertion in
 | `0072_support_attachments.sql` | Additive: new table `support_ticket_attachments` (bytes in a BLOB of at most 10 MiB, pending while `ticket_id`/`message_id` are NULL, cascading with the ticket and message, uploader `ON DELETE SET NULL`) with a message index and a partial pending index; `support_ticket_messages.auto` (0/1, default 0) marks the automatic reply. Existing rows keep their meaning. Covered by `TestMigrateIdempotentAndSchema` (73 versions) and the attachment API tests |
 | `0073_user_domains.sql` | Additive: new tables `user_domain_tokens` (one 32-character token per user, created on first use) and `user_domains` (unique per user and domain; verification state like `site_domains`), both `ON DELETE CASCADE` with the user; `site_domains.user_domain_id` (`ON DELETE SET NULL`, NULL for existing rows) records which user domain proved a custom domain. Covered by `TestMigrateIdempotentAndSchema` (74 versions), `TestSiteCustomDomains` and `TestUserDomains` |
 | `0074_user_domain_default.sql` | Additive: `user_domains.is_default` (0/1, default 0, so existing domains are not the default) and the partial unique index `user_domains_default_idx(user_id) WHERE is_default = 1` (one default per user). Covered by `TestMigrateIdempotentAndSchema` (75 versions) and `TestUserDomains` |
+| `0075_move_operations.sql` | Rebuilds `operations` with identical columns (as `0025` did) so `kind` may be `move`; rows, indexes and the active-status partial index are recreated. Nothing references the table. Covered by `TestMigrateIdempotentAndSchema` (76 versions) and `TestMoveBotBetweenNodes` |
 | `0054_web_apps.sql` | Rebuilds `bots` (kind gains `web`, runtime gains `php`, new `release_command`) and `sites` (mode gains `app`; `app_id`, `framework`, `build_output_dir`, `app_port`, `health_path`, `max_body_bytes`) with explicit column lists and foreign keys off (checked with `PRAGMA foreign_key_check`; all indexes recreated); additive `site_releases.source_ref` and `bot_health_probes.target` (`host`/`app`). Covered by `apps_migration_test.go` |
 | `0030_ai_global_chat.sql` | Rebuilds `ai_conversations` so a chat may have no target; `ai_runs.bot_id`/`site_id`, `ai_messages.context_json` (the conversation subtree is stashed and restored, rows preserved) |
 

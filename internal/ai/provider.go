@@ -137,6 +137,10 @@ type Config struct {
 	Timeout                                   time.Duration
 	MaxTokens                                 int64
 	Temperature                               float64
+	// JSONObject asks for a single JSON object (response_format
+	// json_object). Providers that reject it answer 400; callers retry
+	// without it.
+	JSONObject bool
 }
 
 type ProviderError struct {
@@ -290,6 +294,9 @@ func (c *Client) Complete(ctx context.Context, cfg Config, msgs []Message, tools
 	body := map[string]any{"model": cfg.Model, "messages": NormalizeMessages(msgs), "stream": true, "stream_options": map[string]any{"include_usage": true}, "temperature": cfg.Temperature}
 	if cfg.MaxTokens > 0 && cfg.MaxTokens < NoTokenCap {
 		body["max_tokens"] = cfg.MaxTokens // otherwise the model's own maximum
+	}
+	if cfg.JSONObject {
+		body["response_format"] = map[string]any{"type": "json_object"}
 	}
 	if len(tools) > 0 {
 		body["tools"] = tools

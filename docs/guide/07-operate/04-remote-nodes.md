@@ -138,12 +138,43 @@ applies:
 2. else the panel's default node (**Administration → Nodes → Use for new apps**);
 3. else the panel's own host.
 
-This is a fixed rule, not scheduling by free memory or load, and existing apps
-never move. Creating an app on a node whose agent is offline is refused with a
+This is a fixed rule, not scheduling by free memory or load: existing apps
+move only when someone moves them (below). Creating an app on a node whose agent is offline is refused with a
 message naming the node. Web app units for sites always run on the panel's own
 host. The forms read `GET /api/v1/placement`: node managers see a card per
 node, everyone else sees where their apps run. See also
 [Limits and allowances](../06-teams/04-limits.md).
+
+## Move a bot to another node
+
+Node managers with full control of a bot move it from its **Settings** tab:
+the **Node** section shows the same cards as creation, with the current node
+marked **Runs here now**. Pick a node and confirm **Move to …**.
+
+1. The bot is stopped if it runs.
+2. Its files (without rebuildable folders such as `node_modules` and
+   `.venv`, which the next build recreates) and all its database add-on data
+   are copied from the old node to the panel, then written on the new node.
+   Add-on data is extracted beside the existing data and swapped in only when
+   it is complete, owned by the new node's workspace owner.
+3. The panel records the new node, but only if the bot is still stopped and
+   unchanged since the move began. [enforced: panel]
+4. The old node's containers, files and add-on data are deleted.
+5. The bot starts on the new node if it was running.
+
+Until step 3 the bot stays on the old node with everything intact; any failure
+removes the partial copy from the new node and starts the bot again where it
+was. Variables, backups, history, sharing and the workspace do not change.
+The move shows as an operation with its stage, both in the section and in
+the activity list.
+
+| Limit | Rule |
+| --- | --- |
+| Who | `nodes.manage` and full control of the bot |
+| What | Bots. Game servers keep port allocations on their node and cannot move yet; sites and container apps always run on the panel's host |
+| Nodes | Both must be connected; the target must be enabled, not draining, and allow the bot's memory and CPU |
+| Agents | Copying add-on data needs rivet-agent 1.18.0 or later; an older agent is refused with a message to update it. Bots without add-ons move with any agent |
+| Space | The panel spools the copy beside its backups and needs the usual free disk |
 
 ## Manage nodes
 
@@ -153,7 +184,7 @@ count, with CPU, memory, disk and running-server charts for the last hour.
 
 | Action | Effect |
 | --- | --- |
-| Drain | Refuses new placement; existing servers keep running. Nothing is migrated |
+| Drain | Refuses new placement; existing servers keep running. Nothing is migrated automatically: [move bots](#move-a-bot-to-another-node) off it one by one |
 | Disable | Disconnects the agent |
 | Revoke certificate | Disconnects the agent at once |
 | Delete | Allowed only after every server on it has been removed or moved by an operator |

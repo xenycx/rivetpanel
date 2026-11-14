@@ -612,6 +612,7 @@ func serve(log *slog.Logger, logs *logbuf.Buffer) error {
 	var dk *docker.Adapter
 	botSvc.NodeCapacity = nodeCapacity(db.GetAgentState, func() *docker.Adapter { return dk })
 	var rn *runner.Runner
+	var localAddons service.LocalAddonData // add-on data on this host, for node moves
 	// Deployment problems found at start (former installation, container
 	// paths, unencrypted public address) are logged and shown in Diagnostics.
 	deployChecks := listenCheck(log, cfg)
@@ -670,6 +671,13 @@ func serve(log *slog.Logger, logs *logbuf.Buffer) error {
 		botSvc.LocalPublished = dk.PublishedPorts
 		botSvc.Stdin = dk
 		botSvc.AddonData, botSvc.AddonRuntime = addonData, addonRuntime{rn}
+		ownerSpec := cfg.WorkspaceOwner
+		if ownerSpec == "" {
+			ownerSpec = cfg.ContainerUser
+		}
+		if ouid, ogid, err := runner.ParseUser(ownerSpec); err == nil {
+			localAddons = addons.OwnedData{DataRoot: addonData, UID: ouid, GID: ogid}
+		}
 		checks = append(checks, api.Check{Name: "docker", Fn: rn.Check})
 		runnerReady = rn.Check
 		runnerStatus = func(context.Context) (runner.Status, bool) { return rn.Status(), true }
@@ -857,6 +865,7 @@ func serve(log *slog.Logger, logs *logbuf.Buffer) error {
 	}
 	var enrollmentSvc *service.AgentEnrollmentService
 	var router *noderoute.Router
+	var moveSvc *service.NodeMoveService // nil without agent nodes: there is nowhere to move to
 	var agentControl api.AgentControl
 	// Where players reach a node without a public address: the local node's
 	// agent address host (set explicitly, so never the panel's own name),
@@ -936,6 +945,10 @@ func serve(log *slog.Logger, logs *logbuf.Buffer) error {
 			gameSvc.RemoteQuery = router.QueryMinecraft
 		}
 		backupSvc.Remote = router
+		moveSvc = &service.NodeMoveService{Backups: backupSvc, Nodes: router}
+		if localAddons != nil {
+			moveSvc.LocalAddons = localAddons
+		}
 		aiSvc.RemoteDiagnostic = router
 		deploySvc.Remote = router
 		deploySvc.RemotePush = router
@@ -1004,7 +1017,7 @@ func serve(log *slog.Logger, logs *logbuf.Buffer) error {
 	}
 	go scheduler.Run(ctx)
 	mfaSvc := &service.MFAService{Store: db, Keys: keys, Auth: authSvc}
-	app := api.New(api.Deps{Agent: agentBridge, Live: liveHub, Diagnostics: diagnostics, Log: log, Deploy: deploySvc, Backups: backupSvc, Stats: statsSrc, SFTP: sftpInfo, Analytics: analytics, PublicURL: cfg.PublicURL, DB: db, UI: webui.FS(), Auth: authSvc, Bots: botSvc, OAuth: oauthSvc,
+	app := api.New(api.Deps{Agent: agentBridge, Live: liveHub, Diagnostics: diagnostics, Log: log, Deploy: deploySvc, Backups: backupSvc, Moves: moveSvc, Stats: statsSrc, SFTP: sftpInfo, Analytics: analytics, PublicURL: cfg.PublicURL, DB: db, UI: webui.FS(), Auth: authSvc, Bots: botSvc, OAuth: oauthSvc,
 		Catalog: catalog, SecureCookies: cfg.Production, ProxyHeader: cfg.ProxyHeader, MetricsToken: cfg.MetricsToken, Modules: cfg.Modules, Checks: checks, Nodes: db, Files: wsm, MaxUpload: cfg.MaxUploadBytes,
 		Console: consoleSvc, BaseCtx: ctx, RunnerReady: runnerReady, Ops: ops, Audit: audit, Schedules: scheduler,
 		MFA: mfaSvc, Tokens: &service.TokenService{Store: db, Bots: botSvc}, Clients: &service.APIClientService{Store: db, Bots: botSvc}, Passkeys: &service.PasskeyService{Store: db, Auth: authSvc, MFA: mfaSvc, PublicURL: oauthSvc.CurrentPublicURL}, OIDC: &service.OIDCService{Store: db, Auth: authSvc, Keys: keys, PublicURL: oauthSvc.CurrentPublicURL, States: oauthSvc.States, Log: log}, Enrollment: enrollmentSvc, AgentControl: agentControl, GameAddress: gameAddress, Games: gameSvc, Containers: containerSvc, Router: router, Health: health,

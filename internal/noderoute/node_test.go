@@ -1,6 +1,9 @@
 package noderoute_test
 
 import (
+	"archive/tar"
+	"bytes"
+	"compress/gzip"
 	"context"
 	"errors"
 	"os"
@@ -216,7 +219,9 @@ func TestRemoteTelemetryAndDiskPreflight(t *testing.T) {
 // real hub and agent; other add-ons' data and unknown kinds are untouched.
 func TestRemoteAddonDataRemoval(t *testing.T) {
 	root := addons.DataRoot{Dir: t.TempDir()}
-	r, nodeID, _, _ := remoteNodeWith(t, func(d *agentnode.Deps) { d.AddonData = root })
+	r, nodeID, _, _ := remoteNodeWith(t, func(d *agentnode.Deps) {
+		d.AddonData = addons.OwnedData{DataRoot: root, UID: os.Getuid(), GID: os.Getgid()}
+	})
 	ctx := t.Context()
 	bot := uuid.NewString()
 	for _, k := range []string{"postgres", "redis"} {
@@ -255,4 +260,75 @@ func TestRemoteAddonDataRemoval(t *testing.T) {
 func exists(p string) bool {
 	_, err := os.Stat(p)
 	return err == nil
+}
+
+// TestRemoteAddonDataMove copies all add-on data of a server off one node
+// and onto another through real hubs and agents, preserving modes and
+// contents, and refuses an archive that tries to leave the data directory.
+func TestRemoteAddonDataMove(t *testing.T) {
+	srcRoot := addons.DataRoot{Dir: t.TempDir()}
+	dstRoot := addons.DataRoot{Dir: t.TempDir()}
+	own := func(root addons.DataRoot) func(d *agentnode.Deps) {
+		return func(d *agentnode.Deps) {
+			d.AddonData = addons.OwnedData{DataRoot: root, UID: os.Getuid(), GID: os.Getgid()}
+		}
+	}
+	src, srcNode, _, _ := remoteNodeWith(t, own(srcRoot))
+	dst, dstNode, _, _ := remoteNodeWith(t, own(dstRoot))
+	ctx := t.Context()
+	bot := uuid.NewString()
+	p, _ := srcRoot.Path(bot, "postgres")
+	if err := os.MkdirAll(filepath.Join(p, "base", "1"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(p, "base", "1", "rel"), []byte("rows"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink("base/1/rel", filepath.Join(p, "link")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(filepath.Join(p, "base"), 0o500); err != nil { // a read-only directory, as databases make
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chmod(filepath.Join(p, "base"), 0o700) })
+
+	var buf bytes.Buffer
+	if err := src.ArchiveAddonData(ctx, srcNode, bot, &buf); err != nil {
+		t.Fatal(err)
+	}
+	// Existing data on the target is replaced, not merged.
+	q, _ := dstRoot.Path(bot, "redis")
+	os.MkdirAll(q, 0o700)
+	if err := dst.ReplaceAddonData(ctx, dstNode, bot, bytes.NewReader(buf.Bytes())); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := dstRoot.Path(bot, "postgres")
+	t.Cleanup(func() { os.Chmod(filepath.Join(got, "base"), 0o700) })
+	if b, err := os.ReadFile(filepath.Join(got, "link")); err != nil || string(b) != "rows" {
+		t.Fatalf("data not copied: %q %v", b, err)
+	}
+	if st, err := os.Stat(filepath.Join(got, "base")); err != nil || st.Mode().Perm() != 0o500 {
+		t.Fatalf("directory mode not kept: %v %v", st, err)
+	}
+	if exists(q) {
+		t.Fatal("old add-on data on the target survived the replace")
+	}
+
+	// An archive that writes outside the data directory is refused.
+	var evil bytes.Buffer
+	gz := gzip.NewWriter(&evil)
+	tw := tar.NewWriter(gz)
+	tw.WriteHeader(&tar.Header{Name: "postgres/../../escape", Typeflag: tar.TypeReg, Mode: 0o600, Size: 1})
+	tw.Write([]byte("x"))
+	tw.Close()
+	gz.Close()
+	var ve *domain.ValidationError
+	if err := dst.ReplaceAddonData(ctx, dstNode, bot, &evil); err == nil {
+		t.Fatal("unsafe archive accepted")
+	} else if !errors.As(err, &ve) {
+		t.Logf("refused with %v", err)
+	}
+	if b, err := os.ReadFile(filepath.Join(got, "base", "1", "rel")); err != nil || string(b) != "rows" {
+		t.Fatal("a refused archive changed the existing data")
+	}
 }

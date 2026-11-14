@@ -18,6 +18,7 @@ import (
 // in the creation form; the server validates it again on create.
 type Plan struct {
 	Source       string   `json:"source"`     // recipe | detected | ai
+	Name         string   `json:"name"`       // suggested display name ("" = from the repository)
 	Confidence   string   `json:"confidence"` // high | medium | low
 	Summary      string   `json:"summary"`
 	Runtime      string   `json:"runtime"`

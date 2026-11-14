@@ -340,6 +340,39 @@
 	.field[aria-invalid='true'] {
 		@apply border-fail;
 	}
+	/* Filled in by a repository analysis and not yet changed by the person. */
+	.field[data-filled]:not([aria-invalid='true']) {
+		border-color: color-mix(in srgb, var(--color-action) 45%, var(--color-rule));
+	}
+	.filled-list {
+		@apply grid grid-cols-[auto_minmax(0,1fr)] gap-x-5 gap-y-1 text-small;
+	}
+	.filled-list dt {
+		@apply text-muted;
+	}
+	.analysis-dot {
+		@apply inline-block size-2 shrink-0 rounded-full;
+		background: var(--color-rule);
+	}
+	.analysis-dot[data-state='done'] {
+		background: var(--color-run);
+	}
+	.analysis-dot[data-state='active'] {
+		background: var(--color-action);
+		animation: analysis-pulse 1.4s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+	}
+	@keyframes analysis-pulse {
+		0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-action) 55%, transparent); }
+		100% { box-shadow: 0 0 0 7px color-mix(in srgb, var(--color-action) 0%, transparent); }
+	}
+	@media (prefers-reduced-motion: reduce) {
+		.analysis-dot[data-state='active'] { animation: none; }
+	}
+	.fill-tag {
+		@apply ml-1.5 inline-flex items-center gap-1 rounded-control px-1.5 align-[1px] text-[11px] leading-[18px] font-medium;
+		background: color-mix(in srgb, var(--color-action) var(--tint-state), transparent);
+		color: var(--color-action);
+	}
 	select.field {
 		@apply pr-8;
 		appearance: none;

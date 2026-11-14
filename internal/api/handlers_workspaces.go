@@ -179,6 +179,25 @@ func (s *panel) moveBot(c fiber.Ctx) error {
 	return c.JSON(s.viewBot(c, b))
 }
 
+// moveBotNode starts moving a bot to another node; the operation reports
+// the progress (202 with its id).
+func (s *panel) moveBotNode(c fiber.Ctx) error {
+	var in struct {
+		NodeID string `json:"node_id"`
+	}
+	if err := decode(c, &in); err != nil {
+		return err
+	}
+	if s.moves == nil {
+		return domain.Invalid("this panel has no other nodes to move apps to")
+	}
+	op, err := s.moves.MoveNode(c.Context(), currentUser(c), strings.Clone(c.Params("id")), service.MoveNodeInput{NodeID: in.NodeID})
+	if err != nil {
+		return err
+	}
+	return c.Status(fiber.StatusAccepted).JSON(fiber.Map{"operation_id": op})
+}
+
 // adminBotDTO is a bot row in administrator overviews, with its owner.
 type adminBotDTO struct {
 	botDTO

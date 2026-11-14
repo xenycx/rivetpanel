@@ -55,9 +55,13 @@ type Addons interface {
 	AddonLogs(ctx context.Context, botID, kind string, lines int) (string, error)
 }
 
-// AddonData deletes add-on data directories on this node (addons.DataRoot).
+// AddonData manages add-on data directories on this node
+// (addons.OwnedData): deletes one add-on's data, and archives or replaces all
+// of a server's add-on data when the server moves between nodes.
 type AddonData interface {
 	Remove(botID, kind string) error
+	Archive(botID string, dst io.Writer) (int64, error)
+	Replace(botID string, src io.Reader) (int64, error)
 }
 
 // Diagnostics runs isolated AI diagnostics on this node (runner.Diagnostic):
@@ -229,6 +233,42 @@ func App(d Deps) *fiber.App {
 			return fiber.NewError(fiber.StatusBadRequest, "unknown add-on")
 		}
 		if err := d.AddonData.Remove(id, kind); err != nil {
+			return err
+		}
+		return c.SendStatus(fiber.StatusNoContent)
+	})
+	// All add-on data of a stopped server, for a move to another node: the
+	// panel reads it from the old node and writes it to the new one, which
+	// extracts beside the data and swaps it in only when it is complete.
+	v1.Get("/bots/:id/addons/data", func(c fiber.Ctx) error {
+		if d.AddonData == nil {
+			return fiber.ErrServiceUnavailable
+		}
+		id := strings.Clone(c.Params("id"))
+		if !validID(id) {
+			return fiber.NewError(fiber.StatusBadRequest, "invalid server id")
+		}
+		c.Set(fiber.HeaderContentType, "application/gzip")
+		pr, pw := io.Pipe()
+		go func() {
+			_, err := d.AddonData.Archive(id, pw)
+			pw.CloseWithError(err)
+		}()
+		return c.SendStream(pr)
+	})
+	v1.Put("/bots/:id/addons/data", func(c fiber.Ctx) error {
+		if d.AddonData == nil {
+			return fiber.ErrServiceUnavailable
+		}
+		id := strings.Clone(c.Params("id"))
+		if !validID(id) {
+			return fiber.NewError(fiber.StatusBadRequest, "invalid server id")
+		}
+		if _, err := d.AddonData.Replace(id, requestBody(c)); err != nil {
+			var ae *addons.ErrArchive
+			if errors.As(err, &ae) {
+				return fiber.NewError(fiber.StatusUnprocessableEntity, ae.Msg)
+			}
 			return err
 		}
 		return c.SendStatus(fiber.StatusNoContent)

@@ -271,7 +271,15 @@ func serve(log *slog.Logger, args []string) error {
 	diags := agentDiagnostics{installID: installID, base: runner.Diagnostic{Docker: dk, Files: files, Catalog: cat, ScratchRoot: scratch,
 		User: *user, NodeID: cfg.NodeID, Timeout: 10 * time.Minute, MemoryBytes: 768 << 20, NanoCPUs: 1e9, PidsLimit: 256, TmpfsBytes: 128 << 20}}
 	probe := &hostProbe{reader: telemetry.ProcReader{}}
-	node := agentnode.App(agentnode.Deps{Runner: lazy, Addons: lazy, AddonData: addonData, Diagnostics: diags, Telemetry: probe.read,
+	ownerSpec := *owner
+	if ownerSpec == "" {
+		ownerSpec = *user
+	}
+	ouid, ogid, err := runner.ParseUser(ownerSpec)
+	if err != nil {
+		return fmt.Errorf("workspace owner: %w", err)
+	}
+	node := agentnode.App(agentnode.Deps{Runner: lazy, Addons: lazy, AddonData: addons.OwnedData{DataRoot: addonData, UID: ouid, GID: ogid}, Diagnostics: diags, Telemetry: probe.read,
 		Docker: dk, Files: files, MaxUpload: 4 << 30, InstallID: installID, Log: log})
 	agent.Handler = node.Handler()
 	agent.Hello = func() agentproto.Hello {

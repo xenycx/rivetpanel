@@ -15,6 +15,7 @@
 	import PlacementNotice from '$lib/components/PlacementNotice.svelte';
 	import ResourcePicker from '$lib/components/ResourcePicker.svelte';
 	import CreatingIn from '$lib/components/CreatingIn.svelte';
+	import { autofill } from '$lib/ui/autofill';
 	import { creatable, loadWorkspaces, workspaces, wsName } from '$lib/workspaces.svelte';
 
 	type Source = 'template' | 'github' | 'blank';
@@ -71,6 +72,16 @@
 	let analyzeError = $state('');
 	let useAI = $state(true);
 	let planEnv = $state<TemplateEnv[]>([]);
+	// What the analysis is doing now: reading the files, then asking the AI.
+	let stage = $state<'' | 'files' | 'ai'>('');
+	// Fields an analysis filled in and the person has not changed since,
+	// with where the value came from. fillRun replays the highlight.
+	type FillSource = Plan['source'];
+	let filled = $state<Record<string, FillSource>>({});
+	let fillRun = $state(0);
+	const unfill = (k: string) => {
+		if (filled[k]) delete filled[k];
+	};
 
 	// New bots go into the workspace selected in the sidebar (personal when "all").
 	let workspaceId = $state(workspaces.selected !== 'all' ? workspaces.selected : '');
@@ -249,32 +260,68 @@
 		if (!repo.full_name) return;
 		analyzing = true;
 		analyzeError = '';
+		const ask = useAI && session.features.ai;
+		const req = (ai: boolean) => api<Analysis>('POST', '/github/analyze', { repo: repo.full_name, branch: repo.branch, root_dir: repo.root_dir, ai });
 		try {
-			analysis = await api<Analysis>('POST', '/github/analyze', {
-				repo: repo.full_name,
-				branch: repo.branch,
-				root_dir: repo.root_dir,
-				ai: useAI && session.features.ai
-			});
+			// The files first: the form fills in within seconds, then the AI
+			// refines it (the panel keeps the downloaded branch for that pass).
+			stage = 'files';
+			analysis = await req(false);
 			applyPlan(analysis.plan);
-			if (analysis.ai.error) analyzeError = `The AI could not refine the result (${analysis.ai.error}); the detected settings are shown.`;
+			if (ask && analysis.ai.available && analysis.plan.source !== 'recipe') {
+				stage = 'ai';
+				try {
+					const refined = await req(true);
+					if (refined.ai.used) {
+						analysis = refined;
+						applyPlan(refined.plan);
+					} else {
+						analysis = { ...analysis, ai: refined.ai };
+						if (refined.ai.error) analyzeError = `The AI could not finish the plan (${refined.ai.error}). The settings found in the files are filled in; Analyze again to retry.`;
+					}
+				} catch (err) {
+					analyzeError = `The AI could not finish the plan (${err instanceof ApiError ? err.message : 'the request failed'}). The settings found in the files are filled in; Analyze again to retry.`;
+				}
+			}
 		} catch (err) {
 			analyzeError = err instanceof ApiError ? err.message : 'The repository could not be analyzed.';
 		} finally {
 			analyzing = false;
+			stage = '';
 		}
 	}
-	/** Prefills the form from a plan; the person reviews every value. */
+	/** Prefills every field the plan covers; the person reviews each value. */
 	function applyPlan(p: Plan) {
-		if (p.runtime && runtimes.some((r) => r.id === p.runtime)) runtime = p.runtime;
+		const f: Record<string, FillSource> = {};
+		const src = p.source;
+		if (p.runtime && runtimes.some((r) => r.id === p.runtime)) {
+			runtime = p.runtime;
+			f.runtime = src;
+		}
+		const suggested = p.name?.trim() || (repo.full_name.split('/')[1] ?? '');
+		if (!nameTouched && suggested) {
+			name = suggested;
+			f.name = src;
+		}
 		command = p.argv?.length ? joinArgs(p.argv) : '';
+		if (command) f.command = src;
 		buildCommand = p.build_command ?? '';
+		if (buildCommand) f.build = src;
 		addonSel = (p.addons ?? []).filter((a) => addonKinds.length === 0 || addonKinds.some((k) => k.id === a));
+		if (addonSel.length) f.addons = src;
 		planEnv = (p.env ?? []).map((v) => ({ name: v.name, label: '', description: v.description, secret: v.secret, required: v.required, default: v.value }));
-		for (const v of p.env ?? []) if (v.value && !(env[v.name] ?? '').trim()) env[v.name] = v.value;
+		for (const v of p.env ?? [])
+			if (v.value && (!(env[v.name] ?? '').trim() || filled['env.' + v.name])) {
+				env[v.name] = v.value;
+				f['env.' + v.name] = src;
+			}
 		memoryBytes = p.memory_bytes || null;
+		if (memoryBytes) f.memory = src;
 		nanoCpus = p.nano_cpus || null;
-		showAdvanced = !!(buildCommand || command || addonSel.length);
+		if (nanoCpus) f.cpu = src;
+		filled = f;
+		fillRun++;
+		showAdvanced = true;
 	}
 	function toggleAddon(id: string) {
 		addonSel = addonSel.includes(id) ? addonSel.filter((a) => a !== id) : [...addonSel, id];
@@ -404,7 +451,31 @@
 	const sourceLabel = $derived(source === 'template' ? (tpl?.name ?? 'Template') : source === 'github' ? 'GitHub repository' : 'Empty workspace');
 	const secretLike = (n: string) => /token|secret|key|password|pass|auth/i.test(n);
 	const sourceBadge: Record<string, string> = { recipe: 'Verified recipe', detected: 'Detected from files', ai: 'Refined by AI' };
+	const fillLabel: Record<string, string> = { recipe: 'Recipe', detected: 'Detected', ai: 'AI' };
+	// The form as it stands, field by field: it follows the person's edits,
+	// so the list never claims a value the form no longer has.
+	type Row = { key: string; label: string; value: string; src?: FillSource; mono?: boolean; tone?: 'warn' };
+	const filledRows = $derived.by<Row[]>(() => {
+		const valued = required.filter((v) => (env[v.name] ?? '').trim());
+		const needed = missingRequired.map((v) => v.name);
+		const optional = required.filter((v) => !v.required && !(env[v.name] ?? '').trim()).map((v) => v.name);
+		const envSrc = Object.keys(filled).find((k) => k.startsWith('env.'));
+		const build = buildCommand.trim();
+		const rows: Row[] = [
+			{ key: 'name', label: 'Name', value: name.trim() || 'Not set', src: filled.name },
+			{ key: 'runtime', label: 'Language', value: rt?.display_name ?? runtime, src: filled.runtime },
+			{ key: 'command', label: 'Start', value: command.trim() || joinArgs(rt?.default_argv ?? []), src: filled.command, mono: true },
+			{ key: 'build', label: 'Build', value: build ? build.split('\n')[0] + (build.includes('\n') ? ' …' : '') : `Default for ${rt?.display_name ?? 'the language'}`, src: filled.build, mono: !!build },
+			{ key: 'addons', label: 'Databases', value: chosenAddons.map((k) => k.display_name).join(', ') || 'None needed', src: filled.addons },
+			{ key: 'vars', label: 'Variables', value: required.length ? `${valued.length} of ${required.length} have a value` + (optional.length ? `; optional, empty: ${optional.join(', ')}` : '') : 'None found', src: envSrc ? filled[envSrc] : undefined }
+		];
+		if (needed.length) rows.push({ key: 'needed', label: 'Needs you', value: `${needed.join(', ')} (next step)`, tone: 'warn', mono: true });
+		rows.push({ key: 'memory', label: 'Memory', value: fmtBytes(effMemory), src: filled.memory }, { key: 'cpu', label: 'CPU', value: fmtCpu(effCpu), src: filled.cpu });
+		return rows;
+	});
 </script>
+
+{#snippet tag(k: string)}{#if filled[k]}<span class="fill-tag" title={filled[k] === 'ai' ? 'Filled in by the AI' : 'Filled in from the repository files'}>{fillLabel[filled[k]]}</span>{/if}{/snippet}
 
 <svelte:head><title>New bot · RivetPanel</title></svelte:head>
 
@@ -571,7 +642,18 @@
 							{/if}
 							<span class="text-small text-muted">Works out the language, start and build commands, variables, databases and resources.</span>
 						</div>
-						{#if analyzing}<p class="mt-2 text-small text-muted" aria-live="polite">Downloading the branch and reading its files{useAI && session.features.ai ? ', then asking the AI' : ''}…</p>{/if}
+						{#if analyzing}
+							<ol class="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-small" aria-live="polite" aria-label="Analysis progress">
+								<li class="flex items-center gap-1.5 {stage === 'files' ? 'text-ink' : 'text-muted'}">
+									<span class="analysis-dot" data-state={stage === 'files' ? 'active' : 'done'}></span>{stage === 'files' ? 'Downloading the branch and reading its files…' : 'Files read; the form is filled in'}
+								</li>
+								{#if useAI && session.features.ai}
+									<li class="flex items-center gap-1.5 {stage === 'ai' ? 'text-ink' : 'text-muted'}">
+										<span class="analysis-dot" data-state={stage === 'ai' ? 'active' : 'waiting'}></span>{stage === 'ai' ? 'The AI is reading the code to finish every field…' : 'Then the AI finishes the plan'}
+									</li>
+								{/if}
+							</ol>
+						{/if}
 						{#if analyzeError}<Notice tone="warn" class="mt-3" live>{analyzeError}</Notice>{/if}
 						{#if analysis && useAI && !analysis.ai.available && analysis.plan.source !== 'recipe'}
 							<p class="mt-2 text-small text-muted">No AI provider is set up, so only file detection was used. An administrator can add one under Administration → AI.</p>
@@ -584,7 +666,14 @@
 									<span class="text-small text-muted">Confidence: {p.confidence}{analysis.ai.used && analysis.ai.model ? ` · ${analysis.ai.model}` : ''} · {analysis.files.toLocaleString()} files{analysis.truncated ? ' (partly inspected)' : ''}</span>
 								</p>
 								{#if p.summary}<p class="mt-2">{p.summary}</p>{/if}
-								<p class="mt-2 text-small text-muted">Applied below: {runtimes.find((r) => r.id === p.runtime)?.display_name ?? 'no language'}{p.argv?.length ? ', start command' : ''}{p.build_command ? ', build command' : ''}{p.addons.length ? `, ${p.addons.join(' + ')}` : ''}{p.env.length ? `, ${p.env.length} variables (next step)` : ''}{p.memory_bytes ? `, ${fmtBytes(p.memory_bytes)} memory` : ''}. Review them before creating the bot.</p>
+								<h3 class="mt-4 text-small font-semibold">Filled in</h3>
+								<dl class="filled-list mt-1.5">
+									{#each filledRows as r (r.key)}
+										<dt>{r.label}</dt>
+										<dd class={r.tone === 'warn' ? 'text-warn' : ''}><span class={r.mono ? 'font-mono text-[12.5px] break-all' : ''}>{r.value}</span>{#if r.src}<span class="fill-tag">{fillLabel[r.src]}</span>{/if}</dd>
+									{/each}
+								</dl>
+								<p class="mt-2 text-small text-muted">Every value is in the form below and on the next steps; change any of them before creating the bot.</p>
 								{#if p.setup?.length}
 									<h3 class="mt-3 text-small font-semibold">Before the first start</h3>
 									<ol class="mt-1 list-decimal space-y-0.5 pl-5 text-small">{#each p.setup as s, i (i)}<li>{s}</li>{/each}</ol>
@@ -601,8 +690,8 @@
 
 			{#if source !== 'template'}
 				<label class="mt-5 block max-w-xs">
-					<span class="label">Language</span>
-					<select class="field" bind:value={runtime}>{#each runtimes as r (r.id)}<option value={r.id}>{r.display_name}</option>{/each}</select>
+					<span class="label">Language{@render tag('runtime')}</span>
+					<select class="field" bind:value={runtime} data-filled={filled.runtime ? '' : undefined} use:autofill={filled.runtime ? fillRun : 0} onchange={() => unfill('runtime')}>{#each runtimes as r (r.id)}<option value={r.id}>{r.display_name}</option>{/each}</select>
 				</label>
 				<div class="mt-4">
 					<button type="button" class="inline-flex items-center gap-1 text-small font-medium text-action" aria-expanded={showAdvanced} onclick={() => (showAdvanced = !showAdvanced)}>
@@ -611,22 +700,22 @@
 					{#if showAdvanced}
 						<div class="mt-3 grid gap-4">
 							<label class="block">
-								<span class="label">Start command</span>
-								<input class="field font-mono text-[13px]" bind:value={command} spellcheck="false" placeholder={rt ? joinArgs(rt.default_argv) : ''} aria-invalid={problems.command ? 'true' : undefined} />
+								<span class="label">Start command{@render tag('command')}</span>
+								<input class="field font-mono text-[13px]" bind:value={command} data-filled={filled.command ? '' : undefined} data-fill-order="1" use:autofill={filled.command ? fillRun : 0} oninput={() => unfill('command')} spellcheck="false" placeholder={rt ? joinArgs(rt.default_argv) : ''} aria-invalid={problems.command ? 'true' : undefined} />
 								<span class="help {problems.command ? 'text-fail!' : ''}">{problems.command || 'Program and arguments, run directly (no shell). Leave empty for the default shown.'}</span>
 							</label>
 							<label class="block">
-								<span class="label">Build command <span class="font-normal text-muted">(optional)</span></span>
-								<textarea class="field min-h-24 font-mono text-[13px]" bind:value={buildCommand} spellcheck="false" maxlength="4096" placeholder={rt?.has_build ? 'Empty: the default build for ' + rt.display_name : 'Shell commands, one per line'}></textarea>
+								<span class="label">Build command <span class="font-normal text-muted">(optional)</span>{@render tag('build')}</span>
+								<textarea class="field min-h-24 font-mono text-[13px]" bind:value={buildCommand} data-filled={filled.build ? '' : undefined} data-fill-order="2" use:autofill={filled.build ? fillRun : 0} oninput={() => unfill('build')} spellcheck="false" maxlength="4096" placeholder={rt?.has_build ? 'Empty: the default build for ' + rt.display_name : 'Shell commands, one per line'}></textarea>
 								<span class="help">Runs with <code>sh</code> in the workspace before each start, with internet access but without the bot's variables. {#if analysis?.plan.build_command}Suggested from the repository: check it before creating the bot.{/if}</span>
 							</label>
 							{#if addonKinds.length}
 								<fieldset>
-									<legend class="label">Services <span class="font-normal text-muted">(databases and caches)</span></legend>
+									<legend class="label">Services <span class="font-normal text-muted">(databases and caches)</span>{@render tag('addons')}</legend>
 									<div class="grid gap-2 sm:grid-cols-2">
 										{#each addonKinds as k (k.id)}
 											<label class="flex items-start gap-2.5 rounded-tile border p-3 {addonSel.includes(k.id) ? 'border-action' : 'border-rule-soft'}">
-												<input type="checkbox" class="mt-0.5" checked={addonSel.includes(k.id)} onchange={() => toggleAddon(k.id)} />
+												<input type="checkbox" class="mt-0.5" checked={addonSel.includes(k.id)} onchange={() => (toggleAddon(k.id), unfill('addons'))} />
 												<span><span class="font-medium">{k.display_name}</span> <span class="text-small text-muted">· {fmtBytes(k.default_memory_bytes)}</span><span class="help">Host <code>{k.id}</code>; sets {k.variables.slice(0, 3).join(', ')}…</span></span>
 											</label>
 										{/each}
@@ -639,8 +728,8 @@
 				</div>
 			{/if}
 			<label class="mt-5 block max-w-md">
-				<span class="label">Name</span>
-				<input class="field" maxlength="64" bind:value={name} oninput={() => (nameTouched = true)} placeholder="Music bot" aria-invalid={problems.name ? 'true' : undefined} aria-describedby="name-help" />
+				<span class="label">Name{@render tag('name')}</span>
+				<input class="field" maxlength="64" bind:value={name} oninput={() => ((nameTouched = true), unfill('name'))} data-filled={filled.name ? '' : undefined} use:autofill={filled.name ? fillRun : 0} placeholder="Music bot" aria-invalid={problems.name ? 'true' : undefined} aria-describedby="name-help" />
 				<span id="name-help" class="help {problems.name ? 'text-fail!' : ''}">{problems.name || 'Only members of its workspace and people you share the bot with see this name.'}</span>
 			</label>
 			{#if targets.length > 1}
@@ -692,12 +781,15 @@
 			<div class="mt-5 grid gap-4">
 				{#each required as v (v.name)}
 					<label class="block">
-						<span class="label">{v.label || v.name} {#if v.label}<code class="ml-1 text-small font-normal text-muted">{v.name}</code>{/if}{#if !v.required}<span class="ml-1 font-normal text-muted">(optional)</span>{/if}</span>
+						<span class="label">{v.label || v.name} {#if v.label}<code class="ml-1 text-small font-normal text-muted">{v.name}</code>{/if}{#if !v.required}<span class="ml-1 font-normal text-muted">(optional)</span>{/if}{@render tag('env.' + v.name)}</span>
 						<span class="relative block">
 							<input
 								class="field pr-10 font-mono"
 								type={v.secret && !shown[v.name] ? 'password' : 'text'}
 								bind:value={env[v.name]}
+								data-filled={filled['env.' + v.name] ? '' : undefined}
+								use:autofill={filled['env.' + v.name] ? fillRun : 0}
+								oninput={() => unfill('env.' + v.name)}
 								autocomplete="off"
 								spellcheck="false"
 								aria-invalid={problems['env.' + v.name] ? 'true' : undefined}
@@ -743,13 +835,13 @@
 			</dl>
 			<div class="mt-5 grid gap-4">
 				<div>
-					<span class="label" id="memory-label">Memory limit</span>
-					<ResourcePicker kind="memory" id="memory" labelledby="memory-label" value={memoryBytes} onchange={(v) => (memoryBytes = v)} min={minMem} max={maxMem} allowEmpty emptyLabel={rt ? `Default (${fmtBytes(rt.default_memory_bytes)})` : 'Default'} invalid={!!problems.memory} />
+					<span class="label" id="memory-label">Memory limit{@render tag('memory')}</span>
+					<ResourcePicker kind="memory" id="memory" labelledby="memory-label" value={memoryBytes} onchange={(v) => ((memoryBytes = v), unfill('memory'))} min={minMem} max={maxMem} allowEmpty emptyLabel={rt ? `Default (${fmtBytes(rt.default_memory_bytes)})` : 'Default'} invalid={!!problems.memory} />
 					<span class="help {problems.memory ? 'text-fail!' : ''}" data-problem={problems.memory ? '' : undefined}>{problems.memory || 'The process is stopped if it uses more.'}<span class="block">{boundText('memory', cap, nodeMaxMem, nodeName, { extra: addonMemory })}</span></span>
 				</div>
 				<div>
-					<span class="label" id="cpu-label">CPU limit</span>
-					<ResourcePicker kind="cpu" id="cpu" labelledby="cpu-label" value={nanoCpus} onchange={(v) => (nanoCpus = v)} min={minCpu} max={maxCpu} allowEmpty emptyLabel={rt ? `Default (${fmtCpu(rt.default_nano_cpus)})` : 'Default'} invalid={!!problems.cpu} />
+					<span class="label" id="cpu-label">CPU limit{@render tag('cpu')}</span>
+					<ResourcePicker kind="cpu" id="cpu" labelledby="cpu-label" value={nanoCpus} onchange={(v) => ((nanoCpus = v), unfill('cpu'))} min={minCpu} max={maxCpu} allowEmpty emptyLabel={rt ? `Default (${fmtCpu(rt.default_nano_cpus)})` : 'Default'} invalid={!!problems.cpu} />
 					<span class="help {problems.cpu ? 'text-fail!' : ''}" data-problem={problems.cpu ? '' : undefined}>{problems.cpu || 'A limit, not a reservation.'}<span class="block">{boundText('cpu', cap, nodeMaxCpu, nodeName)}</span></span>
 				</div>
 			</div>

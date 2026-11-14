@@ -523,3 +523,65 @@ func (m remote) StreamStats(ctx context.Context, cid string, fn func(domain.Reso
 	}
 	return sc.Err()
 }
+
+// ArchiveAddonData streams all add-on data of a stopped server on a remote
+// node into dst (see addons.DataRoot.WriteTarGz).
+func (r *Router) ArchiveAddonData(ctx context.Context, nodeID, botID string, dst io.Writer) error {
+	if !r.Remote(nodeID) || r.Hub == nil {
+		return ErrNoRunner
+	}
+	resp, err := r.Hub.Do(ctx, nodeID, http.MethodGet, "/node/v1/bots/"+url.PathEscape(botID)+"/addons/data", nil, "")
+	if err != nil {
+		return offline(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusMethodNotAllowed {
+		return domain.Invalid("this node's agent is too old to copy database data; update rivet-agent on it first")
+	}
+	if resp.StatusCode != http.StatusOK {
+		return agentError("add-on data", resp)
+	}
+	_, err = io.Copy(dst, resp.Body)
+	return err
+}
+
+// ReplaceAddonData writes a server's add-on data archive to a remote node,
+// which swaps it in only once it is complete.
+func (r *Router) ReplaceAddonData(ctx context.Context, nodeID, botID string, src io.Reader) error {
+	if !r.Remote(nodeID) || r.Hub == nil {
+		return ErrNoRunner
+	}
+	if err := r.EnsureDiskFree(ctx, nodeID, sizeOf(src)); err != nil {
+		return err
+	}
+	resp, err := r.Hub.Do(ctx, nodeID, http.MethodPut, "/node/v1/bots/"+url.PathEscape(botID)+"/addons/data", src, "application/gzip")
+	if err != nil {
+		return offline(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusMethodNotAllowed {
+		return domain.Invalid("this node's agent is too old to receive database data; update rivet-agent on it first")
+	}
+	if resp.StatusCode != http.StatusNoContent {
+		return agentError("add-on data", resp)
+	}
+	return nil
+}
+
+// PurgeOn removes a server's containers, add-on data and files from one
+// named node, whatever node the server is recorded on now: the node it just
+// moved away from, or the target of a move that did not finish. It never
+// deletes the server's row (the node's runner only deletes rows marked
+// deleted, and the server is not on that node any more).
+func (r *Router) PurgeOn(ctx context.Context, nodeID, botID string) error {
+	if !r.Remote(nodeID) {
+		if r.Local == nil {
+			return ErrNoRunner
+		}
+		return r.Local.Purge(ctx, botID)
+	}
+	if r.Hub == nil {
+		return ErrNoRunner
+	}
+	return offline(r.Hub.Call(ctx, nodeID, http.MethodPost, "/node/v1/purge", agentproto.Notify{BotID: botID}, nil))
+}

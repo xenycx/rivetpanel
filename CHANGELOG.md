@@ -6,6 +6,38 @@ authoritative current version.
 
 ## Unreleased
 
+## 1.18.0 - 2026-11-14
+
+### Added
+
+- **Move a bot to another node.** Node managers move an existing bot from
+  its Settings tab (**Node**): the bot stops, its files and all its database
+  add-on data are copied to the chosen node, the panel switches it over only
+  if nothing changed meanwhile, the old node's copy is deleted and the bot
+  starts again if it was running. Any failure before the switch removes the
+  partial copy and leaves the bot where it was. The move is a `move`
+  operation (migration `0075`); `POST /api/v1/bots/:id/node` starts it.
+  Remote nodes need the updated rivet-agent to copy add-on data (new agent
+  routes for exporting and replacing it); bots without add-ons move with any
+  agent. Game servers cannot move yet.
+
+### Fixed
+
+- **Repository analysis fills in the whole form.** The AI plan now sets the
+  bot's name, start command, build, databases, values for non-secret
+  variables, memory and CPU, and the form shows a **Filled in** summary with
+  what still needs you instead of a block of prose. Filled fields are marked
+  (**AI**, **Detected**, **Recipe**) until you change them. The form fills
+  from the files first and the AI refines it in a second pass that reuses
+  the downloaded branch.
+- **"The AI did not return a plan" with DeepSeek and other reasoning
+  models.** Plan requests now ask for a JSON object, get at least 16,384
+  output tokens regardless of the provider's chat cap (4,096 left no room
+  after reasoning), ignore `<think>` blocks, and ask once more when a reply
+  is cut off, empty or unreadable. Providers that reject JSON mode are
+  retried without it. Variables detected in the files that the AI left out
+  are kept as optional instead of required.
+
 ## 1.17.0 - 2026-11-14
 
 ### Added

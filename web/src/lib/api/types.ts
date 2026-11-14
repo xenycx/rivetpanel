@@ -443,7 +443,7 @@ export type Gauge = {
 };
 export type ApiKey = { id: string; name: string; prefix: string; created_at_ms: number; last_used_at_ms: number | null; expires_at_ms: number | null };
 
-export type OpKind = 'build' | 'deploy' | 'rollback' | 'backup' | 'restore' | 'publish';
+export type OpKind = 'build' | 'deploy' | 'rollback' | 'backup' | 'restore' | 'publish' | 'move';
 export type OpStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled' | 'interrupted';
 export type Operation = {
 	id: string;
@@ -809,6 +809,8 @@ export type BotAddon = {
 export type PlanEnv = { name: string; description: string; required: boolean; secret: boolean; value: string };
 export type Plan = {
 	source: 'recipe' | 'detected' | 'ai';
+	/** Suggested display name ("" = from the repository). */
+	name?: string;
 	confidence: 'high' | 'medium' | 'low';
 	summary: string;
 	runtime: string;

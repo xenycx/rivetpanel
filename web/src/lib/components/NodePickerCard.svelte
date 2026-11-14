@@ -13,6 +13,7 @@
 		onselect,
 		defaultId,
 		pinnedId,
+		currentId,
 		disabledIds = []
 	}: {
 		nodes: NodeInfo[];
@@ -23,13 +24,16 @@
 		defaultId?: string;
 		/** The node pinned to the workspace being created in. */
 		pinnedId?: string;
+		/** The node an existing app runs on now (moving it): marked, not choosable. */
+		currentId?: string;
 		disabledIds?: string[];
 	} = $props();
 
 	const locationName = (n: NodeInfo) => locations.find((l) => l.id === n.location_id)?.name ?? '';
 	const online = (n: NodeInfo) => n.transport === 'local' || !!n.agent?.connected;
 	const blocker = (n: NodeInfo) => (!n.enabled ? 'Disabled — cannot receive new apps' : n.draining ? 'Draining — cannot receive new apps' : !online(n) ? 'Offline — cannot receive new apps' : disabledIds.includes(n.id) ? 'Not available here' : '');
-	const selectable = (n: NodeInfo) => blocker(n) === '';
+	const isCurrent = (n: NodeInfo) => !!currentId && n.id === currentId;
+	const selectable = (n: NodeInfo) => blocker(n) === '' && !isCurrent(n);
 	const hostname = (n: NodeInfo) => (n.transport === 'local' ? 'this host' : n.agent?.hostname || n.public_address || 'remote agent');
 	const isDefault = (n: NodeInfo) => n.default || (!!defaultId && n.id === defaultId);
 
@@ -67,10 +71,10 @@
 			type="button"
 			role="radio"
 			aria-checked={on}
-			aria-disabled={why ? 'true' : undefined}
+			aria-disabled={why || isCurrent(n) ? 'true' : undefined}
 			tabindex={n.id === tabStop ? 0 : -1}
 			bind:this={buttons[n.id]}
-			class="min-w-0 rounded-tile border p-3.5 text-left transition-colors focus-visible:ring-2 focus-visible:ring-action/60 focus-visible:outline-none {on ? 'border-action bg-action/5' : 'border-rule-soft bg-panel'} {why ? 'cursor-not-allowed opacity-60' : 'hover:border-rule'}"
+			class="min-w-0 rounded-tile border p-3.5 text-left transition-colors focus-visible:ring-2 focus-visible:ring-action/60 focus-visible:outline-none {on ? 'border-action bg-action/5' : 'border-rule-soft bg-panel'} {why ? 'cursor-not-allowed opacity-60' : isCurrent(n) ? 'cursor-default' : 'hover:border-rule'}"
 			onclick={() => selectable(n) && onselect(n.id)}
 			onkeydown={(e) => onkeydown(e, i)}
 		>
@@ -80,6 +84,7 @@
 				<span class="pill">{n.transport === 'local' ? 'Local' : 'Remote'}</span>
 				<span class="pill" data-tone={up ? 'run' : 'fail'}>{up ? 'Online' : 'Offline'}</span>
 				{#if isDefault(n)}<span class="pill" data-tone="run">Default</span>{/if}
+				{#if isCurrent(n)}<span class="pill" data-tone="action">Runs here now</span>{/if}
 				{#if pinnedId && n.id === pinnedId}<span class="pill" data-tone="warn">Pinned to this workspace</span>{/if}
 			</span>
 			<span class="mt-1 block truncate text-small text-muted">{hostname(n)}</span>

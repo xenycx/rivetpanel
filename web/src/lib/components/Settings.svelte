@@ -2,7 +2,7 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { api, ApiError, fmtBytes, fmtCpu } from '$lib/api/client';
-	import type { Bot, Capacity, Limits, RuntimeInfo } from '$lib/api/types';
+	import type { Bot, Capacity, Limits, LocationInfo, NodeInfo, Operation, RuntimeInfo } from '$lib/api/types';
 	import { boundText, clampMax, room } from '$lib/room';
 	import { confirmDialog } from '$lib/ui/dialogs.svelte';
 	import { registerDirty } from '$lib/ui/guard.svelte';
@@ -14,7 +14,8 @@
 	import Icon from '$lib/components/ui/Icon.svelte';
 	import Notifications from '$lib/components/Notifications.svelte';
 	import ResourcePicker from '$lib/components/ResourcePicker.svelte';
-	import { session } from '$lib/session.svelte';
+	import { can, session } from '$lib/session.svelte';
+	import NodePickerCard from '$lib/components/NodePickerCard.svelte';
 	import { logoSeed } from '$lib/avatar';
 	import { creatable, loadWorkspaces, workspaceName, wsName } from '$lib/workspaces.svelte';
 
@@ -96,6 +97,67 @@
 			toast(`Moved to ${workspaceName(b.workspace_id) || 'the workspace'}`, 'success');
 		} catch (err) {
 			toast(err instanceof ApiError ? err.message : `The ${noun} could not be moved.`, 'fail');
+		}
+	}
+
+	// Moving to another node: node managers pick from the same cards as on
+	// creation; the move runs as an operation whose stages show here.
+	const movesNode = $derived(can('nodes.manage') && session.features.agents && bot.kind === 'bot' && (bot.permissions & 16) !== 0);
+	let nodes = $state<NodeInfo[] | null>(null);
+	let locations = $state<LocationInfo[]>([]);
+	let target = $state('');
+	let moveOp = $state<Operation | null>(null);
+	let moveError = $state('');
+	const targetNode = $derived(nodes?.find((n) => n.id === target));
+	const moving = $derived(!!moveOp && (moveOp.status === 'queued' || moveOp.status === 'running'));
+	$effect(() => {
+		if (!movesNode || nodes) return;
+		Promise.all([api<{ nodes: NodeInfo[] }>('GET', '/nodes'), api<{ locations: LocationInfo[] }>('GET', '/nodes/locations')])
+			.then(([n, l]) => {
+				nodes = n.nodes;
+				locations = l.locations;
+			})
+			.catch(() => (nodes = []));
+	});
+
+	async function moveNode() {
+		const to = targetNode;
+		if (!to) return;
+		const running = bot.desired_state === 'running';
+		const ok = await confirmDialog({
+			title: `Move ${bot.name} to ${to.name}?`,
+			body:
+				(running ? `The bot stops while its files and database data are copied, then starts again on ${to.name}. ` : `Its files and database data are copied to ${to.name}. `) +
+				`Variables, backups, history and access stay as they are. When the copy is complete the bot runs only on ${to.name} and the old copy on ${bot.node_name ?? 'its current node'} is deleted; if anything fails, it stays where it is.`,
+			confirmLabel: `Move to ${to.name}`
+		});
+		if (!ok) return;
+		moveError = '';
+		try {
+			const r = await api<{ operation_id: string }>('POST', `/bots/${bot.id}/node`, { node_id: to.id });
+			await followMove(r.operation_id);
+		} catch (err) {
+			moveError = err instanceof ApiError ? err.message : `The ${noun} could not be moved.`;
+		}
+	}
+
+	async function followMove(id: string) {
+		for (;;) {
+			try {
+				moveOp = await api<Operation>('GET', `/bots/${bot.id}/operations/${id}`);
+			} catch {
+				// A blip in the connection: keep following.
+			}
+			if (moveOp && !(moveOp.status === 'queued' || moveOp.status === 'running')) break;
+			await new Promise((r) => setTimeout(r, 1000));
+		}
+		if (moveOp?.status === 'succeeded') {
+			const b = await api<Bot>('GET', `/bots/${bot.id}`).catch(() => null);
+			if (b) onSaved(b);
+			target = '';
+			toast(moveOp.message ?? 'Moved', 'success');
+		} else {
+			moveError = moveOp?.message ?? 'The move did not finish.';
 		}
 	}
 
@@ -244,6 +306,28 @@
 			</label>
 			<button class="btn" disabled={workspaceId === bot.workspace_id}>Move {noun}</button>
 		</form>
+	</SettingsSection>
+{/if}
+
+{#if movesNode}
+	<SettingsSection title="Node" description="The machine that runs the {noun} and keeps its files and database data. Moving copies everything to the other node, starts the {noun} there if it was running, and deletes the old copy.">
+		{#if nodes === null}
+			<p class="text-small text-muted">Loading nodes…</p>
+		{:else if nodes.length < 2}
+			<p class="text-small text-muted">Runs on {bot.node_name ?? 'this host'}. Add another node under Administration → Nodes to move it.</p>
+		{:else}
+			<fieldset disabled={moving}>
+				<legend class="sr-only">Target node</legend>
+				<NodePickerCard {nodes} {locations} selected={target} currentId={bot.node_id} onselect={(id) => ((target = id), (moveError = ''))} />
+			</fieldset>
+			<div class="mt-3 flex flex-wrap items-center gap-3">
+				<button class="btn btn-primary" onclick={moveNode} disabled={!targetNode || moving}>{moving ? 'Moving…' : targetNode ? `Move to ${targetNode.name}…` : 'Choose a node'}</button>
+				{#if moveOp && moving}
+					<span class="flex items-center gap-1.5 text-small" aria-live="polite"><span class="analysis-dot" data-state="active"></span>{moveOp.stage || 'Starting the move'}…</span>
+				{/if}
+			</div>
+			{#if moveError}<Notice tone="fail" class="mt-3" live>{moveError}</Notice>{/if}
+		{/if}
 	</SettingsSection>
 {/if}
 

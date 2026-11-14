@@ -54,6 +54,7 @@ type Deps struct {
 	Registry     *pkgmgr.Registry                // package registry client; default used when nil
 	Stats        StatsSource                     // Docker stats stream; nil disables live gauges
 	Backups      *service.BackupService          // nil disables the backup routes
+	Moves        *service.NodeMoveService        // nil: bots cannot move between nodes
 	Deploy       *service.DeployService          // nil disables GitHub deployment routes
 	Ops          *service.Operations             // nil disables operation history routes
 	Audit        *service.Audit                  // nil disables the activity record
@@ -143,6 +144,7 @@ type panel struct {
 	registry      *pkgmgr.Registry
 	stats         StatsSource
 	backups       *service.BackupService
+	moves         *service.NodeMoveService
 	deploy        *service.DeployService
 	ops           *service.Operations
 	audit         *service.Audit
@@ -268,7 +270,7 @@ func New(d Deps) *fiber.App {
 		return c.JSON(fiber.Map{"status": "ok", "checks": checks})
 	})
 	if d.Auth != nil && d.Bots != nil {
-		s := &panel{log: d.Log, auth: d.Auth, bots: d.Bots, oauth: d.OAuth, sftp: d.SFTP, analytics: d.Analytics, publicURL: d.PublicURL, registry: d.Registry, stats: d.Stats, backups: d.Backups, deploy: d.Deploy, ops: d.Ops, audit: d.Audit, schedules: d.Schedules, mfa: d.MFA, tokens: d.Tokens, clients: d.Clients, oidc: d.OIDC, passkeys: d.Passkeys, enrollment: d.Enrollment, agentControl: d.AgentControl, gameAddress: d.GameAddress, games: d.Games, containers: d.Containers, extensions: d.Extensions, router: d.Router, health: d.Health, settings: d.Settings, mail: d.Mail, notifications: d.Notifications, tickets: d.Tickets, kb: d.KB, status: d.Status, usage: d.Usage, resets: d.Resets, verify: d.Verify, mailPrefs: d.MailPrefs, sites: d.Sites, ai: d.AI, agent: d.Agent, env: d.Env, host: d.Host, logs: d.Logs, logArchive: d.LogArchive, setupCodeFile: d.SetupCodeFile, onSetupDone: d.OnSetupDone, statsLimit: console.NewLimiter(0, 0, 0), catalog: d.Catalog, secureCookies: d.SecureCookies, modules: d.Modules,
+		s := &panel{log: d.Log, auth: d.Auth, bots: d.Bots, oauth: d.OAuth, sftp: d.SFTP, analytics: d.Analytics, publicURL: d.PublicURL, registry: d.Registry, stats: d.Stats, backups: d.Backups, moves: d.Moves, deploy: d.Deploy, ops: d.Ops, audit: d.Audit, schedules: d.Schedules, mfa: d.MFA, tokens: d.Tokens, clients: d.Clients, oidc: d.OIDC, passkeys: d.Passkeys, enrollment: d.Enrollment, agentControl: d.AgentControl, gameAddress: d.GameAddress, games: d.Games, containers: d.Containers, extensions: d.Extensions, router: d.Router, health: d.Health, settings: d.Settings, mail: d.Mail, notifications: d.Notifications, tickets: d.Tickets, kb: d.KB, status: d.Status, usage: d.Usage, resets: d.Resets, verify: d.Verify, mailPrefs: d.MailPrefs, sites: d.Sites, ai: d.AI, agent: d.Agent, env: d.Env, host: d.Host, logs: d.Logs, logArchive: d.LogArchive, setupCodeFile: d.SetupCodeFile, onSetupDone: d.OnSetupDone, statsLimit: console.NewLimiter(0, 0, 0), catalog: d.Catalog, secureCookies: d.SecureCookies, modules: d.Modules,
 			console: d.Console, consoleLimit: d.ConsoleLimit, baseCtx: d.BaseCtx, nodes: d.Nodes, files: d.Files, maxUpload: d.MaxUpload,
 			runnerReady: d.RunnerReady, buildMemory: d.BuildMemory, diagnostics: d.Diagnostics, live: d.Live}
 		if s.buildMemory == 0 {
@@ -601,6 +603,7 @@ func (s *panel) routes(v1 fiber.Router) {
 	authed.Patch("/workspaces/:wid/members/:uid", s.patchWorkspaceMember)
 	authed.Delete("/workspaces/:wid/members/:uid", s.removeWorkspaceMember)
 	authed.Put("/bots/:id/workspace", s.moveBot)
+	authed.Post("/bots/:id/node", s.moveBotNode)
 	// Administration → Workspaces: workspaces.view reads, workspaces.manage
 	// also renames and deletes; limits stay with built-in administrators
 	// (checked in the service).

@@ -291,6 +291,27 @@ func (db *DB) UpdateBotConfig(ctx context.Context, b domain.Bot, nowMS int64) er
 	return domain.ErrConflict
 }
 
+// MoveBotNode records that a stopped bot now lives on node to. It succeeds
+// only while the bot is still on node from, at generation gen and stopped,
+// so a start, edit or other move in between makes it fail with
+// domain.ErrConflict. The generation advances (the new node's runner
+// reconciles it afresh) and the old container is forgotten.
+func (db *DB) MoveBotNode(ctx context.Context, botID, from, to string, gen, nowMS int64) error {
+	res, err := db.ExecContext(ctx, `UPDATE bots SET node_id = ?, container_id = NULL, generation = generation + 1,
+		observed_state = 'stopped', updated_at_ms = ?
+		WHERE id = ? AND node_id = ? AND generation = ? AND `+stoppedPredicate, to, nowMS, botID, from, gen)
+	if err != nil {
+		return mapErr(err)
+	}
+	if n, _ := res.RowsAffected(); n != 1 {
+		if _, err := db.GetBot(ctx, botID); err != nil {
+			return err
+		}
+		return domain.ErrConflict
+	}
+	return nil
+}
+
 // SetBotPorts replaces a bot's published ports and bumps its generation in one
 // transaction, only while the bot is stopped and at generation gen. A host
 // port taken by another bot returns domain.ErrConflict.

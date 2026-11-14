@@ -103,6 +103,7 @@ var auditRoutes = map[string]auditRoute{
 	"DELETE /api/v1/bots/:id/schedules/:sid":                  {"schedule.delete", param("sid")},
 	"POST /api/v1/bots/:id/schedules/:sid/run":                {"schedule.run_now", param("sid")},
 	"POST /api/v1/bots/:id/transfer":                          {"bot.transfer", nil},
+	"POST /api/v1/bots/:id/node":                              {"bot.move_node", nil},
 	"PUT /api/v1/bots/:id/alerts":                             {"bot.alerts", nil},
 	"PUT /api/v1/bots/:id/tags":                               {"bot.tags", nil},
 	"POST /api/v1/bots/:id/logo/shuffle":                      {"bot.logo_shuffle", nil},
