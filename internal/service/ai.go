@@ -102,17 +102,17 @@ type LogTail interface {
 }
 
 type AIRunLimits struct {
-	Rounds           int   `json:"rounds"`
-	Diagnostics      int   `json:"diagnostics"`
-	ApplyAttempts    int   `json:"apply_attempts"`
-	LifecycleActions int   `json:"lifecycle_actions"`
+	Rounds           int `json:"rounds"`
+	Diagnostics      int `json:"diagnostics"`
+	ApplyAttempts    int `json:"apply_attempts"`
+	LifecycleActions int `json:"lifecycle_actions"`
 	// Actions bounds the panel-wide changes one run makes: deployments,
 	// environment, power, settings and panel API writes.
-	Actions          int   `json:"actions"`
-	WallMinutes      int   `json:"wall_minutes"`
-	ChangedFiles     int   `json:"changed_files"`
-	ChangedBytes     int64 `json:"changed_bytes"`
-	RetainedOutput   int64 `json:"retained_output"`
+	Actions        int   `json:"actions"`
+	WallMinutes    int   `json:"wall_minutes"`
+	ChangedFiles   int   `json:"changed_files"`
+	ChangedBytes   int64 `json:"changed_bytes"`
+	RetainedOutput int64 `json:"retained_output"`
 }
 
 func DefaultAIRunLimits() AIRunLimits {
@@ -202,13 +202,13 @@ type pendingApproval struct {
 }
 
 type AIService struct {
-	Store      AIStore
-	Keys       *secrets.Keyring
-	Bots       *BotService
-	Sites      *SiteService
-	Files      *filesystem.Manager
-	Ops        *Operations
-	Audit      *Audit
+	Store AIStore
+	Keys  *secrets.Keyring
+	Bots  *BotService
+	Sites *SiteService
+	Files *filesystem.Manager
+	Ops   *Operations
+	Audit *Audit
 	// Deploy, Containers and API give the assistant the panel-wide tools:
 	// deploying from GitHub, Docker images, templates and compose files, and
 	// calling any panel API route as the person. Nil hides what they power.
@@ -523,11 +523,13 @@ func (s *AIService) PutProvider(ctx context.Context, actor domain.User, id strin
 		id = uuid.NewString()
 	}
 	p := domain.AIProviderProfile{ID: id, Name: strings.TrimSpace(in.Name), Enabled: in.Enabled, Default: in.Default, BaseURL: strings.TrimRight(in.BaseURL, "/"), ChatPath: in.ChatPath, ModelsPath: in.ModelsPath, DefaultModel: strings.TrimSpace(in.DefaultModel), ContextSize: in.ContextSize, MaxOutputTokens: in.MaxOutputTokens, Temperature: in.Temperature, TimeoutMS: in.TimeoutMS, InputPriceMicros: in.InputPriceMicros, OutputPriceMicros: in.OutputPriceMicros, CreatedAtMS: now, UpdatedAtMS: now}
+	// 0 output tokens means no cap. The column only holds 64..131072, so the
+	// ceiling is stored and stands for "no cap" (max_tokens is not sent).
 	if p.MaxOutputTokens == 0 {
-		p.MaxOutputTokens = 4096
+		p.MaxOutputTokens = operator.NoTokenCap
 	}
 	if p.TimeoutMS == 0 {
-		p.TimeoutMS = 120000
+		p.TimeoutMS = 300000
 	}
 	if in.Key != nil {
 		key := strings.TrimSpace(*in.Key)
@@ -1428,7 +1430,7 @@ func (s *AIService) toolTimeout() time.Duration {
 // on copies of the run and call rows (read-only tools do not change them).
 func (s *AIService) executeToolBounded(ctx context.Context, actor domain.User, c domain.AIConversation, run *domain.AIRun, call *domain.AIToolCall, budget *aiBudget, rawArgs string) (string, bool, error) {
 	if !readOnlyAITools[call.Name] {
-		return s.executeTool(ctx, actor, c, run, call, budget, rawArgs)
+		return s.executeToolSafely(ctx, actor, c, run, call, budget, rawArgs)
 	}
 	tctx, cancel := context.WithTimeout(ctx, s.toolTimeout())
 	defer cancel()
@@ -1463,6 +1465,20 @@ func (s *AIService) executeToolBounded(ctx context.Context, actor domain.User, c
 	}
 }
 
+// executeToolSafely turns a panic inside one tool into that tool's error, so
+// a bad argument fails one call instead of the whole run.
+func (s *AIService) executeToolSafely(ctx context.Context, actor domain.User, c domain.AIConversation, run *domain.AIRun, call *domain.AIToolCall, budget *aiBudget, rawArgs string) (out string, mut bool, err error) {
+	defer func() {
+		if p := recover(); p != nil {
+			if s.Log != nil {
+				s.Log.Error("AI tool panicked", "tool", call.Name, "panic", fmt.Sprint(p))
+			}
+			out, mut, err = "", false, errors.New("the tool stopped because of an internal error; check its arguments and try again")
+		}
+	}()
+	return s.executeTool(ctx, actor, c, run, call, budget, rawArgs)
+}
+
 func (s *AIService) executeTool(ctx context.Context, actor domain.User, c domain.AIConversation, run *domain.AIRun, call *domain.AIToolCall, budget *aiBudget, rawArgs string) (string, bool, error) {
 	if out, mut, e, ok := s.executeAgentTool(ctx, actor, c, run, call, budget, rawArgs); ok {
 		return out, mut, e
@@ -1471,7 +1487,19 @@ func (s *AIService) executeTool(ctx context.Context, actor domain.User, c domain
 	if e := json.Unmarshal([]byte(rawArgs), &a); e != nil {
 		return "", false, domain.Invalid("tool arguments are invalid")
 	}
-	str := func(k string) string { var v string; _ = json.Unmarshal(a[k], &v); return v }
+	str := func(k string) string {
+		var v string
+		_ = json.Unmarshal(a[k], &v)
+		if k == "path" {
+			// Models often use the container's path for the workspace root.
+			if v == "/workspace" || v == "/workspace/" {
+				v = "."
+			} else if r, ok := strings.CutPrefix(v, "/workspace/"); ok {
+				v = r
+			}
+		}
+		return v
+	}
 	red := s.redactor(ctx, c)
 	if c.BotID == nil && c.SiteID == nil && !targetless[call.Name] {
 		return "", false, domain.Invalid("no bot or site is in focus: call list_targets and focus_target, or ask the person which one they mean")
@@ -1520,7 +1548,7 @@ func (s *AIService) executeTool(ctx context.Context, actor domain.User, c domain
 			p = "."
 		}
 		if operator.ProtectedPath(p) {
-			return "", false, domain.ErrForbidden
+			return "", false, domain.Invalid("this file is protected because it can hold secrets; the assistant never reads it (use environment_names, or ask the person)")
 		}
 		es, e := w.List(p)
 		if e != nil {
@@ -1534,7 +1562,7 @@ func (s *AIService) executeTool(ctx context.Context, actor domain.User, c domain
 	case "read_file":
 		p := str("path")
 		if operator.ProtectedPath(p) {
-			return "", false, domain.ErrForbidden
+			return "", false, domain.Invalid("this file is protected because it can hold secrets; the assistant never reads it (use environment_names, or ask the person)")
 		}
 		w, _, _, e := s.targetWorkspace(ctx, actor, c, "target", false)
 		if e != nil {
@@ -1596,14 +1624,19 @@ func (s *AIService) executeTool(ctx context.Context, actor domain.User, c domain
 		run.Status = "waiting_approval"
 		_ = s.Store.UpdateAIRun(ctx, *run)
 		s.emit(run.ID, "approval_required", map[string]any{"tool_call": toolCallView(*call), "title": "Secure environment input", "names": names, "secure_input": true})
+		// Values set on the Environment page (or by the API) while the card
+		// is open count too: the run goes on once every name is set.
+		watch, stopWatch := context.WithCancel(ctx)
+		go s.watchEnvSet(watch, actor, run.ID, *c.BotID, call.ID, names, call.CreatedAtMS)
 		ok := wait(ctx)
+		stopWatch()
 		call.ApprovalState = map[bool]string{true: "approved", false: "rejected"}[ok]
 		run.Status = "running"
 		_ = s.Store.UpdateAIRun(ctx, *run)
 		if !ok {
 			return "Secure input was cancelled.", false, nil
 		}
-		return "The requested environment variable names were configured through the secure form. Their values were not shown to the model.", true, nil
+		return "The requested environment variables are now set (through the secure form or the Environment page). Their values were not shown to the model. Start or restart the app so it reads them.", true, nil
 	case "web_search":
 		v, cfg, e := s.searchConfig(ctx)
 		if e != nil {
@@ -1706,6 +1739,53 @@ func (s *AIService) executeTool(ctx context.Context, actor domain.User, c domain
 		return fmt.Sprintf("Restart requested. generation=%d desired_state=%s", b.Generation, b.DesiredState), true, nil
 	default:
 		return "", false, domain.Invalid("unknown tool")
+	}
+}
+
+// watchEnvSet completes a pending secure-input card when every requested
+// variable has been set since the card opened, wherever it was set.
+func (s *AIService) watchEnvSet(ctx context.Context, actor domain.User, runID, botID, callID string, names []string, since int64) {
+	t := time.NewTicker(2 * time.Second)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+		}
+		vars, e := s.Bots.ListEnv(ctx, actor, botID)
+		if e != nil {
+			continue
+		}
+		set := map[string]bool{}
+		for _, v := range vars {
+			if v.UpdatedAtMS >= since {
+				set[v.Name] = true
+			}
+		}
+		all := true
+		for _, n := range names {
+			all = all && set[n]
+		}
+		if !all {
+			continue
+		}
+		s.mu.Lock()
+		p, ok := s.pending[callID]
+		s.mu.Unlock()
+		if !ok {
+			return
+		}
+		if call, e := s.Store.GetAIToolCall(ctx, callID); e == nil && call.ApprovalState == "pending" {
+			call.ApprovalState = "approved"
+			_ = s.Store.UpdateAIToolCall(ctx, call)
+		}
+		select {
+		case p.ch <- true:
+		default:
+		}
+		s.emit(runID, "status", map[string]any{"tool_call_id": callID, "secure_names_configured": names})
+		return
 	}
 }
 

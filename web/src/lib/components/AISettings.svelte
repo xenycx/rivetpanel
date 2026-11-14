@@ -16,9 +16,9 @@
 	// seconds; the API stores micro-units per million tokens and milliseconds.
 	type Form = {
 		name: string; enabled: boolean; default: boolean; base_url: string; chat_path: string; models_path: string; default_model: string;
-		context_size: number | null; max_output_tokens: number; temperature: number; timeout_s: number; input_price: number | null; output_price: number | null;
+		context_size: number | null; max_output_tokens: number | null; temperature: number; timeout_s: number; input_price: number | null; output_price: number | null;
 	};
-	const preset = (): Form => ({ name: 'DeepSeek', enabled: true, default: true, base_url: 'https://api.deepseek.com', chat_path: '/chat/completions', models_path: '/models', default_model: 'deepseek-chat', context_size: null, max_output_tokens: 4096, temperature: 0.2, timeout_s: 120, input_price: null, output_price: null });
+	const preset = (): Form => ({ name: 'DeepSeek', enabled: true, default: true, base_url: 'https://api.deepseek.com', chat_path: '/chat/completions', models_path: '/models', default_model: 'deepseek-chat', context_size: null, max_output_tokens: null, temperature: 0.2, timeout_s: 300, input_price: null, output_price: null });
 
 	let providers = $state<P[]>([]);
 	let search = $state<S | null>(null);
@@ -46,10 +46,10 @@
 	const num = (v: number | null) => (v === null || (v as unknown) === '' || Number.isNaN(Number(v)) ? null : Number(v));
 
 	function toForm(p: P): Form {
-		return { name: p.name, enabled: p.enabled, default: p.default, base_url: p.base_url, chat_path: p.chat_path, models_path: p.models_path, default_model: p.default_model, context_size: p.context_size, max_output_tokens: p.max_output_tokens, temperature: p.temperature, timeout_s: Math.round(p.timeout_ms / 1000), input_price: usd(p.input_price_micros), output_price: usd(p.output_price_micros) };
+		return { name: p.name, enabled: p.enabled, default: p.default, base_url: p.base_url, chat_path: p.chat_path, models_path: p.models_path, default_model: p.default_model, context_size: p.context_size, max_output_tokens: p.max_output_tokens && p.max_output_tokens < 131072 ? p.max_output_tokens : null, temperature: p.temperature, timeout_s: Math.round(p.timeout_ms / 1000), input_price: usd(p.input_price_micros), output_price: usd(p.output_price_micros) };
 	}
 	function body(f: Form) {
-		return { name: f.name.trim(), enabled: f.enabled, default: f.default, base_url: f.base_url.trim(), chat_path: f.chat_path.trim(), models_path: f.models_path.trim(), default_model: f.default_model.trim(), context_size: num(f.context_size), max_output_tokens: Number(f.max_output_tokens), temperature: Number(f.temperature), timeout_ms: Math.round(Number(f.timeout_s) * 1000), input_price_micros: micros(f.input_price), output_price_micros: micros(f.output_price) };
+		return { name: f.name.trim(), enabled: f.enabled, default: f.default, base_url: f.base_url.trim(), chat_path: f.chat_path.trim(), models_path: f.models_path.trim(), default_model: f.default_model.trim(), context_size: num(f.context_size), max_output_tokens: Number(f.max_output_tokens) || 0, temperature: Number(f.temperature), timeout_ms: Math.round(Number(f.timeout_s) * 1000), input_price_micros: micros(f.input_price), output_price_micros: micros(f.output_price) };
 	}
 
 	async function load() {
@@ -147,7 +147,7 @@
 	const tuned = $derived(
 		[
 			form.chat_path !== defaults.chat_path, form.models_path !== defaults.models_path, form.context_size !== null && (form.context_size as unknown) !== '',
-			Number(form.max_output_tokens) !== defaults.max_output_tokens, Number(form.temperature) !== defaults.temperature, Number(form.timeout_s) !== defaults.timeout_s,
+			form.max_output_tokens !== null && (form.max_output_tokens as unknown) !== '', Number(form.temperature) !== defaults.temperature, Number(form.timeout_s) !== defaults.timeout_s,
 			form.input_price !== null && (form.input_price as unknown) !== '', form.output_price !== null && (form.output_price as unknown) !== ''
 		].filter(Boolean).length
 	);
@@ -247,7 +247,7 @@
 					</button>
 					{#if showTuning}
 						<div class="grid gap-3 border-t border-rule-soft p-3 sm:grid-cols-2">
-							<label><span class="label">Max output tokens<span class="opt">Optional</span></span><input class="field" type="number" min="64" max="131072" required bind:value={form.max_output_tokens} /><span class="help">Default {defaults.max_output_tokens}.</span></label>
+							<label><span class="label">Max output tokens<span class="opt">Optional</span></span><input class="field" type="number" min="64" max="131072" bind:value={form.max_output_tokens} placeholder="No limit" /><span class="help">Empty lets the model answer at full length.</span></label>
 							<label><span class="label">Temperature<span class="opt">Optional</span></span><input class="field" type="number" min="0" max="2" step="0.05" required bind:value={form.temperature} /><span class="help">Default {defaults.temperature}. Lower is steadier.</span></label>
 							<label><span class="label">Timeout, seconds<span class="opt">Optional</span></span><input class="field" type="number" min="5" max="600" required bind:value={form.timeout_s} /><span class="help">Default {defaults.timeout_s}.</span></label>
 							<label><span class="label">Context size, tokens<span class="opt">Optional</span></span><input class="field" type="number" min="1024" max="2000000" bind:value={form.context_size} placeholder="Provider default" /></label>

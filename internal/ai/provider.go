@@ -160,6 +160,10 @@ func endpoint(base, p string) (string, error) {
 	return u.ResolveReference(r).String(), nil
 }
 
+// NoTokenCap as a provider's max output tokens means no cap: the request
+// leaves max_tokens out and the model's own maximum applies.
+const NoTokenCap = 131072
+
 func (c *Client) client(timeout time.Duration) *http.Client {
 	if c != nil && c.HTTP != nil {
 		return c.HTTP
@@ -283,7 +287,10 @@ func (c *Client) Complete(ctx context.Context, cfg Config, msgs []Message, tools
 	if e != nil {
 		return Response{}, e
 	}
-	body := map[string]any{"model": cfg.Model, "messages": NormalizeMessages(msgs), "stream": true, "stream_options": map[string]any{"include_usage": true}, "max_tokens": cfg.MaxTokens, "temperature": cfg.Temperature}
+	body := map[string]any{"model": cfg.Model, "messages": NormalizeMessages(msgs), "stream": true, "stream_options": map[string]any{"include_usage": true}, "temperature": cfg.Temperature}
+	if cfg.MaxTokens > 0 && cfg.MaxTokens < NoTokenCap {
+		body["max_tokens"] = cfg.MaxTokens // otherwise the model's own maximum
+	}
 	if len(tools) > 0 {
 		body["tools"] = tools
 		body["tool_choice"] = "auto"

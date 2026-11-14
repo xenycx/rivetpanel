@@ -88,13 +88,13 @@ type Deps struct {
 	AI            *service.AIService                // nil disables the AI operator
 	// Agent lets the AI assistant call this API in-process as the person it
 	// works for (nil: the assistant has no panel API tool).
-	Agent *AgentBridge
-	Env           *service.PanelEnvService          // nil disables the environment editor
-	Host          *hostmon.Monitor                  // nil disables the host monitoring routes
-	LogArchive    *service.LogArchiveService        // nil disables the log archive routes
-	Logs          *logbuf.Buffer                    // nil disables the panel log viewer
-	SetupCodeFile string                            // shown by the setup wizard
-	OnSetupDone   func()                            // called after the first administrator is created
+	Agent         *AgentBridge
+	Env           *service.PanelEnvService   // nil disables the environment editor
+	Host          *hostmon.Monitor           // nil disables the host monitoring routes
+	LogArchive    *service.LogArchiveService // nil disables the log archive routes
+	Logs          *logbuf.Buffer             // nil disables the panel log viewer
+	SetupCodeFile string                     // shown by the setup wizard
+	OnSetupDone   func()                     // called after the first administrator is created
 	Catalog       *runtimes.Catalog
 	SecureCookies bool   // Secure flag on the session cookie (production)
 	ProxyHeader   string // trusted client-IP header from a loopback reverse proxy; empty = none

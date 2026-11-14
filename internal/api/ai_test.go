@@ -183,7 +183,7 @@ func TestAIOperatorApprovalApplyAndUndo(t *testing.T) {
 	if strings.Contains(string(raw), "tok-very-secret-value") || !strings.Contains(string(raw), "[REDACTED]") {
 		t.Fatalf("secret value reached the provider or was not redacted: %s", raw)
 	}
-	if !strings.Contains(string(raw), "Permission is required") {
+	if !strings.Contains(string(raw), "this file is protected") {
 		t.Fatalf("protected .env read was not refused: %s", raw)
 	}
 	if got := readBotFile(t, e, bot, "index.js"); !strings.Contains(got, "tok-very-secret-value") {

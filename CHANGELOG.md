@@ -6,6 +6,36 @@ authoritative current version.
 
 ## Unreleased
 
+## 1.16.1 - 2026-11-14
+
+### Changed
+
+- **No output-token cap by default.** New AI providers let the model answer
+  at full length (the field is empty and reads "No limit"; the panel sends no
+  `max_tokens`), and the default request timeout is 5 minutes instead of 2.
+  Existing providers keep their saved cap: clear the field under Tuning to
+  remove it.
+- Variables the assistant sets stay readable in the chat's step list unless
+  their names look secret (tokens, keys, passwords, URLs), which stay hidden.
+- The assistant can read environment templates (`.env.example`,
+  `.env example`, `.env.sample`, `.env.template`, `.env.dist`) to learn every
+  variable an app needs; real `.env` files stay protected and now say why
+  instead of reporting a missing permission.
+- A secure input card completes by itself when the requested variables are
+  set on the Environment page (or through the API) instead of in the card,
+  and the assistant carries on. It only opens that card for secrets an app
+  cannot start without; optional keys are listed in its answer instead.
+
+### Fixed
+
+- A malformed tool call from the model (for example a power action with no
+  action) failed the whole assistant run with "internal error"; now only that
+  call fails and the model corrects itself.
+- The assistant's tool descriptions named runtime ids that do not exist
+  (`nodejs22`, `python312`); they now list the real ones, and site deploys
+  default to `nodejs`.
+- Paths under `/workspace` from the model now resolve to the app's files.
+
 ## 1.16.0 - 2026-11-14
 
 ### Added

@@ -36,12 +36,28 @@ func (r *Redactor) Text(s string) string {
 // parts for the namespace check.
 const legacyInternalPrefix = ".bot" + "panel"
 
+// envTemplate reports whether a .env* file name is an example or template
+// (.env.example, ".env example", .env.sample, .env.template, .env.dist):
+// those list the variables an app reads, with placeholders, and are meant to
+// be committed and read.
+func envTemplate(base string) bool {
+	rest := strings.Trim(strings.TrimPrefix(base, ".env"), ". -_")
+	switch rest {
+	case "example", "sample", "template", "dist", "defaults", "local.example", "development.example", "production.example":
+		return true
+	}
+	return strings.HasSuffix(rest, ".example") || strings.HasSuffix(rest, ".sample") || strings.HasSuffix(rest, ".template")
+}
+
 func ProtectedPath(p string) bool {
 	p = strings.ToLower(strings.TrimSpace(strings.ReplaceAll(p, "\\", "/")))
 	p = strings.TrimPrefix(p, "./")
 	base := p
 	if i := strings.LastIndexByte(p, '/'); i >= 0 {
 		base = p[i+1:]
+	}
+	if strings.HasPrefix(base, ".env") && envTemplate(base) {
+		return false // a template of the variables, with placeholders
 	}
 	if strings.HasPrefix(base, ".env") || base == ".npmrc" || base == ".pypirc" || base == ".netrc" || base == "credentials" || base == "secrets.json" {
 		return true

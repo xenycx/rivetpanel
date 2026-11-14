@@ -81,7 +81,7 @@
 		if (useDiscord) Object.assign(settings, { discord_client_id: dcId.trim(), discord_client_secret: dcSecret.trim() });
 		try {
 			const body: Record<string, unknown> = { code, email, password, settings };
-			if (useAI) body.ai_provider = { name: aiName.trim(), base_url: aiBaseUrl.trim(), default_model: aiModel.trim(), key: aiKey.trim(), max_output_tokens: 4096, timeout_ms: 120000 };
+			if (useAI) body.ai_provider = { name: aiName.trim(), base_url: aiBaseUrl.trim(), default_model: aiModel.trim(), key: aiKey.trim() };
 			const r = await api<{ csrf_token: string; settings_error?: string }>('POST', '/setup/complete', body);
 			aiKey = '';
 			setCsrf(r.csrf_token);

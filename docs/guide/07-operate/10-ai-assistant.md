@@ -118,9 +118,16 @@ the whole panel run at once. [enforced: panel]
 ### Secrets
 
 Values you type in the chat, such as a token for a deploy, are set as
-environment variables and are hidden in the stored tool records (`[hidden]`);
-console output and file reads have configured values redacted. Variable
-values are never shown to the model by the panel. [enforced: panel]
+environment variables. In the stored tool records, variables whose names look
+secret (tokens, keys, passwords, URLs) show as `[hidden]`; console output and
+file reads have configured values redacted. The panel never sends stored
+variable values to the model. [enforced: panel]
+
+For a secret you have not given it, the assistant opens a secure input card.
+Type the value there, or set it on the app's Environment page: either way the
+card completes and the run goes on. The assistant reads environment templates
+(`.env.example`, `.env.sample`, `.env.template`, `.env.dist`) to learn which
+variables an app needs; real `.env` files are protected. [enforced: panel]
 
 ### Run limits
 
@@ -255,8 +262,10 @@ Completions; DeepSeek is the first preset.
    Required fields are marked; tuning, pricing and paths are folded under
    **Optional**.
 2. A profile holds the base URL, chat and models paths, model, context and
-   output limits, temperature, timeouts and optional token prices (USD per
-   million tokens).
+   output limits, temperature, timeout and optional token prices (USD per
+   million tokens). By default there is no output-token cap (the model
+   answers at full length; the panel sends no `max_tokens`) and the timeout
+   is 5 minutes per request.
 3. **Discover models** queries the provider's models path with the saved key.
    It is optional: you can type any model ID.
 4. **Test capabilities** sends no project data. It checks authentication,

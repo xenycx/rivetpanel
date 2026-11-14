@@ -413,7 +413,7 @@ func TestAIOperatorRemoteBotFiles(t *testing.T) {
 	if !strings.Contains(s, "index.js:1:") {
 		t.Fatalf("remote search found nothing: %s", s)
 	}
-	if !strings.Contains(s, "Permission is required") {
+	if !strings.Contains(s, "this file is protected") {
 		t.Fatalf("protected .env read was not refused: %s", s)
 	}
 	// Containment is enforced by the node's filesystem layer.

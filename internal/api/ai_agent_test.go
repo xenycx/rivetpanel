@@ -140,3 +140,51 @@ func TestAgentBridgeTokensStayInProcess(t *testing.T) {
 }
 
 func waitBriefly() { time.Sleep(10 * time.Millisecond) }
+
+// A malformed call (here power with no action, as a real model sent it)
+// fails that one call; the run goes on.
+func TestAIAgentBadArgumentsFailOneCallNotTheRun(t *testing.T) {
+	fp := &fakeProvider{}
+	_, _, admin, bot, conv := aiEnv(t, fp)
+	fp.steps = []func(http.ResponseWriter){
+		toolStep("a", "power", map[string]any{}),
+		toolStep("b", "power", map[string]any{"bot_id": bot, "action": ""}),
+		textStep("recovered"),
+	}
+	run := startRun(t, admin, conv, "auto", "restart it")
+	if r := waitRun(t, admin, run, "completed", "failed"); r["status"] != "completed" {
+		t.Fatalf("run: %v", r)
+	}
+	for i := 1; i <= 2; i++ {
+		if res := lastToolResult(fp, i); !strings.Contains(res, "action must be") {
+			t.Fatalf("call %d: %q", i, res)
+		}
+	}
+}
+
+// A secure-input card completes when the person sets the variables on the
+// Environment page instead of in the card.
+func TestAISecureInputCompletesWhenSetElsewhere(t *testing.T) {
+	fp := &fakeProvider{}
+	e, _, admin, bot, conv := aiEnv(t, fp)
+	fp.steps = []func(http.ResponseWriter){
+		toolStep("a", "request_environment_values", map[string]any{"names": []string{"NEW_TOKEN"}}),
+		textStep("thanks"),
+	}
+	run := startRun(t, admin, conv, "auto", "it needs a token")
+	var id string
+	for i := 0; i < 300 && id == ""; i++ {
+		e.db.QueryRow(`SELECT id FROM ai_tool_calls WHERE run_id=? AND approval_state='pending'`, run).Scan(&id)
+		if id == "" {
+			waitBriefly()
+		}
+	}
+	if id == "" {
+		t.Fatal("no secure card")
+	}
+	admin.mustStatus(200, "PUT", "/api/v1/bots/"+bot+"/env", map[string]any{"vars": map[string]string{"NEW_TOKEN": "set-on-the-page"}})
+	waitRun(t, admin, run, "completed")
+	if res := lastToolResult(fp, 1); !strings.Contains(res, "are now set") {
+		t.Fatalf("result: %q", res)
+	}
+}

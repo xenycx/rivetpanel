@@ -217,3 +217,16 @@ func TestCompleteSendsAcceptableHistory(t *testing.T) {
 		})
 	}
 }
+
+func TestEnvTemplatesAreReadable(t *testing.T) {
+	for _, p := range []string{".env.example", ".env example", "app/.env.sample", ".env.template", ".env.dist", ".env.production.example"} {
+		if ProtectedPath(p) {
+			t.Errorf("%s is protected", p)
+		}
+	}
+	for _, p := range []string{".env", ".env.local", ".env.production", "app/.env", ".env.example.key", "id_rsa"} {
+		if !ProtectedPath(p) {
+			t.Errorf("%s is readable", p)
+		}
+	}
+}

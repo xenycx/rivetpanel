@@ -34,29 +34,29 @@ func agentTools() []operator.Tool {
 			map[string]any{"repo": map[string]any{"type": "string", "description": "owner/name or any GitHub URL (a /tree/<branch>/<dir> URL selects branch and folder)"}, "branch": str, "root_dir": str, "as": map[string]any{"type": "string", "enum": []string{"app", "site"}}}, "repo"),
 		toolSchema("deploy_github", "Create an app or bot from a GitHub repository, pull its code and start it. Fields left out come from analyze_repo's plan (run it first unless you already know). Returns the new id; then call wait_for_ready.",
 			map[string]any{"repo": str, "branch": str, "root_dir": str, "name": str,
-				"runtime":       map[string]any{"type": "string", "description": "Runtime id such as nodejs22, python312, go, java21, bun; omit to use the plan's"},
+				"runtime":       map[string]any{"type": "string", "description": "Runtime id: nodejs, python, go, java, ruby, rust or php; omit to use the plan's"},
 				"start_command": map[string]any{"type": "array", "items": str, "description": "argv, for example [\"node\",\"index.js\"]; omit to use the plan's"},
 				"build_command": str, "env": strMap,
-				"addons":        map[string]any{"type": "array", "items": str, "description": "Add-on kinds such as postgres, mysql, redis, mongodb"},
-				"memory_mb":     map[string]any{"type": "integer", "minimum": 64, "maximum": 65536},
-				"auto_deploy":   map[string]any{"type": "boolean", "description": "Redeploy on every push (default true)"},
-				"start":         map[string]any{"type": "boolean", "description": "Start once deployed (default true)"},
-				"workspace_id":  str}, "repo"),
+				"addons":       map[string]any{"type": "array", "items": str, "description": "Add-on kinds such as postgres, mysql, redis, mongodb"},
+				"memory_mb":    map[string]any{"type": "integer", "minimum": 64, "maximum": 65536},
+				"auto_deploy":  map[string]any{"type": "boolean", "description": "Redeploy on every push (default true)"},
+				"start":        map[string]any{"type": "boolean", "description": "Start once deployed (default true)"},
+				"workspace_id": str}, "repo"),
 		toolSchema("deploy_site", "Create a website from a GitHub repository (static, built static such as Vite/Next export/Astro, or a running web app) and publish it. Fields left out come from analyze_repo as=site. Returns the site and its address.",
 			map[string]any{"repo": str, "branch": str, "root_dir": str, "name": str, "slug": map[string]any{"type": "string", "description": "Address label; defaults from the name"},
 				"kind":      map[string]any{"type": "string", "enum": []string{reposcan.WebStatic, reposcan.WebStaticBuild, reposcan.WebApp}},
-				"framework": str, "runtime": str, "build_command": str, "output_dir": str, "spa": map[string]any{"type": "boolean"},
+				"framework": str, "runtime": map[string]any{"type": "string", "description": "nodejs, python, go, java, ruby, rust or php"}, "build_command": str, "output_dir": str, "spa": map[string]any{"type": "boolean"},
 				"start_command": map[string]any{"type": "array", "items": str}, "port": map[string]any{"type": "integer"}, "env": strMap,
 				"auto_deploy": map[string]any{"type": "boolean"}, "workspace_id": str}, "repo"),
 		toolSchema("deploy_image", "Run a Docker image (Docker Hub, GHCR or another allowed registry) as an app. Publishes the given container ports and starts it.",
 			map[string]any{"image": map[string]any{"type": "string", "description": "for example nginx:alpine, ghcr.io/owner/app:latest"}, "name": str,
-				"ports":      map[string]any{"type": "array", "items": map[string]any{"type": "integer", "minimum": 1, "maximum": 65535}, "description": "Container ports to publish"},
-				"env":        strMap,
-				"command":    strList,
-				"volumes":    map[string]any{"type": "array", "items": map[string]any{"type": "object", "properties": map[string]any{"name": str, "path": str}, "required": []string{"name", "path"}}, "description": "Persistent named volumes mounted at absolute paths"},
-				"writable":   map[string]any{"type": "array", "items": str, "description": "Extra writable folders (the root filesystem is read-only)"},
-				"memory_mb":  map[string]any{"type": "integer", "minimum": 64, "maximum": 65536},
-				"start":      map[string]any{"type": "boolean", "description": "default true"},
+				"ports":        map[string]any{"type": "array", "items": map[string]any{"type": "integer", "minimum": 1, "maximum": 65535}, "description": "Container ports to publish"},
+				"env":          strMap,
+				"command":      strList,
+				"volumes":      map[string]any{"type": "array", "items": map[string]any{"type": "object", "properties": map[string]any{"name": str, "path": str}, "required": []string{"name", "path"}}, "description": "Persistent named volumes mounted at absolute paths"},
+				"writable":     map[string]any{"type": "array", "items": str, "description": "Extra writable folders (the root filesystem is read-only)"},
+				"memory_mb":    map[string]any{"type": "integer", "minimum": 64, "maximum": 65536},
+				"start":        map[string]any{"type": "boolean", "description": "default true"},
 				"workspace_id": str}, "image"),
 		toolSchema("deploy_compose", "Import a docker-compose file as a stack of apps and start it. Use dry_run first to see what the panel accepts.",
 			map[string]any{"compose": map[string]any{"type": "string", "description": "The compose YAML"}, "name": str, "env_file": map[string]any{"type": "string", "description": "Optional .env content for ${VAR} interpolation"}, "dry_run": map[string]any{"type": "boolean"}, "workspace_id": str}, "compose"),
@@ -70,7 +70,7 @@ func agentTools() []operator.Tool {
 		toolSchema("delete_environment", "Remove environment variables from a bot or app.", map[string]any{"bot_id": botID, "names": strList}, "names"),
 		toolSchema("power", "Start, stop, restart or kill a bot or app.", map[string]any{"bot_id": botID, "action": map[string]any{"type": "string", "enum": []string{"start", "stop", "restart", "kill"}}}, "action"),
 		toolSchema("update_bot_settings", "Change a bot's configuration: name, start command, build command, runtime, memory, CPU, network, restart policy, automatic backups.",
-			map[string]any{"bot_id": botID, "name": str, "start_command": strList, "build_command": str, "runtime": str,
+			map[string]any{"bot_id": botID, "name": str, "start_command": strList, "build_command": str, "runtime": map[string]any{"type": "string", "description": "nodejs, python, go, java, ruby, rust or php"},
 				"memory_mb": map[string]any{"type": "integer", "minimum": 64, "maximum": 65536}, "cpus": map[string]any{"type": "number", "minimum": 0.1, "maximum": 64},
 				"network_enabled": map[string]any{"type": "boolean"}, "restart_policy": map[string]any{"type": "string", "enum": []string{"no", "on-failure", "always", "unless-stopped"}},
 				"auto_backup": map[string]any{"type": "boolean"}}),
@@ -109,8 +109,9 @@ var secretArgs = map[string][]string{
 }
 
 // redactToolArgs replaces secret values in a tool call's stored arguments:
-// maps keep their keys, a string becomes "[hidden]", and panel_api bodies
-// hide fields whose names look secret.
+// variables whose names look secret (or any template value) become
+// "[hidden]", other variables stay readable, and panel_api bodies hide
+// fields whose names look secret.
 func redactToolArgs(name, raw string) string {
 	keys := secretArgs[name]
 	if len(keys) == 0 {
@@ -128,8 +129,12 @@ func redactToolArgs(name, raw string) string {
 				continue
 			}
 			out := map[string]any{}
-			for n := range v {
-				out[n] = "[hidden]"
+			for n, x := range v {
+				if k == "values" || reposcan.IsSecretName(n) || strings.Contains(strings.ToLower(n), "password") {
+					out[n] = "[hidden]"
+				} else {
+					out[n] = x
+				}
 			}
 			a[k] = out
 		case string:
@@ -498,6 +503,9 @@ func (s *AIService) agentTool(ctx context.Context, actor domain.User, c domain.A
 			return "", false, e
 		}
 		act := a.str("action")
+		if act != "start" && act != "stop" && act != "restart" && act != "kill" {
+			return "", false, domain.Invalid("action must be start, stop, restart or kill")
+		}
 		if !s.approve(ctx, run, call, strings.ToUpper(act[:1])+act[1:]+" "+b.Name, nil) {
 			return "Rejected by user.", false, nil
 		}
@@ -820,7 +828,7 @@ func (s *AIService) agentDeploySite(ctx context.Context, actor domain.User, run 
 		in.Addons = append(in.Addons, AddonInput{Kind: k})
 	}
 	if in.Runtime == "" {
-		in.Runtime = "nodejs22"
+		in.Runtime = "nodejs"
 	}
 	if !s.approve(ctx, run, call, "Publish site from "+an.Repo.FullName, map[string]any{"repo": an.Repo.FullName, "kind": in.Kind, "framework": in.Framework, "name": name}) {
 		return "Rejected by user.", false, nil

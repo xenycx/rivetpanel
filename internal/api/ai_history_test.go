@@ -52,7 +52,7 @@ func TestAIProviderAlwaysReceivesContent(t *testing.T) {
 			}
 		}
 	}
-	if got := lastToolResult(fp, 2); !strings.Contains(got, "Permission") {
+	if got := lastToolResult(fp, 2); !strings.Contains(got, "is protected") {
 		t.Fatalf("the pre-rename deploy manifest is internal and must be protected: %q", got)
 	}
 }
