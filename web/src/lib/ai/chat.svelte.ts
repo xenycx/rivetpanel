@@ -65,7 +65,7 @@ const approvalTitles: Record<string, string> = {
 	panel_api: 'Change something in the panel'
 };
 /** Tools that only read: a run made of these leaves nothing to refresh. */
-const READ_ONLY = new Set(['list_targets', 'focus_target', 'target_status', 'read_logs', 'build_output', 'list_files', 'read_file', 'search_files', 'environment_names', 'web_search', 'web_fetch', 'analyze_repo', 'list_app_templates', 'wait_for_ready', 'panel_routes', 'client_action']);
+const READ_ONLY = new Set(['panel_docs', 'read_doc', 'panel_info', 'list_targets', 'focus_target', 'target_status', 'read_logs', 'build_output', 'list_files', 'read_file', 'search_files', 'environment_names', 'web_search', 'web_fetch', 'analyze_repo', 'list_app_templates', 'wait_for_ready', 'panel_routes', 'client_action']);
 const MODE_KEY = 'rivetpanel.aiMode';
 function readMode(): 'approval' | 'auto' {
 	try {

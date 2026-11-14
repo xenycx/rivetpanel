@@ -10,6 +10,7 @@ import (
 
 	operator "github.com/xenycx/rivetpanel/internal/ai"
 	"github.com/xenycx/rivetpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/paneldocs"
 	"github.com/xenycx/rivetpanel/internal/reposcan"
 )
 
@@ -30,6 +31,9 @@ func agentTools() []operator.Tool {
 	strList := map[string]any{"type": "array", "items": str, "maxItems": 40}
 	botID := map[string]any{"type": "string", "description": "Bot or app id; defaults to the focused one"}
 	return []operator.Tool{
+		toolSchema("panel_docs", "Search the RivetPanel guide (every feature, limit, setting and how it works: apps, game servers, containers, websites, domains, teams, backups, nodes, security, administration). Use it before answering how-to questions or acting on a feature you are unsure about. Returns the best pages with the matching section and its /docs link.", map[string]any{"query": str}, "query"),
+		toolSchema("read_doc", "Read one guide page, or one section of it, from panel_docs results: page is an id such as websites/domains, a /docs/ link or a short name such as domains.", map[string]any{"page": str, "section": map[string]any{"type": "string", "description": "Optional heading, for example \"verify\" or \"limits\""}}, "page"),
+		toolSchema("panel_info", "Describe this panel right now: version, enabled features and modules, the person's role and permissions, runtimes, add-on kinds, the container image policy, workspaces and capacity. Call it once when what is possible here matters.", map[string]any{}),
 		toolSchema("analyze_repo", "Download a GitHub repository and work out how to host it: runtime, start and build commands, environment variables it reads, add-ons (databases), ports. as=app for bots/workers/APIs/containers, as=site for websites. Nothing is created.",
 			map[string]any{"repo": map[string]any{"type": "string", "description": "owner/name or any GitHub URL (a /tree/<branch>/<dir> URL selects branch and folder)"}, "branch": str, "root_dir": str, "as": map[string]any{"type": "string", "enum": []string{"app", "site"}}}, "repo"),
 		toolSchema("deploy_github", "Create an app or bot from a GitHub repository, pull its code and start it. Fields left out come from analyze_repo's plan (run it first unless you already know). Returns the new id; then call wait_for_ready.",
@@ -94,7 +98,7 @@ var agentToolNames = func() map[string]bool {
 }()
 
 // agentReadOnly agent tools never change anything.
-var agentReadOnly = map[string]bool{"list_app_templates": true, "panel_routes": true, "wait_for_ready": true, "analyze_repo": true}
+var agentReadOnly = map[string]bool{"panel_docs": true, "read_doc": true, "panel_info": true, "list_app_templates": true, "panel_routes": true, "wait_for_ready": true, "analyze_repo": true}
 
 // secretArgs lists the argument keys whose values are secrets the tool-call
 // record must not keep. The live run still passes them to the panel.
@@ -295,6 +299,42 @@ func (s *AIService) executeAgentTool(ctx context.Context, actor domain.User, c d
 func (s *AIService) agentTool(ctx context.Context, actor domain.User, c domain.AIConversation, run *domain.AIRun, call *domain.AIToolCall, budget *aiBudget, a agentArgs) (string, bool, error) {
 	red := s.redactor(ctx, c)
 	switch call.Name {
+	case "panel_docs":
+		hits := paneldocs.Search(a.str("query"), 5)
+		if len(hits) == 0 {
+			return "Nothing in the guide matches; try other words (feature names work best).", false, nil
+		}
+		var b strings.Builder
+		for i, h := range hits {
+			fmt.Fprintf(&b, "%d. %s (page %s, %s)\n", i+1, h.Page.Title, h.Page.ID, h.Page.URL)
+			if h.Page.Lede != "" {
+				b.WriteString("   " + h.Page.Lede + "\n")
+			}
+			if i < 3 {
+				if h.Section.Heading != "" {
+					fmt.Fprintf(&b, "   Section \"%s\" (%s#%s):\n", h.Section.Heading, h.Page.URL, h.Section.Anchor)
+				}
+				b.WriteString("   " + strings.ReplaceAll(clipService(h.Section.Text, 1800), "\n", "\n   ") + "\n")
+			}
+			b.WriteString("\n")
+		}
+		b.WriteString("Read a whole page or another section with read_doc.")
+		return b.String(), false, nil
+
+	case "read_doc":
+		pg, ok := paneldocs.Find(a.str("page"))
+		if !ok {
+			var ids []string
+			for _, p := range paneldocs.Pages() {
+				ids = append(ids, p.ID)
+			}
+			return "", false, domain.Invalid("no such guide page; pages are: " + strings.Join(ids, ", "))
+		}
+		return clipService(pg.Text(a.str("section")), 24000), false, nil
+
+	case "panel_info":
+		return s.panelInfo(ctx, actor), false, nil
+
 	case "analyze_repo":
 		if s.Deploy == nil {
 			return "", false, domain.Invalid("GitHub is not configured on this panel")
@@ -954,4 +994,69 @@ func (s *AIService) agentPanelAPI(ctx context.Context, actor domain.User, run *d
 		return fmt.Sprintf("HTTP %d\n%s", status, clipService(text, 4000)), false, nil
 	}
 	return s.redactor(ctx, domain.AIConversation{BotID: run.BotID}).Text(fmt.Sprintf("HTTP %d\n%s", status, clipService(text, 60000))), write, nil
+}
+
+// panelInfo summarises this panel for the assistant through its own API,
+// so it sees exactly what the person would.
+func (s *AIService) panelInfo(ctx context.Context, actor domain.User) string {
+	out := map[string]any{"version": s.Version}
+	if s.API == nil {
+		return jsonText(out)
+	}
+	fresh, e := s.Store.GetUserByID(ctx, actor.ID)
+	if e != nil || fresh.Disabled {
+		return jsonText(out)
+	}
+	fresh.Client = actor.Client
+	get := func(p string) any {
+		st, b, e := s.API.Do(ctx, fresh, "GET", p, nil)
+		if e != nil || st >= 400 {
+			return nil
+		}
+		var v any
+		_ = json.Unmarshal(b, &v)
+		return v
+	}
+	if me, ok := get("/auth/me").(map[string]any); ok {
+		if u, ok := me["user"].(map[string]any); ok {
+			out["you"] = map[string]any{"role": u["role"], "role_name": u["role_name"], "email_verified": u["email_verified"]}
+		}
+		out["features"] = me["features"]
+		out["permissions"] = me["permissions"]
+	}
+	if rt, ok := get("/runtimes").(map[string]any); ok {
+		var ids []string
+		if list, ok := rt["runtimes"].([]any); ok {
+			for _, r := range list {
+				if m, ok := r.(map[string]any); ok {
+					ids = append(ids, fmt.Sprint(m["id"]))
+				}
+			}
+		}
+		out["runtimes"] = ids
+		out["limits"] = rt["limits"]
+	}
+	if ad, ok := get("/addons").(map[string]any); ok {
+		var kinds []string
+		for _, k := range []string{"addons", "kinds"} {
+			if list, ok := ad[k].([]any); ok {
+				for _, x := range list {
+					if m, ok := x.(map[string]any); ok {
+						kinds = append(kinds, fmt.Sprint(m["id"]))
+					}
+				}
+			}
+		}
+		out["addon_kinds"] = kinds
+	}
+	out["container_policy"] = get("/containers/policy")
+	out["modules"] = get("/modules")
+	if ws, ok := get("/workspaces").(map[string]any); ok {
+		out["workspaces"] = ws["workspaces"]
+	}
+	out["capacity"] = get("/me/capacity")
+	out["github_deploys"] = s.Deploy != nil
+	out["sites"] = s.Sites != nil && s.Sites.Enabled()
+	text := jsonText(out)
+	return clipService(text, 20000)
 }

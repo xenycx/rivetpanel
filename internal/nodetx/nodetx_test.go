@@ -192,7 +192,8 @@ func TestUnconfirmedTransactionsExpire(t *testing.T) {
 		t.Fatal(err)
 	}
 	waitClosed(t, r.reg)
-	if got := r.read("index.js"); got != "old" {
+	// expire leaves the open set before its rollback finishes.
+	if got := waitFile(t, r, "index.js", "old"); got != "old" {
 		t.Fatalf("expired deployment kept its files: %q", got)
 	}
 	if err := r.reg.Complete(r.bot, id, true); !errors.Is(err, ErrNotFound) {
@@ -204,7 +205,7 @@ func TestUnconfirmedTransactionsExpire(t *testing.T) {
 		t.Fatal(err)
 	}
 	waitClosed(t, r.reg)
-	if got := r.read("index.js"); got != "old" {
+	if got := waitFile(t, r, "index.js", "old"); got != "old" {
 		t.Fatalf("expired staged deployment changed files: %q", got)
 	}
 }
@@ -227,6 +228,20 @@ func TestCrashedNodeRecoversPreviousFiles(t *testing.T) {
 	if got := r.read("index.js"); got != "old" {
 		t.Fatalf("recovered file = %q", got)
 	}
+}
+
+// waitFile waits up to two seconds for a workspace file to hold want and
+// returns what it last read.
+func waitFile(t *testing.T, r *rig, name, want string) string {
+	t.Helper()
+	got := ""
+	for i := 0; i < 200; i++ {
+		if got = r.read(name); got == want {
+			return got
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	return got
 }
 
 func waitClosed(t *testing.T, reg *Registry) {

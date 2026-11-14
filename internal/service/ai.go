@@ -215,6 +215,8 @@ type AIService struct {
 	Deploy     *DeployService
 	Containers *ContainerService
 	API        PanelAPI
+	// Version is the panel's version, shown to the assistant by panel_info.
+	Version    string
 	Provider   *operator.Client
 	Research   *operator.Research
 	Diagnostic DiagnosticRunner

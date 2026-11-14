@@ -188,3 +188,28 @@ func TestAISecureInputCompletesWhenSetElsewhere(t *testing.T) {
 		t.Fatalf("result: %q", res)
 	}
 }
+
+// The assistant knows the panel: it searches and reads the embedded guide
+// and sees what this panel offers the person.
+func TestAIAgentKnowsThePanel(t *testing.T) {
+	fp := &fakeProvider{}
+	_, ai, admin, _, conv := aiEnv(t, fp)
+	ai.Version = "9.9.9"
+	fp.steps = []func(http.ResponseWriter){
+		toolStep("a", "panel_docs", map[string]any{"query": "verify a custom domain"}),
+		toolStep("b", "read_doc", map[string]any{"page": "ai", "section": "run limits"}),
+		toolStep("c", "panel_info", map[string]any{}),
+		textStep("ok"),
+	}
+	run := startRun(t, admin, conv, "auto", "how do domains work?")
+	waitRun(t, admin, run, "completed")
+	if res := lastToolResult(fp, 1); !strings.Contains(res, "/docs/websites/") {
+		t.Fatalf("panel_docs: %q", res)
+	}
+	if res := lastToolResult(fp, 2); !strings.Contains(res, "Wall time") {
+		t.Fatalf("read_doc: %q", res)
+	}
+	if res := lastToolResult(fp, 3); !strings.Contains(res, `"version": "9.9.9"`) || !strings.Contains(res, "runtimes") || !strings.Contains(res, "nodejs") {
+		t.Fatalf("panel_info: %q", res)
+	}
+}

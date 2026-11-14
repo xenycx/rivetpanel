@@ -6,6 +6,25 @@ authoritative current version.
 
 ## Unreleased
 
+## 1.17.0 - 2026-11-14
+
+### Added
+
+- **The AI assistant knows RivetPanel.** The whole guide is built into the
+  panel, and the assistant searches it (`panel_docs`) and reads pages or
+  sections (`read_doc`) before it explains a feature or acts on one it is
+  unsure about, then links the page. `panel_info` shows it what this panel
+  offers right now: version, enabled features and modules, the person's
+  permissions, runtimes, add-on kinds, the image policy, workspaces and
+  capacity. Its instructions now include a map of every page and an app's
+  tabs, so it links to and opens the right place.
+
+### Fixed
+
+- A remote-node test could read a workspace before an expired transaction's
+  rollback finished and fail on a slow machine; this failed the 1.16.1
+  image build, so 1.16.1 was never published and its fixes ship in 1.17.0.
+
 ## 1.16.1 - 2026-11-14
 
 ### Changed

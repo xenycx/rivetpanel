@@ -118,6 +118,9 @@
 			case 'list_targets': return 'Listed your bots and sites';
 			case 'focus_target': return 'Opened a bot or site';
 			case 'auto_repair_envelope': return 'Auto repair plan';
+			case 'panel_docs': return `Looked up “${a.query ?? ''}” in the guide`;
+			case 'read_doc': return `Read the guide: ${a.page ?? ''}${a.section ? ` › ${a.section}` : ''}`;
+			case 'panel_info': return 'Checked what this panel offers';
 			case 'analyze_repo': return `Analyzed ${a.repo ?? 'a repository'}`;
 			case 'deploy_github': return `Deployed ${a.repo ?? 'a repository'}`;
 			case 'deploy_site': return `Published a site from ${a.repo ?? 'GitHub'}`;

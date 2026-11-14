@@ -44,6 +44,19 @@ and fixes what failed. For example:
 - "Give my bot 1 GB and turn on daily backups", "stop everything in the
   Staging workspace", "switch me to dark mode with the teal accent".
 
+### Knowing the panel
+
+| Tool | Does | Needs |
+| --- | --- | --- |
+| `panel_docs` | Searches this guide (every page is built into the panel) and returns the best sections with their `/docs` links | Nothing |
+| `read_doc` | Reads one guide page or one of its sections | Nothing |
+| `panel_info` | Describes this panel now: version, enabled features and modules, your permissions, runtimes, add-on kinds, image policy, workspaces and capacity | Signed in |
+
+Its instructions also carry a map of the panel's pages and an app's tabs, so
+it links to the right place (for example the Variables tab of an app) and can
+open it for you. Answers about how the panel works come from the guide, with a
+link to the page.
+
 ### Deploying
 
 | Tool | Does | Needs |

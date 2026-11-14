@@ -1394,6 +1394,10 @@ Known gaps in this work:
   stored tool arguments. Ask first stops on a card for every change;
   Autopilot needs no envelope approval and no target. Run limits are
   enforced per run, including a new `actions` limit (40).
+- [x] The AI operator knows the panel (1.17.0): the guide is embedded in the
+  binary (`docs/guide/embed.go`, `internal/paneldocs`) and searchable with
+  `panel_docs`/`read_doc`; `panel_info` reads the live configuration through
+  the same in-process API as the person. Read-only, application-level.
 
 - [ ] Site release files are not included in `rivetpanel backup`/`restore`.
 - [ ] Sites domains: the panel does not write reverse-proxy routes or install

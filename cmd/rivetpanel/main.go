@@ -829,7 +829,7 @@ func serve(log *slog.Logger, logs *logbuf.Buffer) error {
 	}
 	aiSvc := &service.AIService{Store: db, Keys: keys, Bots: botSvc, Sites: sitesSvc, Files: wsm, Ops: ops, Audit: audit, Diagnostic: aiDiagnostic, Logs: aiLogs, Log: log}
 	agentBridge := api.NewAgentBridge()
-	aiSvc.Deploy, aiSvc.Containers, aiSvc.API = deploySvc, containerSvc, agentBridge
+	aiSvc.Deploy, aiSvc.Containers, aiSvc.API, aiSvc.Version = deploySvc, containerSvc, agentBridge, version
 	aiSvc.Start(ctx)
 	deploySvc.AI = aiSvc
 	var gameSvc *service.GameService
