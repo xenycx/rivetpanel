@@ -6,6 +6,19 @@ authoritative current version.
 
 ## Unreleased
 
+## 1.15.0 - 2026-11-14
+
+### Added
+
+- **Custom domains route themselves in Traefik.** The sites listener serves
+  Traefik dynamic configuration at `/.well-known/rivetpanel/traefik`, with a
+  router per verified custom domain. Point Traefik's HTTP provider at it and a
+  domain such as `maps.example.com` works as soon as it is verified, even when
+  a catch-all rule sends the rest of `*.example.com` elsewhere; no more
+  editing the proxy's files per domain. Only loopback and trusted proxies can
+  read it.
+
+
 ## 1.14.0 - 2026-11-14
 
 ### Added

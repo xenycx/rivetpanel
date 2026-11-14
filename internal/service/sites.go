@@ -14,6 +14,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -457,6 +458,21 @@ func (s *SiteService) Resolve(host string) (domain.SiteRoute, bool) {
 
 // TLSAllowed tells an on-demand TLS proxy (Caddy's "ask") whether to obtain
 // a certificate for host: only for hosts a live site answers on.
+// CustomHosts lists the verified custom domains of sites that are not
+// suspended, sorted (for a reverse proxy's routing).
+func (s *SiteService) CustomHosts() []string {
+	s.mu.RLock()
+	out := make([]string, 0, len(s.routes.ByDomain))
+	for host, r := range s.routes.ByDomain {
+		if !r.Disabled {
+			out = append(out, host)
+		}
+	}
+	s.mu.RUnlock()
+	slices.Sort(out)
+	return out
+}
+
 func (s *SiteService) TLSAllowed(host string) bool {
 	r, ok := s.Resolve(host)
 	return ok && !r.Disabled

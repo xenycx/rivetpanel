@@ -271,8 +271,39 @@ Per sites domain, at its DNS provider:
 ### A domain you already route elsewhere
 
 When the proxy already sends a domain, or a wildcard such as `*.example.com`,
-somewhere else, add a router for the site's custom domains with a higher
-priority than that rule, pointing at the sites listener:
+somewhere else, each custom domain of a site needs a router with a higher
+priority, pointing at the sites listener. With Traefik, let the panel supply
+those routers: the sites listener serves Traefik dynamic configuration with
+one router per verified custom domain at
+`/.well-known/rivetpanel/traefik`, and Traefik's HTTP provider polls it. A
+domain then routes as soon as it is verified, and removing it from its site
+removes its router.
+
+```yaml
+# traefik.yml (static configuration): next to the file provider
+providers:
+  http:
+    endpoint: "http://172.17.0.1:8081/.well-known/rivetpanel/traefik?web=web&middleware=to-https@file"
+    pollInterval: "15s"
+```
+
+Query parameters adapt the routers to your configuration:
+
+| Parameter | Default | Meaning |
+|---|---|---|
+| `service` | `sites@file` | The Traefik service that reaches the sites listener |
+| `entrypoint` | `websecure` | The TLS entry point |
+| `web` | none | A plain-HTTP entry point to route as well |
+| `middleware` | none | Middleware for the plain-HTTP routers, such as `to-https@file` |
+| `certresolver` | none | Certificate resolver for the TLS routers; without one, Traefik uses its default certificate |
+| `priority` | `60` | Router priority: above your catch-all, below the panel's own router |
+
+Only loopback peers and the addresses in `RIVET_SITES_TRUSTED_PROXIES` can
+read it; anyone else gets 404 [enforced: panel]. Every router needs a
+certificate that covers its domain: a wildcard origin certificate, or a
+certificate resolver.
+
+For other proxies, add a router per custom domain by hand:
 
 ```yaml
 http:
@@ -284,8 +315,6 @@ http:
       service: sites
       tls: {}
 ```
-
-Then add the domains to the sites as custom domains and verify them.
 
 ### Apps behind the proxy
 

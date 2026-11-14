@@ -1119,7 +1119,10 @@ items state exactly what remains.
   zone's authoritative nameservers (fallback: the system resolver), a user
   may mark one domain as the default for new sites, and any container app can
   get a web address (a site forwarding to it; workspace administrators,
-  enforced by the application). Enforcement: the sites listener serves a custom domain
+  enforced by the application). Since 1.15.0 the sites listener serves
+  Traefik dynamic configuration (one router per verified custom domain) to
+  loopback and trusted-proxy peers; routing itself stays in the reverse
+  proxy, which must be configured to poll it. Enforcement: the sites listener serves a custom domain
   only after verification (application level). TLS is **not** terminated by
   RivetPanel: certificates are issued by the reverse proxy; RivetPanel only answers
   its on-demand permission check.

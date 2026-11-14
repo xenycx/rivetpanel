@@ -33,6 +33,8 @@ type Router interface {
 	ReleaseRoot(siteID, releaseID string) (*os.Root, error)
 	PublicPage(ctx context.Context, siteID string) (domain.PublicSitePage, error)
 	TLSAllowed(host string) bool
+	// CustomHosts lists the verified custom domains being served.
+	CustomHosts() []string
 }
 
 // Handler serves sites.
@@ -65,6 +67,10 @@ func NewServer(h *Handler) *http.Server {
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path == TLSAskPath {
 		h.tlsAsk(w, r)
+		return
+	}
+	if r.URL.Path == TraefikPath {
+		h.traefik(w, r)
 		return
 	}
 	route, ok := h.Sites.Resolve(r.Host)

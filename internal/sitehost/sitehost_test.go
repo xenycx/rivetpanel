@@ -28,6 +28,7 @@ func (f *fakeRouter) PublicPage(context.Context, string) (domain.PublicSitePage,
 	return domain.PublicSitePage{}, nil
 }
 func (f *fakeRouter) TLSAllowed(string) bool { return false }
+func (f *fakeRouter) CustomHosts() []string  { return nil }
 
 func site(t *testing.T, files map[string]string, spa bool) *Handler {
 	t.Helper()

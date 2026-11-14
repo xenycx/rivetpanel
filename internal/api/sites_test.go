@@ -347,6 +347,44 @@ func TestSiteCustomDomains(t *testing.T) {
 		t.Fatalf("tls ask from outside: %d", rec.Code)
 	}
 
+	// Traefik's HTTP provider gets a router per verified custom domain; only
+	// loopback and trusted proxies may read it.
+	req = httptest.NewRequest("GET", sitehost.TraefikPath+"?web=web&middleware=to-https@file", nil)
+	req.RemoteAddr = "127.0.0.1:5000"
+	rec = httptest.NewRecorder()
+	r.host.ServeHTTP(rec, req)
+	var cfg struct {
+		HTTP struct {
+			Routers map[string]struct {
+				EntryPoints []string `json:"entryPoints"`
+				Rule        string
+				Service     string
+				Middlewares []string
+				TLS         *struct{} `json:"tls"`
+			}
+		}
+	}
+	json.Unmarshal(rec.Body.Bytes(), &cfg)
+	sec, web := cfg.HTTP.Routers["rivetpanel-www-example-com"], cfg.HTTP.Routers["rivetpanel-www-example-com-web"]
+	if rec.Code != 200 || len(cfg.HTTP.Routers) != 2 || sec.Rule != "Host(`www.example.com`)" || sec.Service != "sites@file" || sec.TLS == nil ||
+		sec.EntryPoints[0] != "websecure" || web.EntryPoints[0] != "web" || len(web.Middlewares) != 1 || web.TLS != nil {
+		t.Fatalf("traefik config %d: %s", rec.Code, rec.Body.String())
+	}
+	req = httptest.NewRequest("GET", sitehost.TraefikPath+"?service=x`)||Host(`evil", nil)
+	req.RemoteAddr = "127.0.0.1:5000"
+	rec = httptest.NewRecorder()
+	r.host.ServeHTTP(rec, req)
+	if rec.Code != 400 {
+		t.Fatalf("injected parameter: %d", rec.Code)
+	}
+	req = httptest.NewRequest("GET", sitehost.TraefikPath, nil)
+	req.RemoteAddr = "203.0.113.9:5000"
+	rec = httptest.NewRecorder()
+	r.host.ServeHTTP(rec, req)
+	if rec.Code != 404 {
+		t.Fatalf("traefik config from outside: %d", rec.Code)
+	}
+
 	// Another site cannot take a verified domain.
 	var other struct{ ID string }
 	json.Unmarshal(c.mustStatus(201, "POST", "/api/v1/sites", map[string]string{"name": "Other"}), &other)
