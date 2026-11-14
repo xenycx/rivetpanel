@@ -61,7 +61,8 @@ type SiteStore interface {
 	GetUserDomain(ctx context.Context, id string) (domain.UserDomain, error)
 	RecordUserDomainCheck(ctx context.Context, id string, verifiedAt *int64, errMsg *string, nowMS int64) error
 	DeleteUserDomain(ctx context.Context, userID, id string) error
-	CountDomainsVia(ctx context.Context, userDomainID string) (int, error)
+	ListDomainsVia(ctx context.Context, userDomainID string) ([]domain.UserDomainUse, error)
+	SetDefaultUserDomain(ctx context.Context, userID, id string) error
 	VerifyDomainVia(ctx context.Context, name, userDomainID string, nowMS int64) error
 	ListDomains(ctx context.Context, siteID string) ([]domain.SiteDomain, error)
 	ListVerifiedDomains(ctx context.Context) ([]domain.SiteDomain, error)
@@ -747,6 +748,10 @@ func (s *SiteService) Create(ctx context.Context, actor domain.User, in CreateSi
 		if own, err = s.usableUserDomain(ctx, actor, in.UserDomainID); err != nil {
 			return domain.Site{}, err
 		}
+		// The address on the user's domain is the one that matters: when the
+		// name is taken on the sites domain, the default address gets a
+		// suffix instead.
+		auto = true
 	}
 	var tpl sitetemplates.Template
 	if in.TemplateID != "" {
@@ -794,7 +799,7 @@ func (s *SiteService) Create(ctx context.Context, actor domain.User, in CreateSi
 		}
 	}
 	if own.ID != "" {
-		if _, err := s.AddDomain(ctx, actor, st.ID, st.Slug+"."+own.Domain); err != nil {
+		if _, err := s.AddDomain(ctx, actor, st.ID, slug+"."+own.Domain); err != nil {
 			if derr := s.deleteSite(ctx, st); derr != nil {
 				s.warn("remove site after a failed domain", derr)
 			}
@@ -1664,10 +1669,7 @@ func (s *SiteService) underBaseDomain(ctx context.Context, name string) (string,
 }
 
 func (s *SiteService) checkTXT(ctx context.Context, name, want string) (bool, string) {
-	r := s.Resolver
-	if r == nil {
-		r = net.DefaultResolver
-	}
+	r := s.txtResolverFor(ctx, VerificationZone(strings.TrimPrefix(strings.TrimPrefix(name, baseTXTPrefix), domainTXTPrefix)))
 	ctx, cancel := context.WithTimeout(ctx, 8*time.Second)
 	defer cancel()
 	recs, err := r.LookupTXT(ctx, name)
@@ -1683,7 +1685,7 @@ func (s *SiteService) checkTXT(ctx context.Context, name, want string) (bool, st
 			return true, ""
 		}
 	}
-	return false, "A TXT record exists at " + name + " but none has the expected value"
+	return false, mismatchMessage(name, want, recs)
 }
 
 // recheckDomains re-verifies verified domains and reports problems (a failed

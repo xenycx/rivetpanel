@@ -39,11 +39,14 @@ type siteDTO struct {
 	ReleaseBytes    int64   `json:"release_bytes"`
 	Disabled        bool    `json:"disabled"`
 	Domains         int     `json:"domains"`
-	RepoFullName    *string `json:"repo_full_name"`
-	RepoBranch      *string `json:"repo_branch"`
-	RepoRoot        string  `json:"repo_root"`
-	CreatedAtMS     int64   `json:"created_at_ms"`
-	UpdatedAtMS     int64   `json:"updated_at_ms"`
+	// PrimaryURL is the first verified custom domain's address, else the
+	// default address: the one to show and link in lists.
+	PrimaryURL   string  `json:"primary_url"`
+	RepoFullName *string `json:"repo_full_name"`
+	RepoBranch   *string `json:"repo_branch"`
+	RepoRoot     string  `json:"repo_root"`
+	CreatedAtMS  int64   `json:"created_at_ms"`
+	UpdatedAtMS  int64   `json:"updated_at_ms"`
 	// IconURL serves the custom logo, the release favicon or the bot's logo
 	// (404 when there is none); the version changes when any of them may have.
 	IconURL    string `json:"icon_url"`
@@ -65,7 +68,11 @@ type siteDTO struct {
 }
 
 func (s *panel) toSite(st domain.Site) siteDTO {
-	return siteDTO{ID: st.ID, WorkspaceID: st.WorkspaceID, WorkspaceName: st.WorkspaceName, OwnerID: st.OwnerID, OwnerEmail: st.OwnerEmail,
+	primary := s.sites.URLOf(st)
+	if st.PrimaryDomain != "" {
+		primary = s.sites.DomainURL(st.PrimaryDomain)
+	}
+	return siteDTO{PrimaryURL: primary, ID: st.ID, WorkspaceID: st.WorkspaceID, WorkspaceName: st.WorkspaceName, OwnerID: st.OwnerID, OwnerEmail: st.OwnerEmail,
 		BotID: st.BotID, Name: st.Name, Slug: st.Slug, DomainID: st.DomainID, BaseDomain: st.BaseDomain, URL: s.sites.URLOf(st), SPA: st.SPA, CleanURLs: st.CleanURLs,
 		Mode: st.Mode, PageTitle: st.PageTitle, PageDescription: st.PageDescription, PageTheme: st.PageTheme, PageAccent: st.PageAccent,
 		PageHTML: st.PageHTML, PageCSS: st.PageCSS, WidgetsPublic: st.WidgetsPublic, CurrentRelease: st.CurrentRelease,
@@ -171,12 +178,13 @@ func (s *panel) sitesInfo(c fiber.Ctx) error {
 		ID         string `json:"id"`
 		Domain     string `json:"domain"`
 		ExampleURL string `json:"example_url"`
+		Default    bool   `json:"default"`
 	}
 	own := []ownChoiceDTO{}
 	if list, err := s.sites.ListUserDomains(c.Context(), currentUser(c)); err == nil {
 		for _, d := range list {
 			if d.VerifiedAtMS != nil {
-				own = append(own, ownChoiceDTO{d.ID, d.Domain, s.sites.DomainURL("example." + d.Domain)})
+				own = append(own, ownChoiceDTO{d.ID, d.Domain, s.sites.DomainURL("example." + d.Domain), d.Default})
 			}
 		}
 	}
@@ -282,8 +290,8 @@ func (s *panel) getBotSite(c fiber.Ctx) error {
 }
 
 // botWebAddresses lists the addresses an app answers on: for each site it
-// serves (or the bot's public page), the default address and its custom
-// domains, verified ones first.
+// serves (or the bot's public page), its verified custom domains, then the
+// default address, then domains still waiting for DNS.
 func (s *panel) botWebAddresses(c fiber.Ctx) error {
 	list, err := s.sites.SitesForBot(c.Context(), currentUser(c), strings.Clone(c.Params("id")))
 	if err != nil {
@@ -308,7 +316,7 @@ func (s *panel) botWebAddresses(c fiber.Ctx) error {
 	out := make([]siteAddrs, 0, len(list))
 	for _, d := range list {
 		u := s.sites.URLOf(d.Site)
-		x := siteAddrs{SiteID: d.Site.ID, Name: d.Site.Name, Disabled: d.Site.Disabled, Addresses: []addr{{u, host(u), true, true}}}
+		x := siteAddrs{SiteID: d.Site.ID, Name: d.Site.Name, Disabled: d.Site.Disabled}
 		var pending []addr
 		for _, dm := range d.Domains {
 			a := addr{s.sites.DomainURL(dm.Domain), dm.Domain, dm.VerifiedAtMS != nil, false}
@@ -318,10 +326,32 @@ func (s *panel) botWebAddresses(c fiber.Ctx) error {
 				pending = append(pending, a)
 			}
 		}
+		x.Addresses = append(x.Addresses, addr{u, host(u), true, true})
 		x.Addresses = append(x.Addresses, pending...)
 		out = append(out, x)
 	}
 	return c.JSON(fiber.Map{"sites": out})
+}
+
+// addBotWebAddress gives a container app a web address: a site that
+// forwards to it, optionally on one of the caller's domains.
+func (s *panel) addBotWebAddress(c fiber.Ctx) error {
+	var in struct {
+		Slug         string `json:"slug"`
+		DomainID     string `json:"domain_id"`
+		UserDomainID string `json:"user_domain_id"`
+		Port         int    `json:"port"`
+		HealthPath   string `json:"health_path"`
+	}
+	if err := decode(c, &in); err != nil {
+		return err
+	}
+	st, err := s.sites.AddContainerWebAddress(c.Context(), currentUser(c), strings.Clone(c.Params("id")), service.ContainerWebAddressInput{
+		Slug: in.Slug, DomainID: in.DomainID, UserDomainID: in.UserDomainID, Port: in.Port, HealthPath: in.HealthPath})
+	if err != nil {
+		return err
+	}
+	return c.Status(fiber.StatusCreated).JSON(s.toSite(st))
 }
 
 func (s *panel) getSite(c fiber.Ctx) error {

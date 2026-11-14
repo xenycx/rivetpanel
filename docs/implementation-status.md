@@ -1115,7 +1115,11 @@ items state exactly what remains.
   user domain verify on add, and sites can be created at
   `<slug>.<user domain>`. Enforced by the application: a user domain is usable
   only by its owner, and only once verified. The older per-domain records are
-  still accepted. Enforcement: the sites listener serves a custom domain
+  still accepted. Since 1.14.0 (migration `0074`) verification queries the
+  zone's authoritative nameservers (fallback: the system resolver), a user
+  may mark one domain as the default for new sites, and any container app can
+  get a web address (a site forwarding to it; workspace administrators,
+  enforced by the application). Enforcement: the sites listener serves a custom domain
   only after verification (application level). TLS is **not** terminated by
   RivetPanel: certificates are issued by the reverse proxy; RivetPanel only answers
   its on-demand permission check.
@@ -1368,6 +1372,7 @@ Migrations added since 0.2.0 (the schema-version assertion in
 | `0071_audit_names.sql` | Data only, no schema change: fills `audit_events.bot_name`/`site_name` where NULL from the live `bots`/`sites` row (truncated to the column limits of 64/80); rows of removed apps or sites stay NULL, which the activity summary tolerates. Idempotent. Covered by `TestMigrateIdempotentAndSchema` (72 versions) and `TestActivityStatsToleratesMissingNames` |
 | `0072_support_attachments.sql` | Additive: new table `support_ticket_attachments` (bytes in a BLOB of at most 10 MiB, pending while `ticket_id`/`message_id` are NULL, cascading with the ticket and message, uploader `ON DELETE SET NULL`) with a message index and a partial pending index; `support_ticket_messages.auto` (0/1, default 0) marks the automatic reply. Existing rows keep their meaning. Covered by `TestMigrateIdempotentAndSchema` (73 versions) and the attachment API tests |
 | `0073_user_domains.sql` | Additive: new tables `user_domain_tokens` (one 32-character token per user, created on first use) and `user_domains` (unique per user and domain; verification state like `site_domains`), both `ON DELETE CASCADE` with the user; `site_domains.user_domain_id` (`ON DELETE SET NULL`, NULL for existing rows) records which user domain proved a custom domain. Covered by `TestMigrateIdempotentAndSchema` (74 versions), `TestSiteCustomDomains` and `TestUserDomains` |
+| `0074_user_domain_default.sql` | Additive: `user_domains.is_default` (0/1, default 0, so existing domains are not the default) and the partial unique index `user_domains_default_idx(user_id) WHERE is_default = 1` (one default per user). Covered by `TestMigrateIdempotentAndSchema` (75 versions) and `TestUserDomains` |
 | `0054_web_apps.sql` | Rebuilds `bots` (kind gains `web`, runtime gains `php`, new `release_command`) and `sites` (mode gains `app`; `app_id`, `framework`, `build_output_dir`, `app_port`, `health_path`, `max_body_bytes`) with explicit column lists and foreign keys off (checked with `PRAGMA foreign_key_check`; all indexes recreated); additive `site_releases.source_ref` and `bot_health_probes.target` (`host`/`app`). Covered by `apps_migration_test.go` |
 | `0030_ai_global_chat.sql` | Rebuilds `ai_conversations` so a chat may have no target; `ai_runs.bot_id`/`site_id`, `ai_messages.context_json` (the conversation subtree is stashed and restored, rows preserved) |
 

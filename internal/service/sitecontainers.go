@@ -124,3 +124,55 @@ func (s *SiteService) deleteContainerSites(ctx context.Context, ids []string) er
 	}
 	return nil
 }
+
+// ContainerWebAddressInput gives a container app a web address.
+type ContainerWebAddressInput struct {
+	Slug         string
+	DomainID     string // sites domain; "" = the primary one
+	UserDomainID string // also serve at <slug>.<one of the actor's domains>
+	Port         int    // the port the container listens on
+	HealthPath   string
+}
+
+// AddContainerWebAddress creates a site that forwards to an existing
+// container app, so it answers at <slug>.<sites domain> (and, with a user
+// domain, at <slug>.<that domain>). Workspace administrators only; the
+// container is recreated on the apps network.
+func (s *SiteService) AddContainerWebAddress(ctx context.Context, actor domain.User, botID string, in ContainerWebAddressInput) (domain.Site, error) {
+	if !s.Enabled() {
+		return domain.Site{}, domain.Invalid("site hosting is not enabled on this panel")
+	}
+	b, err := s.Bots.Authorize(ctx, actor, botID, domain.PermFullAdmin)
+	if err != nil {
+		return domain.Site{}, err
+	}
+	if !b.IsContainer() {
+		return domain.Site{}, domain.Invalid("only container apps get a web address this way; sites from GitHub have their own")
+	}
+	if _, err := s.Store.GetSiteForApp(ctx, b.ID); err == nil {
+		return domain.Site{}, domain.Invalid("this app already has a web address; manage its domains on the site page")
+	} else if !errors.Is(err, domain.ErrNotFound) {
+		return domain.Site{}, err
+	}
+	if b.NetworkDisabled {
+		return domain.Site{}, domain.Invalid("this container has no network access, so a web address cannot reach it")
+	}
+	if in.Port < 1 || in.Port > 65535 {
+		return domain.Site{}, domain.Invalid("enter the port the container listens on (1-65535)")
+	}
+	slug := in.Slug
+	if slug == "" {
+		slug = slugFrom(b.Name)
+	}
+	st, err := s.Create(ctx, actor, CreateSiteInput{Name: b.Name, Slug: slug, DomainID: in.DomainID, WorkspaceID: b.WorkspaceID, UserDomainID: in.UserDomainID})
+	if err != nil {
+		return domain.Site{}, err
+	}
+	if err := s.AttachContainer(ctx, actor, st.ID, b.ID, in.Port, in.HealthPath); err != nil {
+		if derr := s.deleteSite(ctx, st); derr != nil {
+			s.warn("remove a site after a failed container attach", derr)
+		}
+		return domain.Site{}, err
+	}
+	return s.Store.GetSite(ctx, st.ID)
+}

@@ -47,14 +47,32 @@ Prove a domain once, then use it for every site you make. Under
 
 A verified domain covers itself and every subdomain [enforced: panel]:
 
-- When you create a site, pick it next to the address (under *Your domains*).
-  The site is served at `<address>.example.com` straight away, as well as at
-  its default address.
+- When you create a site, an app from GitHub or a container's web address,
+  pick it next to the address (under *Your domains*). The site answers at
+  `<address>.example.com` straight away. If the name is already taken on the
+  sites domain, only the site's default address gets a suffix.
 - Any custom domain at or under it that you add to a site is verified the
   moment you add it.
 
 Each address still needs a routing record pointing at this server: a `CNAME`
 per address, or one wildcard such as `*.example.com`.
+
+For each domain, the page shows:
+
+| Item | Meaning |
+|---|---|
+| Status | *Waiting for DNS*, *Verified*, or *Re-check failed* (the record was not found at the last six-hourly check; sites on it keep answering) |
+| Site addresses | Every address it verified, linked to the site |
+| **Make default** | Preselect the domain whenever you create a site; one default per account |
+| **Check again** | Check the record now |
+| **TXT record** | The record to keep in place |
+
+Checks ask the domain's own nameservers (for example Cloudflare's, wherever
+the domain was bought), not the server's caching resolver, so a record you
+just saved is seen at once. When the record holds another value, the check
+names the value it found next to the expected one. When the nameservers do
+not answer, the server's resolver is used, which may serve an older value
+for a few minutes.
 
 Domains belong to one account. Teammates add the domain under their own
 account with their own record, and nobody can use a domain another account

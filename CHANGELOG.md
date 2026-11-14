@@ -6,6 +6,39 @@ authoritative current version.
 
 ## Unreleased
 
+## 1.14.0 - 2026-11-14
+
+### Added
+
+- **Web addresses for any container.** A container started from an image had
+  no way to be opened in a browser: its published ports bind to the server
+  only. **Add a web address** on its Overview, or **Web address** when
+  creating it, now creates a site that forwards to the container's port, on
+  a sites domain or one of your domains (for example `maps.example.com`). The
+  container restarts once to join the sites network.
+- **Websites on the Overview.** The Websites section lists each site with its
+  status and address, where before it showed only a count.
+- **Domain management.** Settings → Domains lists the site addresses each
+  domain verified, can make one domain the default for new sites, re-checks
+  verified domains on demand and keeps the TXT record at hand. Adds
+  migration `0074`.
+
+### Changed
+
+- Site lists and the Overview show a site's first verified custom domain as
+  its address, with the default address as a tooltip.
+- An app's web addresses list verified custom domains first.
+- A site created on one of your domains keeps that exact name there; when the
+  name is taken on the sites domain, only the default address gets a suffix.
+
+### Fixed
+
+- **DNS checks no longer see stale records.** Verification asks the domain's
+  own nameservers, so a TXT record you just added or corrected is seen at
+  once instead of after the server's DNS cache expires. A record holding
+  another value is now reported with the value found and the value expected.
+
+
 ## 1.13.0 - 2026-11-14
 
 ### Added

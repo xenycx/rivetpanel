@@ -49,6 +49,7 @@ type Site struct {
 	WorkspaceName string
 	BaseDomain    string // host of DomainID ("" when unassigned)
 	Domains       int
+	PrimaryDomain string // first verified custom domain ("" = none)
 	ReleaseBytes  int64  // size of the current release
 	AppState      string // observed state of the web unit ("" without one)
 }
@@ -114,6 +115,15 @@ type UserDomain struct {
 	LastCheckedAtMS *int64
 	LastError       *string
 	CreatedAtMS     int64
+	// Default: preselected when the user creates a site.
+	Default bool
+}
+
+// UserDomainUse is a site address a user domain verified.
+type UserDomainUse struct {
+	Domain   string
+	SiteID   string
+	SiteName string
 }
 
 // SiteBaseDomain is a domain every site may live under: a site is served at

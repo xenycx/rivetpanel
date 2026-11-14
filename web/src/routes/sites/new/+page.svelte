@@ -102,7 +102,8 @@
 	onMount(async () => {
 		try {
 			info = await api<SitesInfo>('GET', '/sites-info');
-			domainId = info.domains?.find((b) => b.primary)?.id ?? '';
+			const def = info.my_domains?.find((m) => m.default);
+			domainId = def ? `mine:${def.id}` : (info.domains?.find((b) => b.primary)?.id ?? '');
 			const p = await api<{ presets: WebPlan[]; public_build_prefixes: string[] }>('GET', '/site-presets');
 			presets = p.presets;
 			publicPrefixes = p.public_build_prefixes;

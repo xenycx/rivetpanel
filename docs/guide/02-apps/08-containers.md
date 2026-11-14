@@ -41,6 +41,7 @@ administrator hides them by turning the module off under
 | **Volumes** | A name and a folder inside the container. The data lives in the app's files under `volumes/<name>`, survives restarts and image changes, is included in backups and can be edited in **Files** or over SFTP |
 | **Command** | Optional. Empty keeps the image's own entrypoint and command |
 | **Writable paths**, **Run as**, **Memory** | Optional; see below |
+| **Web address** | Optional. For a web app: also creates a site that forwards to the port it listens on, on a sites domain or [one of your domains](../04-websites/04-domains.md#your-domains). See [Web addresses](#web-addresses) |
 
 Prefer a version tag. A moving tag such as `latest` is pulled once per host;
 **Pull again** under **Configuration** fetches a newer one, and restarts the
@@ -273,8 +274,21 @@ The kernel enforces nothing beyond Docker's own capability handling.
 
 ### Web addresses
 
-An app installed with a web address is a site (in the Websites list) in
-**app** mode whose app is the template's web container.
+A published port binds to the server only (`127.0.0.1`), so a browser cannot
+reach it. A web address makes a container reachable as a site: a site (in the
+Websites list) in **app** mode that forwards to the container's port.
+
+- One-click apps with a web part get one when installed.
+- Any other container gets one from **Web address** when you create it, or
+  later from **Add a web address** on its **Overview** (workspace
+  administrators). Choose the address, on a sites domain or one of your
+  verified domains, the port the app listens on and a health check path.
+  The container restarts once to join the apps network; its published ports
+  keep working. A container has at most one web address; add more domains to
+  its site.
+- The **Overview** lists the app's addresses under **Web addresses**: verified
+  custom domains first, then the default address, then domains still waiting
+  for DNS.
 
 - The container joins the shared apps network (`RIVET_APPS_NETWORK`, default
   `rivetpanel-apps`) under a private alias.

@@ -62,7 +62,8 @@
 			const ws = workspaces.selected !== 'all' && !workspaces.list.find((w) => w.id === workspaces.selected)?.personal ? workspaces.selected : '';
 			const t = templates.find((x) => x.id === template);
 			form = { name: '', slug: '', domain_id: bases.find((b) => b.primary)?.id ?? '', workspace_id: ws, spa: t?.spa ?? false, template_id: t?.id ?? '' };
-			address = form.domain_id;
+			const def = mine.find((m) => m.default);
+			address = def ? `mine:${def.id}` : form.domain_id;
 			slugTouched = false;
 			error = '';
 		}

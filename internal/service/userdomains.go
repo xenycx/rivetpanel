@@ -61,15 +61,12 @@ func (s *SiteService) UserDomainToken(ctx context.Context, actor domain.User) (s
 // itself only). It returns the name the record was found on, or a message
 // about the record expected at the registrable domain.
 func (s *SiteService) findRecord(ctx context.Context, name, want, legacy string) (string, string) {
-	r := s.Resolver
-	if r == nil {
-		r = net.DefaultResolver
-	}
+	zone := VerificationZone(name)
+	r := s.txtResolverFor(ctx, zone)
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
-	zone := VerificationZone(name)
 	var zoneErr error
-	zoneFound := false
+	var zoneRecs []string
 	for n := name; ; {
 		recs, err := r.LookupTXT(ctx, domainTXTPrefix+n)
 		for _, v := range recs {
@@ -79,7 +76,7 @@ func (s *SiteService) findRecord(ctx context.Context, name, want, legacy string)
 			}
 		}
 		if n == zone {
-			zoneErr, zoneFound = err, len(recs) > 0
+			zoneErr, zoneRecs = err, recs
 			break
 		}
 		i := strings.IndexByte(n, '.')
@@ -91,8 +88,8 @@ func (s *SiteService) findRecord(ctx context.Context, name, want, legacy string)
 	at := domainTXTPrefix + zone
 	var dnsErr *net.DNSError
 	switch {
-	case zoneFound:
-		return "", "A TXT record exists at " + at + " but none has the expected value"
+	case len(zoneRecs) > 0:
+		return "", mismatchMessage(at, want, zoneRecs)
 	case zoneErr != nil && !(errors.As(zoneErr, &dnsErr) && dnsErr.IsNotFound):
 		return "", "The DNS lookup failed; try again in a minute"
 	}
@@ -236,13 +233,35 @@ func (s *SiteService) RemoveUserDomain(ctx context.Context, actor domain.User, i
 	return s.Store.DeleteUserDomain(ctx, actor.ID, id)
 }
 
-// UserDomainUses counts the custom domains a user domain proved.
-func (s *SiteService) UserDomainUses(ctx context.Context, id string) int {
-	n, err := s.Store.CountDomainsVia(ctx, id)
+// UserDomainUses lists the site addresses a user domain verified.
+func (s *SiteService) UserDomainUses(ctx context.Context, id string) []domain.UserDomainUse {
+	list, err := s.Store.ListDomainsVia(ctx, id)
 	if err != nil {
-		return 0
+		s.warn("list user domain uses", err)
 	}
-	return n
+	return list
+}
+
+// SetDefaultUserDomain makes one of the actor's verified domains the one new
+// sites start on (on false, clears it).
+func (s *SiteService) SetDefaultUserDomain(ctx context.Context, actor domain.User, id string, on bool) (domain.UserDomain, error) {
+	ud, err := s.ownUserDomain(ctx, actor, id)
+	if err != nil {
+		return domain.UserDomain{}, err
+	}
+	target := ""
+	if on {
+		if ud.VerifiedAtMS == nil {
+			return domain.UserDomain{}, domain.Invalid("verify " + ud.Domain + " before making it the default")
+		}
+		target = ud.ID
+	} else if !ud.Default {
+		return ud, nil
+	}
+	if err := s.Store.SetDefaultUserDomain(ctx, actor.ID, target); err != nil {
+		return domain.UserDomain{}, err
+	}
+	return s.Store.GetUserDomain(ctx, ud.ID)
 }
 
 // usableUserDomain returns one of the actor's verified domains for a new site.

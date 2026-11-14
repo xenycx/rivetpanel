@@ -22,13 +22,28 @@ type userDomainDTO struct {
 	TXTValue        string  `json:"txt_value"`
 	ExampleURL      string  `json:"example_url"`
 	Uses            int     `json:"uses"`
-	CreatedAtMS     int64   `json:"created_at_ms"`
+	Default         bool    `json:"default"`
+	// Addresses are the site addresses this domain verified.
+	Addresses   []userDomainUseDTO `json:"addresses"`
+	CreatedAtMS int64              `json:"created_at_ms"`
+}
+
+type userDomainUseDTO struct {
+	Domain   string `json:"domain"`
+	URL      string `json:"url"`
+	SiteID   string `json:"site_id"`
+	SiteName string `json:"site_name"`
 }
 
 func (s *panel) toUserDomain(c fiber.Ctx, d domain.UserDomain, token string) userDomainDTO {
 	name, value := service.DomainVerificationRecord(d.Domain, token)
+	uses := s.sites.UserDomainUses(c.Context(), d.ID)
+	addrs := make([]userDomainUseDTO, len(uses))
+	for i, u := range uses {
+		addrs[i] = userDomainUseDTO{u.Domain, s.sites.DomainURL(u.Domain), u.SiteID, u.SiteName}
+	}
 	return userDomainDTO{d.ID, d.Domain, d.VerifiedAtMS != nil, d.VerifiedAtMS, d.LastCheckedAtMS, d.LastError, name, value,
-		s.sites.DomainURL("example." + d.Domain), s.sites.UserDomainUses(c.Context(), d.ID), d.CreatedAtMS}
+		s.sites.DomainURL("example." + d.Domain), len(uses), d.Default, addrs, d.CreatedAtMS}
 }
 
 func (s *panel) userDomainsJSON(c fiber.Ctx) ([]userDomainDTO, error) {
@@ -91,4 +106,27 @@ func (s *panel) removeUserDomain(c fiber.Ctx) error {
 		return err
 	}
 	return c.SendStatus(fiber.StatusNoContent)
+}
+
+// updateUserDomain changes a domain's settings: {default} makes it the one
+// new sites start on.
+func (s *panel) updateUserDomain(c fiber.Ctx) error {
+	var in struct {
+		Default *bool `json:"default"`
+	}
+	if err := decode(c, &in); err != nil {
+		return err
+	}
+	if in.Default == nil {
+		return domain.Invalid("nothing to change")
+	}
+	d, err := s.sites.SetDefaultUserDomain(c.Context(), currentUser(c), strings.Clone(c.Params("did")), *in.Default)
+	if err != nil {
+		return err
+	}
+	tok, err := s.sites.UserDomainToken(c.Context(), currentUser(c))
+	if err != nil {
+		return err
+	}
+	return c.JSON(s.toUserDomain(c, d, tok))
 }

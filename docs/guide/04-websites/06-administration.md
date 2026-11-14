@@ -70,7 +70,8 @@ All paths are under `/api/v1`.
 | `DELETE /sites/{id}/domains/{domain}` | Remove it |
 | `GET /bots/{id}/web-addresses` | The sites an app answers on (the site it runs behind, a bot's public page), each with its default address and custom domains |
 | `GET /me/domains`, `POST /me/domains` `{domain}` | Your domains with their TXT record and how many site addresses each verified; add one |
-| `POST /me/domains/{id}/verify`, `DELETE /me/domains/{id}` | Check its TXT record now; remove it |
+| `POST /me/domains/{id}/verify`, `PATCH /me/domains/{id}` `{default}`, `DELETE /me/domains/{id}` | Check its TXT record now; make it the default for new sites; remove it |
+| `POST /bots/{id}/web-addresses` `{slug?, domain_id?, user_domain_id?, port, health_path?}` | Give a container app a web address: a site forwarding to `port` (workspace administrators) |
 | `GET /admin/sites`, `PATCH /admin/sites/{id}` `{disabled}` | Administrators: list, suspend or restore |
 | `GET /admin/site-base-domains`, `POST /admin/site-base-domains` `{domain, label?, dns_target?}` | Administrators: list sites domains with their DNS records, add one |
 | `POST /admin/site-base-domains/{domain}/verify` | Check its `_rivetpanel-domain` TXT record now |

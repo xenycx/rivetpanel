@@ -13,6 +13,7 @@ const siteCols = `s.id, s.workspace_id, s.owner_id, s.name, s.slug, s.spa, s.cle
 	s.bot_id, s.mode, s.page_title, s.page_description, s.page_theme, s.page_accent, s.page_html, s.page_css, s.widgets_public,
 	s.domain_id, COALESCE(bd.domain, ''), COALESCE(u.email, ''), COALESCE(w.name, ''),
 	(SELECT count(*) FROM site_domains d WHERE d.site_id = s.id),
+	COALESCE((SELECT d.domain FROM site_domains d WHERE d.site_id = s.id AND d.verified_at_ms IS NOT NULL ORDER BY d.created_at_ms, d.domain LIMIT 1), ''),
 	COALESCE((SELECT r.bytes FROM site_releases r WHERE r.id = s.current_release), 0), COALESCE(s.logo_updated_at_ms, 0),
 	s.app_id, s.framework, s.build_output_dir, COALESCE(s.app_port, 0), s.health_path, s.max_body_bytes, COALESCE(ab.observed_state, ''),
 	s.auto_backup, s.logo_variant`
@@ -26,7 +27,7 @@ func scanSite(row interface{ Scan(...any) error }) (domain.Site, error) {
 	err := row.Scan(&s.ID, &s.WorkspaceID, &s.OwnerID, &s.Name, &s.Slug, &spa, &clean, &s.CurrentRelease, &disabled,
 		&s.RepoFullName, &s.RepoBranch, &s.RepoRoot, &s.RepoTokenUser, &s.CreatedAtMS, &s.UpdatedAtMS,
 		&s.BotID, &s.Mode, &s.PageTitle, &s.PageDescription, &s.PageTheme, &s.PageAccent, &s.PageHTML, &s.PageCSS, &widgetsPublic,
-		&s.DomainID, &s.BaseDomain, &s.OwnerEmail, &s.WorkspaceName, &s.Domains, &s.ReleaseBytes, &s.LogoUpdatedMS,
+		&s.DomainID, &s.BaseDomain, &s.OwnerEmail, &s.WorkspaceName, &s.Domains, &s.PrimaryDomain, &s.ReleaseBytes, &s.LogoUpdatedMS,
 		&s.AppID, &s.Framework, &s.BuildOutputDir, &s.AppPort, &s.HealthPath, &s.MaxBodyBytes, &s.AppState, &autoBackup, &s.LogoVariant)
 	s.SPA, s.CleanURLs, s.Disabled, s.WidgetsPublic = spa == 1, clean == 1, disabled == 1, widgetsPublic == 1
 	s.AutoBackupOff = autoBackup == 0
@@ -583,11 +584,11 @@ func (db *DB) UserDomainToken(ctx context.Context, userID, fresh string, nowMS i
 	return tok, mapErr(err)
 }
 
-const userDomainCols = `id, user_id, domain, verified_at_ms, last_checked_at_ms, last_error, created_at_ms`
+const userDomainCols = `id, user_id, domain, verified_at_ms, last_checked_at_ms, last_error, created_at_ms, is_default`
 
 func scanUserDomain(row interface{ Scan(...any) error }) (domain.UserDomain, error) {
 	var d domain.UserDomain
-	err := row.Scan(&d.ID, &d.UserID, &d.Domain, &d.VerifiedAtMS, &d.LastCheckedAtMS, &d.LastError, &d.CreatedAtMS)
+	err := row.Scan(&d.ID, &d.UserID, &d.Domain, &d.VerifiedAtMS, &d.LastCheckedAtMS, &d.LastError, &d.CreatedAtMS, &d.Default)
 	return d, mapErr(err)
 }
 
@@ -650,11 +651,47 @@ func (db *DB) DeleteUserDomain(ctx context.Context, userID, id string) error {
 	return nil
 }
 
-// CountDomainsVia counts the custom domains a user domain proved.
-func (db *DB) CountDomainsVia(ctx context.Context, userDomainID string) (int, error) {
-	var n int
-	err := db.QueryRowContext(ctx, `SELECT count(*) FROM site_domains WHERE user_domain_id = ?`, userDomainID).Scan(&n)
-	return n, err
+// ListDomainsVia returns the custom domains a user domain proved, with their
+// sites' names.
+func (db *DB) ListDomainsVia(ctx context.Context, userDomainID string) ([]domain.UserDomainUse, error) {
+	rows, err := db.QueryContext(ctx, `SELECT d.domain, d.site_id, s.name FROM site_domains d JOIN sites s ON s.id = d.site_id
+		WHERE d.user_domain_id = ? ORDER BY d.domain LIMIT 500`, userDomainID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []domain.UserDomainUse
+	for rows.Next() {
+		var u domain.UserDomainUse
+		if err := rows.Scan(&u.Domain, &u.SiteID, &u.SiteName); err != nil {
+			return nil, err
+		}
+		out = append(out, u)
+	}
+	return out, rows.Err()
+}
+
+// SetDefaultUserDomain makes one of a user's domains the default for new
+// sites ("" clears it).
+func (db *DB) SetDefaultUserDomain(ctx context.Context, userID, id string) error {
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx, `UPDATE user_domains SET is_default = 0 WHERE user_id = ? AND is_default = 1`, userID); err != nil {
+		return err
+	}
+	if id != "" {
+		res, err := tx.ExecContext(ctx, `UPDATE user_domains SET is_default = 1 WHERE id = ? AND user_id = ?`, id, userID)
+		if err != nil {
+			return err
+		}
+		if n, _ := res.RowsAffected(); n == 0 {
+			return domain.ErrNotFound
+		}
+	}
+	return tx.Commit()
 }
 
 // VerifyDomainVia marks a custom domain verified through a user domain.

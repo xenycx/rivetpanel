@@ -10,6 +10,9 @@
 	import Notice from '$lib/components/ui/Notice.svelte';
 	import NewMenu from '$lib/components/NewMenu.svelte';
 	import ResourceTable from '$lib/components/ResourceTable.svelte';
+	import Logo from '$lib/components/ui/Logo.svelte';
+	import { logoSeed } from '$lib/avatar';
+	import { hostOf, siteKind, siteStatus } from '$lib/sites';
 	import Roll from '$lib/components/ui/Roll.svelte';
 	import WorkspaceScope from '$lib/components/WorkspaceScope.svelte';
 	import { currentWorkspace, workspaceName, workspaces } from '$lib/workspaces.svelte';
@@ -250,11 +253,39 @@
 
 	{#if session.features.sites && sites}
 		<section class="mt-7" aria-labelledby="web-h">
-			<div class="flex items-baseline gap-3">
+			<div class="mb-2 flex items-baseline gap-3">
 				<h2 id="web-h" class="text-section font-semibold">Websites</h2>
 				<p class="text-small text-muted">{scopedSites.length ? `${liveSites} of ${scopedSites.length} live` : `None${scope ? ' in this workspace' : ''} yet`}</p>
-				<a href="/apps?kind=web" class="ml-auto text-small text-muted hover:text-ink">{scopedSites.length ? 'Open list' : 'Create one'}</a>
+				<a href="/apps?kind=web" class="ml-auto text-small text-muted hover:text-ink">{scopedSites.length > SHOWN ? `View all ${scopedSites.length}` : scopedSites.length ? 'Open list' : 'Create one'}</a>
 			</div>
+			{#if scopedSites.length}
+				<div class="rows" role="table" aria-label="Websites">
+					<div class="rows-head hidden grid-cols-[minmax(0,1.3fr)_7rem_minmax(0,1.6fr)_2.25rem] items-center gap-x-4 px-4 py-2 md:grid" role="row">
+						<span role="columnheader">Name</span><span role="columnheader">Status</span><span role="columnheader">Address</span><span role="columnheader" class="sr-only">Open</span>
+					</div>
+					{#each scopedSites.slice(0, SHOWN) as x (x.id)}
+						{@const st = siteStatus(x)}
+						{@const url = x.primary_url || x.url}
+						<div class="row-link grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-x-4 px-4 py-2.5 md:grid-cols-[minmax(0,1.3fr)_7rem_minmax(0,1.6fr)_2.25rem]" role="row">
+							<div class="flex min-w-0 items-center gap-3" role="cell">
+								<Logo src={x.icon_url} kind="site" seed={logoSeed(x.id, x.logo_variant)} class="size-8 rounded-control" />
+								<div class="min-w-0">
+									<a href="/sites/{x.id}" class="block truncate font-medium hover:underline">{x.name}</a>
+									<p class="truncate text-small text-muted">{siteKind(x)}{x.domains ? ` · ${x.domains} ${x.domains === 1 ? 'domain' : 'domains'}` : ''}</p>
+								</div>
+							</div>
+							<span role="cell"><span class="pill" data-tone={st.tone}>{st.label}</span></span>
+							<a href={url} target="_blank" rel="noopener" class="hidden truncate font-mono text-small hover:underline md:block" role="cell" title={url !== x.url ? `Also at ${hostOf(x.url)}` : undefined}>{hostOf(url)}</a>
+							<a href={url} target="_blank" rel="noopener" class="btn btn-quiet btn-icon btn-sm justify-self-end" aria-label="Open {x.name} in a new tab" title="Open site" role="cell"><Icon name="external" size={14} /></a>
+						</div>
+					{/each}
+				</div>
+			{:else}
+				<div class="rows"><div class="rows-empty">
+					<span>No websites{scope ? ' in this workspace' : ''} yet.</span>
+					{#if canDo('sites.create')}<a class="link" href="/apps?kind=web&new=1">Upload files</a><a class="link" href="/templates?tab=sites">Start from a template</a>{/if}
+				</div></div>
+			{/if}
 		</section>
 	{/if}
 {/if}

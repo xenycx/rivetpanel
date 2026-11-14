@@ -13,7 +13,8 @@
 	import ConnectCard from '$lib/components/ConnectCard.svelte';
 	import Notice from '$lib/components/ui/Notice.svelte';
 	import { helpFor } from '$lib/help';
-	import { session } from '$lib/session.svelte';
+	import { session, can as canDo } from '$lib/session.svelte';
+	import AddWebAddressDialog from '$lib/components/AddWebAddressDialog.svelte';
 
 	// The Manage tab: what runs (the console, passed in as `top`), its state and
 	// recent activity in the wide column, and the side facts in a narrow one.
@@ -39,6 +40,10 @@
 	// Where the app answers on the web: each site it serves, with its domains.
 	type WebSite = { site_id: string; name: string; disabled: boolean; addresses: { url: string; host: string; verified: boolean; default: boolean }[] };
 	let web = $state<WebSite[]>([]);
+	let webLoaded = $state(false);
+	let addingAddress = $state(false);
+	// A container with no site yet can be given one here.
+	const offerAddress = $derived(webLoaded && !web.length && bot.kind === 'container' && can(bot, Perm.admin) && canDo('sites.create'));
 
 	const canEnv = $derived(can(bot, Perm.env));
 	const canFiles = $derived(can(bot, Perm.files));
@@ -60,7 +65,11 @@
 			if (bot.source_type === 'github' && !isGame)
 				jobs.push(api<{ linked: boolean; repo?: RepoLink }>('GET', `/bots/${bot.id}/github`).then((r) => (repo = r.linked ? r.repo! : null)).catch(() => {}));
 		}
-		jobs.push(api<{ sites: WebSite[] }>('GET', `/bots/${bot.id}/web-addresses`).then((r) => (web = r.sites)).catch(() => {}));
+		jobs.push(
+			api<{ sites: WebSite[] }>('GET', `/bots/${bot.id}/web-addresses`)
+				.then((r) => ((web = r.sites), (webLoaded = true)))
+				.catch(() => {})
+		);
 		await Promise.allSettled(jobs);
 	}
 	// Live: re-fetch as soon as what this view shows changes anywhere.
@@ -257,6 +266,14 @@
 					<a class="link mt-1.5 inline-block text-small" href="/sites/{w.site_id}">Site settings and domains</a>
 				{/each}
 			</section>
+		{:else if offerAddress}
+			<section aria-labelledby="ov-web">
+				<h3 id="ov-web" class="text-title font-semibold">Web address</h3>
+				<p class="mt-2 text-ink/90">Not on the web yet.</p>
+				<p class="text-small text-muted">{bot.ports.length ? `Its published ${bot.ports.length === 1 ? 'port listens' : 'ports listen'} on this server only (${bot.ports.map((p) => `${p.host_ip || '127.0.0.1'}:${p.host_port}`).join(', ')}).` : 'It publishes no ports.'} Give it an address to open it in a browser, on a sites domain or your own.</p>
+				<button class="btn btn-sm mt-2.5" onclick={() => (addingAddress = true)}><Icon name="globe" size={14} />Add a web address</button>
+			</section>
+			<AddWebAddressDialog bind:open={addingAddress} {bot} onDone={load} />
 		{/if}
 
 		<section>

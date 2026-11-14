@@ -224,8 +224,8 @@ func TestBotSitePageAndEditableDraft(t *testing.T) {
 	}
 	c.mustStatus(400, "POST", "/api/v1/bots/"+botID+"/site", map[string]string{"slug": "another-page"})
 
-	// The app's page lists where it answers: the default address first, then
-	// verified custom domains, then pending ones.
+	// The app's page lists where it answers: verified custom domains, the
+	// default address, then pending ones.
 	c.mustStatus(201, "POST", "/api/v1/sites/"+detail.Site.ID+"/domains", map[string]string{"domain": "beacon.example.net"})
 	var web struct {
 		Sites []struct {
@@ -676,6 +676,12 @@ func TestUserDomains(t *testing.T) {
 	if ud.Verified || ud.Error == nil {
 		t.Fatalf("verified without a record: %+v", ud)
 	}
+	// A stale or mistyped value is named in the message.
+	r.dns.set(ud.TXTName, "rivetpanel-verify=443dd331")
+	json.Unmarshal(c.mustStatus(200, "POST", "/api/v1/me/domains/"+ud.ID+"/verify", nil), &ud)
+	if ud.Verified || ud.Error == nil || !strings.Contains(*ud.Error, "443dd331") || !strings.Contains(*ud.Error, ud.TXTValue) {
+		t.Fatalf("mismatch = %+v", ud)
+	}
 	r.dns.set(ud.TXTName, ud.TXTValue)
 	json.Unmarshal(c.mustStatus(200, "POST", "/api/v1/me/domains/"+ud.ID+"/verify", nil), &ud)
 	if !ud.Verified || ud.Error != nil {
@@ -746,8 +752,36 @@ func TestUserDomains(t *testing.T) {
 		t.Fatalf("other user's domain = %+v", theirs)
 	}
 
-	var list struct{ Domains []udDTO }
+	// One default domain, preselected for new sites.
+	var def struct{ Default bool }
+	json.Unmarshal(c.mustStatus(200, "PATCH", "/api/v1/me/domains/"+ud.ID, map[string]bool{"default": true}), &def)
+	if !def.Default {
+		t.Fatal("default not set")
+	}
+	var info2 struct {
+		Mine []struct{ Default bool } `json:"my_domains"`
+	}
+	json.Unmarshal(c.mustStatus(200, "GET", "/api/v1/sites-info", nil), &info2)
+	if len(info2.Mine) != 1 || !info2.Mine[0].Default {
+		t.Fatalf("sites-info default = %+v", info2.Mine)
+	}
+	other.mustStatus(404, "PATCH", "/api/v1/me/domains/"+ud.ID, map[string]bool{"default": true})
+	other.mustStatus(400, "PATCH", "/api/v1/me/domains/"+theirs.ID, map[string]bool{"default": true}) // not verified
+	c.mustStatus(404, "PATCH", "/api/v1/me/domains/"+theirs.ID, map[string]bool{"default": true})
+
+	var list struct {
+		Domains []struct {
+			udDTO
+			Addresses []struct {
+				Domain   string
+				SiteName string `json:"site_name"`
+			}
+		}
+	}
 	json.Unmarshal(c.mustStatus(200, "GET", "/api/v1/me/domains", nil), &list)
+	if len(list.Domains) == 1 && (len(list.Domains[0].Addresses) != 3 || list.Domains[0].Addresses[0].SiteName != "Maps") {
+		t.Fatalf("addresses = %+v", list.Domains[0].Addresses)
+	}
 	if len(list.Domains) != 1 || list.Domains[0].Uses != 3 {
 		t.Fatalf("list = %+v", list.Domains)
 	}
@@ -757,4 +791,90 @@ func TestUserDomains(t *testing.T) {
 	if len(detail.Domains) != 3 || !detail.Domains[0].Verified || detail.Domains[0].Via {
 		t.Fatalf("after removal = %+v", detail.Domains)
 	}
+}
+
+func TestContainerWebAddress(t *testing.T) {
+	r := newSiteRig(t)
+	cs := &service.ContainerService{Bots: r.e.bots, Store: r.e.db, Policy: service.ContainerPolicy{Registries: []string{"ghcr.io", "docker.io"}}}
+	r.e.app = New(Deps{Log: slog.New(slog.NewTextHandler(io.Discard, nil)), DB: r.e.db, Auth: r.e.auth, Bots: r.e.bots, Catalog: r.e.bots.Catalog,
+		SecureCookies: true, Nodes: r.e.db, MaxUpload: 2 << 20, Sites: r.svc, Containers: cs})
+	c := r.owner
+	var app struct{ ID, Generation string }
+	var created struct {
+		ID         string `json:"id"`
+		Generation int64  `json:"generation"`
+	}
+	json.Unmarshal(c.mustStatus(201, "POST", "/api/v1/containers", map[string]any{"name": "stylized-maps", "image": "ghcr.io/xenycx/stylized-maps:latest",
+		"ports": []map[string]any{{"container_port": 8080, "host_port": 20000}}}), &created)
+	app.ID = created.ID
+	base := "/api/v1/bots/" + app.ID + "/web-addresses"
+
+	var web struct{ Sites []struct{ SiteID string `json:"site_id"` } }
+	json.Unmarshal(c.mustStatus(200, "GET", base, nil), &web)
+	if len(web.Sites) != 0 {
+		t.Fatalf("new container has addresses: %+v", web.Sites)
+	}
+	c.mustStatus(400, "POST", base, map[string]any{"slug": "maps", "port": 0})
+
+	// With one of the user's verified domains it answers there at once.
+	var ud struct {
+		ID       string
+		TXTName  string `json:"txt_name"`
+		TXTValue string `json:"txt_value"`
+	}
+	json.Unmarshal(c.mustStatus(201, "POST", "/api/v1/me/domains", map[string]string{"domain": "xenyc.ge"}), &ud)
+	r.dns.set(ud.TXTName, ud.TXTValue)
+	c.mustStatus(200, "POST", "/api/v1/me/domains/"+ud.ID+"/verify", nil)
+
+	var st struct {
+		ID   string `json:"id"`
+		Slug string `json:"slug"`
+		Mode string `json:"mode"`
+	}
+	json.Unmarshal(c.mustStatus(201, "POST", base, map[string]any{"slug": "maps", "port": 8080, "user_domain_id": ud.ID}), &st)
+	if st.Slug != "maps" || st.Mode != "app" {
+		t.Fatalf("site = %+v", st)
+	}
+	var addrs struct {
+		Sites []struct {
+			SiteID    string `json:"site_id"`
+			Addresses []struct {
+				Host     string
+				Verified bool
+			}
+		}
+	}
+	json.Unmarshal(c.mustStatus(200, "GET", base, nil), &addrs)
+	if len(addrs.Sites) != 1 || addrs.Sites[0].SiteID != st.ID || len(addrs.Sites[0].Addresses) != 2 ||
+		addrs.Sites[0].Addresses[0].Host != "maps.xenyc.ge" || !addrs.Sites[0].Addresses[0].Verified {
+		t.Fatalf("addresses = %+v", addrs.Sites)
+	}
+	// The container is recreated on the apps network.
+	var after struct {
+		Generation int64 `json:"generation"`
+	}
+	json.Unmarshal(c.mustStatus(200, "GET", "/api/v1/bots/"+app.ID, nil), &after)
+	if after.Generation <= created.Generation {
+		t.Fatalf("generation %d -> %d", created.Generation, after.Generation)
+	}
+	// A name taken on the sites domain still works on the user's domain:
+	// only the default address gets a suffix.
+	var taken struct{ ID, Slug string }
+	json.Unmarshal(c.mustStatus(201, "POST", "/api/v1/sites", map[string]string{"name": "Blog", "slug": "blog"}), &taken)
+	var onOwn struct{ ID, Slug string }
+	json.Unmarshal(c.mustStatus(201, "POST", "/api/v1/sites", map[string]string{"name": "Blog two", "slug": "blog", "user_domain_id": ud.ID}), &onOwn)
+	if onOwn.Slug == "blog" || !strings.HasPrefix(onOwn.Slug, "blog-") {
+		t.Fatalf("default address = %q", onOwn.Slug)
+	}
+	var od struct{ Domains []struct{ Domain string } }
+	json.Unmarshal(c.mustStatus(200, "GET", "/api/v1/sites/"+onOwn.ID, nil), &od)
+	if len(od.Domains) != 1 || od.Domains[0].Domain != "blog.xenyc.ge" {
+		t.Fatalf("own address = %+v", od.Domains)
+	}
+	// One web address per container.
+	if b := c.mustStatus(400, "POST", base, map[string]any{"slug": "maps-two", "port": 8080}); !strings.Contains(string(b), "already has a web address") {
+		t.Fatalf("second address: %s", b)
+	}
+	// Others cannot add one.
+	r.e.user("stranger@x.io", domain.RoleUser).mustStatus(404, "POST", base, map[string]any{"slug": "x-maps", "port": 8080})
 }

@@ -3,7 +3,9 @@
 	import { goto } from '$app/navigation';
 	import { api, ApiError, fmtBytes, fmtCpu } from '$lib/api/client';
 	import { splitArgs } from '$lib/args';
-	import type { Bot, Capacity, Limits, Volume } from '$lib/api/types';
+	import type { Bot, Capacity, Limits, SitesInfo, Volume } from '$lib/api/types';
+	import { toast } from '$lib/ui/toast.svelte';
+	import { can } from '$lib/session.svelte';
 	import { boundText, budgetWarning, clampMax, countBlock, room } from '$lib/room';
 	import { resourceHref } from '$lib/api/games';
 	import { session } from '$lib/session.svelte';
@@ -35,10 +37,31 @@
 	let busy = $state(false);
 	let error = $state('');
 	let advanced = $state(false);
+	// Optional web address: a site that forwards to the container's port.
+	let sites = $state<SitesInfo | null>(null);
+	let webOn = $state(false);
+	let webSlug = $state('');
+	let webSlugTouched = $state(false);
+	let webDomain = $state('');
+	let webPort = $state<number | null>(null);
+	const webBases = $derived(sites?.domains ?? []);
+	const webMine = $derived(sites?.my_domains ?? []);
+	const webOwn = $derived(webDomain.startsWith('mine:') ? webMine.find((m) => `mine:${m.id}` === webDomain) : undefined);
+	const slugOf = (n: string) => n.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 30);
+	const webPortValue = $derived(webPort ?? ports.find((p) => p.container_port)?.container_port ?? 8080);
 
 	onMount(() => {
 		api<Policy>('GET', '/containers/policy').then((p) => (policy = p)).catch(() => {});
 		api<{ limits: Limits }>('GET', '/runtimes').then((r) => (limits = r.limits)).catch(() => {});
+		if (can('sites.create'))
+			api<SitesInfo>('GET', '/sites-info')
+				.then((i) => {
+					if (!i.enabled) return;
+					sites = i;
+					const def = i.my_domains?.find((m) => m.default);
+					webDomain = def ? `mine:${def.id}` : (i.domains?.find((b) => b.primary)?.id ?? '');
+				})
+				.catch(() => {});
 		// The workspace selected in the sidebar, once the list is known.
 		loadWorkspaces().then(() => {
 			const sel = workspaces.selected;
@@ -84,6 +107,8 @@
 	);
 	// The image's last path part, without its tag, as a starting name.
 	const suggested = $derived(image.trim().split('/').pop()?.split(/[:@]/)[0] ?? '');
+	const webLabel = $derived((webSlugTouched ? webSlug : slugOf(name.trim() || suggested)) || 'your-app');
+	const webPreview = $derived((webOwn?.example_url ?? webBases.find((b) => b.id === webDomain)?.example_url ?? sites?.example_url ?? '').replace('://example.', `://${webLabel}.`));
 
 	function parseEnv(text: string): Record<string, string> {
 		const out: Record<string, string> = {};
@@ -118,6 +143,18 @@
 				nano_cpus: cpu ?? 0,
 				start: start && session.features.runner
 			});
+			if (webOn && sites) {
+				try {
+					await api('POST', `/bots/${b.id}/web-addresses`, {
+						slug: webLabel,
+						port: webPortValue,
+						domain_id: webOwn ? (webBases.find((x) => x.primary)?.id ?? '') : webDomain,
+						user_domain_id: webOwn?.id ?? ''
+					});
+				} catch (err) {
+					toast(`The container was created, but its web address was not: ${err instanceof ApiError ? err.message : 'try again from its Overview'}.`, 'fail');
+				}
+			}
 			goto(resourceHref(b));
 		} catch (err) {
 			error = err instanceof ApiError ? err.message : 'The container could not be created.';
@@ -176,6 +213,39 @@
 			{/each}
 			<div><button type="button" class="btn btn-sm" onclick={() => ports.push({ container_port: null, host_port: null })}><Icon name="plus" size={13} />Publish a port</button></div>
 		</section>
+
+		{#if sites}
+			<section class="grid gap-3 border-t border-rule-soft pt-6" aria-labelledby="web-h">
+				<h2 id="web-h" class="text-title font-semibold">Web address</h2>
+				<label class="flex items-start gap-2.5"><input type="checkbox" class="mt-0.5" bind:checked={webOn} /><span>Open it in a browser<span class="help mt-0">For a web app: a site forwards visitors to the port it listens on, with HTTPS from your reverse proxy. You can also add one later from its Overview.</span></span></label>
+				{#if webOn}
+					<div class="grid gap-4 sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+						<label class="block">
+							<span class="label">Address</span>
+							<div class="flex items-stretch">
+								<input class="field min-w-0 font-mono {webBases.length > 1 || webMine.length ? 'rounded-r-none' : ''}" maxlength="40" value={webLabel} oninput={(e) => ((webSlugTouched = true), (webSlug = e.currentTarget.value.toLowerCase()))} aria-describedby="web-preview" />
+								{#if webBases.length > 1 || webMine.length}
+									<select class="field w-auto max-w-[55%] rounded-l-none border-l-0 font-mono" bind:value={webDomain} aria-label="Domain">
+										{#if webMine.length}
+											<optgroup label="Your domains">{#each webMine as m (m.id)}<option value="mine:{m.id}">.{m.domain}</option>{/each}</optgroup>
+											<optgroup label="Sites domains">{#each webBases as b (b.id)}<option value={b.id}>.{b.domain}</option>{/each}</optgroup>
+										{:else}
+											{#each webBases as b (b.id)}<option value={b.id}>.{b.domain}</option>{/each}
+										{/if}
+									</select>
+								{/if}
+							</div>
+							<span class="help" id="web-preview">Answers at <code class="text-ink">{webPreview}</code>{#if webOwn}; point <code class="text-ink">{webLabel}.{webOwn.domain}</code> at this server, or use a wildcard record{/if}.</span>
+						</label>
+						<label class="block">
+							<span class="label">Container port</span>
+							<input class="field font-mono" type="number" min="1" max="65535" value={webPortValue} oninput={(e) => (webPort = Number(e.currentTarget.value) || null)} />
+							<span class="help">The port the app listens on.</span>
+						</label>
+					</div>
+				{/if}
+			</section>
+		{/if}
 
 		<section class="grid gap-3 border-t border-rule-soft pt-6" aria-labelledby="env-h">
 			<h2 id="env-h" class="text-title font-semibold">Variables</h2>

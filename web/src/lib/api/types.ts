@@ -637,6 +637,8 @@ export type Site = {
 	release_bytes: number;
 	disabled: boolean;
 	domains: number;
+	/** First verified custom domain's address, else the default address. */
+	primary_url: string;
 	repo_full_name: string | null;
 	repo_branch: string | null;
 	repo_root: string;
@@ -699,6 +701,9 @@ export type UserDomain = {
 	example_url: string;
 	/** Site addresses it verified. */
 	uses: number;
+	addresses: { domain: string; url: string; site_id: string; site_name: string }[];
+	/** Preselected when creating a site. */
+	default: boolean;
 	created_at_ms: number;
 };
 export type SitesInfo = {
@@ -707,7 +712,7 @@ export type SitesInfo = {
 	example_url?: string;
 	domains?: SiteBaseChoice[];
 	/** The caller's verified domains (Settings → Domains), offered as addresses. */
-	my_domains?: { id: string; domain: string; example_url: string }[];
+	my_domains?: { id: string; domain: string; example_url: string; default: boolean }[];
 	max_bytes?: number;
 	max_domains?: number;
 	/** Sites can be built from GitHub repositories. */
