@@ -89,9 +89,11 @@ func aiEnv(t *testing.T, fp http.Handler) (*env, *service.AIService, *client, st
 	ai := &service.AIService{Store: e.db, Keys: e.bots.Keys, Bots: e.bots, Files: e.bots.Workspaces.(*filesystem.Manager), Audit: audit, Log: slog.New(slog.NewTextHandler(io.Discard, nil))}
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
+	bridge := NewAgentBridge()
+	ai.API = bridge
 	ai.Start(ctx)
 	e.app = New(Deps{Log: slog.New(slog.NewTextHandler(io.Discard, nil)), DB: e.db, Auth: e.auth, Bots: e.bots, Catalog: e.bots.Catalog, SecureCookies: true,
-		Nodes: e.db, Files: e.bots.Workspaces.(*filesystem.Manager), MaxUpload: 2 << 20, AI: ai, Audit: audit})
+		Nodes: e.db, Files: e.bots.Workspaces.(*filesystem.Manager), MaxUpload: 2 << 20, AI: ai, Audit: audit, Agent: bridge})
 	srv := httptest.NewServer(fp)
 	t.Cleanup(srv.Close)
 
@@ -507,17 +509,16 @@ func TestAIOperatorToolCallIDsAndEnvelope(t *testing.T) {
 			t.Fatalf("tool message did not echo the provider id: %v", res)
 		}
 	}
+	// Autopilot starts at once: no envelope card waits for a second approval.
 	runs := conversationRuns(t, admin, conv)
-	if len(runs) != 2 || runs[0].ToolCalls[0].Name != "auto_repair_envelope" {
+	if len(runs) != 2 {
 		t.Fatalf("runs: %+v", runs)
 	}
-	env := runs[0].ToolCalls[0]
-	if env.ApprovalState != "approved" || !strings.Contains(env.Arguments, `"apply_attempts":3`) {
-		t.Fatalf("envelope: %+v", env)
-	}
-	for _, claim := range []string{"deploy", "publish", "startup"} {
-		if strings.Contains(env.Arguments, claim) {
-			t.Fatalf("envelope claims an unimplemented %s action: %s", claim, env.Arguments)
+	for _, r := range runs {
+		for _, c := range r.ToolCalls {
+			if c.Name == "auto_repair_envelope" || c.ApprovalState == "pending" {
+				t.Fatalf("autopilot waited for approval: %+v", r)
+			}
 		}
 	}
 }

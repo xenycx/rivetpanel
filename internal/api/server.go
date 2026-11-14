@@ -86,6 +86,9 @@ type Deps struct {
 	MailPrefs     MailPrefs                         // per-account alert-email switch; nil hides it
 	Sites         *service.SiteService              // nil (or not started) disables static site hosting
 	AI            *service.AIService                // nil disables the AI operator
+	// Agent lets the AI assistant call this API in-process as the person it
+	// works for (nil: the assistant has no panel API tool).
+	Agent *AgentBridge
 	Env           *service.PanelEnvService          // nil disables the environment editor
 	Host          *hostmon.Monitor                  // nil disables the host monitoring routes
 	LogArchive    *service.LogArchiveService        // nil disables the log archive routes
@@ -184,6 +187,7 @@ type panel struct {
 	buildMemory   int64
 	diagnostics   func(ctx context.Context) diag.Report
 	modules       modules.Registry
+	agent         *AgentBridge
 }
 
 const readyTimeout = 2 * time.Second
@@ -216,6 +220,9 @@ func New(d Deps) *fiber.App {
 		d.Modules = modules.Default()
 	}
 	app := fiber.New(cfg)
+	if d.Agent != nil {
+		d.Agent.attach(app)
+	}
 
 	metrics := newPanelMetrics()
 	if d.Host != nil && d.Host.HTTP == nil {
@@ -261,7 +268,7 @@ func New(d Deps) *fiber.App {
 		return c.JSON(fiber.Map{"status": "ok", "checks": checks})
 	})
 	if d.Auth != nil && d.Bots != nil {
-		s := &panel{log: d.Log, auth: d.Auth, bots: d.Bots, oauth: d.OAuth, sftp: d.SFTP, analytics: d.Analytics, publicURL: d.PublicURL, registry: d.Registry, stats: d.Stats, backups: d.Backups, deploy: d.Deploy, ops: d.Ops, audit: d.Audit, schedules: d.Schedules, mfa: d.MFA, tokens: d.Tokens, clients: d.Clients, oidc: d.OIDC, passkeys: d.Passkeys, enrollment: d.Enrollment, agentControl: d.AgentControl, gameAddress: d.GameAddress, games: d.Games, containers: d.Containers, extensions: d.Extensions, router: d.Router, health: d.Health, settings: d.Settings, mail: d.Mail, notifications: d.Notifications, tickets: d.Tickets, kb: d.KB, status: d.Status, usage: d.Usage, resets: d.Resets, verify: d.Verify, mailPrefs: d.MailPrefs, sites: d.Sites, ai: d.AI, env: d.Env, host: d.Host, logs: d.Logs, logArchive: d.LogArchive, setupCodeFile: d.SetupCodeFile, onSetupDone: d.OnSetupDone, statsLimit: console.NewLimiter(0, 0, 0), catalog: d.Catalog, secureCookies: d.SecureCookies, modules: d.Modules,
+		s := &panel{log: d.Log, auth: d.Auth, bots: d.Bots, oauth: d.OAuth, sftp: d.SFTP, analytics: d.Analytics, publicURL: d.PublicURL, registry: d.Registry, stats: d.Stats, backups: d.Backups, deploy: d.Deploy, ops: d.Ops, audit: d.Audit, schedules: d.Schedules, mfa: d.MFA, tokens: d.Tokens, clients: d.Clients, oidc: d.OIDC, passkeys: d.Passkeys, enrollment: d.Enrollment, agentControl: d.AgentControl, gameAddress: d.GameAddress, games: d.Games, containers: d.Containers, extensions: d.Extensions, router: d.Router, health: d.Health, settings: d.Settings, mail: d.Mail, notifications: d.Notifications, tickets: d.Tickets, kb: d.KB, status: d.Status, usage: d.Usage, resets: d.Resets, verify: d.Verify, mailPrefs: d.MailPrefs, sites: d.Sites, ai: d.AI, agent: d.Agent, env: d.Env, host: d.Host, logs: d.Logs, logArchive: d.LogArchive, setupCodeFile: d.SetupCodeFile, onSetupDone: d.OnSetupDone, statsLimit: console.NewLimiter(0, 0, 0), catalog: d.Catalog, secureCookies: d.SecureCookies, modules: d.Modules,
 			console: d.Console, consoleLimit: d.ConsoleLimit, baseCtx: d.BaseCtx, nodes: d.Nodes, files: d.Files, maxUpload: d.MaxUpload,
 			runnerReady: d.RunnerReady, buildMemory: d.BuildMemory, diagnostics: d.Diagnostics, live: d.Live}
 		if s.buildMemory == 0 {

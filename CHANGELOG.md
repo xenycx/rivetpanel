@@ -6,6 +6,46 @@ authoritative current version.
 
 ## Unreleased
 
+## 1.16.0 - 2026-11-14
+
+### Added
+
+- **The AI assistant now does the work.** Paste a GitHub repository, a Docker
+  image or a compose file and it analyzes it, creates the app or site with
+  the right runtime, commands, add-on databases and variables, starts it,
+  waits for it and reads the console until it runs. It also installs
+  one-click apps, sets and removes environment variables, starts, stops,
+  restarts and kills apps, changes memory, CPU, start command, runtime,
+  network, restart policy and backups, sends console commands, redeploys and
+  deletes. A new panel API tool reaches everything else the pages can do
+  (backups, schedules, domains, workspaces, notifications, profile and, for
+  administrators, panel settings), always with the person's own permissions.
+  It can also change the person's theme, accent colour and corner style and
+  open pages for them. A button under each run opens what it deployed, and
+  the page behind the chat refreshes after changes.
+
+### Changed
+
+- **Autopilot replaces Auto repair.** Choosing Autopilot is enough: no
+  confirmation dialog, no envelope card to approve, and no bot or site needs
+  to be open. The mode switch is always shown and remembered per browser.
+  Ask first still stops on a card before every change, now including
+  deploys, variables, settings and panel API writes.
+- The assistant may switch between bots and sites within one run.
+- Run limits are higher: 40 rounds, 30 minutes, 12 diagnostics, 24 apply
+  attempts, 8 restarts, 48 changed files, 4 MiB retained output, and a new
+  limit of 40 panel actions per run.
+- The "AI can make mistakes" footer under the message box is gone.
+
+### Security
+
+- The assistant's panel API calls run in-process with a one-request token and
+  can never reach sign-in, passwords, two-step sign-in, passkeys, sessions,
+  API keys and tokens, linked identities, the email address, account
+  deletion or its own approvals. Secret values it sets are stored as
+  `[hidden]` in the chat's tool records and every action is in the activity
+  log.
+
 ## 1.15.0 - 2026-11-14
 
 ### Added

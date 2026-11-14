@@ -106,13 +106,18 @@ type AIRunLimits struct {
 	Diagnostics      int   `json:"diagnostics"`
 	ApplyAttempts    int   `json:"apply_attempts"`
 	LifecycleActions int   `json:"lifecycle_actions"`
+	// Actions bounds the panel-wide changes one run makes: deployments,
+	// environment, power, settings and panel API writes.
+	Actions          int   `json:"actions"`
 	WallMinutes      int   `json:"wall_minutes"`
 	ChangedFiles     int   `json:"changed_files"`
 	ChangedBytes     int64 `json:"changed_bytes"`
 	RetainedOutput   int64 `json:"retained_output"`
 }
 
-func DefaultAIRunLimits() AIRunLimits { return AIRunLimits{12, 5, 3, 2, 20, 32, 8 << 20, 2 << 20} }
+func DefaultAIRunLimits() AIRunLimits {
+	return AIRunLimits{Rounds: 40, Diagnostics: 12, ApplyAttempts: 24, LifecycleActions: 8, Actions: 40, WallMinutes: 30, ChangedFiles: 48, ChangedBytes: 8 << 20, RetainedOutput: 4 << 20}
+}
 
 // aiBudget counts what one run has consumed against its limits. Every mode
 // uses it; approvals never raise a limit. A run executes one tool at a time,
@@ -120,6 +125,7 @@ func DefaultAIRunLimits() AIRunLimits { return AIRunLimits{12, 5, 3, 2, 20, 32, 
 type aiBudget struct {
 	lim                             AIRunLimits
 	diagnostics, applies, lifecycle int
+	actions                         int
 	files                           map[string]bool
 	bytes, output                   int64
 }
@@ -132,6 +138,16 @@ func limitReached(what string, n any) error {
 func (b *aiBudget) diagnostic() error {
 	if b.diagnostics >= b.lim.Diagnostics {
 		return limitReached("diagnostic jobs", b.lim.Diagnostics)
+	}
+	return nil
+}
+func (b *aiBudget) action() error {
+	max := b.lim.Actions
+	if max <= 0 {
+		max = DefaultAIRunLimits().Actions
+	}
+	if b.actions >= max {
+		return limitReached("panel actions", max)
 	}
 	return nil
 }
@@ -193,6 +209,12 @@ type AIService struct {
 	Files      *filesystem.Manager
 	Ops        *Operations
 	Audit      *Audit
+	// Deploy, Containers and API give the assistant the panel-wide tools:
+	// deploying from GitHub, Docker images, templates and compose files, and
+	// calling any panel API route as the person. Nil hides what they power.
+	Deploy     *DeployService
+	Containers *ContainerService
+	API        PanelAPI
 	Provider   *operator.Client
 	Research   *operator.Research
 	Diagnostic DiagnosticRunner
@@ -887,9 +909,6 @@ func (s *AIService) StartMessage(ctx context.Context, actor domain.User, convers
 	if botID == nil && siteID == nil {
 		botID, siteID = c.BotID, c.SiteID
 	}
-	if mode == AIAuto && botID == nil && siteID == nil {
-		return domain.AIRun{}, domain.Invalid("Auto repair works on one bot or site: open it first, or use Approval mode")
-	}
 	kind, targetID := "", ""
 	switch {
 	case botID != nil:
@@ -941,45 +960,15 @@ func (s *AIService) StartMessage(ctx context.Context, actor domain.User, convers
 			}
 		}()
 		if mode == AIAuto {
-			if !s.awaitAutoEnvelope(rctx, &live, lim) {
-				return
-			}
+			// Autopilot was the person's own choice for this message: it
+			// starts right away, within the run's limits.
+			now := s.now()
+			live.AutoApprovedAtMS = &now
+			_ = s.Store.UpdateAIRun(rctx, live)
 		}
 		s.run(rctx, actor, c, &live, lim)
 	}()
 	return run, nil
-}
-
-// autoActions are the live actions one Auto approval covers. Secure
-// environment input always waits for the user; GitHub writes, kill, startup
-// changes, deployments and site publication are not operator tools.
-var autoActions = []string{"run_diagnostic", "propose_file_change", "restart_bot"}
-
-func (s *AIService) awaitAutoEnvelope(ctx context.Context, run *domain.AIRun, lim AIRunLimits) bool {
-	// The envelope names its target: it covers this bot or site and no other.
-	target := s.targetName(ctx, domain.AIConversation{BotID: run.BotID, SiteID: run.SiteID})
-	args, _ := json.Marshal(map[string]any{"actions": autoActions, "limits": lim, "target": target, "target_kind": targetKind(*run)})
-	call := domain.AIToolCall{ID: uuid.NewString(), RunID: run.ID, CallIndex: -1, Name: "auto_repair_envelope", ArgumentsJSON: string(args), ApprovalState: "pending", Status: "proposed", CreatedAtMS: s.now()}
-	wait := s.expectDecision(call.ID, run.ID)
-	_ = s.Store.InsertAIToolCall(ctx, call)
-	run.Status = "waiting_approval"
-	_ = s.Store.UpdateAIRun(ctx, *run)
-	s.emit(run.ID, "approval_required", map[string]any{"tool_call": toolCallView(call), "title": "Approve bounded Auto repair", "detail": map[string]any{"actions": autoActions, "limits": lim, "target": target, "target_kind": targetKind(*run)}})
-	ok := wait(ctx)
-	call.FinishedAtMS = ptrNow(s.now())
-	if !ok {
-		call.ApprovalState, call.Status = "rejected", "cancelled"
-		_ = s.Store.UpdateAIToolCall(context.WithoutCancel(ctx), call)
-		s.finishRun(run, "cancelled", "rejected", "Auto repair was not approved.")
-		return false
-	}
-	call.ApprovalState, call.Status = "approved", "completed"
-	_ = s.Store.UpdateAIToolCall(ctx, call)
-	now := s.now()
-	run.AutoApprovedAtMS = &now
-	run.Status = "queued"
-	_ = s.Store.UpdateAIRun(ctx, *run)
-	return true
 }
 
 // expectDecision registers a waiter before the pending state is persisted,
@@ -1140,7 +1129,7 @@ func (s *AIService) run(ctx context.Context, actor domain.User, conv domain.AICo
 		s.emit(run.ID, "status", map[string]any{"label": "Consulting " + p.Name, "round": round + 1})
 		var resp operator.Response
 		for attempt := 0; attempt < 3; attempt++ {
-			resp, e = s.Provider.Complete(ctx, cfg, chat, aiTools(s.diagnosticPolicy(ctx, eff.BotID)), func(d string) { s.emit(run.ID, "delta", map[string]string{"text": d}) })
+			resp, e = s.Provider.Complete(ctx, cfg, chat, s.tools(ctx, eff.BotID), func(d string) { s.emit(run.ID, "delta", map[string]string{"text": d}) })
 			if e == nil {
 				break
 			}
@@ -1191,7 +1180,10 @@ func (s *AIService) run(ctx context.Context, actor domain.User, conv domain.AICo
 			}
 			// Providers reuse short call ids across runs, so rows get their
 			// own UUID and the provider id is only echoed in the tool message.
-			call := domain.AIToolCall{ID: uuid.NewString(), RunID: run.ID, CallIndex: callIndex, Name: tc.Function.Name, ArgumentsJSON: sanitizeArgs(tc.Function.Arguments), ApprovalState: "not_required", Status: "running", CreatedAtMS: s.now()}
+			// The stored row hides secret values (environment values, app
+			// passwords); the live call below still receives them.
+			rawArgs := sanitizeArgs(tc.Function.Arguments)
+			call := domain.AIToolCall{ID: uuid.NewString(), RunID: run.ID, CallIndex: callIndex, Name: tc.Function.Name, ArgumentsJSON: redactToolArgs(tc.Function.Name, rawArgs), ApprovalState: "not_required", Status: "running", CreatedAtMS: s.now()}
 			callIndex++
 			if tc.ID != "" && len(tc.ID) <= 200 {
 				pid := tc.ID
@@ -1207,7 +1199,7 @@ func (s *AIService) run(ctx context.Context, actor domain.User, conv domain.AICo
 			if budget.output >= lim.RetainedOutput {
 				e = limitReached("bytes of retained tool output", lim.RetainedOutput)
 			} else {
-				out, didMutate, e = s.executeToolBounded(ctx, actor, eff, run, &call, budget)
+				out, didMutate, e = s.executeToolBounded(ctx, actor, eff, run, &call, budget, rawArgs)
 				// focus_target may have moved the run onto a bot or site.
 				if eff.BotID != run.BotID || eff.SiteID != run.SiteID {
 					eff = effective(conv, *run)
@@ -1418,7 +1410,7 @@ func (s *AIService) redactor(ctx context.Context, c domain.AIConversation) *oper
 
 // readOnlyAITools only read; each call runs under ToolTimeout so a slow or
 // unresponsive node, log source or web page cannot hang the run.
-var readOnlyAITools = map[string]bool{"list_targets": true, "target_status": true, "read_logs": true, "build_output": true, "list_files": true, "read_file": true, "search_files": true, "environment_names": true, "web_search": true, "web_fetch": true}
+var readOnlyAITools = map[string]bool{"list_app_templates": true, "panel_routes": true, "list_targets": true, "target_status": true, "read_logs": true, "build_output": true, "list_files": true, "read_file": true, "search_files": true, "environment_names": true, "web_search": true, "web_fetch": true}
 
 // errAIToolTimeout is reported to the model (and the person) when a
 // read-only tool does not finish in time.
@@ -1434,9 +1426,9 @@ func (s *AIService) toolTimeout() time.Duration {
 // executeToolBounded runs a read-only tool with a deadline and returns when
 // the deadline passes even if the tool ignores its context. The tool works
 // on copies of the run and call rows (read-only tools do not change them).
-func (s *AIService) executeToolBounded(ctx context.Context, actor domain.User, c domain.AIConversation, run *domain.AIRun, call *domain.AIToolCall, budget *aiBudget) (string, bool, error) {
+func (s *AIService) executeToolBounded(ctx context.Context, actor domain.User, c domain.AIConversation, run *domain.AIRun, call *domain.AIToolCall, budget *aiBudget, rawArgs string) (string, bool, error) {
 	if !readOnlyAITools[call.Name] {
-		return s.executeTool(ctx, actor, c, run, call, budget)
+		return s.executeTool(ctx, actor, c, run, call, budget, rawArgs)
 	}
 	tctx, cancel := context.WithTimeout(ctx, s.toolTimeout())
 	defer cancel()
@@ -1453,7 +1445,7 @@ func (s *AIService) executeToolBounded(ctx context.Context, actor domain.User, c
 				ch <- result{err: errors.New("the tool stopped because of an internal error")}
 			}
 		}()
-		o, m, e := s.executeTool(tctx, actor, c, &runCopy, &callCopy, newAIBudget(budget.lim))
+		o, m, e := s.executeTool(tctx, actor, c, &runCopy, &callCopy, newAIBudget(budget.lim), rawArgs)
 		ch <- result{o, m, e}
 	}()
 	select {
@@ -1471,9 +1463,12 @@ func (s *AIService) executeToolBounded(ctx context.Context, actor domain.User, c
 	}
 }
 
-func (s *AIService) executeTool(ctx context.Context, actor domain.User, c domain.AIConversation, run *domain.AIRun, call *domain.AIToolCall, budget *aiBudget) (string, bool, error) {
+func (s *AIService) executeTool(ctx context.Context, actor domain.User, c domain.AIConversation, run *domain.AIRun, call *domain.AIToolCall, budget *aiBudget, rawArgs string) (string, bool, error) {
+	if out, mut, e, ok := s.executeAgentTool(ctx, actor, c, run, call, budget, rawArgs); ok {
+		return out, mut, e
+	}
 	var a map[string]json.RawMessage
-	if e := json.Unmarshal([]byte(call.ArgumentsJSON), &a); e != nil {
+	if e := json.Unmarshal([]byte(rawArgs), &a); e != nil {
 		return "", false, domain.Invalid("tool arguments are invalid")
 	}
 	str := func(k string) string { var v string; _ = json.Unmarshal(a[k], &v); return v }

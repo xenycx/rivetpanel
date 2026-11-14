@@ -1,6 +1,8 @@
+import { goto, invalidateAll } from '$app/navigation';
 import { api, ApiError } from '$lib/api/client';
 import { confirmDialog } from '$lib/ui/dialogs.svelte';
 import { toast } from '$lib/ui/toast.svelte';
+import { accents, radii, setAccent, setRadius, setTheme, type Accent, type Radius } from '$lib/ui/theme.svelte';
 import { describeView, type ViewContext } from './context.svelte';
 
 export type Provider = { id: string; name: string; default_model: string; default: boolean; pricing_configured: boolean };
@@ -44,12 +46,34 @@ type Event = { sequence: number; type: string; data?: any };
 
 const ACTIVE = ['queued', 'running', 'waiting_approval'];
 const approvalTitles: Record<string, string> = {
-	auto_repair_envelope: 'Approve bounded Auto repair',
 	request_environment_values: 'Secure environment input',
 	run_diagnostic: 'Run isolated diagnostic',
 	propose_file_change: 'Apply reviewed file change',
-	restart_bot: 'Restart bot'
+	restart_bot: 'Restart bot',
+	deploy_github: 'Deploy from GitHub',
+	deploy_site: 'Publish a site',
+	deploy_image: 'Run a Docker image',
+	deploy_compose: 'Import a compose stack',
+	install_app_template: 'Install an app',
+	set_environment: 'Set environment variables',
+	delete_environment: 'Remove environment variables',
+	power: 'Change power state',
+	update_bot_settings: 'Change settings',
+	redeploy: 'Redeploy',
+	delete_bot: 'Delete permanently',
+	console_command: 'Send a console command',
+	panel_api: 'Change something in the panel'
 };
+/** Tools that only read: a run made of these leaves nothing to refresh. */
+const READ_ONLY = new Set(['list_targets', 'focus_target', 'target_status', 'read_logs', 'build_output', 'list_files', 'read_file', 'search_files', 'environment_names', 'web_search', 'web_fetch', 'analyze_repo', 'list_app_templates', 'wait_for_ready', 'panel_routes', 'client_action']);
+const MODE_KEY = 'rivetpanel.aiMode';
+function readMode(): 'approval' | 'auto' {
+	try {
+		return localStorage.getItem(MODE_KEY) === 'auto' ? 'auto' : 'approval';
+	} catch {
+		return 'approval';
+	}
+}
 const why = (e: unknown) => (e instanceof ApiError ? e.message : 'The assistant could not complete that request.');
 
 function toStep(c: ToolCall, live: boolean): Step {
@@ -114,7 +138,19 @@ class Chat {
 	messages = $state<Message[]>([]);
 	runs = $state<RunBlock[]>([]);
 	prompt = $state('');
-	mode = $state<'approval' | 'auto'>('approval');
+	#mode = $state<'approval' | 'auto'>(typeof localStorage === 'undefined' ? 'approval' : readMode());
+	/** Ask first, or Autopilot. Remembered in this browser. */
+	get mode() {
+		return this.#mode;
+	}
+	set mode(m: 'approval' | 'auto') {
+		this.#mode = m;
+		try {
+			localStorage.setItem(MODE_KEY, m);
+		} catch {
+			/* not remembered; still used for this page */
+		}
+	}
 	error = $state('');
 	busy = $state(false);
 	secureValues = $state<Record<string, Record<string, string>>>({});
@@ -267,16 +303,7 @@ class Chat {
 	async send(view: ViewContext | null = this.currentView()) {
 		const content = this.prompt.trim();
 		if (!content || this.active || this.busy) return;
-		// Auto repair is bound to one bot or site, so it needs one in view.
-		const mode = this.mode === 'auto' && view && view.kind !== 'page' ? 'auto' : 'approval';
-		if (mode === 'auto') {
-			const ok = await confirmDialog({
-				title: 'Start bounded Auto repair?',
-				body: 'The assistant will first show what it may do. Nothing live changes until you approve that. It can then apply file changes, run isolated diagnostics and restart this bot within the limits shown. GitHub pushes still need separate approval.',
-				confirmLabel: 'Continue to plan'
-			});
-			if (!ok) return;
-		}
+		const mode = this.mode;
 		this.busy = true;
 		this.error = '';
 		try {
@@ -360,6 +387,9 @@ class Chat {
 			case 'focus':
 				this.patch(runId, (b) => ({ ...b, focus: d.name }));
 				break;
+			case 'client_action':
+				this.clientAction(d.action, d.value);
+				break;
 			case 'change_set':
 				this.patch(runId, (b) => {
 					const i = b.changes.findIndex((x) => x.id === d.id);
@@ -383,10 +413,30 @@ class Chat {
 		}
 	}
 
+	/** Runs something the assistant asked for in this browser: the look of the panel, or a page to open. */
+	private clientAction(action: string, value: string) {
+		switch (action) {
+			case 'set_theme':
+				if (value === 'light' || value === 'dark' || value === 'system') setTheme(value);
+				break;
+			case 'set_accent':
+				if (accents.some((a) => a.id === value)) setAccent(value as Accent);
+				break;
+			case 'set_radius':
+				if (radii.some((r) => r.id === value)) setRadius(value as Radius);
+				break;
+			case 'navigate':
+				if (value.startsWith('/') && !value.startsWith('//')) void goto(value);
+				break;
+		}
+	}
+
 	/** Reloads messages and activity from the server so Undo and the final answer are exact. */
 	private async finished(runId: string) {
 		const c = this.selected;
 		if (!c || this.latest?.id !== runId) return;
+		// Whatever the run created or changed shows up on the page behind the chat.
+		if (this.latest.steps.some((s) => !READ_ONLY.has(s.name) && s.status === 'completed')) void invalidateAll();
 		this.close();
 		try {
 			const d = await api<{ conversation: Conversation; messages: Message[] }>('GET', `/ai/conversations/${c.id}`);

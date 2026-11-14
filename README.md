@@ -110,9 +110,11 @@ on the smallest VPS you have.
 - **Activity**: one timeline of who changed what and what ran automatically
   (schedules, GitHub pushes, crashes), with a zoomable chart, filters by
   person, app, kind and result, a report and CSV export.
-- An **AI assistant** on every page (bring an OpenAI-compatible provider) that
-  reads console output, build logs and files to answer *"why did it crash?"*,
-  and only changes things after you approve.
+- An **AI assistant** on every page (bring an OpenAI-compatible provider)
+  that does the job, not just explains it: paste a GitHub repo or a Docker
+  image and it deploys it, sets its variables and checks it runs; it fixes
+  crashes, changes settings and calls any panel action with your permissions.
+  **Ask first** stops for your yes; **Autopilot** goes start to finish.
 - An administrator **Host** page with live and historical charts, daily log
   files with an archive job, and a <kbd>Ctrl</kbd>+<kbd>K</kbd> palette that
   finds anything.

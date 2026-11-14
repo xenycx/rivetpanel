@@ -1,11 +1,12 @@
 ---
 title: AI assistant
-lede: Ask one private chat about whatever you are looking at, and let it read logs and files, propose fixes and run checks, with every change waiting for your approval.
+lede: Tell one private chat what you want and it does it with your permissions: deploy any repository, image or app, set variables, change settings, fix crashes and set up the panel.
 icon: sparkle
 aliases: [ai]
 glance:
-  - 12 rounds and 20 minutes per run
-  - Chats kept 90 days after last use
+  - Deploys GitHub repos, Docker images, compose files and one-click apps
+  - Ask first or Autopilot, remembered per browser
+  - 40 rounds and 30 minutes per run
   - Works with any OpenAI-compatible provider
 related: [apps/bots, apps/files, operate/remote-nodes, operate/security]
 ---
@@ -28,6 +29,48 @@ normally without one.
 
 ## What it can do
 
+The assistant is an operator for the whole panel. Give it a task and it
+works it through: it looks, acts, waits for the result, reads the console
+and fixes what failed. For example:
+
+- "Deploy github.com/acme/ticket-bot, my token is …": it analyzes the
+  repository, creates the app with the right runtime, start and build
+  commands, add-on databases and variables, pulls the code, starts it and
+  checks the console until it runs.
+- "Run `louislam/uptime-kuma` and give it a web address": it runs the image
+  with its port published, or installs the matching one-click app.
+- "Publish my portfolio repo as a site": it detects the framework (Vite,
+  Astro, Next export, plain HTML or a server app) and publishes it.
+- "Give my bot 1 GB and turn on daily backups", "stop everything in the
+  Staging workspace", "switch me to dark mode with the teal accent".
+
+### Deploying
+
+| Tool | Does | Needs |
+| --- | --- | --- |
+| `analyze_repo` | Works out runtime, commands, variables, add-ons and ports of a GitHub repository (as an app or a site) | GitHub on this panel |
+| `deploy_github` | Creates an app from a repository with auto-deploy, pulls it and starts it | Create permission |
+| `deploy_site` | Creates and publishes a site from a repository | Site create permission |
+| `deploy_image` | Runs a Docker image with published ports, variables and volumes | Container apps enabled |
+| `deploy_compose` | Imports a compose file as a stack (with a dry run) | Container apps enabled |
+| `list_app_templates`, `install_app_template` | Finds and installs one-click apps with generated passwords | Container apps enabled |
+| `wait_for_ready` | Waits for a deploy or start to settle, then reports state and the last console lines | Access |
+| `redeploy` | Deploys the latest commit of a linked repository | Configure permission |
+
+### Managing what exists
+
+| Tool | Does | Needs |
+| --- | --- | --- |
+| `set_environment`, `delete_environment` | Sets or removes variables, optionally restarting | Environment permission |
+| `power` | Start, stop, restart or kill | Power permission |
+| `update_bot_settings` | Name, start and build command, runtime, memory, CPU, network, restart policy, automatic backups | Configure permission |
+| `console_command` | Sends one line to a running console | Console permission |
+| `delete_bot` | Deletes an app and its files | Owner or administrator |
+| `panel_routes`, `panel_api` | Calls any panel API route: backups, schedules, domains, sites, workspaces, members, add-ons, notifications, profile, administration | The same permission as the page |
+| `client_action` | Sets your theme, accent colour or corner style in this browser, or opens a page | Nothing; it only changes your view |
+
+### Looking and fixing
+
 | Tool | Reads or changes | Needs |
 | --- | --- | --- |
 | `target_status` | State, last exit code, last error, startup command | Access to the bot or site |
@@ -35,68 +78,79 @@ normally without one.
 | `build_output` | Recent builds, deployments and backups, and the tail of one operation's output | Console permission |
 | `list_files`, `read_file`, `search_files` | Permitted workspace text | Access |
 | `environment_names` | Variable names only | Access |
-| `list_targets`, `focus_target` | The bots and sites you can open; picks a target for a run that has none | Access |
+| `list_targets`, `focus_target` | Lists your bots and sites and points the file and log tools at one; it can switch at any time | Access |
 | `web_search`, `web_fetch` | Public research | An administrator enabled it |
-| `request_environment_values` | A secure form; the values bypass the model | Environment permission and your input |
-| `propose_file_change` | One text file, with a diff and Undo | File permission and approval |
-| `run_diagnostic` | One allowed command in an offline container | File permission and approval |
-| `restart_bot` | Restart | Power permission and approval |
+| `request_environment_values` | A secure form for a secret you have not given it; the values bypass the model | Environment permission and your input |
+| `propose_file_change` | One text file, with a diff and Undo | File permission |
+| `run_diagnostic` | One allowed command in an offline container | File permission |
+| `restart_bot` | Restart | Power permission |
 
-`read_logs` and `build_output` are what make debugging work: the assistant
-sees the crash, not just the files. Its instructions give it a method (status,
-console output, build output, then files), rules for secrets and untrusted
-text, what it cannot do, and the current context.
+**Permissions.** Every tool, and every `panel_api` call, runs as you: the same
+role permissions, per-bot grants, validation and activity log as the page
+would. The assistant can never do more than you can. [enforced: panel]
+`panel_api` calls the panel's own routes in-process with a one-request token
+that never leaves the server.
 
-It has **no** tools for the startup command, deployments, site publication,
-GitHub pushes, kill, accounts and access, keys, two-step sign-in, domains,
-resource or network policy, backups and restores, deletion or revealing
-secrets. Neither mode can do those. [enforced: panel]
+**Out of reach by design.** Signing in and out, passwords, two-step sign-in,
+passkeys, sessions, API keys and tokens, linked sign-in providers, your email
+address, account deletion and the assistant's own approvals. [enforced: panel]
+Streaming routes (consoles, terminals, live events) are not callable; it uses
+`read_logs` instead.
 
-## Approval and Auto repair
+## Ask first and Autopilot
 
-**Ask first** is the default mode. Status, permitted files, variable
-names and web research are read without asking. A diagnostic, a file change,
-a restart and secure environment input each stop on a review card.
+Pick the mode with the switch above the message box. The choice is
+remembered in this browser.
 
-**Auto repair** is available while a bot or site is open. It first shows its
-envelope (the target, the tools it covers and the run limits) and needs one
-approval. It then covers diagnostics, file changes and restarts; secure
-environment input still waits for you.
+**Ask first** is the default. Status, logs, files, variable names, the API
+catalog and web research are read without asking. Every change (a deploy, a
+variable, a setting, a file, a restart, a `panel_api` write) stops on a review
+card that shows what it will do; a rejection means it did not happen.
 
-The target of a run is fixed when it starts. With no bot or site in view, the
-assistant answers general questions and can use `list_targets` and
-`focus_target` to look at one of your bots in Ask first mode. A run with a
-target cannot move to another, and Auto repair always needs a target, so an
-approval covers exactly one bot or site. [enforced: panel]
+**Autopilot** does the whole job without stopping to ask, on any bot, site or
+page, and needs nothing open. You chose it, so there is no extra confirmation
+step. A secure input card for a secret you have not given it still waits for
+you.
 
 At most one changing run per target, two active runs per person and four on
 the whole panel run at once. [enforced: panel]
+
+### Secrets
+
+Values you type in the chat, such as a token for a deploy, are set as
+environment variables and are hidden in the stored tool records (`[hidden]`);
+console output and file reads have configured values redacted. Variable
+values are never shown to the model by the panel. [enforced: panel]
 
 ### Run limits
 
 Every run, in both modes, counts against these limits. Approving a card never
 raises them; a call over a limit is refused and the model is told to
-summarize and stop. [enforced: panel] The limits are stored with each run and
-shown on the Auto repair envelope.
+summarize what it did and what is left. Send another message to continue.
+[enforced: panel]
 
 | Limit | Default | Counts |
 | --- | --- | --- |
-| Rounds | 12 | Model and tool rounds |
-| Wall time | 20 minutes | From queueing to finish |
-| Diagnostics | 5 | Diagnostic jobs started |
-| Apply attempts | 3 | File changes the panel tried to apply, conflicts included |
-| Restarts | 2 | Bot restarts |
-| Changed files | 32 | Distinct files changed by applied change sets |
+| Rounds | 40 | Model and tool rounds |
+| Wall time | 30 minutes | From queueing to finish |
+| Panel actions | 40 | Deploys, variables, power, settings, console lines and `panel_api` writes |
+| Diagnostics | 12 | Diagnostic jobs started |
+| Apply attempts | 24 | File changes the panel tried to apply, conflicts included |
+| Restarts | 8 | `restart_bot` calls |
+| Changed files | 48 | Distinct files changed by applied change sets |
 | Changed text | 8 MiB | Written text (deleted text for deletions) |
-| Retained output | 2 MiB | Stored tool output; a result that crosses it is cut short and later tools fail |
+| Retained output | 4 MiB | Stored tool output; a result that crosses it is cut short and later tools fail |
 
 A read-only tool is stopped after 90 seconds, for example when a remote node
 does not answer; the model and you get a "did not finish in time" error and
-the run continues. Tools waiting for approval are bounded by the wall time.
-When a run fails, is cancelled or is interrupted by a restart, its open tool
-calls are closed as failed (or cancelled, when they waited for approval) and
-never shown as running afterwards. Runs active during a panel restart are
-marked interrupted and can be retried from the chat.
+the run continues. `wait_for_ready` waits up to 5 minutes. Tools waiting for
+approval are bounded by the wall time. When a run fails, is cancelled or is
+interrupted by a restart, its open tool calls are closed as failed (or
+cancelled, when they waited for approval). Runs active during a panel restart
+are marked interrupted and can be retried from the chat.
+
+When a run created or changed something, the page behind the chat reloads
+its data, and a button under the run opens what it deployed.
 
 ## File changes and Undo
 
@@ -153,10 +207,9 @@ a bot on a remote node, diagnostics and file tools run on that node; see
   with the real one, and clips everything else to short plain text. A bot you
   cannot open cannot be named as context. [enforced: panel]
 - The model may receive bounded file snippets it asked for, status, redacted
-  tool output, variable **names** and public research. It never receives
-  variable values, provider or search keys, authentication headers, protected
-  credential files, hidden reasoning, panel metadata or whole workspace
-  archives. Values typed into a secure input card go straight to the
+  tool output, variable **names**, API responses it asked for (redacted) and
+  public research. The panel never sends it stored variable values, provider or search keys, authentication headers, protected
+  credential files, hidden reasoning or whole workspace archives. Values typed into a secure input card go straight to the
   environment service, bypassing the provider and the transcript.
   [enforced: panel]
 - Every tool re-checks your account and target permission right before it
@@ -165,11 +218,14 @@ a bot on a remote node, diagnostics and file tools run on that node; see
 ### Activity log
 
 Every model-initiated action is recorded with the person who started the run,
-labelled "via AI operator" (plus "(Auto)" for Auto repair), whether or not a
-card was approved: `ai.file_apply` (path), `ai.diagnostic` (redacted
-command), `ai.restart` and `ai.env_input` (variable names only). Refused and
-failed attempts are recorded as `denied` or `failed`. Chat requests,
-approvals, secure input and Undo are recorded too.
+labelled "via AI operator" (plus "(Auto)" for Autopilot): `ai.deploy_github`,
+`ai.deploy_site`, `ai.deploy_image`, `ai.deploy_compose`, `ai.install_app`,
+`ai.deploy`, `ai.env_set` and `ai.env_delete` (variable names only),
+`ai.start`, `ai.stop`, `ai.restart`, `ai.kill`, `ai.settings`, `ai.console`,
+`ai.delete`, `ai.api` (method and path), `ai.file_apply` (path),
+`ai.diagnostic` (redacted command) and `ai.env_input`. `panel_api` writes are
+also recorded under the route's own action, as if you had clicked it. Refused
+and failed attempts are recorded as `denied` or `failed`.
 
 ## Web research
 

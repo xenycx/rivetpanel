@@ -130,9 +130,9 @@ func TestAIChatFollowsThePageTheUserIsOn(t *testing.T) {
 	if resp, _ := other.do("POST", "/api/v1/ai/conversations/"+oc+"/messages", map[string]any{"content": "x", "context": map[string]any{"kind": "bot", "id": bot}}); resp.StatusCode != 404 && resp.StatusCode != 403 {
 		t.Fatalf("a bot the user cannot open was accepted as context: %d", resp.StatusCode)
 	}
-	// Auto repair is bound to one target, so it needs one.
-	if resp, _ := admin.do("POST", "/api/v1/ai/conversations/"+chat+"/messages", map[string]any{"content": "fix", "mode": "auto", "context": map[string]any{"kind": "page", "path": "/dashboard"}}); resp.StatusCode != 400 {
-		t.Fatalf("auto repair without a target: %d", resp.StatusCode)
+	// Autopilot works across the panel, so it needs no bot or site in view.
+	if resp, _ := admin.do("POST", "/api/v1/ai/conversations/"+chat+"/messages", map[string]any{"content": "fix", "mode": "auto", "context": map[string]any{"kind": "page", "path": "/dashboard"}}); resp.StatusCode != 202 {
+		t.Fatalf("autopilot without a target: %d", resp.StatusCode)
 	}
 }
 
@@ -155,18 +155,18 @@ func TestAIChatFocusTargetAndRunScope(t *testing.T) {
 	if res := lastToolResult(fp, 2); !strings.Contains(res, `"name":"aibot"`) {
 		t.Fatalf("target_status after focus = %q", res)
 	}
-	// The prompt was rebuilt for the focused bot, and the run cannot hop to
-	// another one: what the person approved stays on one bot.
+	// The prompt was rebuilt for the focused bot, and the run may move on to
+	// another bot the person can open.
 	if p := systemPrompt(fp, 1); !strings.Contains(p, `scoped to bot "aibot"`) {
 		t.Fatalf("prompt after focus: %s", p)
 	}
-	if res := lastToolResult(fp, 3); !strings.Contains(res, "already scoped") {
+	if res := lastToolResult(fp, 3); !strings.Contains(res, `Focused on bot "second"`) {
 		t.Fatalf("second focus_target = %q", res)
 	}
 	var got string
 	e.db.QueryRow(`SELECT coalesce(bot_id,'') FROM ai_runs WHERE id=?`, run).Scan(&got)
-	if got != bot {
-		t.Fatalf("run bot_id = %q, want %s", got, bot)
+	if got != second {
+		t.Fatalf("run bot_id = %q, want %s", got, second)
 	}
 }
 

@@ -1309,7 +1309,8 @@ items state exactly what remains.
   message carries its context (bot or site id authorized and named by the
   server, section, open file). Runs store their own target; `list_targets` /
   `focus_target` let a target-less run open one of the person's bots in
-  Approval mode, and Auto repair requires a target. New tools `read_logs` and
+  Approval mode, and Auto repair required a target (lifted in 1.16.0:
+  Autopilot works across the panel). New tools `read_logs` and
   `build_output` give it the crash and build output. Enforcement: target
   authorization, per-run target pinning and run limits are application-level.
 - [x] Diagnostics fixed: the runner's reconciler used to treat an AI
@@ -1381,8 +1382,18 @@ Migrations added since 0.2.0 (the schema-version assertion in
 
 Known gaps in this work:
 
-- [ ] The AI operator has no tools for startup-command changes, deployments or
-  site publication; those stay manual.
+- [x] The AI operator deploys and manages (1.16.0): GitHub apps and sites,
+  Docker images, compose stacks and one-click apps, environment, power,
+  settings, console input, redeploys and deletes, plus `panel_api` for any
+  panel route and `client_action` for the person's theme, accent, corners and
+  navigation. Enforcement: application-level. Every tool and every
+  `panel_api` call runs as the person (route permissions, per-bot grants,
+  validation, audit); `panel_api` uses an in-process one-request token
+  (`api.AgentBridge`) and refuses credential, session, sign-in, account
+  deletion, AI-approval and streaming routes. Secret values are redacted from
+  stored tool arguments. Ask first stops on a card for every change;
+  Autopilot needs no envelope approval and no target. Run limits are
+  enforced per run, including a new `actions` limit (40).
 
 - [ ] Site release files are not included in `rivetpanel backup`/`restore`.
 - [ ] Sites domains: the panel does not write reverse-proxy routes or install

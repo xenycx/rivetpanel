@@ -92,7 +92,7 @@ Install, configure, secure, back up and extend a RivetPanel installation.
 - [Backups and restore](guide/07-operate/07-backups.md) (administrators): Back up the whole installation from the host, back up each app from its Backups tab, and restore either without losing your secrets.
 - [Security and isolation](guide/07-operate/08-security.md) (administrators): What separates apps from each other and from the host, which layer enforces each boundary, and what you must add yourself.
 - [Extensions](guide/07-operate/09-extensions.md) (administrators): Add signed, sandboxed features to the panel, such as Discord insights, Discord ChatOps and a database browser, and write your own.
-- [AI assistant](guide/07-operate/10-ai-assistant.md): Ask one private chat about whatever you are looking at, and let it read logs and files, propose fixes and run checks, with every change waiting for your approval.
+- [AI assistant](guide/07-operate/10-ai-assistant.md): Tell one private chat what you want and it does it with your permissions: deploy any repository, image or app, set variables, change settings, fix crashes and set up the panel.
 - [Automation API](guide/07-operate/11-automation-api.md): Let scripts and CI pipelines check, restart, deploy and back up your bots with scoped tokens that never outrank you.
 - [Diagnostics and footprint](guide/07-operate/12-diagnostics.md) (administrators): Check the installation's health from the browser or the shell, and know how much memory the panel itself uses.
 

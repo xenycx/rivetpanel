@@ -51,6 +51,18 @@ func (s *panel) checkOrigin(c fiber.Ctx) error {
 // instead (no cookie is read, so CSRF does not apply); the request then acts
 // as the client's creator limited to the client (see clientGuard).
 func (s *panel) requireAuth(c fiber.Ctx) error {
+	if b, ok := strings.CutPrefix(c.Get(fiber.HeaderAuthorization), "Bearer "); ok && strings.HasPrefix(b, agentTokenPrefix) {
+		// The AI assistant calling in-process as the person it works for.
+		u, found := s.agent.user(strings.Clone(strings.TrimSpace(b)))
+		if !found {
+			return fiber.NewError(fiber.StatusUnauthorized, "unknown assistant token")
+		}
+		if _, err := AgentPathAllowed(c.Path()); err != nil {
+			return fiber.NewError(fiber.StatusForbidden, err.Error())
+		}
+		c.Locals(keyUser, u)
+		return c.Next()
+	}
 	if s.clients != nil {
 		if b, ok := strings.CutPrefix(c.Get(fiber.HeaderAuthorization), "Bearer "); ok && strings.HasPrefix(strings.TrimSpace(b), service.APIClientPrefix) {
 			u, err := s.clients.Authenticate(c.Context(), strings.Clone(strings.TrimSpace(b)))

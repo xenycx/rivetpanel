@@ -35,6 +35,7 @@
 	const sent = $derived<ViewContext | null>(attach ? view : null);
 	chat.currentView = () => sent;
 	const hasTarget = $derived(!!sent && sent.kind !== 'page');
+	const autopilot = $derived(chat.mode === 'auto');
 	const isAdmin = $derived(session.user?.role === 'admin');
 	const noProvider = $derived(chat.ready && chat.providers.length === 0);
 
@@ -43,7 +44,7 @@
 			? ['Why isn’t my bot starting?', 'Check the latest console output for errors', 'Review my startup command and entry file']
 			: view.kind === 'site' && attach
 				? ['Why does my page look broken?', 'Review my index.html for problems']
-				: ['What can you help me with?', 'Which of my bots are having problems?', 'How do I deploy a bot from GitHub?']
+				: ['Deploy a GitHub repository for me', 'Run a Docker image and give it a web address', 'Which of my apps are having problems?', 'Switch the panel to dark mode']
 	);
 
 	// Keep the newest output in view unless the reader scrolled up.
@@ -117,6 +118,24 @@
 			case 'list_targets': return 'Listed your bots and sites';
 			case 'focus_target': return 'Opened a bot or site';
 			case 'auto_repair_envelope': return 'Auto repair plan';
+			case 'analyze_repo': return `Analyzed ${a.repo ?? 'a repository'}`;
+			case 'deploy_github': return `Deployed ${a.repo ?? 'a repository'}`;
+			case 'deploy_site': return `Published a site from ${a.repo ?? 'GitHub'}`;
+			case 'deploy_image': return `Ran ${a.image ?? 'a Docker image'}`;
+			case 'deploy_compose': return a.dry_run ? 'Checked a compose file' : `Imported compose stack${a.name ? ` “${a.name}”` : ''}`;
+			case 'list_app_templates': return a.query ? `Searched apps for “${a.query}”` : 'Browsed the app catalog';
+			case 'install_app_template': return `Installed ${a.template_id ?? 'an app'}`;
+			case 'wait_for_ready': return 'Waited for it to start';
+			case 'set_environment': return `Set ${Object.keys(a.vars ?? {}).join(', ') || 'variables'}`;
+			case 'delete_environment': return `Removed ${(a.names ?? []).join(', ') || 'variables'}`;
+			case 'power': return ({ start: 'Started', stop: 'Stopped', restart: 'Restarted', kill: 'Killed' } as Record<string, string>)[a.action] ?? 'Changed power state';
+			case 'update_bot_settings': return 'Changed settings';
+			case 'redeploy': return 'Redeployed the latest commit';
+			case 'delete_bot': return 'Deleted an app';
+			case 'console_command': return `Sent “${a.line ?? ''}” to the console`;
+			case 'panel_routes': return a.query ? `Looked up ${a.query} in the panel API` : 'Looked up the panel API';
+			case 'panel_api': return `${a.method ?? 'GET'} ${a.path ?? ''}`;
+			case 'client_action': return a.action === 'navigate' ? `Opened ${a.value}` : `Set ${String(a.action ?? '').replace('set_', '')} to ${a.value}`;
 		}
 		return s.name.replaceAll('_', ' ');
 	}
@@ -128,6 +147,21 @@
 		return `${live(r) ? 'Working' : 'Worked'} · ${n} step${n === 1 ? '' : 's'}${t ? ` · ${t.toLocaleString()} tokens` : ''}`;
 	};
 	const pending = (r: RunBlock) => r.steps.filter((s) => s.approval || s.secure);
+	// Links to what a run created: the app's page and its public address.
+	const DEPLOYS = new Set(['deploy_github', 'deploy_site', 'deploy_image', 'install_app_template']);
+	function made(r: RunBlock): { href: string; label: string; external: boolean }[] {
+		const out: { href: string; label: string; external: boolean }[] = [];
+		for (const s of r.steps) {
+			if (!DEPLOYS.has(s.name) || s.status !== 'completed' || !s.output) continue;
+			const o = parse(s.output);
+			const page = typeof o.page === 'string' && o.page.startsWith('/') ? o.page : '';
+			if (page) out.push({ href: page, label: `Open ${o.name ?? (s.name === 'deploy_site' ? 'site' : 'app')}`, external: false });
+			if (typeof o.url === 'string' && /^https?:\/\//.test(o.url)) out.push({ href: o.url, label: o.url.replace(/^https?:\/\//, '').replace(/\/$/, ''), external: true });
+			const id = page ? undefined : /\(id ([0-9a-f-]{36})\)/.exec(s.output)?.[1];
+			if (id) out.push({ href: `/bots/${id}`, label: 'Open app', external: false });
+		}
+		return out;
+	}
 	const when = (ms: number) => new Date(ms).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 
 	function onKeydown(e: KeyboardEvent) {
@@ -177,12 +211,15 @@
 			<p class="mt-1 text-small text-muted">The bot restarts with its current files and variables.</p>
 		{:else if s.name === 'propose_file_change'}
 			<p class="mt-1 text-small text-muted">Review the diff above, then apply it to <span class="font-mono">{a.path}</span>. Undo stays available.</p>
-		{:else if s.name === 'auto_repair_envelope'}
-			{@const d = s.detail ?? {}}
-			<p class="mt-1 text-small text-muted">On {d.target ? `“${d.target}”` : 'this bot'} only, it may apply file changes, run isolated diagnostics and restart, within these limits:</p>
-			<ul class="mt-1 grid grid-cols-2 gap-x-3 text-[.72rem] text-muted">
-				{#each Object.entries(d.limits ?? {}) as [k, v]}<li><span class="font-mono text-ink">{v}</span> {k.replaceAll('_', ' ')}</li>{/each}
-			</ul>
+		{:else if s.name === 'panel_api'}
+			<p class="mt-1.5 overflow-x-auto rounded-control bg-term px-2 py-1.5 font-mono text-[.72rem] whitespace-nowrap text-term-ink">{a.method} {a.path}</p>
+		{:else if s.detail && typeof s.detail === 'object'}
+			<dl class="mt-1.5 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-[.72rem]">
+				{#each Object.entries(s.detail).filter(([, v]) => v != null && v !== '' && !(Array.isArray(v) && !v.length)) as [k, v]}
+					<dt class="text-muted">{k.replaceAll('_', ' ')}</dt>
+					<dd class="min-w-0 truncate font-mono text-ink" title={Array.isArray(v) ? v.join(' ') : String(v)}>{Array.isArray(v) ? v.join(' ') : String(v)}</dd>
+				{/each}
+			</dl>
 		{/if}
 		{#if s.secure}
 			<div class="mt-2 space-y-2">
@@ -235,6 +272,13 @@
 					{#if live(r) && r.note}<li class="pt-1 text-[.72rem] text-muted italic">{r.note.length > 140 ? r.note.slice(0, 140) + '…' : r.note}</li>{/if}
 				</ul>
 			</details>
+		{/if}
+		{#if made(r).length}
+			<div class="flex flex-wrap gap-1.5">
+				{#each made(r) as m (m.href)}
+					<a class="btn btn-sm" href={m.href} target={m.external ? '_blank' : undefined} rel={m.external ? 'noopener noreferrer' : undefined}><Icon name={m.external ? 'globe' : 'terminal'} size={13} />{m.label}</a>
+				{/each}
+			</div>
 		{/if}
 		{#each r.changes as ch (ch.id)}{@render changeCard(r, ch)}{/each}
 		{#each pending(r) as s (s.id)}{@render approvalCard(r, s)}{/each}
@@ -304,11 +348,11 @@
 						<div class="mt-1 grid gap-2">
 							<label class="flex cursor-pointer items-start gap-2.5 rounded-tile border border-rule-soft p-2.5 {chat.mode === 'approval' ? 'border-action/50 bg-action/5' : ''}">
 								<input type="radio" name="mode" value="approval" bind:group={chat.mode} class="mt-0.5" />
-								<span><strong class="block text-small">Ask me first</strong><span class="text-small text-muted">It reads freely and stops for your approval before each file change, diagnostic or restart.</span></span>
+								<span><strong class="block text-small">Ask me first</strong><span class="text-small text-muted">It looks around freely and stops for your yes before it deploys, changes a setting, a variable or a file, or restarts something.</span></span>
 							</label>
 							<label class="flex cursor-pointer items-start gap-2.5 rounded-tile border border-rule-soft p-2.5 {chat.mode === 'auto' ? 'border-action/50 bg-action/5' : ''}">
 								<input type="radio" name="mode" value="auto" bind:group={chat.mode} class="mt-0.5" />
-								<span><strong class="block text-small">Auto repair</strong><span class="text-small text-muted">You approve one bounded plan for the bot or site you are viewing, then it works within those limits. Needs a bot or site open.</span></span>
+								<span><strong class="block text-small">Autopilot</strong><span class="text-small text-muted">It does what you ask from start to finish: deploys, sets variables, changes settings, fixes and restarts, without stopping to ask. It acts with your permissions only.</span></span>
 							</label>
 						</div>
 					</fieldset>
@@ -339,7 +383,7 @@
 							<span class="grid size-11 place-items-center rounded-tile bg-paper-2 text-muted"><Icon name="sparkle" size={22} /></span>
 							<h3 class="mt-3 text-section font-semibold">How can I help?</h3>
 							<p class="mt-1 text-small text-muted">
-								{#if view.kind !== 'page' && attach}I can see you are on <strong class="text-ink">{view.label}</strong>{view.section ? ` (${view.section.replace(/[-_]/g, ' ')})` : ''}. Ask about it, or ask me to find and fix a problem.{:else}Ask about RivetPanel, or open a bot and I can look at its logs, files and settings.{/if}
+								{#if view.kind !== 'page' && attach}I can see you are on <strong class="text-ink">{view.label}</strong>{view.section ? ` (${view.section.replace(/[-_]/g, ' ')})` : ''}. Ask me to fix it, change its settings or variables, or anything else in the panel.{:else}Paste a GitHub link or a Docker image and I will deploy it, set its variables and check that it runs. I can also fix apps, change settings and set up the panel for you.{/if}
 							</p>
 							<div class="mt-4 grid gap-1.5">
 								{#each suggestions as s}
@@ -383,24 +427,21 @@
 						{:else}
 							<button type="button" class="inline-flex items-center gap-1 rounded-pill border border-dashed border-rule px-2 py-0.5 text-[.72rem] text-muted hover:text-ink" onclick={() => (attach = true)}><Icon name="plus" size={10} />Share “{describeView(view)}”</button>
 						{/if}
-						{#if hasTarget}
-							<div class="ml-auto inline-flex rounded-control border border-rule-soft text-[.72rem]" role="group" aria-label="Mode">
-								<button type="button" class="rounded-l-control px-2 py-0.5 {chat.mode === 'approval' ? 'bg-paper-2 font-medium' : 'text-muted'}" aria-pressed={chat.mode === 'approval'} onclick={() => (chat.mode = 'approval')} title="Stops for your approval before changing anything">Ask first</button>
-								<button type="button" class="rounded-r-control px-2 py-0.5 {chat.mode === 'auto' ? 'bg-action font-medium text-action-ink' : 'text-muted'}" aria-pressed={chat.mode === 'auto'} onclick={() => (chat.mode = 'auto')} title="One approval for a bounded plan, then it works on its own">Auto</button>
-							</div>
-						{/if}
+						<div class="ml-auto inline-flex rounded-control border border-rule-soft text-[.72rem]" role="group" aria-label="Mode">
+							<button type="button" class="rounded-l-control px-2 py-0.5 {chat.mode === 'approval' ? 'bg-paper-2 font-medium' : 'text-muted hover:text-ink'}" aria-pressed={chat.mode === 'approval'} onclick={() => (chat.mode = 'approval')} title="Stops for your yes before it changes anything">Ask first</button>
+							<button type="button" class="inline-flex items-center gap-1 rounded-r-control px-2 py-0.5 {autopilot ? 'bg-action font-medium text-action-ink' : 'text-muted hover:text-ink'}" aria-pressed={autopilot} onclick={() => (chat.mode = 'auto')} title="Does the whole job without stopping to ask"><Icon name="sparkle" size={10} />Autopilot</button>
+						</div>
 					</div>
 					<div class="flex items-end gap-2">
 						<label class="sr-only" for="ai-chat-input">Message the assistant</label>
-						<textarea id="ai-chat-input" bind:this={box} class="field max-h-40 min-h-[2.5rem] flex-1 resize-none py-2 [field-sizing:content]" rows="1" bind:value={chat.prompt} onkeydown={onKeydown} placeholder={noProvider ? 'The assistant is not set up' : hasTarget ? `Ask about ${view.label}…` : 'Ask anything about RivetPanel…'} disabled={noProvider}></textarea>
+						<textarea id="ai-chat-input" bind:this={box} class="field max-h-40 min-h-[2.5rem] flex-1 resize-none py-2 [field-sizing:content]" rows="1" bind:value={chat.prompt} onkeydown={onKeydown} placeholder={noProvider ? 'The assistant is not set up' : hasTarget ? `Ask about ${view.label}, or anything else…` : 'Deploy, fix or change anything…'} disabled={noProvider}></textarea>
 						{#if chat.active}
 							<button type="button" class="btn btn-icon" onclick={() => chat.cancel()} aria-label="Stop" title="Stop"><Icon name="stop" size={12} /></button>
 						{:else}
 							<button class="btn btn-primary btn-icon" disabled={chat.busy || !chat.prompt.trim() || noProvider} aria-label="Send" title="Send (Enter)"><Icon name="send" size={15} /></button>
 						{/if}
 					</div>
-					<p class="mt-1 px-0.5 text-[.68rem] text-muted">AI can make mistakes. Check changes before approving them.</p>
-				</form>
+</form>
 			{/if}
 		</div>
 	{/if}

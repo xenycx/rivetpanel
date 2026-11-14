@@ -828,6 +828,8 @@ func serve(log *slog.Logger, logs *logbuf.Buffer) error {
 		monitor.Stats, monitor.Containers = dk, dk
 	}
 	aiSvc := &service.AIService{Store: db, Keys: keys, Bots: botSvc, Sites: sitesSvc, Files: wsm, Ops: ops, Audit: audit, Diagnostic: aiDiagnostic, Logs: aiLogs, Log: log}
+	agentBridge := api.NewAgentBridge()
+	aiSvc.Deploy, aiSvc.Containers, aiSvc.API = deploySvc, containerSvc, agentBridge
 	aiSvc.Start(ctx)
 	deploySvc.AI = aiSvc
 	var gameSvc *service.GameService
@@ -1002,7 +1004,7 @@ func serve(log *slog.Logger, logs *logbuf.Buffer) error {
 	}
 	go scheduler.Run(ctx)
 	mfaSvc := &service.MFAService{Store: db, Keys: keys, Auth: authSvc}
-	app := api.New(api.Deps{Live: liveHub, Diagnostics: diagnostics, Log: log, Deploy: deploySvc, Backups: backupSvc, Stats: statsSrc, SFTP: sftpInfo, Analytics: analytics, PublicURL: cfg.PublicURL, DB: db, UI: webui.FS(), Auth: authSvc, Bots: botSvc, OAuth: oauthSvc,
+	app := api.New(api.Deps{Agent: agentBridge, Live: liveHub, Diagnostics: diagnostics, Log: log, Deploy: deploySvc, Backups: backupSvc, Stats: statsSrc, SFTP: sftpInfo, Analytics: analytics, PublicURL: cfg.PublicURL, DB: db, UI: webui.FS(), Auth: authSvc, Bots: botSvc, OAuth: oauthSvc,
 		Catalog: catalog, SecureCookies: cfg.Production, ProxyHeader: cfg.ProxyHeader, MetricsToken: cfg.MetricsToken, Modules: cfg.Modules, Checks: checks, Nodes: db, Files: wsm, MaxUpload: cfg.MaxUploadBytes,
 		Console: consoleSvc, BaseCtx: ctx, RunnerReady: runnerReady, Ops: ops, Audit: audit, Schedules: scheduler,
 		MFA: mfaSvc, Tokens: &service.TokenService{Store: db, Bots: botSvc}, Clients: &service.APIClientService{Store: db, Bots: botSvc}, Passkeys: &service.PasskeyService{Store: db, Auth: authSvc, MFA: mfaSvc, PublicURL: oauthSvc.CurrentPublicURL}, OIDC: &service.OIDCService{Store: db, Auth: authSvc, Keys: keys, PublicURL: oauthSvc.CurrentPublicURL, States: oauthSvc.States, Log: log}, Enrollment: enrollmentSvc, AgentControl: agentControl, GameAddress: gameAddress, Games: gameSvc, Containers: containerSvc, Router: router, Health: health,
