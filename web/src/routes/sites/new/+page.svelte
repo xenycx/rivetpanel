@@ -77,7 +77,12 @@
 	const msg = (e: unknown, fallback = 'The request failed.') => (e instanceof ApiError ? e.message : fallback);
 	const suggest = (n: string) => n.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 30);
 	const bases = $derived(info?.domains ?? []);
-	const preview = $derived((bases.find((b) => b.id === domainId)?.example_url ?? info?.example_url ?? '').replace('://example.', `://${(slugTouched ? slug : suggest(name)) || 'your-site'}.`));
+	const mine = $derived(info?.my_domains ?? []);
+	// domainId holds a sites domain id, or "mine:<id>" for one of the user's
+	// own domains (the site then also gets its default address).
+	const own = $derived(domainId.startsWith('mine:') ? mine.find((m) => `mine:${m.id}` === domainId) : undefined);
+	const label = $derived((slugTouched ? slug : suggest(name)) || 'your-site');
+	const preview = $derived((own?.example_url ?? bases.find((b) => b.id === domainId)?.example_url ?? info?.example_url ?? '').replace('://example.', `://${label}.`));
 	const kinds: { id: WebKind; label: string; help: string }[] = [
 		{ id: 'static', label: 'Static files', help: 'The files in the repository are the site.' },
 		{ id: 'static_build', label: 'Static build', help: 'A build runs on each deploy and its output folder is published.' },
@@ -187,7 +192,8 @@
 			const s = await api<Site>('POST', '/sites/from-repo', {
 				name: name.trim(),
 				slug: slugTouched ? slug : '',
-				domain_id: domainId,
+				domain_id: own ? (bases.find((b) => b.primary)?.id ?? '') : domainId,
+				user_domain_id: own?.id ?? '',
 				workspace_id: workspaceId,
 				kind,
 				framework,
@@ -334,10 +340,19 @@
 					<label class="block"><span class="label">Name</span><input class="field" required maxlength="64" bind:value={name} oninput={() => (nameTouched = true)} /></label>
 					<label class="block"><span class="label">Address</span>
 						<div class="flex items-stretch">
-							<input class="field min-w-0 font-mono {bases.length > 1 ? 'rounded-r-none' : ''}" maxlength="40" value={slugTouched ? slug : suggest(name)} oninput={(e) => { slugTouched = true; slug = e.currentTarget.value.toLowerCase(); }} />
-							{#if bases.length > 1}<select class="field w-auto max-w-[55%] rounded-l-none border-l-0 font-mono" bind:value={domainId} aria-label="Sites domain">{#each bases as b (b.id)}<option value={b.id}>.{b.domain}</option>{/each}</select>{/if}
+							<input class="field min-w-0 font-mono {bases.length > 1 || mine.length ? 'rounded-r-none' : ''}" maxlength="40" value={slugTouched ? slug : suggest(name)} oninput={(e) => { slugTouched = true; slug = e.currentTarget.value.toLowerCase(); }} />
+							{#if bases.length > 1 || mine.length}
+								<select class="field w-auto max-w-[55%] rounded-l-none border-l-0 font-mono" bind:value={domainId} aria-label="Domain">
+									{#if mine.length}
+										<optgroup label="Sites domains">{#each bases as b (b.id)}<option value={b.id}>.{b.domain}</option>{/each}</optgroup>
+										<optgroup label="Your domains">{#each mine as m (m.id)}<option value="mine:{m.id}">.{m.domain}</option>{/each}</optgroup>
+									{:else}
+										{#each bases as b (b.id)}<option value={b.id}>.{b.domain}</option>{/each}
+									{/if}
+								</select>
+							{/if}
 						</div>
-						<span class="help">Served at <code class="text-ink">{preview}</code>; add your own domain afterwards.</span>
+						<span class="help">Served at <code class="text-ink">{preview}</code>{#if own}; point <code class="text-ink">{label}.{own.domain}</code> at this server (a wildcard record covers it){:else}; add your own domain afterwards, or prove one under <a class="link" href="/settings/domains">Settings → Domains</a> to pick it here{/if}.</span>
 					</label>
 					{#if creatable().length > 1}
 						<label class="block"><span class="label">Workspace</span>

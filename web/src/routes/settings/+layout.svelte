@@ -8,6 +8,7 @@
 		{ href: '/settings/notifications', label: 'Notifications', icon: 'bell' as const },
 		{ href: '/settings/workspaces', label: 'Workspaces', icon: 'building' as const, match: '/settings/workspaces/' },
 		{ href: '/settings/connected-accounts', label: 'Connected accounts', icon: 'link' as const },
+		{ href: '/settings/domains', label: 'Domains', icon: 'globe' as const },
 		{ href: '/settings/security', label: 'Security', icon: 'shield' as const },
 		{ href: '/settings/sftp', label: 'SFTP and API keys', icon: 'key' as const }
 	];

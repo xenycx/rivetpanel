@@ -59,6 +59,8 @@
 	let dragging = $state(false);
 	let domain = $state('');
 	let checking = $state<Record<string, boolean>>({});
+	// Domains added in this visit keep their routing record on show.
+	let fresh = $state<Record<string, boolean>>({});
 	let conn = $state<Connection | null>(null);
 	let repos = $state<GitHubRepo[]>([]);
 	let repoForm = $state({ full_name: '', branch: '', root_dir: '' });
@@ -193,7 +195,8 @@
 		try {
 			const x = await api<SiteDomain>('POST', `/sites/${id}/domains`, { domain });
 			domain = '';
-			toast(`Added ${x.domain}; add the DNS records to verify it`);
+			fresh[x.domain] = true;
+			toast(x.verified ? `${x.domain} is verified through your domains; point it at this server to go live` : `Added ${x.domain}; add the DNS records to verify it`);
 			await load();
 		} catch (err) {
 			toast(msg(err), 'fail');
@@ -386,10 +389,20 @@
 		</div>
 
 		<div class="grid min-w-0 content-start gap-6">
+			{#snippet dnsRecord(type: string, why: string, name: string, value: string)}
+				<div class="rounded-control bg-paper px-2.5 py-2">
+					<dt class="flex items-start gap-2"><span class="pill shrink-0 !px-1.5 !py-0">{type}</span><span class="text-muted">{why}</span></dt>
+					<dd class="mt-1.5 grid grid-cols-[3.5rem_minmax(0,1fr)_auto] items-center gap-x-2 gap-y-1">
+						<span class="text-muted">Name</span><code class="break-all">{name}</code><button class="btn btn-sm btn-quiet btn-icon" onclick={() => copy(name)} aria-label="Copy {type} name"><Icon name="copy" size={13} /></button>
+						<span class="text-muted">Value</span>
+						{#if value}<code class="break-all">{value}</code><button class="btn btn-sm btn-quiet btn-icon" onclick={() => copy(value)} aria-label="Copy {type} value"><Icon name="copy" size={13} /></button>{:else}<span class="col-span-2 text-muted">this server’s public IP address</span>{/if}
+					</dd>
+				</div>
+			{/snippet}
 			<!-- Domains -->
 			<section class="card p-5" aria-labelledby="dom-h">
 				<h2 id="dom-h" class="text-title font-semibold">Custom domains</h2>
-				<p class="mt-1 text-small text-muted">Serve the site on your own domain. A TXT record proves you control it; nothing is served on a domain before that.</p>
+				<p class="mt-1 text-small text-muted">Serve the site on your own domain. A domain you proved under <a class="link" href="/settings/domains">Settings → Domains</a>, and every subdomain of it, is verified as soon as you add it; nothing is served on a domain before that.</p>
 				<ul class="mt-4 grid gap-3">
 					<li class="rounded-tile border border-rule-soft bg-paper/40 px-3 py-2.5">
 						<p class="flex items-center gap-2 text-small"><span class="side-dot" data-tone="run"></span><span class="truncate font-mono">{d.site.url.replace(/^https?:\/\//, '')}</span><span class="ml-auto text-muted">default</span></p>
@@ -404,24 +417,20 @@
 								{/if}
 							</div>
 							{#if !x.verified}
-								<p class="mt-2 text-small text-muted">Add these two records at your DNS provider, then check. Some providers want only the part before your domain as the name.</p>
+								<p class="mt-2 text-small text-muted">Add these records at your DNS provider, then check. Some providers want only the part before your domain as the name.</p>
 								<dl class="mt-2 grid gap-2 text-small">
-									{#each [{ type: 'TXT', why: 'Proves you control the domain', name: x.txt_name, value: x.txt_value }, { type: x.record_type, why: 'Sends visitors to this server', name: x.domain, value: x.record_target }] as rec (rec.type)}
-										<div class="rounded-control bg-paper px-2.5 py-2">
-											<dt class="flex items-center gap-2"><span class="pill !px-1.5 !py-0">{rec.type}</span><span class="text-muted">{rec.why}</span></dt>
-											<dd class="mt-1.5 grid grid-cols-[3.5rem_minmax(0,1fr)_auto] items-center gap-x-2 gap-y-1">
-												<span class="text-muted">Name</span><code class="break-all">{rec.name}</code><button class="btn btn-sm btn-quiet btn-icon" onclick={() => copy(rec.name)} aria-label="Copy {rec.type} name"><Icon name="copy" size={13} /></button>
-												<span class="text-muted">Value</span>
-												{#if rec.value}<code class="break-all">{rec.value}</code><button class="btn btn-sm btn-quiet btn-icon" onclick={() => copy(rec.value)} aria-label="Copy {rec.type} value"><Icon name="copy" size={13} /></button>{:else}<span class="col-span-2 text-muted">this server’s public IP address</span>{/if}
-											</dd>
-										</div>
-									{/each}
+									{@render dnsRecord('TXT', `Proves you control ${x.txt_zone}. Add it once: ${x.txt_zone} joins your domains and every subdomain of it is then verified on any site.`, x.txt_name, x.txt_value)}
+									{@render dnsRecord(x.record_type, 'Sends visitors to this server', x.domain, x.record_target)}
 								</dl>
 								{#if x.record_type === 'CNAME'}<p class="mt-1.5 text-small text-muted">For a root domain (no <code>www.</code>), use your provider’s ALIAS/ANAME record, or an A record with this server’s address.</p>{/if}
 								{#if x.last_error}<p class="mt-2 text-small text-warn">{x.last_error}</p>{/if}
 								{#if canEdit}<button class="btn btn-sm mt-3 w-full" onclick={() => verify(x)} disabled={checking[x.domain]}>{checking[x.domain] ? 'Checking DNS…' : 'Check DNS now'}</button>{/if}
 							{:else}
-								<p class="mt-1 text-small text-muted">Verified {fmtAgo(x.verified_at_ms ?? 0)}.{#if x.last_error}{' '}<span class="text-warn">Last re-check: {x.last_error}</span>{/if}</p>
+								<p class="mt-1 text-small text-muted">Verified {fmtAgo(x.verified_at_ms ?? 0)}{x.via_user_domain ? ' through a proven domain' : ''}.{#if x.last_error}{' '}<span class="text-warn">Last re-check: {x.last_error}</span>{/if}</p>
+								<details class="group mt-2 text-small" open={fresh[x.domain] || Date.now() - (x.verified_at_ms ?? 0) < 600_000}>
+									<summary class="flex cursor-pointer list-none items-center gap-1.5 text-muted hover:text-ink [&::-webkit-details-marker]:hidden"><Icon name="chevronRight" size={13} class="transition-transform group-open:rotate-90" />Routing record</summary>
+									<dl class="mt-2 grid gap-2">{@render dnsRecord(x.record_type, 'Sends visitors to this server', x.domain, x.record_target)}</dl>
+								</details>
 							{/if}
 						</li>
 					{/each}

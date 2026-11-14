@@ -54,6 +54,15 @@ type SiteStore interface {
 	ListReleases(ctx context.Context, siteID string) ([]domain.SiteRelease, error)
 	DeleteRelease(ctx context.Context, siteID, releaseID string) error
 	ClaimDomain(ctx context.Context, d domain.SiteDomain) error
+	UserDomainToken(ctx context.Context, userID, fresh string, nowMS int64) (string, error)
+	InsertUserDomain(ctx context.Context, d domain.UserDomain) error
+	ListUserDomains(ctx context.Context, userID string) ([]domain.UserDomain, error)
+	ListVerifiedUserDomains(ctx context.Context) ([]domain.UserDomain, error)
+	GetUserDomain(ctx context.Context, id string) (domain.UserDomain, error)
+	RecordUserDomainCheck(ctx context.Context, id string, verifiedAt *int64, errMsg *string, nowMS int64) error
+	DeleteUserDomain(ctx context.Context, userID, id string) error
+	CountDomainsVia(ctx context.Context, userDomainID string) (int, error)
+	VerifyDomainVia(ctx context.Context, name, userDomainID string, nowMS int64) error
 	ListDomains(ctx context.Context, siteID string) ([]domain.SiteDomain, error)
 	ListVerifiedDomains(ctx context.Context) ([]domain.SiteDomain, error)
 	GetDomain(ctx context.Context, siteID, name string) (domain.SiteDomain, error)
@@ -522,6 +531,9 @@ type SiteDetail struct {
 	Domains  []domain.SiteDomain
 	Releases []domain.SiteRelease
 	Job      SiteJob
+	// DomainToken is the viewer's own domain-verification token (see
+	// DomainVerificationRecord).
+	DomainToken string
 	// Built and app sites: the web unit and its repository link.
 	App  *domain.Bot
 	Repo *RepoView
@@ -562,7 +574,11 @@ func (s *SiteService) Get(ctx context.Context, actor domain.User, id string) (Si
 	if err != nil {
 		return SiteDetail{}, err
 	}
-	d := SiteDetail{Site: st, Role: role, Domains: ds, Releases: rs, Job: s.job(id)}
+	tok, err := s.userToken(ctx, actor.ID)
+	if err != nil {
+		return SiteDetail{}, err
+	}
+	d := SiteDetail{Site: st, Role: role, Domains: ds, Releases: rs, Job: s.job(id), DomainToken: tok}
 	if st.AppID != nil && s.Deploys != nil {
 		if b, err := s.Bots.Store.GetBot(ctx, *st.AppID); err == nil {
 			d.App = &b
@@ -605,6 +621,9 @@ type CreateSiteInput struct {
 	// TemplateID seeds the first release from a built-in site template
 	// (package sitetemplates); "" creates an empty site.
 	TemplateID string
+	// UserDomainID also serves the site at <slug>.<that domain>: one of the
+	// actor's verified domains (see userdomains.go).
+	UserDomainID string
 }
 
 func slugFrom(name string) string {
@@ -723,6 +742,12 @@ func (s *SiteService) Create(ctx context.Context, actor domain.User, in CreateSi
 	if mode == "page" && botID == nil {
 		return domain.Site{}, domain.Invalid("a generated public page must be attached to a bot")
 	}
+	var own domain.UserDomain
+	if in.UserDomainID != "" {
+		if own, err = s.usableUserDomain(ctx, actor, in.UserDomainID); err != nil {
+			return domain.Site{}, err
+		}
+	}
 	var tpl sitetemplates.Template
 	if in.TemplateID != "" {
 		var ok bool
@@ -765,6 +790,14 @@ func (s *SiteService) Create(ctx context.Context, actor domain.User, in CreateSi
 				s.warn("remove site after a failed template", derr)
 			}
 			_ = s.root.Remove(st.ID)
+			return domain.Site{}, err
+		}
+	}
+	if own.ID != "" {
+		if _, err := s.AddDomain(ctx, actor, st.ID, st.Slug+"."+own.Domain); err != nil {
+			if derr := s.deleteSite(ctx, st); derr != nil {
+				s.warn("remove site after a failed domain", derr)
+			}
 			return domain.Site{}, err
 		}
 	}
@@ -1606,76 +1639,10 @@ func NormalizeDomain(in string) (string, error) {
 	return a, nil
 }
 
-// VerificationRecord is the DNS TXT record proving control of a domain.
+// VerificationRecord is the per-domain DNS TXT record that proved control of
+// a domain before workspace tokens; it is still accepted.
 func VerificationRecord(d domain.SiteDomain) (name, value string) {
 	return domainTXTPrefix + d.Domain, domainTXTValue + d.Token
-}
-
-// AddDomain attaches a custom domain; it is served once verified.
-func (s *SiteService) AddDomain(ctx context.Context, actor domain.User, id, name string) (domain.SiteDomain, error) {
-	if _, _, err := s.requireSite(ctx, actor, id, domain.WorkspaceDeveloper); err != nil {
-		return domain.SiteDomain{}, err
-	}
-	d, err := NormalizeDomain(name)
-	if err != nil {
-		return domain.SiteDomain{}, err
-	}
-	if p := normalizeHost(s.PanelHost); p != "" && (d == p || strings.HasSuffix(d, "."+p)) {
-		return domain.SiteDomain{}, domain.Invalid("the panel's own domain (and its subdomains) cannot host a site")
-	}
-	if base, err := s.underBaseDomain(ctx, d); err != nil {
-		return domain.SiteDomain{}, err
-	} else if base != "" {
-		return domain.SiteDomain{}, domain.Invalid("addresses under " + base + " are assigned automatically; change the site address instead")
-	}
-	existing, err := s.Store.ListDomains(ctx, id)
-	if err != nil {
-		return domain.SiteDomain{}, err
-	}
-	if len(existing) >= MaxDomainsPerSite {
-		return domain.SiteDomain{}, domain.Invalid(fmt.Sprintf("a site can have at most %d domains", MaxDomainsPerSite))
-	}
-	sd := domain.SiteDomain{Domain: d, SiteID: id, Token: randHex(16), CreatedAtMS: s.now().UnixMilli()}
-	if err := s.Store.ClaimDomain(ctx, sd); err != nil {
-		if errors.Is(err, domain.ErrConflict) {
-			return domain.SiteDomain{}, domain.Invalid("that domain is already verified for another site on this panel")
-		}
-		return domain.SiteDomain{}, err
-	}
-	return sd, nil
-}
-
-// VerifyDomain checks the TXT record now and, when it matches, starts serving
-// the domain.
-func (s *SiteService) VerifyDomain(ctx context.Context, actor domain.User, id, name string) (domain.SiteDomain, error) {
-	if _, _, err := s.requireSite(ctx, actor, id, domain.WorkspaceDeveloper); err != nil {
-		return domain.SiteDomain{}, err
-	}
-	d, err := s.Store.GetDomain(ctx, id, strings.ToLower(name))
-	if err != nil {
-		return domain.SiteDomain{}, err
-	}
-	txtName, txtValue := VerificationRecord(d)
-	ok, msg := s.checkTXT(ctx, txtName, txtValue)
-	// A base domain added after this claim owns every name below it.
-	if base, err := s.underBaseDomain(ctx, d.Domain); err != nil {
-		return domain.SiteDomain{}, err
-	} else if base != "" {
-		ok, msg = false, d.Domain+" is under the sites domain "+base+" and cannot be a custom domain; remove it"
-	}
-	now := s.now().UnixMilli()
-	var at *int64
-	var errMsg *string
-	if ok {
-		at = &now
-	} else {
-		errMsg = &msg
-	}
-	if err := s.Store.RecordDomainCheck(ctx, d.Domain, at, errMsg, now); err != nil {
-		return domain.SiteDomain{}, err
-	}
-	s.reloadSoon()
-	return s.Store.GetDomain(ctx, id, d.Domain)
 }
 
 // underBaseDomain returns the base domain (in any state) that name equals or
@@ -1727,12 +1694,12 @@ func (s *SiteService) recheckDomains(ctx context.Context) {
 		s.warn("list domains", err)
 		return
 	}
+	s.recheckUserDomains(ctx)
 	for _, d := range ds {
 		if ctx.Err() != nil {
 			return
 		}
-		txtName, txtValue := VerificationRecord(d)
-		ok, msg := s.checkTXT(ctx, txtName, txtValue)
+		ok, msg := s.recheckSiteDomain(ctx, d)
 		var errMsg *string
 		if !ok {
 			errMsg = &msg
@@ -2026,4 +1993,32 @@ func (s *SiteService) DeleteBaseDomain(ctx context.Context, actor domain.User, n
 	}
 	s.reloadSoon()
 	return nil
+}
+
+// SitesForBot returns the sites an app answers on: the site it runs behind
+// (container and web apps) and a bot's generated public page, each with its
+// domains. Sites the actor cannot open are left out.
+func (s *SiteService) SitesForBot(ctx context.Context, actor domain.User, botID string) ([]SiteDetail, error) {
+	if _, err := s.Bots.Authorize(ctx, actor, botID, domain.PermViewConsole); err != nil {
+		return nil, err
+	}
+	var out []SiteDetail
+	seen := map[string]bool{}
+	for _, find := range []func(context.Context, string) (domain.Site, error){s.Store.GetSiteForApp, s.Store.GetSiteForBot} {
+		st, err := find(ctx, botID)
+		if errors.Is(err, domain.ErrNotFound) || seen[st.ID] {
+			continue
+		} else if err != nil {
+			return nil, err
+		}
+		seen[st.ID] = true
+		d, err := s.Get(ctx, actor, st.ID)
+		if errors.Is(err, domain.ErrNotFound) || errors.Is(err, domain.ErrForbidden) {
+			continue
+		} else if err != nil {
+			return nil, err
+		}
+		out = append(out, d)
+	}
+	return out, nil
 }

@@ -224,6 +224,31 @@ func TestBotSitePageAndEditableDraft(t *testing.T) {
 	}
 	c.mustStatus(400, "POST", "/api/v1/bots/"+botID+"/site", map[string]string{"slug": "another-page"})
 
+	// The app's page lists where it answers: the default address first, then
+	// verified custom domains, then pending ones.
+	c.mustStatus(201, "POST", "/api/v1/sites/"+detail.Site.ID+"/domains", map[string]string{"domain": "beacon.example.net"})
+	var web struct {
+		Sites []struct {
+			SiteID    string `json:"site_id"`
+			Addresses []struct {
+				Host     string
+				Verified bool
+				Default  bool
+			}
+		}
+	}
+	json.Unmarshal(c.mustStatus(200, "GET", "/api/v1/bots/"+botID+"/web-addresses", nil), &web)
+	if len(web.Sites) != 1 || web.Sites[0].SiteID != detail.Site.ID || len(web.Sites[0].Addresses) != 2 ||
+		!strings.HasPrefix(web.Sites[0].Addresses[0].Host, "beacon-page.sites.test") || !web.Sites[0].Addresses[0].Default ||
+		web.Sites[0].Addresses[1].Host != "beacon.example.net" || web.Sites[0].Addresses[1].Verified {
+		t.Fatalf("web addresses = %+v", web.Sites)
+	}
+	bare := c.createBot("Quiet")
+	json.Unmarshal(c.mustStatus(200, "GET", "/api/v1/bots/"+bare+"/web-addresses", nil), &web)
+	if len(web.Sites) != 0 {
+		t.Fatalf("bot without a site = %+v", web.Sites)
+	}
+
 	patch := map[string]any{
 		"page_title": "Beacon community", "page_description": "Commands, status, and community links.",
 		"page_theme": "daylight", "page_accent": "#3366cc", "page_html": "<h2>Join us</h2>",
@@ -273,6 +298,7 @@ func TestSiteCustomDomains(t *testing.T) {
 	var d struct {
 		Domain   string
 		Verified bool
+		TXTZone  string  `json:"txt_zone"`
 		TXTName  string  `json:"txt_name"`
 		TXTValue string  `json:"txt_value"`
 		Error    *string `json:"last_error"`
@@ -280,7 +306,7 @@ func TestSiteCustomDomains(t *testing.T) {
 		RecValue string  `json:"record_target"`
 	}
 	json.Unmarshal(c.mustStatus(201, "POST", base, map[string]string{"domain": " WWW.Example.COM. "}), &d)
-	if d.Domain != "www.example.com" || d.Verified || d.TXTName != "_rivetpanel-verify.www.example.com" || !strings.HasPrefix(d.TXTValue, "rivetpanel-verify=") ||
+	if d.Domain != "www.example.com" || d.Verified || d.TXTZone != "example.com" || d.TXTName != "_rivetpanel-verify.example.com" || !strings.HasPrefix(d.TXTValue, "rivetpanel-verify=") ||
 		d.RecType != "CNAME" || d.RecValue != "blog.sites.test" {
 		t.Fatalf("domain = %+v", d)
 	}
@@ -325,6 +351,36 @@ func TestSiteCustomDomains(t *testing.T) {
 	var other struct{ ID string }
 	json.Unmarshal(c.mustStatus(201, "POST", "/api/v1/sites", map[string]string{"name": "Other"}), &other)
 	c.mustStatus(400, "POST", "/api/v1/sites/"+other.ID+"/domains", map[string]string{"domain": "www.example.com"})
+	// The workspace record on example.com already covers every subdomain of
+	// it for every site of the workspace: no further TXT record is needed.
+	var shop struct {
+		Verified bool
+		TXTName  string `json:"txt_name"`
+		TXTValue string `json:"txt_value"`
+	}
+	json.Unmarshal(c.mustStatus(201, "POST", "/api/v1/sites/"+other.ID+"/domains", map[string]string{"domain": "shop.eu.example.com"}), &shop)
+	if !shop.Verified || shop.TXTName != d.TXTName || shop.TXTValue != d.TXTValue {
+		t.Fatalf("subdomain under a verified zone = %+v", shop)
+	}
+	if rec := r.get("shop.eu.example.com", "/"); rec.Code == 404 {
+		t.Fatal("subdomain verified through its zone is not served")
+	}
+	// A per-domain record from before workspace tokens still verifies.
+	var legacy struct {
+		Verified bool
+		Error    *string `json:"last_error"`
+	}
+	json.Unmarshal(c.mustStatus(201, "POST", "/api/v1/sites/"+other.ID+"/domains", map[string]string{"domain": "old.test-legacy.org"}), &legacy)
+	if legacy.Verified {
+		t.Fatalf("verified without any record: %+v", legacy)
+	}
+	var tok string
+	r.e.db.QueryRowContext(context.Background(), `SELECT token FROM site_domains WHERE domain = 'old.test-legacy.org'`).Scan(&tok)
+	r.dns.set("_rivetpanel-verify.old.test-legacy.org", "rivetpanel-verify="+tok)
+	json.Unmarshal(c.mustStatus(200, "POST", "/api/v1/sites/"+other.ID+"/domains/old.test-legacy.org/verify", nil), &legacy)
+	if !legacy.Verified {
+		t.Fatalf("legacy per-domain record = %+v", legacy)
+	}
 
 	c.mustStatus(204, "DELETE", base+"/www.example.com", nil)
 	if rec := r.get("www.example.com", "/"); rec.Code != 404 {
@@ -589,4 +645,116 @@ func TestSiteTemplates(t *testing.T) {
 	viewer := r.e.user("viewer@x.io", domain.RoleUser)
 	admin.mustStatus(204, "PATCH", "/api/v1/users/"+r.e.userID("viewer@x.io"), map[string]any{"role": rid})
 	viewer.mustStatus(403, "POST", "/api/v1/sites", map[string]string{"name": "Nope", "template_id": "landing"})
+}
+
+func TestUserDomains(t *testing.T) {
+	r := newSiteRig(t)
+	c := r.owner
+	type udDTO struct {
+		ID         string
+		Domain     string
+		Verified   bool
+		Error      *string `json:"last_error"`
+		TXTName    string  `json:"txt_name"`
+		TXTValue   string  `json:"txt_value"`
+		ExampleURL string  `json:"example_url"`
+		Uses       int
+	}
+	for _, bad := range []string{"panel.example.com", "x.sites.test", "localhost", "nodot"} {
+		c.mustStatus(400, "POST", "/api/v1/me/domains", map[string]string{"domain": bad})
+	}
+	var ud udDTO
+	json.Unmarshal(c.mustStatus(201, "POST", "/api/v1/me/domains", map[string]string{"domain": "XenYC.ge"}), &ud)
+	if ud.Domain != "xenyc.ge" || ud.Verified || ud.TXTName != "_rivetpanel-verify.xenyc.ge" || !strings.HasPrefix(ud.TXTValue, "rivetpanel-verify=") {
+		t.Fatalf("added = %+v", ud)
+	}
+	c.mustStatus(400, "POST", "/api/v1/me/domains", map[string]string{"domain": "xenyc.ge"})
+
+	// An unverified domain cannot take sites.
+	c.mustStatus(400, "POST", "/api/v1/sites", map[string]string{"name": "Maps", "user_domain_id": ud.ID})
+	json.Unmarshal(c.mustStatus(200, "POST", "/api/v1/me/domains/"+ud.ID+"/verify", nil), &ud)
+	if ud.Verified || ud.Error == nil {
+		t.Fatalf("verified without a record: %+v", ud)
+	}
+	r.dns.set(ud.TXTName, ud.TXTValue)
+	json.Unmarshal(c.mustStatus(200, "POST", "/api/v1/me/domains/"+ud.ID+"/verify", nil), &ud)
+	if !ud.Verified || ud.Error != nil {
+		t.Fatalf("verify = %+v", ud)
+	}
+	// A name below a verified domain is verified on add.
+	var sub udDTO
+	json.Unmarshal(c.mustStatus(201, "POST", "/api/v1/me/domains", map[string]string{"domain": "eu.xenyc.ge"}), &sub)
+	if !sub.Verified {
+		t.Fatalf("subdomain = %+v", sub)
+	}
+	c.mustStatus(204, "DELETE", "/api/v1/me/domains/"+sub.ID, nil)
+
+	// The domain is offered when creating a site, and the new site answers
+	// at <slug>.xenyc.ge straight away.
+	var info struct {
+		Mine []struct{ ID, Domain string } `json:"my_domains"`
+	}
+	json.Unmarshal(c.mustStatus(200, "GET", "/api/v1/sites-info", nil), &info)
+	if len(info.Mine) != 1 || info.Mine[0].ID != ud.ID {
+		t.Fatalf("sites-info my_domains = %+v", info.Mine)
+	}
+	var site struct{ ID, Slug string }
+	json.Unmarshal(c.mustStatus(201, "POST", "/api/v1/sites", map[string]string{"name": "Maps", "slug": "maps", "user_domain_id": ud.ID}), &site)
+	var detail struct {
+		Domains []struct {
+			Domain   string
+			Verified bool
+			Via      bool `json:"via_user_domain"`
+		}
+	}
+	json.Unmarshal(c.mustStatus(200, "GET", "/api/v1/sites/"+site.ID, nil), &detail)
+	if len(detail.Domains) != 1 || detail.Domains[0].Domain != "maps.xenyc.ge" || !detail.Domains[0].Verified || !detail.Domains[0].Via {
+		t.Fatalf("site domains = %+v", detail.Domains)
+	}
+	c.raw("POST", "/api/v1/sites/"+site.ID+"/upload", zipOf(t, map[string]string{"index.html": "maps"}), "application/zip")
+	if rec := r.get("maps.xenyc.ge", "/"); rec.Code != 200 || rec.Body.String() != "maps" {
+		t.Fatalf("maps.xenyc.ge: %d %q", rec.Code, rec.Body.String())
+	}
+	// Adding any other subdomain by hand needs no record either.
+	var dd struct{ Verified bool }
+	json.Unmarshal(c.mustStatus(201, "POST", "/api/v1/sites/"+site.ID+"/domains", map[string]string{"domain": "www.maps.xenyc.ge"}), &dd)
+	if !dd.Verified {
+		t.Fatal("custom domain under a user domain was not verified on add")
+	}
+	// A taken address leaves no half-made site behind.
+	c.mustStatus(201, "POST", "/api/v1/sites/"+site.ID+"/domains", map[string]string{"domain": "dup.xenyc.ge"})
+	var before struct{ Sites []struct{ ID string } }
+	json.Unmarshal(c.mustStatus(200, "GET", "/api/v1/sites", nil), &before)
+	if b := c.mustStatus(400, "POST", "/api/v1/sites", map[string]string{"name": "Dup", "slug": "dup", "user_domain_id": ud.ID}); !strings.Contains(string(b), "dup.xenyc.ge is already") {
+		t.Fatalf("taken address: %s", b)
+	}
+	var after struct{ Sites []struct{ ID string } }
+	json.Unmarshal(c.mustStatus(200, "GET", "/api/v1/sites", nil), &after)
+	if len(after.Sites) != len(before.Sites) {
+		t.Fatalf("sites %d -> %d", len(before.Sites), len(after.Sites))
+	}
+
+	// Another user can neither see nor use the domain, and the record holds
+	// the owner's token, not theirs.
+	other := r.e.user("other@x.io", domain.RoleUser)
+	other.mustStatus(404, "POST", "/api/v1/me/domains/"+ud.ID+"/verify", nil)
+	other.mustStatus(404, "DELETE", "/api/v1/me/domains/"+ud.ID, nil)
+	other.mustStatus(400, "POST", "/api/v1/sites", map[string]string{"name": "Steal", "user_domain_id": ud.ID})
+	var theirs udDTO
+	json.Unmarshal(other.mustStatus(201, "POST", "/api/v1/me/domains", map[string]string{"domain": "xenyc.ge"}), &theirs)
+	if theirs.Verified || theirs.TXTValue == ud.TXTValue {
+		t.Fatalf("other user's domain = %+v", theirs)
+	}
+
+	var list struct{ Domains []udDTO }
+	json.Unmarshal(c.mustStatus(200, "GET", "/api/v1/me/domains", nil), &list)
+	if len(list.Domains) != 1 || list.Domains[0].Uses != 3 {
+		t.Fatalf("list = %+v", list.Domains)
+	}
+	// Removing it keeps the sites' domains attached.
+	c.mustStatus(204, "DELETE", "/api/v1/me/domains/"+ud.ID, nil)
+	json.Unmarshal(c.mustStatus(200, "GET", "/api/v1/sites/"+site.ID, nil), &detail)
+	if len(detail.Domains) != 3 || !detail.Domains[0].Verified || detail.Domains[0].Via {
+		t.Fatalf("after removal = %+v", detail.Domains)
+	}
 }

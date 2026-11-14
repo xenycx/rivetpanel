@@ -260,11 +260,11 @@ func (db *DB) ClaimDomain(ctx context.Context, d domain.SiteDomain) error {
 	return tx.Commit()
 }
 
-const domainCols = `domain, site_id, token, verified_at_ms, last_checked_at_ms, last_error, created_at_ms`
+const domainCols = `domain, site_id, token, verified_at_ms, last_checked_at_ms, last_error, created_at_ms, user_domain_id`
 
 func scanDomain(row interface{ Scan(...any) error }) (domain.SiteDomain, error) {
 	var d domain.SiteDomain
-	err := row.Scan(&d.Domain, &d.SiteID, &d.Token, &d.VerifiedAtMS, &d.LastCheckedAtMS, &d.LastError, &d.CreatedAtMS)
+	err := row.Scan(&d.Domain, &d.SiteID, &d.Token, &d.VerifiedAtMS, &d.LastCheckedAtMS, &d.LastError, &d.CreatedAtMS, &d.UserDomainID)
 	return d, mapErr(err)
 }
 
@@ -569,4 +569,97 @@ func (db *DB) PublicSitePage(ctx context.Context, siteID string) (domain.PublicS
 		p.Widgets, err = db.ListBotWidgets(ctx, p.BotID)
 	}
 	return p, err
+}
+
+// UserDomainToken returns the user's domain-verification token, storing
+// fresh as the token the first time it is asked for.
+func (db *DB) UserDomainToken(ctx context.Context, userID, fresh string, nowMS int64) (string, error) {
+	if _, err := db.ExecContext(ctx, `INSERT INTO user_domain_tokens (user_id, token, created_at_ms) VALUES (?,?,?)
+		ON CONFLICT (user_id) DO NOTHING`, userID, fresh, nowMS); err != nil {
+		return "", mapErr(err)
+	}
+	var tok string
+	err := db.QueryRowContext(ctx, `SELECT token FROM user_domain_tokens WHERE user_id = ?`, userID).Scan(&tok)
+	return tok, mapErr(err)
+}
+
+const userDomainCols = `id, user_id, domain, verified_at_ms, last_checked_at_ms, last_error, created_at_ms`
+
+func scanUserDomain(row interface{ Scan(...any) error }) (domain.UserDomain, error) {
+	var d domain.UserDomain
+	err := row.Scan(&d.ID, &d.UserID, &d.Domain, &d.VerifiedAtMS, &d.LastCheckedAtMS, &d.LastError, &d.CreatedAtMS)
+	return d, mapErr(err)
+}
+
+func (db *DB) queryUserDomains(ctx context.Context, where string, args ...any) ([]domain.UserDomain, error) {
+	rows, err := db.QueryContext(ctx, `SELECT `+userDomainCols+` FROM user_domains `+where+` ORDER BY domain LIMIT 10000`, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []domain.UserDomain
+	for rows.Next() {
+		d, err := scanUserDomain(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, d)
+	}
+	return out, rows.Err()
+}
+
+// InsertUserDomain adds a domain to a user's list (ErrConflict: already there).
+func (db *DB) InsertUserDomain(ctx context.Context, d domain.UserDomain) error {
+	_, err := db.ExecContext(ctx, `INSERT INTO user_domains (id, user_id, domain, verified_at_ms, last_checked_at_ms, created_at_ms)
+		VALUES (?,?,?,?,?,?)`, d.ID, d.UserID, d.Domain, d.VerifiedAtMS, d.LastCheckedAtMS, d.CreatedAtMS)
+	return mapErr(err)
+}
+
+// ListUserDomains returns a user's domains.
+func (db *DB) ListUserDomains(ctx context.Context, userID string) ([]domain.UserDomain, error) {
+	return db.queryUserDomains(ctx, `WHERE user_id = ?`, userID)
+}
+
+// ListVerifiedUserDomains returns every verified user domain (for re-checks).
+func (db *DB) ListVerifiedUserDomains(ctx context.Context) ([]domain.UserDomain, error) {
+	return db.queryUserDomains(ctx, `WHERE verified_at_ms IS NOT NULL`)
+}
+
+// GetUserDomain returns one user domain by id.
+func (db *DB) GetUserDomain(ctx context.Context, id string) (domain.UserDomain, error) {
+	return scanUserDomain(db.QueryRowContext(ctx, `SELECT `+userDomainCols+` FROM user_domains WHERE id = ?`, id))
+}
+
+// RecordUserDomainCheck stores a check's outcome; verifiedAt nil keeps the
+// current verification time.
+func (db *DB) RecordUserDomainCheck(ctx context.Context, id string, verifiedAt *int64, errMsg *string, nowMS int64) error {
+	_, err := db.ExecContext(ctx, `UPDATE user_domains SET verified_at_ms = COALESCE(?, verified_at_ms), last_error = ?,
+		last_checked_at_ms = ? WHERE id = ?`, verifiedAt, errMsg, nowMS, id)
+	return err
+}
+
+// DeleteUserDomain removes one of a user's domains.
+func (db *DB) DeleteUserDomain(ctx context.Context, userID, id string) error {
+	res, err := db.ExecContext(ctx, `DELETE FROM user_domains WHERE id = ? AND user_id = ?`, id, userID)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return domain.ErrNotFound
+	}
+	return nil
+}
+
+// CountDomainsVia counts the custom domains a user domain proved.
+func (db *DB) CountDomainsVia(ctx context.Context, userDomainID string) (int, error) {
+	var n int
+	err := db.QueryRowContext(ctx, `SELECT count(*) FROM site_domains WHERE user_domain_id = ?`, userDomainID).Scan(&n)
+	return n, err
+}
+
+// VerifyDomainVia marks a custom domain verified through a user domain.
+func (db *DB) VerifyDomainVia(ctx context.Context, name, userDomainID string, nowMS int64) error {
+	_, err := db.ExecContext(ctx, `UPDATE site_domains SET verified_at_ms = COALESCE(verified_at_ms, ?1), last_checked_at_ms = ?1,
+		last_error = NULL, user_domain_id = ?2 WHERE domain = ?3`, nowMS, userDomainID, name)
+	return err
 }

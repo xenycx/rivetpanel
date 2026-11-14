@@ -50,7 +50,7 @@ All paths are under `/api/v1`.
 | --- | --- |
 | `GET /sites-info` | Whether hosting is on, how addresses look, and the sites domains new sites can use (`domains`) |
 | `GET /bots/{bot}/site`, `POST /bots/{bot}/site` `{slug?, domain_id?}` | Get or create a bot's integrated site |
-| `GET /sites`, `POST /sites` `{name, slug?, domain_id?, workspace_id?, spa?, template_id?}` | List and create standalone sites. `domain_id` is a sites domain id or name (default: the primary); `template_id` publishes a site template as the first release |
+| `GET /sites`, `POST /sites` `{name, slug?, domain_id?, workspace_id?, spa?, template_id?, user_domain_id?}` | List and create standalone sites. `domain_id` is a sites domain id or name (default: the primary); `template_id` publishes a site template as the first release; `user_domain_id` (one of your verified domains) also serves it at `<slug>.<domain>` |
 | `GET /site-presets` | The frameworks sites can be built or run with, and the public build-variable prefixes |
 | `POST /sites/analyze` `{repo, branch?, root_dir?}` | Download a branch and propose a site type and preset (creates nothing) |
 | `POST /sites/from-repo` | Create a static, static build or app site from GitHub and queue its first deployment (fields below) |
@@ -65,9 +65,12 @@ All paths are under `/api/v1`.
 | `POST /sites/{id}/files/publish` | Snapshot and activate the private draft |
 | `POST /sites/{id}/deploy` `{sha?}` | Deploy the linked branch head in the background. Sites from GitHub build and publish, or rebuild and restart the app, and accept a commit to deploy again |
 | `POST /sites/{id}/releases/{release}/activate` | Serve an earlier release |
-| `POST /sites/{id}/domains` `{domain}` | Add a custom domain |
+| `POST /sites/{id}/domains` `{domain}` | Add a custom domain (verified at once under one of your domains) |
 | `POST /sites/{id}/domains/{domain}/verify` | Check its TXT record now |
 | `DELETE /sites/{id}/domains/{domain}` | Remove it |
+| `GET /bots/{id}/web-addresses` | The sites an app answers on (the site it runs behind, a bot's public page), each with its default address and custom domains |
+| `GET /me/domains`, `POST /me/domains` `{domain}` | Your domains with their TXT record and how many site addresses each verified; add one |
+| `POST /me/domains/{id}/verify`, `DELETE /me/domains/{id}` | Check its TXT record now; remove it |
 | `GET /admin/sites`, `PATCH /admin/sites/{id}` `{disabled}` | Administrators: list, suspend or restore |
 | `GET /admin/site-base-domains`, `POST /admin/site-base-domains` `{domain, label?, dns_target?}` | Administrators: list sites domains with their DNS records, add one |
 | `POST /admin/site-base-domains/{domain}/verify` | Check its `_rivetpanel-domain` TXT record now |
@@ -75,7 +78,7 @@ All paths are under `/api/v1`.
 | `POST /admin/site-base-domains/{domain}/move-sites` `{to}` | Move every site to another sites domain (all or nothing) |
 | `DELETE /admin/site-base-domains/{domain}` | Remove an unused, non-primary domain not set in the environment file |
 
-`POST /sites/from-repo` takes `{name, slug?, domain_id?, workspace_id?, kind,
+`POST /sites/from-repo` takes `{name, slug?, domain_id?, user_domain_id?, workspace_id?, kind,
 framework?, repo:{full_name, branch, root_dir?, auto_deploy?}, runtime,
 build_command?, output_dir?, spa?, argv?, port?, health_path?,
 release_command?, memory_bytes?, nano_cpus?, max_body_bytes?, env?, addons?}`.

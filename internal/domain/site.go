@@ -98,6 +98,22 @@ type SiteDomain struct {
 	LastCheckedAtMS *int64
 	LastError       *string
 	CreatedAtMS     int64
+	// UserDomainID is the user domain that proved this one (nil: its own
+	// per-domain TXT record).
+	UserDomainID *string
+}
+
+// UserDomain is a domain a user has proven they control with a TXT record
+// holding their token. Once verified it covers the domain and every name
+// below it, for any site the user adds a custom domain to.
+type UserDomain struct {
+	ID              string
+	UserID          string
+	Domain          string
+	VerifiedAtMS    *int64
+	LastCheckedAtMS *int64
+	LastError       *string
+	CreatedAtMS     int64
 }
 
 // SiteBaseDomain is a domain every site may live under: a site is served at

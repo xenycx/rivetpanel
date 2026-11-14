@@ -4,6 +4,7 @@ lede: Change a site's address, serve it on your own domain, and (as an administr
 icon: link
 glance:
   - Up to 10 custom domains per site
+  - One TXT record per domain, for all your sites
   - Domains re-checked every 6 hours
   - Addresses are 3–40 characters
 related: [websites/bot-sites, websites/administration, operate/install, operate/configuration]
@@ -32,26 +33,69 @@ The same rules apply as at creation [enforced: panel]:
 - not a reserved name (`www`, `api`, `admin`, `panel`, `mail`, …)
 - not already used under that sites domain
 
+## Your domains
+
+Prove a domain once, then use it for every site you make. Under
+**Settings → Domains**:
+
+1. Add the domain, such as `example.com`.
+2. Create the TXT record it shows at your DNS provider:
+   `_rivetpanel-verify.example.com` with the value
+   `rivetpanel-verify=<token>`. The token is yours, the same for every domain
+   you add.
+3. Press **Check DNS now**.
+
+A verified domain covers itself and every subdomain [enforced: panel]:
+
+- When you create a site, pick it next to the address (under *Your domains*).
+  The site is served at `<address>.example.com` straight away, as well as at
+  its default address.
+- Any custom domain at or under it that you add to a site is verified the
+  moment you add it.
+
+Each address still needs a routing record pointing at this server: a `CNAME`
+per address, or one wildcard such as `*.example.com`.
+
+Domains belong to one account. Teammates add the domain under their own
+account with their own record, and nobody can use a domain another account
+proved [enforced: panel]. You can keep up to 50 domains.
+
+Removing a domain stops offering it for new sites. The site addresses it
+verified keep working until the six-hourly re-check, which then reports that
+each needs its own record; as with every failed re-check, serving does not
+stop.
+
 ## Custom domains
 
 A site can answer on up to 10 custom domains [enforced: panel].
 
 1. Add the domain on the site's page, for example `www.example.com`.
-   Internationalized names are stored in punycode.
-2. Create the two records it shows at your DNS provider:
-   - `TXT _rivetpanel-verify.www.example.com` with the value
-     `rivetpanel-verify=<token>`, which proves you control the domain.
-   - `CNAME www.example.com` pointing at the site's default host (or
-     `RIVET_SITES_DNS_TARGET`), or an `A`/`AAAA` record with the server's
-     address. Root domains need an ALIAS/ANAME or `A` record.
-3. Press **Check DNS now**.
+   Internationalized names are stored in punycode. If `example.com` is one of
+   your domains, it is verified at once; skip to step 3's routing record.
+2. Otherwise create the TXT record it shows:
+   `_rivetpanel-verify.example.com` with your token. It goes on the
+   registrable domain, so `example.com` joins your domains and later
+   subdomains need no further TXT record.
+3. Point the domain at the server: `CNAME www.example.com` to the site's
+   default host (or `RIVET_SITES_DNS_TARGET`), or an `A`/`AAAA` record with
+   the server's address. Root domains need an ALIAS/ANAME or `A` record.
+4. Press **Check DNS now**.
 
-The domain is served only after the TXT record matches [enforced: panel].
-Remove the domain to stop serving it.
+The domain is served only after a TXT record matches [enforced: panel]. Remove
+the domain to stop serving it.
+
+The **Overview** of an app that runs behind a site, or of a bot with a public
+page, lists the same addresses under **Web addresses**: the default address
+and each custom domain, as links, with domains still waiting for DNS marked.
+
+> [!NOTE]
+> Older records with a per-domain token on the domain itself
+> (`_rivetpanel-verify.www.example.com`) keep working.
 
 ### Rules for custom domains
 
 - A domain verified for one site cannot be added to another.
+- A record proves control only for the account whose token it holds.
 - An unverified claim does not reserve a domain: whoever verifies first wins.
 - The panel's own host and its subdomains are refused, and so are names under
   any sites domain [enforced: panel].

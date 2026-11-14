@@ -36,6 +36,9 @@
 	let repo = $state<RepoLink | null>(null);
 	let backups = $state<Backup[] | null>(null);
 	let schedule = $state<{ interval_ms: number; enabled: boolean } | null>(null);
+	// Where the app answers on the web: each site it serves, with its domains.
+	type WebSite = { site_id: string; name: string; disabled: boolean; addresses: { url: string; host: string; verified: boolean; default: boolean }[] };
+	let web = $state<WebSite[]>([]);
 
 	const canEnv = $derived(can(bot, Perm.env));
 	const canFiles = $derived(can(bot, Perm.files));
@@ -57,6 +60,7 @@
 			if (bot.source_type === 'github' && !isGame)
 				jobs.push(api<{ linked: boolean; repo?: RepoLink }>('GET', `/bots/${bot.id}/github`).then((r) => (repo = r.linked ? r.repo! : null)).catch(() => {}));
 		}
+		jobs.push(api<{ sites: WebSite[] }>('GET', `/bots/${bot.id}/web-addresses`).then((r) => (web = r.sites)).catch(() => {}));
 		await Promise.allSettled(jobs);
 	}
 	// Live: re-fetch as soon as what this view shows changes anywhere.
@@ -230,6 +234,31 @@
 
 	<aside class="space-y-6" aria-label="Details">
 		{#if isGame}<ConnectCard {bot} {game} />{/if}
+		{#if web.length}
+			<section aria-labelledby="ov-web">
+				<h3 id="ov-web" class="text-title font-semibold">Web addresses</h3>
+				{#each web as w (w.site_id)}
+					{#if web.length > 1}<p class="mt-2 text-small font-medium text-muted">{w.name}</p>{/if}
+					<ul class="mt-2 grid gap-1.5">
+						{#each w.addresses as a (a.host)}
+							<li class="flex min-w-0 items-center gap-2">
+								<span class="side-dot shrink-0" data-tone={w.disabled ? 'fail' : a.verified ? 'run' : 'warn'}></span>
+								{#if a.verified && !w.disabled}
+									<a class="link min-w-0 truncate font-mono text-small" href={a.url} target="_blank" rel="noopener" title={a.host}>{a.host}</a>
+									<Icon name="external" size={12} class="shrink-0 text-muted" />
+								{:else}
+									<span class="min-w-0 truncate font-mono text-small text-muted" title={a.host}>{a.host}</span>
+								{/if}
+								{#if a.default}<span class="ml-auto shrink-0 text-small text-muted">default</span>{:else if !a.verified}<span class="ml-auto shrink-0 text-small text-warn">waiting for DNS</span>{/if}
+							</li>
+						{/each}
+					</ul>
+					{#if w.disabled}<p class="mt-1 text-small text-fail">Suspended by an administrator.</p>{/if}
+					<a class="link mt-1.5 inline-block text-small" href="/sites/{w.site_id}">Site settings and domains</a>
+				{/each}
+			</section>
+		{/if}
+
 		<section>
 			<h3 class="text-title font-semibold">{isGame ? 'Server type' : 'Source'}</h3>
 			<div class="mt-2 text-ink/90">

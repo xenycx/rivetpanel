@@ -6,6 +6,32 @@ authoritative current version.
 
 ## Unreleased
 
+## 1.13.0 - 2026-11-14
+
+### Added
+
+- **Your domains.** Prove a domain once under **Settings → Domains** with a
+  single TXT record (`_rivetpanel-verify.example.com`) holding your own
+  token, then pick it next to the address when creating a site: the site is
+  served at `<address>.example.com` at once, as well as at its default
+  address. Domains belong to your account, so every site you make, in any
+  workspace, can use them; other accounts cannot. Up to 50 per account,
+  re-checked every six hours.
+- **Web addresses on the app page.** An app's Overview now lists where it
+  answers on the web: the default address and every custom domain of the site
+  it runs behind (or of a bot's public page), as links, with domains still
+  waiting for DNS marked, and a link to the site's settings.
+
+### Changed
+
+- **One DNS record verifies a whole domain.** A custom domain at or under one
+  of your proven domains is verified as soon as it is added, and the site
+  page then shows only the routing record. A custom domain verified with your
+  record on its registrable domain adds that domain to your list. This stops
+  DNS zones filling up with a TXT record per site. Per-domain records created
+  before this release keep verifying, including at the re-check. Adds
+  migration `0073`.
+
 ## 1.12.0 - 2026-11-14
 
 ### Added

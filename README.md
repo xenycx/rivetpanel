@@ -98,7 +98,8 @@ on the smallest VPS you have.
 - **Web apps** in Node.js/TypeScript, PHP/Laravel, Python, Go and Rust with
   variables, a persistent `/data` folder, databases, health checks and release
   commands.
-- **Custom domains** with DNS verification, TLS on demand through your reverse
+- **Custom domains** with DNS verification (one TXT record per domain, reused by
+  every site you make), TLS on demand through your reverse
   proxy, `_redirects`/`_headers`, and instant rollback.
 
 ### 🛠️ Day-to-day operations

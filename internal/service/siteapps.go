@@ -31,6 +31,7 @@ type WebDeployHook interface {
 // published as it is, built into static files, or run as an app.
 type CreateBuiltSiteInput struct {
 	Name, Slug, DomainID, WorkspaceID string
+	UserDomainID                      string // also serve at <slug>.<one of the actor's domains>
 
 	Kind      string // reposcan.WebStatic | WebStaticBuild | WebApp
 	Framework string // preset id (informational)
@@ -164,7 +165,7 @@ func (s *SiteService) CreateBuilt(ctx context.Context, actor domain.User, in Cre
 		env["PORT"] = strconv.Itoa(port)
 		in.Env, in.Port = env, port
 	}
-	st, err := s.Create(ctx, actor, CreateSiteInput{Name: in.Name, Slug: in.Slug, DomainID: in.DomainID, WorkspaceID: in.WorkspaceID, SPA: in.SPA})
+	st, err := s.Create(ctx, actor, CreateSiteInput{Name: in.Name, Slug: in.Slug, DomainID: in.DomainID, WorkspaceID: in.WorkspaceID, SPA: in.SPA, UserDomainID: in.UserDomainID})
 	if err != nil {
 		return domain.Site{}, err
 	}

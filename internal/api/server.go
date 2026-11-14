@@ -614,6 +614,7 @@ func (s *panel) routes(v1 fiber.Router) {
 	authed.Get("/sites-info", s.sitesInfo)
 	if s.sites.Enabled() {
 		authed.Get("/bots/:id/site", s.getBotSite)
+		authed.Get("/bots/:id/web-addresses", s.botWebAddresses)
 		authed.Post("/bots/:id/site", s.requirePerm(domain.PermSitesCreate), s.createBotSite)
 		authed.Get("/sites", s.listSites)
 		authed.Post("/sites", s.requirePerm(domain.PermSitesCreate), s.createSite)
@@ -642,6 +643,10 @@ func (s *panel) routes(v1 fiber.Router) {
 		authed.Post("/sites/:sid/deploy", s.deploySite)
 		authed.Post("/sites/:sid/releases/:rid/activate", s.activateRelease)
 		s.siteBackupRoutes(authed)
+		authed.Get("/me/domains", s.listUserDomains)
+		authed.Post("/me/domains", s.requirePerm(domain.PermSitesCreate), s.addUserDomain)
+		authed.Post("/me/domains/:did/verify", s.verifyUserDomain)
+		authed.Delete("/me/domains/:did", s.removeUserDomain)
 		authed.Post("/sites/:sid/domains", s.addSiteDomain)
 		authed.Post("/sites/:sid/domains/:domain/verify", s.verifySiteDomain)
 		authed.Delete("/sites/:sid/domains/:domain", s.removeSiteDomain)

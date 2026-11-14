@@ -111,19 +111,25 @@ type domainDTO struct {
 	VerifiedAtMS    *int64  `json:"verified_at_ms"`
 	LastCheckedAtMS *int64  `json:"last_checked_at_ms"`
 	LastError       *string `json:"last_error"`
-	TXTName         string  `json:"txt_name"`
-	TXTValue        string  `json:"txt_value"`
+	// The verification record for the viewer: their own token on the
+	// registrable domain (TXTZone), which proves every subdomain of it.
+	// ViaUserDomain: verified through one of a user's domains.
+	TXTZone       string `json:"txt_zone"`
+	ViaUserDomain bool   `json:"via_user_domain"`
+	TXTName       string `json:"txt_name"`
+	TXTValue      string `json:"txt_value"`
 	// The record that routes visitors: CNAME to a host, or A/AAAA to an
 	// address ("" = this server's public address, unknown to the panel).
 	RecordType   string `json:"record_type"`
 	RecordTarget string `json:"record_target"`
 }
 
-func (s *panel) toDomain(d domain.SiteDomain, st domain.Site) domainDTO {
-	name, value := service.VerificationRecord(d)
-	kind, target := s.sites.TrafficRecord(st.Slug, st.BaseDomain)
+func (s *panel) toDomain(d domain.SiteDomain, sd service.SiteDetail) domainDTO {
+	zone := service.VerificationZone(d.Domain)
+	name, value := service.DomainVerificationRecord(zone, sd.DomainToken)
+	kind, target := s.sites.TrafficRecord(sd.Site.Slug, sd.Site.BaseDomain)
 	return domainDTO{d.Domain, s.sites.DomainURL(d.Domain), d.VerifiedAtMS != nil, d.VerifiedAtMS, d.LastCheckedAtMS, d.LastError,
-		name, value, kind, target}
+		zone, d.UserDomainID != nil, name, value, kind, target}
 }
 
 type releaseDTO struct {
@@ -160,8 +166,22 @@ func (s *panel) sitesInfo(c fiber.Ctx) error {
 	for i, b := range bases {
 		choices[i] = baseChoiceDTO{b.ID, b.Domain, b.Label, b.Primary, s.sites.SiteURL("example", b.Domain)}
 	}
+	// The caller's verified domains, offered as further addresses.
+	type ownChoiceDTO struct {
+		ID         string `json:"id"`
+		Domain     string `json:"domain"`
+		ExampleURL string `json:"example_url"`
+	}
+	own := []ownChoiceDTO{}
+	if list, err := s.sites.ListUserDomains(c.Context(), currentUser(c)); err == nil {
+		for _, d := range list {
+			if d.VerifiedAtMS != nil {
+				own = append(own, ownChoiceDTO{d.ID, d.Domain, s.sites.DomainURL("example." + d.Domain)})
+			}
+		}
+	}
 	return c.JSON(fiber.Map{"enabled": true, "domain": s.sites.SitesDomain(), "example_url": s.sites.SiteURL("example", ""),
-		"domains": choices, "max_bytes": s.sites.MaxBytes, "max_domains": service.MaxDomainsPerSite,
+		"domains": choices, "my_domains": own, "max_bytes": s.sites.MaxBytes, "max_domains": service.MaxDomainsPerSite,
 		"builds_enabled": s.sites.AppsEnabled(), "apps_enabled": s.sites.RunsApps(), "github": s.deploy != nil && s.deploy.Ready() == nil})
 }
 
@@ -183,12 +203,15 @@ func (s *panel) createSite(c fiber.Ctx) error {
 		// TemplateID seeds the first release from a site template (see
 		// GET /site-templates); omitted or "" creates an empty site.
 		TemplateID string `json:"template_id"`
+		// UserDomainID also serves the site at <slug>.<one of the caller's
+		// verified domains> (GET /me/domains).
+		UserDomainID string `json:"user_domain_id"`
 	}
 	if err := decode(c, &in); err != nil {
 		return err
 	}
 	st, err := s.sites.Create(c.Context(), currentUser(c), service.CreateSiteInput{Name: in.Name, Slug: in.Slug, DomainID: in.DomainID,
-		WorkspaceID: in.WorkspaceID, SPA: in.SPA, TemplateID: in.TemplateID})
+		WorkspaceID: in.WorkspaceID, SPA: in.SPA, TemplateID: in.TemplateID, UserDomainID: in.UserDomainID})
 	if err != nil {
 		return err
 	}
@@ -258,6 +281,49 @@ func (s *panel) getBotSite(c fiber.Ctx) error {
 	return c.JSON(s.siteDetailJSON(c, d))
 }
 
+// botWebAddresses lists the addresses an app answers on: for each site it
+// serves (or the bot's public page), the default address and its custom
+// domains, verified ones first.
+func (s *panel) botWebAddresses(c fiber.Ctx) error {
+	list, err := s.sites.SitesForBot(c.Context(), currentUser(c), strings.Clone(c.Params("id")))
+	if err != nil {
+		return err
+	}
+	type addr struct {
+		URL      string `json:"url"`
+		Host     string `json:"host"`
+		Verified bool   `json:"verified"`
+		Default  bool   `json:"default"`
+	}
+	type siteAddrs struct {
+		SiteID    string `json:"site_id"`
+		Name      string `json:"name"`
+		Disabled  bool   `json:"disabled"`
+		Addresses []addr `json:"addresses"`
+	}
+	host := func(u string) string {
+		u = strings.TrimPrefix(strings.TrimPrefix(u, "https://"), "http://")
+		return strings.TrimSuffix(u, "/")
+	}
+	out := make([]siteAddrs, 0, len(list))
+	for _, d := range list {
+		u := s.sites.URLOf(d.Site)
+		x := siteAddrs{SiteID: d.Site.ID, Name: d.Site.Name, Disabled: d.Site.Disabled, Addresses: []addr{{u, host(u), true, true}}}
+		var pending []addr
+		for _, dm := range d.Domains {
+			a := addr{s.sites.DomainURL(dm.Domain), dm.Domain, dm.VerifiedAtMS != nil, false}
+			if a.Verified {
+				x.Addresses = append(x.Addresses, a)
+			} else {
+				pending = append(pending, a)
+			}
+		}
+		x.Addresses = append(x.Addresses, pending...)
+		out = append(out, x)
+	}
+	return c.JSON(fiber.Map{"sites": out})
+}
+
 func (s *panel) getSite(c fiber.Ctx) error {
 	d, err := s.sites.Get(c.Context(), currentUser(c), strings.Clone(c.Params("sid")))
 	if err != nil {
@@ -269,7 +335,7 @@ func (s *panel) getSite(c fiber.Ctx) error {
 func (s *panel) siteDetailJSON(c fiber.Ctx, d service.SiteDetail) fiber.Map {
 	domains := make([]domainDTO, len(d.Domains))
 	for i, x := range d.Domains {
-		domains[i] = s.toDomain(x, d.Site)
+		domains[i] = s.toDomain(x, d)
 	}
 	releases := make([]releaseDTO, len(d.Releases))
 	for i, r := range d.Releases {
@@ -387,7 +453,7 @@ func (s *panel) addSiteDomain(c fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	return c.Status(fiber.StatusCreated).JSON(s.toDomain(d, st.Site))
+	return c.Status(fiber.StatusCreated).JSON(s.toDomain(d, st))
 }
 
 func (s *panel) verifySiteDomain(c fiber.Ctx) error {
@@ -400,7 +466,7 @@ func (s *panel) verifySiteDomain(c fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	return c.JSON(s.toDomain(d, st.Site))
+	return c.JSON(s.toDomain(d, st))
 }
 
 func (s *panel) removeSiteDomain(c fiber.Ctx) error {
@@ -576,9 +642,11 @@ func (s *panel) createBuiltSite(c fiber.Ctx) error {
 		Slug        string `json:"slug"`
 		DomainID    string `json:"domain_id"`
 		WorkspaceID string `json:"workspace_id"`
-		Kind        string `json:"kind"`
-		Framework   string `json:"framework"`
-		Repo        struct {
+		// UserDomainID: also serve at <slug>.<one of the caller's domains>.
+		UserDomainID string `json:"user_domain_id"`
+		Kind         string `json:"kind"`
+		Framework    string `json:"framework"`
+		Repo         struct {
 			FullName   string `json:"full_name"`
 			Branch     string `json:"branch"`
 			RootDir    string `json:"root_dir"`
@@ -606,7 +674,7 @@ func (s *panel) createBuiltSite(c fiber.Ctx) error {
 		addons = append(addons, serviceAddon(a))
 	}
 	st, err := s.sites.CreateBuilt(c.Context(), currentUser(c), service.CreateBuiltSiteInput{
-		Name: in.Name, Slug: in.Slug, DomainID: in.DomainID, WorkspaceID: in.WorkspaceID, Kind: in.Kind, Framework: in.Framework,
+		Name: in.Name, Slug: in.Slug, DomainID: in.DomainID, WorkspaceID: in.WorkspaceID, UserDomainID: in.UserDomainID, Kind: in.Kind, Framework: in.Framework,
 		Repo:    service.ConfigureInput{FullName: in.Repo.FullName, Branch: in.Repo.Branch, RootDir: in.Repo.RootDir, AutoDeploy: in.Repo.AutoDeploy},
 		Runtime: in.Runtime, BuildCommand: in.BuildCommand, OutputDir: in.OutputDir, SPA: in.SPA, Argv: in.Argv, Port: in.Port,
 		HealthPath: in.HealthPath, ReleaseCommand: in.ReleaseCommand, MemoryBytes: in.MemoryBytes, NanoCPUs: in.NanoCPUs,

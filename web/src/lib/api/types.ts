@@ -663,6 +663,10 @@ export type SiteDomain = {
 	verified_at_ms: number | null;
 	last_checked_at_ms: number | null;
 	last_error: string | null;
+	/** Registrable domain the TXT record sits on; it covers every subdomain. */
+	txt_zone: string;
+	/** Verified through one of a user's domains. */
+	via_user_domain: boolean;
 	txt_name: string;
 	txt_value: string;
 	record_type: 'CNAME' | 'A' | 'AAAA';
@@ -682,11 +686,28 @@ export type SiteRelease = {
 };
 /** A domain sites can be placed under: a site's address is <slug>.<domain>. */
 export type SiteBaseChoice = { id: string; domain: string; label: string; primary: boolean; example_url: string };
+/** A domain the signed-in user proved (Settings → Domains). */
+export type UserDomain = {
+	id: string;
+	domain: string;
+	verified: boolean;
+	verified_at_ms: number | null;
+	last_checked_at_ms: number | null;
+	last_error: string | null;
+	txt_name: string;
+	txt_value: string;
+	example_url: string;
+	/** Site addresses it verified. */
+	uses: number;
+	created_at_ms: number;
+};
 export type SitesInfo = {
 	enabled: boolean;
 	domain?: string;
 	example_url?: string;
 	domains?: SiteBaseChoice[];
+	/** The caller's verified domains (Settings → Domains), offered as addresses. */
+	my_domains?: { id: string; domain: string; example_url: string }[];
 	max_bytes?: number;
 	max_domains?: number;
 	/** Sites can be built from GitHub repositories. */
