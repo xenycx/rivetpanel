@@ -114,6 +114,8 @@ on the smallest VPS you have.
   that does the job, not just explains it: paste a GitHub repo or a Docker
   image and it deploys it, sets its variables and checks it runs; it fixes
   crashes, changes settings and calls any panel action with your permissions.
+  When you need to choose, it answers with interactive views
+  ([A2UI](https://a2ui.org)): plans to confirm, forms and status boards.
   **Ask first** stops for your yes; **Autopilot** goes start to finish.
 - An administrator **Host** page with live and historical charts, daily log
   files with an archive job, and a <kbd>Ctrl</kbd>+<kbd>K</kbd> palette that

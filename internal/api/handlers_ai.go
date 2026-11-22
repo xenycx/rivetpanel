@@ -11,6 +11,7 @@ import (
 	fws "github.com/gofiber/contrib/v3/websocket"
 	"github.com/gofiber/fiber/v3"
 
+	"github.com/xenycx/rivetpanel/internal/a2ui"
 	"github.com/xenycx/rivetpanel/internal/domain"
 	"github.com/xenycx/rivetpanel/internal/service"
 )
@@ -152,6 +153,8 @@ type aiMessageInput struct {
 	Content string             `json:"content"`
 	Mode    string             `json:"mode"`
 	Context *service.AIContext `json:"context"`
+	// Action is an A2UI v1.0 button press; it replaces content.
+	Action *a2ui.Action `json:"action"`
 }
 
 func conversationJSON(v domain.AIConversation) fiber.Map {
@@ -297,7 +300,7 @@ func (s *panel) aiMessage(c fiber.Ctx) error {
 	if e := decode(c, &in); e != nil {
 		return e
 	}
-	r, e := s.ai.StartMessage(c.Context(), currentUser(c), strings.Clone(c.Params("conversation")), in.Content, in.Mode, in.Context)
+	r, e := s.ai.StartMessage(c.Context(), currentUser(c), strings.Clone(c.Params("conversation")), in.Content, in.Mode, in.Context, in.Action)
 	if e != nil {
 		return e
 	}

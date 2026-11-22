@@ -4,6 +4,7 @@ import { confirmDialog } from '$lib/ui/dialogs.svelte';
 import { toast } from '$lib/ui/toast.svelte';
 import { accents, radii, setAccent, setRadius, setTheme, type Accent, type Radius } from '$lib/ui/theme.svelte';
 import { describeView, type ViewContext } from './context.svelte';
+import { ACTION_PREFIX, Surfaces, VERSION, type Action } from '$lib/a2ui/model.svelte';
 
 export type Provider = { id: string; name: string; default_model: string; default: boolean; pricing_configured: boolean };
 export type Conversation = { id: string; title: string; provider_id: string | null; model: string | null; updated_at_ms: number; bot_id?: string | null; site_id?: string | null };
@@ -65,7 +66,7 @@ const approvalTitles: Record<string, string> = {
 	panel_api: 'Change something in the panel'
 };
 /** Tools that only read: a run made of these leaves nothing to refresh. */
-const READ_ONLY = new Set(['panel_docs', 'read_doc', 'panel_info', 'list_targets', 'focus_target', 'target_status', 'read_logs', 'build_output', 'list_files', 'read_file', 'search_files', 'environment_names', 'web_search', 'web_fetch', 'analyze_repo', 'list_app_templates', 'wait_for_ready', 'panel_routes', 'client_action']);
+const READ_ONLY = new Set(['panel_docs', 'read_doc', 'panel_info', 'list_targets', 'focus_target', 'target_status', 'read_logs', 'build_output', 'list_files', 'read_file', 'search_files', 'environment_names', 'web_search', 'web_fetch', 'analyze_repo', 'list_app_templates', 'wait_for_ready', 'panel_routes', 'client_action', 'show_ui']);
 const MODE_KEY = 'rivetpanel.aiMode';
 function readMode(): 'approval' | 'auto' {
 	try {
@@ -154,6 +155,8 @@ class Chat {
 	error = $state('');
 	busy = $state(false);
 	secureValues = $state<Record<string, Record<string, string>>>({});
+	/** The A2UI surfaces the assistant showed in this chat. */
+	surfaces = new Surfaces();
 	/** Set by the chat window: the context of wherever the person is now. */
 	currentView: () => ViewContext | null = () => null;
 
@@ -221,6 +224,7 @@ class Chat {
 		this.prompt = '';
 		this.error = '';
 		this.secureValues = {};
+		this.surfaces.clear();
 	}
 
 	newChat() {
@@ -229,6 +233,7 @@ class Chat {
 		this.messages = [];
 		this.runs = [];
 		this.error = '';
+		this.surfaces.clear();
 	}
 	private close() {
 		this.ws?.close();
@@ -242,6 +247,7 @@ class Chat {
 		this.messages = [];
 		this.runs = [];
 		this.error = '';
+		this.surfaces.clear();
 		try {
 			const d = await api<{ conversation: Conversation; messages: Message[] }>('GET', `/ai/conversations/${c.id}`);
 			if (this.selected?.id !== c.id) return;
@@ -258,11 +264,17 @@ class Chat {
 	}
 
 	/** Rebuilds activity from the server so approvals and Undo survive reloads. */
-	private async restore(conversationId: string): Promise<RunBlock | null> {
+	private async restore(conversationId: string, rebuildSurfaces = true): Promise<RunBlock | null> {
 		try {
-			const runs = (await api<{ runs: RunDto[] }>('GET', `/ai/conversations/${conversationId}/runs`)).runs;
+			const runs = (await api<{ runs: RunDto[] }>('GET', `/ai/conversations/${conversationId}/runs?limit=20`)).runs;
 			if (this.selected?.id !== conversationId) return null;
 			this.runs = runs.map(toBlock).reverse();
+			// Surfaces are rebuilt from the accepted show_ui calls, oldest first.
+			// After a live run they are already current (and may hold the
+			// person's unsent edits), so they stay as they are.
+			if (!rebuildSurfaces) return this.latest ?? null;
+			this.surfaces.clear();
+			for (const r of this.runs) for (const s of r.steps) if (s.name === 'show_ui' && s.status === 'completed') void this.surfaces.apply(r.id, s.args, false);
 			return this.latest ?? null;
 		} catch (e) {
 			this.error = why(e);
@@ -329,6 +341,27 @@ class Chat {
 		}
 	}
 
+	/** Sends a button press on an A2UI surface; the server checks it was really offered. */
+	async sendAction(action: Action, label: string, view: ViewContext | null = this.currentView()) {
+		const conv = this.selected;
+		if (!conv || this.active || this.busy) return;
+		this.busy = true;
+		this.error = '';
+		try {
+			const run = await api<RunDto>('POST', `/ai/conversations/${conv.id}/messages`, { mode: this.mode, context: view, action });
+			if (this.selected?.id !== conv.id) return;
+			const content = ACTION_PREFIX + JSON.stringify({ version: VERSION, action: { ...action, ...(label ? { metadata: { label } } : {}) } });
+			this.messages = [...this.messages, { id: crypto.randomUUID(), role: 'user', content, created_at_ms: run.created_at_ms }];
+			this.runs = [...this.runs, toBlock(run)];
+			this.lastSequence = 0;
+			this.connect(run.id);
+		} catch (e) {
+			this.error = why(e);
+		} finally {
+			this.busy = false;
+		}
+	}
+
 	private connect(id: string) {
 		this.ws?.close();
 		const scheme = location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -371,6 +404,10 @@ class Chat {
 				break;
 			case 'tool_output':
 				this.upsertStep(runId, { id: d.id, name: d.name, output: d.output, status: d.status, exit: d.exit_code ?? undefined, duration: d.duration_ms ?? undefined });
+				if (d.name === 'show_ui' && d.status === 'completed') {
+					const step = this.runs.find((b) => b.id === runId)?.steps.find((t) => t.id === d.id);
+					if (step?.args) void this.surfaces.apply(runId, step.args, true);
+				}
 				break;
 			case 'approval_required': {
 				const c = d.tool_call ?? {};
@@ -441,6 +478,9 @@ class Chat {
 		try {
 			const d = await api<{ conversation: Conversation; messages: Message[] }>('GET', `/ai/conversations/${c.id}`);
 			if (this.selected?.id === c.id) {
+				// The final answer arrives as a message: drop its streamed copy at
+				// the same moment so it never shows twice.
+				this.patch(runId, (b) => ({ ...b, streaming: '' }));
 				this.messages = d.messages;
 				this.selected = d.conversation;
 				this.conversations = this.conversations.map((x) => (x.id === c.id ? d.conversation : x)).sort((a, b) => b.updated_at_ms - a.updated_at_ms);
@@ -448,7 +488,7 @@ class Chat {
 		} catch (e) {
 			this.error = why(e);
 		}
-		await this.restore(c.id);
+		await this.restore(c.id, false);
 	}
 
 	async decide(runId: string, s: Step, approve: boolean) {

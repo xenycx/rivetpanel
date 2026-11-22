@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/xenycx/rivetpanel/internal/a2ui"
 	operator "github.com/xenycx/rivetpanel/internal/ai"
 	"github.com/xenycx/rivetpanel/internal/domain"
 	"github.com/xenycx/rivetpanel/internal/paneldocs"
@@ -84,6 +85,7 @@ func agentTools() []operator.Tool {
 		toolSchema("panel_routes", "List the panel API routes you can call with panel_api (METHOD /path). Filter with a word such as backups, schedules, domains, workspaces, notifications, settings.", map[string]any{"query": str}),
 		toolSchema("panel_api", "Call any panel API route as the person, with their permissions: everything the panel's pages can do (backups, schedules, domains, sites, workspaces, members, add-ons, notifications, profile, admin settings for administrators). Paths are relative to /api/v1, for example GET /bots or PATCH /bots/{id}. Find routes with panel_routes. Read with GET before you change something so you send the right fields.",
 			map[string]any{"method": map[string]any{"type": "string", "enum": []string{"GET", "POST", "PUT", "PATCH", "DELETE"}}, "path": str, "body": map[string]any{"type": "object", "description": "JSON body for POST, PUT and PATCH"}}, "method", "path"),
+		toolSchema("show_ui", a2ui.ToolDescription, map[string]any{"messages": map[string]any{"type": "array", "minItems": 1, "maxItems": a2ui.MaxMessages, "items": map[string]any{"type": "object"}, "description": "A2UI v1.0 messages, applied in order"}}, "messages"),
 		toolSchema("client_action", "Change this person's own browser preferences or move their screen: theme (light, dark, system), accent colour (ember, ocean, teal, violet, orchid, rose, amber, lime, cyan, indigo, slate, clay), corner radius (none, subtle, default, round), or navigate to a panel page such as /bots/{id} or /settings.",
 			map[string]any{"action": map[string]any{"type": "string", "enum": []string{"set_theme", "set_accent", "set_radius", "navigate"}}, "value": str}, "action", "value"),
 	}
@@ -98,7 +100,7 @@ var agentToolNames = func() map[string]bool {
 }()
 
 // agentReadOnly agent tools never change anything.
-var agentReadOnly = map[string]bool{"panel_docs": true, "read_doc": true, "panel_info": true, "list_app_templates": true, "panel_routes": true, "wait_for_ready": true, "analyze_repo": true}
+var agentReadOnly = map[string]bool{"panel_docs": true, "read_doc": true, "panel_info": true, "list_app_templates": true, "panel_routes": true, "wait_for_ready": true, "analyze_repo": true, "show_ui": true}
 
 // secretArgs lists the argument keys whose values are secrets the tool-call
 // record must not keep. The live run still passes them to the panel.
@@ -696,6 +698,10 @@ func (s *AIService) agentTool(ctx context.Context, actor domain.User, c domain.A
 
 	case "panel_api":
 		return s.agentPanelAPI(ctx, actor, run, call, budget, a)
+
+	case "show_ui":
+		out, e := s.showUI(ctx, c, a)
+		return out, false, e
 
 	case "client_action":
 		act, val := a.str("action"), a.str("value")

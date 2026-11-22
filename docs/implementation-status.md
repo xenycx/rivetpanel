@@ -1332,6 +1332,16 @@ items state exactly what remains.
   Autopilot works across the panel). New tools `read_logs` and
   `build_output` give it the crash and build output. Enforcement: target
   authorization, per-run target pinning and run limits are application-level.
+- [x] A2UI interactive views in the assistant (1.19.0): `show_ui` takes
+  A2UI v1.0 messages (`internal/a2ui`), validated against the RivetPanel
+  catalog (basic catalog without Video/AudioPlayer, plus Heading, Metric,
+  Badge, Code, Link); a native Svelte renderer (`web/src/lib/a2ui`) draws them
+  with panel controls, morphs updates with View Transitions and rebuilds them
+  from stored tool calls (no migration). Button presses go back as A2UI
+  `action` messages. Enforcement: catalog, size limits, image/link address
+  rules and "only buttons this chat showed" are application-level (server);
+  the browser repeats the image/link address checks. Not yet: `sendDataModel`,
+  `callAgentFunction` and custom catalogs from the model.
 - [x] Diagnostics fixed: the runner's reconciler used to treat an AI
   diagnostic container (labelled with the bot id) as a stale duplicate of the
   bot and stop it (exit 137, no logs); diagnostic containers are now excluded

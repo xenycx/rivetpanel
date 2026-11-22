@@ -19,6 +19,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/xenycx/rivetpanel/internal/a2ui"
 	operator "github.com/xenycx/rivetpanel/internal/ai"
 	"github.com/xenycx/rivetpanel/internal/domain"
 	"github.com/xenycx/rivetpanel/internal/filesystem"
@@ -878,9 +879,13 @@ func (s *AIService) DeleteConversation(ctx context.Context, actor domain.User, i
 	return s.Store.DeleteAIConversation(ctx, id)
 }
 
-func (s *AIService) StartMessage(ctx context.Context, actor domain.User, conversationID, content, mode string, view *AIContext) (domain.AIRun, error) {
+// StartMessage stores the person's message and starts a run on it. An A2UI
+// action (a button the assistant showed) replaces the content: the
+// server checks it against the surfaces this conversation showed and writes
+// the message itself.
+func (s *AIService) StartMessage(ctx context.Context, actor domain.User, conversationID, content, mode string, view *AIContext, action *a2ui.Action) (domain.AIRun, error) {
 	content = strings.TrimSpace(content)
-	if content == "" || len(content) > 100000 {
+	if action == nil && (content == "" || len(content) > 100000) {
 		return domain.AIRun{}, domain.Invalid("message is empty or too large")
 	}
 	if mode == "" {
@@ -895,6 +900,11 @@ func (s *AIService) StartMessage(ctx context.Context, actor domain.User, convers
 	}
 	if e = s.authorizeTarget(ctx, actor, c, false); e != nil {
 		return domain.AIRun{}, e
+	}
+	if action != nil {
+		if content, e = s.actionMessage(ctx, c.ID, *action); e != nil {
+			return domain.AIRun{}, e
+		}
 	}
 	if c.ProviderID == nil || c.Model == nil {
 		return domain.AIRun{}, domain.Invalid("select an enabled AI provider and model")

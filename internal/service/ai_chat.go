@@ -9,6 +9,7 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/xenycx/rivetpanel/internal/a2ui"
 	operator "github.com/xenycx/rivetpanel/internal/ai"
 	"github.com/xenycx/rivetpanel/internal/domain"
 	"github.com/xenycx/rivetpanel/internal/runtimes"
@@ -213,7 +214,7 @@ Common causes: a missing or wrong environment variable (Discord says "TOKEN_INVA
 
 // systemPromptFor builds the full system prompt for one run.
 func (s *AIService) systemPromptFor(ctx context.Context, run domain.AIRun, view AIContext, targetName string) string {
-	return systemPromptBase + s.contextBlock(ctx, run, view, targetName)
+	return systemPromptBase + a2ui.PromptSection + s.contextBlock(ctx, run, view, targetName)
 }
 
 func toolSchema(name, description string, props map[string]any, required ...string) operator.Tool {

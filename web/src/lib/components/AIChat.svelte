@@ -7,6 +7,9 @@
 	import Icon from '$lib/components/ui/Icon.svelte';
 	import Notice from '$lib/components/ui/Notice.svelte';
 	import SafeMarkdown from '$lib/components/SafeMarkdown.svelte';
+	import { goto } from '$app/navigation';
+	import A2Surface from '$lib/a2ui/A2Surface.svelte';
+	import { ACTION_PREFIX, samePath, type Action } from '$lib/a2ui/model.svelte';
 
 	// One assistant for the whole panel. It follows the person from page to
 	// page, and every message carries what they were looking at.
@@ -139,6 +142,12 @@
 			case 'panel_routes': return a.query ? `Looked up ${a.query} in the panel API` : 'Looked up the panel API';
 			case 'panel_api': return `${a.method ?? 'GET'} ${a.path ?? ''}`;
 			case 'client_action': return a.action === 'navigate' ? `Opened ${a.value}` : `Set ${String(a.action ?? '').replace('set_', '')} to ${a.value}`;
+			case 'show_ui': {
+				const msgs: any[] = Array.isArray(a.messages) ? a.messages : [];
+				if (msgs.some((m) => m?.createSurface)) return 'Showed an interactive view';
+				if (msgs.length && msgs.every((m) => m?.deleteSurface)) return 'Removed an interactive view';
+				return 'Updated the interactive view';
+			}
 		}
 		return s.name.replaceAll('_', ' ');
 	}
@@ -165,6 +174,28 @@
 		}
 		return out;
 	}
+	// A2UI: button presses go back to the assistant as the next message.
+	const host = {
+		act: (a: Action, label: string) => void chat.sendAction(a, label),
+		locked: () => chat.active || chat.busy || noProvider,
+		open: (href: string) => {
+			if (samePath(href)) void goto(href);
+			else window.open(href, '_blank', 'noopener,noreferrer');
+		}
+	};
+	type Pressed = { label: string; details: string };
+	function pressed(content: string): Pressed | null {
+		if (!content.startsWith(ACTION_PREFIX)) return null;
+		try {
+			const a = JSON.parse(content.slice(ACTION_PREFIX.length)).action ?? {};
+			const ctx = a.context && typeof a.context === 'object' ? Object.entries(a.context as Record<string, unknown>) : [];
+			const show = (v: unknown) => (Array.isArray(v) ? v.join(', ') : v && typeof v === 'object' ? JSON.stringify(v) : String(v ?? ''));
+			return { label: String(a.metadata?.label || a.name || 'Pressed a button'), details: ctx.slice(0, 6).map(([k, v]) => `${k.replaceAll('_', ' ')}: ${show(v)}`).join(' · ') };
+		} catch {
+			return { label: 'Pressed a button', details: '' };
+		}
+	}
+
 	const when = (ms: number) => new Date(ms).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 
 	function onKeydown(e: KeyboardEvent) {
@@ -276,6 +307,9 @@
 				</ul>
 			</details>
 		{/if}
+		{#each chat.surfaces.ownedBy(r.id) as sf (sf.id)}
+			<A2Surface surface={sf} act={host.act} locked={host.locked} open={host.open} />
+		{/each}
 		{#if made(r).length}
 			<div class="flex flex-wrap gap-1.5">
 				{#each made(r) as m (m.href)}
@@ -398,7 +432,15 @@
 						<div class="space-y-3.5">
 							{#each timeline as it (it.t === 'msg' ? it.m.id : it.r.id)}
 								{#if it.t === 'msg'}
-									{#if it.m.role === 'user'}
+									{#if it.m.role === 'user' && pressed(it.m.content)}
+										{@const p = pressed(it.m.content)!}
+										<div class="flex flex-col items-end gap-0.5">
+											<p class="inline-flex max-w-[88%] items-center gap-1.5 rounded-tile rounded-br-sm border border-action/30 bg-action/6 px-2.5 py-1.5 text-small font-medium text-ink">
+												<Icon name="check" size={13} class="text-action" /><span class="truncate">{p.label}</span>
+											</p>
+											{#if p.details}<span class="max-w-[88%] truncate text-[.7rem] text-muted" title={p.details}>{p.details}</span>{/if}
+										</div>
+									{:else if it.m.role === 'user'}
 										<div class="flex flex-col items-end gap-1">
 											<p class="max-w-[88%] rounded-tile rounded-br-sm bg-paper-2 px-3 py-2 text-body whitespace-pre-wrap text-ink">{it.m.content}</p>
 											{#if it.m.context?.label || it.m.context?.kind === 'page'}

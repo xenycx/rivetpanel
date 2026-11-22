@@ -3088,3 +3088,151 @@ aside.sidebar {
 		color: var(--color-muted);
 	}
 }
+
+/* A2UI surfaces in the assistant chat (lib/a2ui). The agent describes a
+   small interface; it is drawn with the panel's own controls. One authored
+   moment: when the agent changes a surface the person can see, its cards,
+   metrics, badges and buttons travel to their new place and size in a View
+   Transition (even into a later turn), while the rest of the page holds
+   still. A new surface settles in part by part, once. */
+@layer components {
+	.a2-surface {
+		min-width: 0;
+		font-size: var(--text-small);
+		line-height: var(--text-small--line-height);
+	}
+	.a2-surface :is(input[type='checkbox'], input[type='radio'], input[type='range']) {
+		accent-color: var(--color-action);
+	}
+	.a2-card {
+		min-width: 0;
+		border: 1px solid var(--color-rule-soft);
+		border-radius: var(--radius-tile);
+		background: var(--color-panel);
+		padding: 0.875rem;
+		box-shadow: 0 1px 2px rgb(20 18 16 / 0.04), 0 6px 16px -10px rgb(20 18 16 / 0.18);
+	}
+	.a2-stretch > * {
+		flex: 1 1 0;
+		min-width: 0;
+	}
+	.a2-vlist > * {
+		padding-block: 0.5rem;
+	}
+	.a2-vlist > :first-child {
+		padding-top: 0;
+	}
+	.a2-vlist > :last-child {
+		padding-bottom: 0;
+	}
+	.a2-vlist > * + * {
+		border-top: 1px solid var(--color-rule-soft);
+	}
+	.a2-hlist > * {
+		flex-shrink: 0;
+		scroll-snap-align: start;
+	}
+	.a2-text :where(p, ul, ol) {
+		font-size: var(--text-small);
+		line-height: 1.45;
+	}
+	.a2-chip {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.3rem;
+		min-height: 1.875rem;
+		border: 1px solid var(--color-rule);
+		border-radius: var(--radius-pill);
+		background: var(--color-raised);
+		padding: 0.125rem 0.75rem;
+		font-weight: 500;
+		color: var(--color-ink);
+		transition:
+			background-color 120ms,
+			border-color 120ms,
+			color 120ms;
+	}
+	.a2-chip:hover {
+		border-color: color-mix(in srgb, var(--color-rule) 50%, var(--color-muted));
+	}
+	.a2-chip[aria-checked='true'] {
+		border-color: color-mix(in srgb, var(--color-action) 55%, var(--color-rule));
+		background: color-mix(in srgb, var(--color-action) var(--tint-state), var(--color-raised));
+		color: var(--color-action);
+	}
+	.a2-chip:focus-visible {
+		outline: 2px solid var(--color-action);
+		outline-offset: 2px;
+	}
+	@media (pointer: coarse) {
+		.a2-chip {
+			min-height: 2.5rem;
+		}
+	}
+	.a2-metric[data-tone='run'] .a2-value {
+		color: var(--color-run);
+	}
+	.a2-metric[data-tone='warn'] .a2-value {
+		color: var(--color-warn);
+	}
+	.a2-metric[data-tone='fail'] .a2-value {
+		color: var(--color-fail);
+	}
+	.a2-metric[data-tone='info'] .a2-value {
+		color: var(--color-data);
+	}
+	.a2-surface .pill[data-tone='info'] {
+		background: color-mix(in srgb, var(--color-data) var(--tint-state), transparent);
+		color: var(--color-data);
+	}
+	.a2-missing {
+		display: block;
+		height: 0.75rem;
+		width: 40%;
+		border-radius: var(--radius-inner);
+		background: var(--color-paper-2);
+	}
+	.a2-pending {
+		height: 3rem;
+		border-radius: var(--radius-tile);
+		background: var(--color-paper-2);
+	}
+	/* A new surface: each part rises a few pixels into place, in reading order. */
+	.a2-fresh .a2-in {
+		animation: a2-in 380ms cubic-bezier(0.16, 1, 0.3, 1) both;
+		animation-delay: calc(var(--a2-i, 0) * 30ms);
+	}
+	@keyframes a2-in {
+		from {
+			opacity: 0;
+			transform: translateY(5px);
+		}
+	}
+	@media (prefers-reduced-motion: reduce) {
+		.a2-fresh .a2-in {
+			animation: none;
+		}
+	}
+}
+/* The morph (lib/a2ui/model.svelte.ts names the parts for one transition). */
+:root[data-a2ui-morph]::view-transition-old(root) {
+	display: none;
+}
+:root[data-a2ui-morph]::view-transition-new(root) {
+	animation: none;
+}
+::view-transition-group(*.a2ui) {
+	animation-duration: 480ms;
+	animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+}
+::view-transition-old(*.a2ui) {
+	animation: 160ms cubic-bezier(0.4, 0, 1, 1) both vt-leave;
+}
+::view-transition-new(*.a2ui) {
+	animation: 300ms cubic-bezier(0.16, 1, 0.3, 1) 80ms both a2-arrive;
+}
+@keyframes a2-arrive {
+	from {
+		opacity: 0;
+	}
+}

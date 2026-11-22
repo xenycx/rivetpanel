@@ -81,6 +81,7 @@ link to the page.
 | `delete_bot` | Deletes an app and its files | Owner or administrator |
 | `panel_routes`, `panel_api` | Calls any panel API route: backups, schedules, domains, sites, workspaces, members, add-ons, notifications, profile, administration | The same permission as the page |
 | `client_action` | Sets your theme, accent colour or corner style in this browser, or opens a page | Nothing; it only changes your view |
+| `show_ui` | Shows an interactive view in the chat: choices, a short form, a plan to confirm, status metrics ([Interactive views](#interactive-views)) | Nothing; a button press is your next message |
 
 ### Looking and fixing
 
@@ -109,6 +110,49 @@ passkeys, sessions, API keys and tokens, linked sign-in providers, your email
 address, account deletion and the assistant's own approvals. [enforced: panel]
 Streaming routes (consoles, terminals, live events) are not callable; it uses
 `read_logs` instead.
+
+## Interactive views
+
+When choosing or filling something in beats typing, the assistant shows a
+small interface in the chat instead of prose: a deploy plan with a name field,
+a runtime choice, a memory slider and a **Deploy** button; a status board of
+your apps with metrics and badges; options to pick from. It is drawn with the
+panel's own controls, in your theme.
+
+- **Buttons answer the assistant.** Pressing one sends your choice and the
+  values in the view as your next message; the transcript shows it as a chip
+  with the button's label and the values. Buttons wait while a run is working,
+  and a button whose checks fail (an empty required field) stays disabled.
+- **Views update in place.** When the assistant changes a view you can see
+  (after a restart, say), the view moves into the newest turn and its parts
+  glide to their new values. With reduced motion turned on, updates are
+  instant.
+- **Reloads keep them.** Views are rebuilt from the chat history. Values you
+  edited but did not send are not kept.
+
+The views follow [A2UI](https://a2ui.org) v1.0, an open protocol for agent
+interfaces. The catalog is the A2UI basic catalog (Text, Image, Icon, Row,
+Column, List, Card, Tabs, Modal, Divider, Button, TextField, CheckBox,
+ChoicePicker, Slider, DateTimeInput) plus Heading, Metric, Badge, Code and
+Link.
+
+| Limit | Value |
+| --- | --- |
+| Messages per `show_ui` call | 20 |
+| Components per view | 120 |
+| Views kept in one chat | 24 |
+| Data per update | 32 KiB |
+| Values sent by one button | 8 KiB |
+
+**Checked by the server.** Every view is validated before you see it: only
+catalog components and functions, no Video or Audio, images only from the
+panel's own addresses, links only to panel pages or `https://` addresses, and
+no hidden password fields (secrets go through the secure input card). A broken
+view goes back to the model as an error to fix. A button press is accepted
+only for a button the chat really showed, with the event name it carries; the
+server writes the message and its time itself. [enforced: panel] The browser
+repeats the address checks before it draws an image or opens a link.
+[enforced: browser]
 
 ## Ask first and Autopilot
 

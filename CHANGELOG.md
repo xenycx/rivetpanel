@@ -6,6 +6,30 @@ authoritative current version.
 
 ## Unreleased
 
+## 1.19.0 - 2026-11-22
+
+### Added
+
+- **Interactive views in the AI assistant (A2UI).** The assistant can answer
+  with a small interface drawn by the panel instead of prose: a deploy plan
+  to adjust and confirm, a status board with metrics and badges, choices to
+  pick from, a short form. Buttons send the choice and the form values back
+  as your next message (shown as a chip). When the assistant updates a view
+  you can see, it moves into the newest turn and its parts glide to their new
+  values (View Transitions; instant with reduced motion). Views survive a
+  reload. It speaks [A2UI](https://a2ui.org) v1.0 through a new `show_ui`
+  tool, with the basic catalog plus Heading, Metric, Badge, Code and Link.
+
+### Security
+
+- Every A2UI view is validated on the server before it is drawn: catalog
+  components and functions only, no Video or Audio, images only from panel
+  addresses, links only to panel paths or `https://`, and no obscured fields
+  (secrets keep using the secure input card). A button press is accepted only
+  for a button the chat actually showed, with its event name and at most 8 KiB
+  of values; the server writes the message and its timestamp. No migration:
+  views are rebuilt from stored tool calls.
+
 ## 1.18.0 - 2026-11-14
 
 ### Added
