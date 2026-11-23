@@ -6,6 +6,16 @@ authoritative current version.
 
 ## Unreleased
 
+## 1.20.1 - 2026-11-23
+
+### Fixed
+
+- Hovering over a monitoring chart no longer makes the page jump. The
+  crosshair is shared, so every chart's legend used to gain a timestamp and
+  change width at once, re-wrapping and resizing every card. The legend now
+  keeps its time slot (showing the latest sample's time when you are not
+  hovering) and gives each value the width of its widest reading.
+
 ## 1.20.0 - 2026-11-23
 
 ### Added

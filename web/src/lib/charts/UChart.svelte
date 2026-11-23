@@ -441,11 +441,27 @@
 			.map(({ s, i }) => {
 				const col = data.series[i];
 				const v = cursorIdx !== null ? (col?.[cursorIdx] ?? null) : lastValue(col);
-				return { s, v: v === null ? '—' : (s.format ?? format)(v) };
+				return { s, i, v: v === null ? '—' : (s.format ?? format)(v) };
 			})
 	);
 	const cursorTime = $derived(cursorIdx !== null ? data.times[cursorIdx] : null);
+	// The legend must not change size while the crosshair moves: every chart
+	// in a group hovers at once, so a legend that re-wraps shifts the whole
+	// grid. Each value gets the width of its widest formatted value (computed
+	// when the data changes, not per hover), and the time slot is always there.
+	const valueWidths = $derived.by(() => {
+		const out: number[] = [];
+		for (const [i, s] of series.entries()) {
+			const f = s.format ?? format;
+			let w = 1;
+			for (const v of data.series[i] ?? []) if (v !== null && v !== undefined) w = Math.max(w, f(v).length);
+			out[i] = w;
+		}
+		return out;
+	});
+	const lastTime = $derived(data.times.length ? data.times[data.times.length - 1] : null);
 	const span = $derived(data.times.length > 1 ? data.times[data.times.length - 1] - data.times[0] : 0);
+	const stampWidth = $derived(data.times.length ? Math.max(fmtStamp(data.times[0], span).length, fmtStamp(data.times[data.times.length - 1], span).length) : 0);
 	const summary = $derived.by(() => {
 		const vs = (data.series[0] ?? []).filter((v): v is number => v !== null && v !== undefined);
 		if (!vs.length) return `${label}: no samples.`;
@@ -479,7 +495,7 @@
 	</div>
 	{#if legend}
 		<div class="mt-1.5 flex flex-wrap items-center gap-x-1 gap-y-0.5 text-small">
-			{#if cursorTime !== null}<span class="mr-1 font-mono text-label text-muted tabular-nums">{fmtStamp(cursorTime, span)}</span>{/if}
+			{#if lastTime !== null}<span class="mr-1 inline-block font-mono text-label whitespace-nowrap tabular-nums {cursorTime !== null ? 'text-muted' : 'text-muted/60'}" style="min-width: {stampWidth}ch">{fmtStamp(cursorTime ?? lastTime, span)}</span>{/if}
 			{#each legendItems as it (it.s.label)}
 				{@const off = hidden.includes(it.s.label)}
 				<button
@@ -495,7 +511,7 @@
 						<span class="inline-block shrink-0 {it.s.dashed ? 'h-0 w-3 border-t border-dashed border-current' : 'size-2 rounded-xs'} {it.s.dashed ? '' : (swatch[it.s.color ?? 'data'] ?? 'bg-data')}" style={it.s.color && !swatch[it.s.color] && !it.s.dashed ? `background: ${it.s.color}` : ''}></span>
 					{/if}
 					<span class="max-w-40 truncate {off ? 'line-through' : 'text-muted'}">{it.s.label}</span>
-					<span class="font-mono font-medium tabular-nums">{it.v}</span>
+					<span class="inline-block text-right font-mono font-medium whitespace-nowrap tabular-nums" style="min-width: {valueWidths[it.i] ?? 1}ch">{it.v}</span>
 				</button>
 			{/each}
 		</div>
