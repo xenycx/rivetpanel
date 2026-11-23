@@ -4,8 +4,10 @@ import { onLive } from '$lib/live.svelte';
  * not poll and catches up as soon as it becomes visible again. With `live`
  * topics it also runs as soon as one of them changes anywhere in the panel
  * (see lib/live.svelte.ts); the interval stays as the fallback. Returns a
- * stop function for onMount's cleanup. */
-export function poll(fn: () => void | Promise<void>, ms: number, live?: string[]): () => void {
+ * stop function for onMount's cleanup. With `immediate: false` the first run
+ * waits one interval (for callers that already loaded once). */
+export function poll(fn: () => void | Promise<void>, ms: number, live?: string[], opts: { immediate?: boolean } = {}): () => void {
+	let first = opts.immediate !== false;
 	let timer: ReturnType<typeof setInterval> | undefined;
 	let running = false;
 	const tick = async () => {
@@ -19,7 +21,8 @@ export function poll(fn: () => void | Promise<void>, ms: number, live?: string[]
 	};
 	const start = () => {
 		if (timer) return;
-		void tick();
+		if (first) void tick();
+		first = true; // coming back from a hidden tab always catches up
 		timer = setInterval(() => void tick(), ms);
 	};
 	const stop = () => {

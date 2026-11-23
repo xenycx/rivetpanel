@@ -117,9 +117,11 @@ on the smallest VPS you have.
   When you need to choose, it answers with interactive views
   ([A2UI](https://a2ui.org)): plans to confirm, forms and status boards.
   **Ask first** stops for your yes; **Autopilot** goes start to finish.
-- An administrator **Host** page with live and historical charts, daily log
-  files with an archive job, and a <kbd>Ctrl</kbd>+<kbd>K</kbd> palette that
-  finds anything.
+- An administrator **Host** page with fast canvas charts (one crosshair,
+  drag to zoom, live mode), per-app CPU and memory every 15 seconds, CPU
+  spikes traced to the app and process behind them, and an assistant that
+  explains them with charts. Plus daily log files with an archive job, and a
+  <kbd>Ctrl</kbd>+<kbd>K</kbd> palette that finds anything.
 
 ### 👥 Teams and sign-in
 - Workspaces with owner, admin, developer and viewer roles, custom account

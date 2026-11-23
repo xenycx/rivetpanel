@@ -207,6 +207,12 @@ var Vars = []VarSpec{
 		Description: "How often host CPU, memory, disk and network are sampled (30 to 60 seconds)."},
 	{Name: "RIVET_TELEMETRY_RETENTION", Group: GroupMonitor, Kind: KindDuration, Managed: "/admin/logs", Default: "168h", Example: "168h",
 		Description: "How long host samples are kept (1 hour to 365 days) when Logs and retention sets nothing. The charts on the Host page can show at most this much."},
+	{Name: "RIVET_HOST_PROC", Group: GroupMonitor, Kind: KindPath, Default: "/proc", Boot: true, Example: "/host/proc",
+		Description: "Where the host's /proc is visible, for the busiest processes and which app they belong to. The container deployment mounts the host's /proc read-only at /host/proc; without it only Docker's per-app process lists are shown. Command lines are shortened and secrets replaced; environments are never read."},
+	{Name: "RIVET_HOST_CGROUP", Group: GroupMonitor, Kind: KindPath, Default: "/sys/fs/cgroup", Boot: true, Example: "/host/cgroup",
+		Description: "Where the host's cgroup v2 filesystem is visible. Per-app CPU, memory and disk I/O are read from it every 15 seconds; when it is not reachable they come from Docker's statistics, which costs more."},
+	{Name: "RIVET_SPIKE_CPU_PCT", Group: GroupMonitor, Kind: KindInt, Default: "80", Example: "80",
+		Description: "Host CPU percent (10 to 100) that, held for 10 seconds, records a CPU spike with the apps and processes behind it. It ends after 30 seconds 10 points below."},
 	{Name: "RIVET_METRICS_TOKEN", Group: GroupMonitor, Kind: KindSecret,
 		Description: "Bearer secret (24 or more characters) that enables the Prometheus /metrics endpoint. Empty keeps the endpoint off."},
 

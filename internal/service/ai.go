@@ -217,7 +217,11 @@ type AIService struct {
 	Containers *ContainerService
 	API        PanelAPI
 	// Version is the panel's version, shown to the assistant by panel_info.
-	Version    string
+	Version string
+	// Metrics powers the load-debugging tools (metrics_query, list_spikes,
+	// explain_load, top_processes, cpu_by_app); nil makes them report that
+	// monitoring is unavailable.
+	Metrics    AIMetrics
 	Provider   *operator.Client
 	Research   *operator.Research
 	Diagnostic DiagnosticRunner
@@ -1303,6 +1307,10 @@ func sanitizeArgs(raw string) string {
 func safeToolError(e error) string {
 	switch {
 	case errors.Is(e, domain.ErrForbidden):
+		var pe *domain.PermissionError
+		if errors.As(e, &pe) {
+			return "Permission is required for this action: " + pe.Error() + "."
+		}
 		return "Permission is required for this action."
 	case errors.Is(e, domain.ErrNotFound):
 		return "The target or resource is no longer available."
@@ -1424,7 +1432,8 @@ func (s *AIService) redactor(ctx context.Context, c domain.AIConversation) *oper
 
 // readOnlyAITools only read; each call runs under ToolTimeout so a slow or
 // unresponsive node, log source or web page cannot hang the run.
-var readOnlyAITools = map[string]bool{"list_app_templates": true, "panel_routes": true, "list_targets": true, "target_status": true, "read_logs": true, "build_output": true, "list_files": true, "read_file": true, "search_files": true, "environment_names": true, "web_search": true, "web_fetch": true}
+var readOnlyAITools = map[string]bool{"list_app_templates": true, "panel_routes": true, "list_targets": true, "target_status": true, "read_logs": true, "build_output": true, "list_files": true, "read_file": true, "search_files": true, "environment_names": true, "web_search": true, "web_fetch": true,
+	"metrics_query": true, "list_spikes": true, "explain_load": true, "top_processes": true, "cpu_by_app": true}
 
 // errAIToolTimeout is reported to the model (and the person) when a
 // read-only tool does not finish in time.

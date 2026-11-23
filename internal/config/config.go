@@ -4,6 +4,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"math"
 	"net"
 	"net/netip"
 	"net/url"
@@ -82,6 +83,12 @@ type Config struct {
 
 	TelemetryInterval  time.Duration // 30s-60s
 	TelemetryRetention time.Duration
+	// HostProc and HostCgroup are where the host's /proc and cgroup v2
+	// filesystem are visible (the container deployment mounts them
+	// read-only), for per-process and per-app attribution.
+	HostProc    string
+	HostCgroup  string
+	SpikeCPUPct float64 // host CPU percent that opens a spike record (10-100)
 
 	// PublicURL is the externally reachable origin of the panel (for example
 	// https://panel.example.com). OAuth redirect URIs are derived from it.
@@ -252,6 +259,9 @@ func LoadLookup(look Lookup) (Config, error) {
 
 		TelemetryInterval:  30 * time.Second,
 		TelemetryRetention: 7 * 24 * time.Hour,
+		HostProc:           "/proc",
+		HostCgroup:         "/sys/fs/cgroup",
+		SpikeCPUPct:        80,
 	}
 	moduleRegistry, err := modules.Parse(getenv("RIVET_MODULES"))
 	if err != nil {
@@ -372,6 +382,19 @@ func LoadLookup(look Lookup) (Config, error) {
 	c.MailFrom = strings.TrimSpace(getenv("RIVET_MAIL_FROM"))
 	c.ProxyHeader = strings.TrimSpace(getenv("RIVET_PROXY_HEADER"))
 	c.MetricsToken = strings.TrimSpace(getenv("RIVET_METRICS_TOKEN"))
+	if v := strings.TrimSpace(getenv("RIVET_HOST_PROC")); v != "" {
+		c.HostProc = v
+	}
+	if v := strings.TrimSpace(getenv("RIVET_HOST_CGROUP")); v != "" {
+		c.HostCgroup = v
+	}
+	if v := strings.TrimSpace(getenv("RIVET_SPIKE_CPU_PCT")); v != "" {
+		n, err := strconv.ParseFloat(v, 64)
+		if err != nil {
+			return Config{}, fmt.Errorf("RIVET_SPIKE_CPU_PCT: %w", err)
+		}
+		c.SpikeCPUPct = n
+	}
 	if v := getenv("RIVET_BACKUP_DIR"); v != "" {
 		c.BackupDir = v
 	}
@@ -717,6 +740,14 @@ func (c Config) Validate() error {
 	}
 	if c.TelemetryRetention < time.Hour || c.TelemetryRetention > 365*24*time.Hour {
 		errs = append(errs, errors.New("telemetry retention must be between 1h and 365d"))
+	}
+	for name, v := range map[string]string{"RIVET_HOST_PROC": c.HostProc, "RIVET_HOST_CGROUP": c.HostCgroup} {
+		if !filepath.IsAbs(v) || strings.ContainsRune(v, 0) {
+			errs = append(errs, fmt.Errorf("%s must be an absolute path", name))
+		}
+	}
+	if math.IsNaN(c.SpikeCPUPct) || c.SpikeCPUPct < 10 || c.SpikeCPUPct > 100 {
+		errs = append(errs, errors.New("RIVET_SPIKE_CPU_PCT must be between 10 and 100"))
 	}
 	errs = append(errs, c.validateOAuth()...)
 	errs = append(errs, c.validateSites()...)

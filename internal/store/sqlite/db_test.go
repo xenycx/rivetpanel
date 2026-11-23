@@ -65,7 +65,7 @@ func TestMigrateIdempotentAndSchema(t *testing.T) {
 	}
 	var versions int
 	db.QueryRowContext(ctx, `SELECT count(*) FROM schema_migrations`).Scan(&versions)
-	if versions != 76 {
+	if versions != 77 {
 		t.Fatalf("versions = %d", versions)
 	}
 	var tables int
@@ -81,8 +81,9 @@ func TestMigrateIdempotentAndSchema(t *testing.T) {
 		'extension_publishers','extensions','extension_versions','extension_settings','extension_kv',
 		'extension_bot_enablements','extension_user_consents','extension_jobs','stacks','bot_containers','site_backups',
 		'support_message_revisions','support_message_reactions','support_labels','support_ticket_labels',
-		'support_saved_replies','support_ticket_watchers','user_domain_tokens','user_domains')`).Scan(&tables)
-	if tables != 67 {
+		'support_saved_replies','support_ticket_watchers','user_domain_tokens','user_domains',
+		'container_samples','process_snapshots','load_spikes')`).Scan(&tables)
+	if tables != 70 {
 		t.Fatalf("tables = %d", tables)
 	}
 }

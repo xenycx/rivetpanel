@@ -31,6 +31,14 @@ to the app can open it, the same people who see its live gauges.
 | 7 days, 30 days | 1 hour |
 | 90 days | 1 day |
 
+For 1 hour and 24 hours the CPU, memory, network, disk I/O and process
+charts use the app's 15-second samples instead (kept 48 hours), share one
+crosshair, zoom together when you drag across one, and mark the app's
+deploys, restarts and crashes. **Processes inside this app** lists what is
+running in its container now, busiest first.
+[Finding what caused a spike](../07-operate/05-host-and-logs.md#finding-what-caused-a-spike)
+covers the host-wide view.
+
 **Export CSV** downloads the rows shown
 (`GET /api/v1/bots/:id/usage?range=…&format=csv`).
 

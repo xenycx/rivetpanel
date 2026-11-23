@@ -3,28 +3,32 @@
 	import { api, fmtBytes } from '$lib/api/client';
 	import { fmtAgo } from '$lib/args';
 	import type { NodeInfo, Sample } from '$lib/api/types';
+	import { poll } from '$lib/poll';
 	import Sparkline from './Sparkline.svelte';
 
-	let nodes = $state<NodeInfo[]>([]);
-	let series = $state<Record<string, Sample[]>>({});
+	let nodes = $state.raw<NodeInfo[]>([]);
+	let series = $state.raw<Record<string, Sample[]>>({});
 	let error = $state('');
 
 	async function load() {
 		try {
-			nodes = (await api<{ nodes: NodeInfo[] }>('GET', '/nodes')).nodes;
-			for (const n of nodes) {
-				series[n.id] = (await api<{ samples: Sample[] }>('GET', `/nodes/${n.id}/telemetry?limit=60`)).samples;
-			}
+			const list = (await api<{ nodes: NodeInfo[] }>('GET', '/nodes')).nodes;
+			// All nodes at once; one slow or failing node keeps its last samples.
+			const got = await Promise.allSettled(list.map((n) => api<{ samples: Sample[] }>('GET', `/nodes/${n.id}/telemetry?limit=60`)));
+			const next: Record<string, Sample[]> = {};
+			list.forEach((n, i) => {
+				const r = got[i];
+				next[n.id] = r.status === 'fulfilled' ? r.value.samples : (series[n.id] ?? []);
+			});
+			nodes = list;
+			series = next;
 			error = '';
 		} catch {
-			error = 'Node metrics are unavailable right now.';
+			if (!nodes.length) error = 'Node metrics are unavailable right now.';
 		}
 	}
-	onMount(() => {
-		load();
-		const t = setInterval(load, 30_000);
-		return () => clearInterval(t);
-	});
+	// Paused while the tab is hidden; never two loads at once.
+	onMount(() => poll(load, 30_000));
 	const pct = (a: number, b: number) => (b ? Math.round((a / b) * 100) : 0);
 </script>
 

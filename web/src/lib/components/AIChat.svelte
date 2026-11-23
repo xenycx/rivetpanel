@@ -142,6 +142,11 @@
 			case 'panel_routes': return a.query ? `Looked up ${a.query} in the panel API` : 'Looked up the panel API';
 			case 'panel_api': return `${a.method ?? 'GET'} ${a.path ?? ''}`;
 			case 'client_action': return a.action === 'navigate' ? `Opened ${a.value}` : `Set ${String(a.action ?? '').replace('set_', '')} to ${a.value}`;
+			case 'metrics_query': return `Read ${a.bot_id ? `${a.bot_id}'s` : 'host'} metrics${a.range ? ` for ${a.range}` : ''}`;
+			case 'list_spikes': return `Listed CPU spikes${a.range ? ` in ${a.range}` : ''}`;
+			case 'explain_load': return a.spike_id != null ? `Explained spike ${a.spike_id}` : a.at ? `Explained the load at ${a.at}` : 'Explained the latest load';
+			case 'top_processes': return a.bot_id ? `Listed ${a.bot_id}'s processes` : 'Listed the busiest processes';
+			case 'cpu_by_app': return `Broke ${a.metric === 'mem' ? 'memory' : 'CPU'} down by app`;
 			case 'show_ui': {
 				const msgs: any[] = Array.isArray(a.messages) ? a.messages : [];
 				if (msgs.some((m) => m?.createSurface)) return 'Showed an interactive view';

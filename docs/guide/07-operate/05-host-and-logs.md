@@ -5,9 +5,10 @@ icon: server
 audience: admin
 aliases: [admin-tools]
 glance:
-  - Charts from 1 hour to 30 days
+  - Charts from 5 minutes to 30 days, live every 2 seconds
+  - Each app's use recorded every 15 seconds for 48 hours
+  - CPU spikes kept 30 days with the apps and processes behind them
   - Panel log keeps the newest 2,000 lines
-  - At most 60 running apps measured per refresh
 related: [operate/configuration, operate/diagnostics, observe/logs, teams/limits]
 ---
 
@@ -20,11 +21,13 @@ four tabs.
 ### Resources
 
 - CPU, memory (with cache and swap), load average, disk, network and disk
-  throughput, now and over 1 hour to 30 days. Charts show averages plus dashed
-  peaks. Samples are taken every `RIVET_TELEMETRY_INTERVAL` (30 seconds by
-  default), and the range is capped by how long samples are kept: 7 days by
-  default, set under **Administration → Logs and retention** or
-  `RIVET_TELEMETRY_RETENTION`.
+  throughput, drawn on canvas charts. Charts show averages plus dashed
+  peaks.
+- **CPU by app** and **memory by app**: stacked charts of the eight busiest
+  apps, the rest of the apps, and **host** (whatever no app accounts for: the
+  panel, Docker and the system).
+- Deploys, starts, stops, restarts, crashes, out-of-memory kills, backups and
+  spikes are marked on every chart.
 - A disk-fill forecast from the trend.
 - Host facts, and the RivetPanel process: memory, goroutines, open files,
   requests, errors and database size.
@@ -32,6 +35,66 @@ four tabs.
   the background about every five minutes.
 - A **needs attention** list that flags a nearly full disk, memory or swap
   pressure, a high load, a Docker problem and recent errors.
+
+#### Time range and refresh
+
+| Control | What it does |
+| --- | --- |
+| Range | 5 minutes to 30 days, or the exact span you dragged |
+| Drag across a chart | Zooms every chart to that span; double-click returns to the range |
+| Hover | One crosshair and the values at that moment on every chart |
+| Legend | Click hides a series; Alt- or Cmd-click shows only that one |
+| Refresh | Off, 5, 10 or 30 seconds, or 1 minute; only new points are fetched, so the charts scroll instead of redrawing |
+| Live | For ranges up to 1 hour, a new host point every 2 seconds (every 5 seconds on a remote node) |
+
+The range, refresh and Live choices are kept in the address, so a copied link
+opens the same view. Refreshing pauses while the tab is hidden.
+
+How far back each chart reaches:
+
+| Data | Step | Kept |
+| --- | --- | --- |
+| Host samples | `RIVET_TELEMETRY_INTERVAL` (30 seconds by default) | `RIVET_TELEMETRY_RETENTION` or **Logs and retention**, 7 days by default; older ranges use hourly and daily rollups |
+| Each app's CPU, memory, network, disk I/O and processes | 15 seconds (30 seconds on remote nodes) | 48 hours; older ranges use the 5-minute, hourly and daily usage rollups |
+| Process snapshots | Every 60 seconds, and every 15 seconds during a spike | 7 days |
+| Spikes | — | 30 days |
+
+#### Finding what caused a spike
+
+A **spike** starts when host CPU stays at or above `RIVET_SPIKE_CPU_PCT` (80 %
+by default) for 10 seconds and ends after 30 seconds at least 10 points below
+it. The panel records its peak and average and the apps and processes using
+the most CPU, and takes a process snapshot every 15 seconds while it lasts.
+Spikes are shaded on the CPU chart and listed above the charts with their
+main cause; selecting one zooms to it.
+
+Click any point on a chart to open **What happened here?** for that moment:
+
+- host CPU, memory and load
+- each app's CPU and memory, with its share of the host
+- the busiest processes, with the app each one belongs to
+- the events within 10 minutes and the spike, if there was one
+- **Ask the assistant**, which starts an AI chat about that moment (see
+  [AI assistant](10-ai-assistant.md))
+
+The **Processes** card lists the busiest processes now. Command lines are
+shortened to 160 characters, and an app's environment values and anything
+that looks like a secret are replaced. Process environments are never read.
+[enforced: panel]
+
+Spike detection and the 2-second live stream run for the panel's own machine.
+Remote nodes report per-app samples, process snapshots and a 5-second live
+stream of CPU, memory and load through their agent (agent 1.20.0 or later),
+but record no spikes.
+
+#### Host access for processes
+
+The busiest processes need the host's process list. Installed with systemd,
+the panel reads `/proc` directly. The container deployment mounts the host's
+`/proc` and `/sys/fs/cgroup` read-only and points `RIVET_HOST_PROC` and
+`RIVET_HOST_CGROUP` at them (see `compose.yaml`). Without those mounts the
+panel falls back to Docker: per-app processes from `docker top`, per-app
+use from Docker's statistics, and no host processes outside apps.
 
 ### Apps
 
@@ -100,7 +163,7 @@ on the page.
 | Kind | Variables |
 | --- | --- |
 | Read before the database opens | `RIVET_ENV`, `RIVET_LISTEN`, `RIVET_DB_PATH`, `RIVET_DB_MAX_CONNS`, `RIVET_DATA_ROOT`, `RIVET_KEY_DIR`, `RIVET_ACTIVE_KEY_ID`, `RIVET_RUNTIMES_DIR`, `RIVET_EXTENSIONS_SAFE_MODE` |
-| Decide what the panel may do to the host | `RIVET_DOCKER_HOST`, `RIVET_CONTAINER_USER`, `RIVET_WORKSPACE_OWNER`, `RIVET_ALLOW_ROOT_CONTAINER_USER`, `RIVET_ALLOW_SHARED_UID`, `RIVET_CONTAINER_NETWORK`, `RIVET_APPS_NETWORK`, `RIVET_PROXY_HEADER` |
+| Decide what the panel may do to the host | `RIVET_DOCKER_HOST`, `RIVET_CONTAINER_USER`, `RIVET_WORKSPACE_OWNER`, `RIVET_ALLOW_ROOT_CONTAINER_USER`, `RIVET_ALLOW_SHARED_UID`, `RIVET_CONTAINER_NETWORK`, `RIVET_APPS_NETWORK`, `RIVET_PROXY_HEADER`, `RIVET_HOST_PROC`, `RIVET_HOST_CGROUP` |
 | Managed by another page | Sign-in and address (**Panel settings**, where the environment file wins); the default allowance fallbacks `RIVET_MAX_BOTS_PER_USER`, `RIVET_MAX_SITES_PER_USER` and `RIVET_USER_MEMORY_BYTES` (**Panel settings → Default allowance**) and `RIVET_TELEMETRY_RETENTION` (**Logs and retention**), where the panel's value wins and the file is the fallback |
 
 Managed variables are marked **Managed** on the page.

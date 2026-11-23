@@ -977,6 +977,12 @@ func serve(log *slog.Logger, logs *logbuf.Buffer) error {
 		}
 		return nil
 	}
+	// Monitoring attribution: per-app samples every 15 seconds, process
+	// snapshots, CPU spikes and the live host stream (see internal/metrics).
+	metricsSvc := newMetrics(cfg, log, db, botSvc, dk, router)
+	go metricsSvc.Run(ctx)
+	// The assistant's load-debugging tools read the same service.
+	aiSvc.Metrics = metricsSvc
 	// Console output of local and remote servers is copied into day files
 	// (remote output streams through the agent; nothing changes on nodes).
 	if dk != nil || router != nil {
@@ -1021,7 +1027,7 @@ func serve(log *slog.Logger, logs *logbuf.Buffer) error {
 		Catalog: catalog, SecureCookies: cfg.Production, ProxyHeader: cfg.ProxyHeader, MetricsToken: cfg.MetricsToken, Modules: cfg.Modules, Checks: checks, Nodes: db, Files: wsm, MaxUpload: cfg.MaxUploadBytes,
 		Console: consoleSvc, BaseCtx: ctx, RunnerReady: runnerReady, Ops: ops, Audit: audit, Schedules: scheduler,
 		MFA: mfaSvc, Tokens: &service.TokenService{Store: db, Bots: botSvc}, Clients: &service.APIClientService{Store: db, Bots: botSvc}, Passkeys: &service.PasskeyService{Store: db, Auth: authSvc, MFA: mfaSvc, PublicURL: oauthSvc.CurrentPublicURL}, OIDC: &service.OIDCService{Store: db, Auth: authSvc, Keys: keys, PublicURL: oauthSvc.CurrentPublicURL, States: oauthSvc.States, Log: log}, Enrollment: enrollmentSvc, AgentControl: agentControl, GameAddress: gameAddress, Games: gameSvc, Containers: containerSvc, Router: router, Health: health,
-		Settings: settingsSvc, Notifications: notices, Tickets: tickets, KB: kbSvc, Status: statusSvc, Usage: usageSvc, Mail: mailSvc, Resets: resetSvc, Verify: verifySvc, MailPrefs: db, Sites: sitesSvc, AI: aiSvc, Extensions: extSvc, Env: envSvc, Host: monitor, Logs: logs, LogArchive: logArchive, SetupCodeFile: setupCodeFile, OnSetupDone: func() { _ = os.Remove(setupCodeFile) }})
+		Settings: settingsSvc, Notifications: notices, Tickets: tickets, KB: kbSvc, Status: statusSvc, Usage: usageSvc, Mail: mailSvc, Resets: resetSvc, Verify: verifySvc, MailPrefs: db, Sites: sitesSvc, AI: aiSvc, Extensions: extSvc, Env: envSvc, Host: monitor, Metrics: metricsSvc, Logs: logs, LogArchive: logArchive, SetupCodeFile: setupCodeFile, OnSetupDone: func() { _ = os.Remove(setupCodeFile) }})
 	ln, err := net.Listen("tcp", cfg.Listen)
 	if err != nil {
 		return err

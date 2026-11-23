@@ -2,12 +2,14 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/xenycx/rivetpanel/internal/domain"
+	"github.com/xenycx/rivetpanel/internal/metrics"
 )
 
 // Autopilot acts at once: environment, settings, power and any panel route,
@@ -211,5 +213,78 @@ func TestAIAgentKnowsThePanel(t *testing.T) {
 	}
 	if res := lastToolResult(fp, 3); !strings.Contains(res, `"version": "9.9.9"`) || !strings.Contains(res, "runtimes") || !strings.Contains(res, "nodejs") {
 		t.Fatalf("panel_info: %q", res)
+	}
+}
+
+// The load-debugging tools read the monitoring service with the person's
+// access: host data needs system.view; the answer can chart it.
+func TestAIAgentExplainsLoad(t *testing.T) {
+	fp := &fakeProvider{}
+	e, ai, admin, _, _ := aiEnv(t, fp)
+	ai.Metrics = &metrics.Metrics{Store: e.db, LocalNode: domain.LocalNodeID, LogicalCPUs: 2, Proc: metrics.ProcSampler{Root: t.TempDir()}, Fast: &metrics.FastSampler{}}
+	now := time.Now().UnixMilli()
+	for i := int64(0); i < 40; i++ {
+		cpu := 30.0
+		if i < 6 {
+			cpu = 96
+		}
+		e.db.InsertTelemetry(t.Context(), domain.Telemetry{NodeID: domain.LocalNodeID, SampledAtMS: now - i*30_000, CPUPercent: cpu, LogicalCPUs: 2,
+			MemoryUsedBytes: 100, MemoryTotalBytes: 200, DiskUsedBytes: 1, DiskTotalBytes: 2, Load1: 1.5})
+	}
+	ended := now - 10_000
+	if _, err := e.db.InsertSpike(t.Context(), domain.LoadSpike{NodeID: domain.LocalNodeID, StartedAtMS: now - 170_000, EndedAtMS: &ended, PeakCPUPct: 97, AvgCPUPct: 95,
+		TopProcesses: []domain.ProcessEntry{{PID: 7, Comm: "stress", Cmd: "stress --cpu 2", CPUPct: 190, RSSBytes: 1 << 20}}}); err != nil {
+		t.Fatal(err)
+	}
+	fp.steps = []func(http.ResponseWriter){
+		toolStep("a", "list_spikes", map[string]any{"range": "1h"}),
+		toolStep("b", "explain_load", map[string]any{}),
+		toolStep("c", "metrics_query", map[string]any{"range": "30m", "metrics": []string{"cpu", "load1"}}),
+		toolStep("d", "show_ui", map[string]any{"messages": []any{map[string]any{"version": "1.0", "createSurface": map[string]any{"surfaceId": "load", "components": []any{
+			map[string]any{"id": "root", "component": "Card", "child": "col"},
+			map[string]any{"id": "col", "component": "Column", "children": []any{"cpu", "tbl"}},
+			map[string]any{"id": "cpu", "component": "TimeSeries", "unit": "percent", "times": []any{now - 60_000, now}, "threshold": 80, "series": []any{map[string]any{"label": "CPU", "values": []any{96, 30}}}, "annotations": []any{map[string]any{"t": now - 170_000, "end": ended, "label": "Spike", "kind": "spike"}}},
+			map[string]any{"id": "tbl", "component": "Table", "bar": "share", "columns": []any{map[string]any{"key": "p", "label": "Process"}, map[string]any{"key": "share", "label": "Share", "format": "percent"}}, "rows": []any{map[string]any{"p": "stress", "share": 95}}},
+		}}}}}),
+		textStep("stress caused it"),
+	}
+	chat := newChat(t, admin)
+	run := sendChat(t, admin, chat, "approval", "what caused the CPU spike?", map[string]any{"kind": "page", "path": "/admin/host"})
+	if r := waitRun(t, admin, run, "completed", "failed"); r["status"] != "completed" {
+		t.Fatalf("run: %v", r)
+	}
+	if res := lastToolResult(fp, 1); !strings.Contains(res, `"threshold_pct":80`) || !strings.Contains(res, `"comm":"stress"`) || !strings.Contains(res, `"annotations"`) {
+		t.Fatalf("list_spikes: %q", res)
+	}
+	if res := lastToolResult(fp, 2); !strings.Contains(res, "latest spike") || !strings.Contains(res, `"likely_cause"`) || !strings.Contains(res, "peaked at 97%") {
+		t.Fatalf("explain_load: %q", res)
+	}
+	if res := lastToolResult(fp, 3); !strings.Contains(res, `"max":96`) || !strings.Contains(res, `"load1"`) {
+		t.Fatalf("metrics_query: %q", res)
+	}
+	if res := lastToolResult(fp, 4); !strings.Contains(res, `Showed surface "load" (4 components)`) {
+		t.Fatalf("show_ui chart: %q", res)
+	}
+	sys := fp.body(0)["messages"].([]any)[0].(map[string]any)["content"].(string)
+	tools, _ := json.Marshal(fp.body(0)["tools"])
+	for _, n := range []string{"metrics_query", "list_spikes", "explain_load", "top_processes", "cpu_by_app"} {
+		if !strings.Contains(sys, n) || !strings.Contains(string(tools), `"`+n+`"`) {
+			t.Fatalf("%s is not offered or taught", n)
+		}
+	}
+	if !strings.Contains(sys, "TimeSeries") || !strings.Contains(string(tools), "Table{") {
+		t.Fatal("the prompt does not teach the chart components")
+	}
+
+	// Without system.view the host tools refuse, naming the permission.
+	user := e.user("user@example.com", domain.RoleUser)
+	fp.steps = append(fp.steps, toolStep("e", "explain_load", map[string]any{}), toolStep("f", "top_processes", map[string]any{}), textStep("no"))
+	uchat := newChat(t, user)
+	run = sendChat(t, user, uchat, "auto", "why is it slow", nil)
+	waitRun(t, user, run, "completed")
+	for i := 6; i <= 7; i++ {
+		if res := lastToolResult(fp, i); !strings.Contains(res, "Tool failed") || !strings.Contains(res, "system.view") {
+			t.Fatalf("host tool %d without system.view: %q", i, res)
+		}
 	}
 }

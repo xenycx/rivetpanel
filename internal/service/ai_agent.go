@@ -31,7 +31,7 @@ func agentTools() []operator.Tool {
 	strMap := map[string]any{"type": "object", "additionalProperties": map[string]any{"type": "string"}}
 	strList := map[string]any{"type": "array", "items": str, "maxItems": 40}
 	botID := map[string]any{"type": "string", "description": "Bot or app id; defaults to the focused one"}
-	return []operator.Tool{
+	return append([]operator.Tool{
 		toolSchema("panel_docs", "Search the RivetPanel guide (every feature, limit, setting and how it works: apps, game servers, containers, websites, domains, teams, backups, nodes, security, administration). Use it before answering how-to questions or acting on a feature you are unsure about. Returns the best pages with the matching section and its /docs link.", map[string]any{"query": str}, "query"),
 		toolSchema("read_doc", "Read one guide page, or one section of it, from panel_docs results: page is an id such as websites/domains, a /docs/ link or a short name such as domains.", map[string]any{"page": str, "section": map[string]any{"type": "string", "description": "Optional heading, for example \"verify\" or \"limits\""}}, "page"),
 		toolSchema("panel_info", "Describe this panel right now: version, enabled features and modules, the person's role and permissions, runtimes, add-on kinds, the container image policy, workspaces and capacity. Call it once when what is possible here matters.", map[string]any{}),
@@ -88,7 +88,7 @@ func agentTools() []operator.Tool {
 		toolSchema("show_ui", a2ui.ToolDescription, map[string]any{"messages": map[string]any{"type": "array", "minItems": 1, "maxItems": a2ui.MaxMessages, "items": map[string]any{"type": "object"}, "description": "A2UI v1.0 messages, applied in order"}}, "messages"),
 		toolSchema("client_action", "Change this person's own browser preferences or move their screen: theme (light, dark, system), accent colour (ember, ocean, teal, violet, orchid, rose, amber, lime, cyan, indigo, slate, clay), corner radius (none, subtle, default, round), or navigate to a panel page such as /bots/{id} or /settings.",
 			map[string]any{"action": map[string]any{"type": "string", "enum": []string{"set_theme", "set_accent", "set_radius", "navigate"}}, "value": str}, "action", "value"),
-	}
+	}, metricsTools()...)
 }
 
 var agentToolNames = func() map[string]bool {
@@ -100,7 +100,8 @@ var agentToolNames = func() map[string]bool {
 }()
 
 // agentReadOnly agent tools never change anything.
-var agentReadOnly = map[string]bool{"panel_docs": true, "read_doc": true, "panel_info": true, "list_app_templates": true, "panel_routes": true, "wait_for_ready": true, "analyze_repo": true, "show_ui": true}
+var agentReadOnly = map[string]bool{"panel_docs": true, "read_doc": true, "panel_info": true, "list_app_templates": true, "panel_routes": true, "wait_for_ready": true, "analyze_repo": true, "show_ui": true,
+	"metrics_query": true, "list_spikes": true, "explain_load": true, "top_processes": true, "cpu_by_app": true}
 
 // secretArgs lists the argument keys whose values are secrets the tool-call
 // record must not keep. The live run still passes them to the panel.
@@ -299,6 +300,10 @@ func (s *AIService) executeAgentTool(ctx context.Context, actor domain.User, c d
 }
 
 func (s *AIService) agentTool(ctx context.Context, actor domain.User, c domain.AIConversation, run *domain.AIRun, call *domain.AIToolCall, budget *aiBudget, a agentArgs) (string, bool, error) {
+	if metricsToolNames[call.Name] {
+		out, err := s.metricsTool(ctx, actor, c, a, call.Name)
+		return out, false, err
+	}
 	red := s.redactor(ctx, c)
 	switch call.Name {
 	case "panel_docs":

@@ -20,6 +20,7 @@ import (
 	"github.com/xenycx/rivetpanel/internal/hostmon"
 	"github.com/xenycx/rivetpanel/internal/live"
 	"github.com/xenycx/rivetpanel/internal/logbuf"
+	"github.com/xenycx/rivetpanel/internal/metrics"
 	"github.com/xenycx/rivetpanel/internal/modules"
 	"github.com/xenycx/rivetpanel/internal/noderoute"
 	"github.com/xenycx/rivetpanel/internal/pkgmgr"
@@ -92,6 +93,7 @@ type Deps struct {
 	Agent         *AgentBridge
 	Env           *service.PanelEnvService   // nil disables the environment editor
 	Host          *hostmon.Monitor           // nil disables the host monitoring routes
+	Metrics       *metrics.Metrics           // nil disables the series, attribution and live host routes
 	LogArchive    *service.LogArchiveService // nil disables the log archive routes
 	Logs          *logbuf.Buffer             // nil disables the panel log viewer
 	SetupCodeFile string                     // shown by the setup wizard
@@ -178,6 +180,8 @@ type panel struct {
 	ai            *service.AIService
 	env           *service.PanelEnvService
 	host          *hostmon.Monitor
+	metrics       *metrics.Metrics
+	streams       chan struct{} // bounds open live host streams
 	logs          *logbuf.Buffer
 	setupCodeFile string
 	onSetupDone   func()
@@ -270,7 +274,7 @@ func New(d Deps) *fiber.App {
 		return c.JSON(fiber.Map{"status": "ok", "checks": checks})
 	})
 	if d.Auth != nil && d.Bots != nil {
-		s := &panel{log: d.Log, auth: d.Auth, bots: d.Bots, oauth: d.OAuth, sftp: d.SFTP, analytics: d.Analytics, publicURL: d.PublicURL, registry: d.Registry, stats: d.Stats, backups: d.Backups, moves: d.Moves, deploy: d.Deploy, ops: d.Ops, audit: d.Audit, schedules: d.Schedules, mfa: d.MFA, tokens: d.Tokens, clients: d.Clients, oidc: d.OIDC, passkeys: d.Passkeys, enrollment: d.Enrollment, agentControl: d.AgentControl, gameAddress: d.GameAddress, games: d.Games, containers: d.Containers, extensions: d.Extensions, router: d.Router, health: d.Health, settings: d.Settings, mail: d.Mail, notifications: d.Notifications, tickets: d.Tickets, kb: d.KB, status: d.Status, usage: d.Usage, resets: d.Resets, verify: d.Verify, mailPrefs: d.MailPrefs, sites: d.Sites, ai: d.AI, agent: d.Agent, env: d.Env, host: d.Host, logs: d.Logs, logArchive: d.LogArchive, setupCodeFile: d.SetupCodeFile, onSetupDone: d.OnSetupDone, statsLimit: console.NewLimiter(0, 0, 0), catalog: d.Catalog, secureCookies: d.SecureCookies, modules: d.Modules,
+		s := &panel{log: d.Log, auth: d.Auth, bots: d.Bots, oauth: d.OAuth, sftp: d.SFTP, analytics: d.Analytics, publicURL: d.PublicURL, registry: d.Registry, stats: d.Stats, backups: d.Backups, moves: d.Moves, deploy: d.Deploy, ops: d.Ops, audit: d.Audit, schedules: d.Schedules, mfa: d.MFA, tokens: d.Tokens, clients: d.Clients, oidc: d.OIDC, passkeys: d.Passkeys, enrollment: d.Enrollment, agentControl: d.AgentControl, gameAddress: d.GameAddress, games: d.Games, containers: d.Containers, extensions: d.Extensions, router: d.Router, health: d.Health, settings: d.Settings, mail: d.Mail, notifications: d.Notifications, tickets: d.Tickets, kb: d.KB, status: d.Status, usage: d.Usage, resets: d.Resets, verify: d.Verify, mailPrefs: d.MailPrefs, sites: d.Sites, ai: d.AI, agent: d.Agent, env: d.Env, host: d.Host, metrics: d.Metrics, streams: make(chan struct{}, maxHostStreams), logs: d.Logs, logArchive: d.LogArchive, setupCodeFile: d.SetupCodeFile, onSetupDone: d.OnSetupDone, statsLimit: console.NewLimiter(0, 0, 0), catalog: d.Catalog, secureCookies: d.SecureCookies, modules: d.Modules,
 			console: d.Console, consoleLimit: d.ConsoleLimit, baseCtx: d.BaseCtx, nodes: d.Nodes, files: d.Files, maxUpload: d.MaxUpload,
 			runnerReady: d.RunnerReady, buildMemory: d.BuildMemory, diagnostics: d.Diagnostics, live: d.Live}
 		if s.buildMemory == 0 {
@@ -700,6 +704,10 @@ func (s *panel) routes(v1 fiber.Router) {
 		authed.Post("/admin/environment/restart", s.requireAdmin, s.restartPanel)
 	}
 	if s.nodes != nil {
+		// Monitoring routes need system.view, not nodes.manage: they are
+		// registered before the /nodes group so its middleware never runs
+		// for them.
+		s.metricsRoutes(authed)
 		nodes := authed.Group("/nodes", s.requirePerm(domain.PermNodesManage))
 		nodes.Get("", s.listNodes)
 		nodes.Put("/default", s.putDefaultNode)

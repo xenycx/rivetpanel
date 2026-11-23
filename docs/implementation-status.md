@@ -186,6 +186,27 @@ items state exactly what remains.
   reconnect, its files are not; the operation message says so). Remote
   add-on copies need the updated agent; an older one answers 404 and the
   move is refused with an update message.
+- [x] Monitoring attribution (1.20.0, migration `0076`, agent protocol
+  unchanged but agent gains `GET /node/v1/processes`): `internal/metrics`
+  records each app's CPU, memory, network, block I/O and PIDs every 15 s
+  (cgroup v2 files under `RIVET_HOST_CGROUP`, falling back to one-shot Docker
+  stats; remote nodes every 30 s through the agent stats proxy, 40 apps per
+  pass), a 2 s in-memory host ring that feeds the SSE stream and spike
+  detection (`RIVET_SPIKE_CPU_PCT`, local node only), and process snapshots
+  from `RIVET_HOST_PROC` mapped to apps by cgroup (fallback `docker top`).
+  Columnar range API (`/nodes/:id/series`, `/series/bots`, `/series/stream`,
+  `/events`, `/spikes`, `/at`, `/processes`, `/bots/:id/series`,
+  `/bots/:id/processes`) behind `system.view` or the app's console
+  permission [enforced: panel]. Process command lines are shortened and have
+  the app's environment values and secret-looking arguments replaced; the
+  process environment is never read [enforced: panel]. The UI uses uPlot
+  canvas charts with synced crosshair and zoom, incremental `since=` refresh
+  and a "What happened here?" drawer. The assistant gains read-only load
+  tools and A2UI `TimeSeries` and `Table` components. Not done: spike
+  detection on remote nodes, and per-process history for remote nodes beyond
+  the 60 s snapshots. Tests: `internal/metrics`, `internal/store/sqlite`
+  metrics tests, `internal/api/metrics_test.go`,
+  `internal/agentnode/processes_test.go`.
 - [~] Game hosting (Preview 2, migration `0040`): Minecraft Java server types
   (Paper, Purpur, Vanilla, Fabric, Forge, NeoForge, Folia, Velocity) defined by
   validated YAML blueprints with immutable revisions; provider version lists;
@@ -1407,6 +1428,7 @@ Migrations added since 0.2.0 (the schema-version assertion in
 | `0073_user_domains.sql` | Additive: new tables `user_domain_tokens` (one 32-character token per user, created on first use) and `user_domains` (unique per user and domain; verification state like `site_domains`), both `ON DELETE CASCADE` with the user; `site_domains.user_domain_id` (`ON DELETE SET NULL`, NULL for existing rows) records which user domain proved a custom domain. Covered by `TestMigrateIdempotentAndSchema` (74 versions), `TestSiteCustomDomains` and `TestUserDomains` |
 | `0074_user_domain_default.sql` | Additive: `user_domains.is_default` (0/1, default 0, so existing domains are not the default) and the partial unique index `user_domains_default_idx(user_id) WHERE is_default = 1` (one default per user). Covered by `TestMigrateIdempotentAndSchema` (75 versions) and `TestUserDomains` |
 | `0075_move_operations.sql` | Rebuilds `operations` with identical columns (as `0025` did) so `kind` may be `move`; rows, indexes and the active-status partial index are recreated. Nothing references the table. Covered by `TestMigrateIdempotentAndSchema` (76 versions) and `TestMoveBotBetweenNodes` |
+| `0076_metrics_attribution.sql` | Additive: `container_samples` (per-app 15 s samples, pruned after 48 h), `process_snapshots` (busiest processes with source, pruned after 7 d) and `load_spikes` (pruned after 30 d), each with a node/time index; JSON columns are size-capped and checked. Covered by `TestMigrateIdempotentAndSchema` (77 versions, 70 tables) and the `internal/store/sqlite` metrics tests |
 | `0054_web_apps.sql` | Rebuilds `bots` (kind gains `web`, runtime gains `php`, new `release_command`) and `sites` (mode gains `app`; `app_id`, `framework`, `build_output_dir`, `app_port`, `health_path`, `max_body_bytes`) with explicit column lists and foreign keys off (checked with `PRAGMA foreign_key_check`; all indexes recreated); additive `site_releases.source_ref` and `bot_health_probes.target` (`host`/`app`). Covered by `apps_migration_test.go` |
 | `0030_ai_global_chat.sql` | Rebuilds `ai_conversations` so a chat may have no target; `ai_runs.bot_id`/`site_id`, `ai_messages.context_json` (the conversation subtree is stashed and restored, rows preserved) |
 

@@ -1,5 +1,6 @@
 <script lang="ts" module>
 	import type { Action, Surface } from './model.svelte';
+	import { ChartGroup } from '$lib/charts/sync.svelte';
 	export type Host = {
 		surface: Surface;
 		/** Sends a button's event to the assistant. */
@@ -8,6 +9,8 @@
 		locked: () => boolean;
 		/** Opens a panel page or an https address. */
 		open: (href: string) => void;
+		/** Charts on one surface share a crosshair and zoom. */
+		group: ChartGroup;
 	};
 	export const HOST = Symbol('a2ui-host');
 </script>
@@ -18,7 +21,9 @@
 
 	// One A2UI surface, drawn with the panel's own controls.
 	let { surface, act, locked, open }: { surface: Surface; act: Host['act']; locked: Host['locked']; open: Host['open'] } = $props();
+	const group = new ChartGroup();
 	setContext<Host>(HOST, {
+		group,
 		get surface() {
 			return surface;
 		},

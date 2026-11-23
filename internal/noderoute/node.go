@@ -8,7 +8,9 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/xenycx/rivetpanel/internal/agentproto"
@@ -220,4 +222,45 @@ func (r *Router) RunNodeSampler(ctx context.Context, store TelemetryStore, inter
 			r.SampleNodes(ctx, store)
 		}
 	}
+}
+
+// Processes reads a remote node's busiest processes (of one container when
+// containerID is set) through its agent. Command lines arrive unredacted
+// (cut to agentproto.MaxProcessCmd); callers redact them.
+func (r *Router) Processes(ctx context.Context, nodeID string, limit int, containerID string) (agentproto.Processes, error) {
+	if !r.Remote(nodeID) || r.Hub == nil {
+		return agentproto.Processes{}, ErrNoRunner
+	}
+	q := url.Values{}
+	q.Set("limit", strconv.Itoa(limit))
+	if containerID != "" {
+		q.Set("container", containerID)
+	}
+	resp, err := r.Hub.Do(ctx, nodeID, http.MethodGet, "/node/v1/processes?"+q.Encode(), nil, "")
+	if err != nil {
+		return agentproto.Processes{}, offline(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return agentproto.Processes{}, agentError("process list", resp)
+	}
+	var out agentproto.Processes
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&out); err != nil {
+		return agentproto.Processes{}, err
+	}
+	return out, nil
+}
+
+// OnlineNodes lists the connected remote nodes.
+func (r *Router) OnlineNodes() []string {
+	if r.Hub == nil {
+		return nil
+	}
+	var out []string
+	for _, id := range r.Hub.ConnectedNodes() {
+		if r.Remote(id) {
+			out = append(out, id)
+		}
+	}
+	return out
 }

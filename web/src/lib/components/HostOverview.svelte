@@ -1,23 +1,21 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { api, fmtBytes } from '$lib/api/client';
-	import { fmtBps, fmtUptime, pct, tone, ranges, type History, type HistoryPoint, type HostSnapshot, type Range } from '$lib/api/admin';
+	import { fmtBps, fmtUptime, pct, tone, type HostSnapshot } from '$lib/api/admin';
+	import type { NodeSeries } from '$lib/api/metrics';
 	import type { NodeInfo, Sample } from '$lib/api/types';
 	import { fmtAgo } from '$lib/args';
 	import { poll } from '$lib/poll';
 	import Icon from '$lib/components/ui/Icon.svelte';
 	import Notice from '$lib/components/ui/Notice.svelte';
 	import Sparkline from '$lib/components/Sparkline.svelte';
-	import TimeChart from '$lib/components/TimeChart.svelte';
+	import HostMonitor from '$lib/components/HostMonitor.svelte';
 
 	let { snap, goto }: { snap: HostSnapshot | null; goto: (tab: string) => void } = $props();
 
-	let range = $state<Range>('1h');
-	let hist = $state<History | null>(null);
+	let series = $state.raw<NodeSeries | null>(null);
 	let node = $state<NodeInfo | null>(null);
 	let nodeLoaded = $state(false);
-	let error = $state('');
-	let loading = $state(false);
 
 	async function loadNode() {
 		try {
@@ -28,39 +26,22 @@
 			nodeLoaded = true;
 		}
 	}
-	async function loadHistory() {
-		if (!node) return;
-		const asked = range;
-		loading = true;
-		try {
-			const h = await api<History>('GET', `/nodes/${node.id}/history?range=${asked}`);
-			if (asked === range) hist = h;
-			error = '';
-		} catch {
-			error = 'Host history is unavailable right now.';
-		} finally {
-			loading = false;
-		}
-	}
-	onMount(() => {
-		const stopNode = poll(loadNode, 15_000, ['bots', 'admin/nodes']);
-		const stopHist = poll(loadHistory, 30_000);
-		return () => {
-			stopNode();
-			stopHist();
-		};
-	});
-	$effect(() => {
-		void range;
-		hist = null;
-		void loadHistory();
-	});
-	$effect(() => {
-		if (node) void loadHistory();
-	});
+	// Only the header figures depend on this poll; the charts key on the node id
+	// (a primitive), so replacing `node` every 15 s never reloads them.
+	onMount(() => poll(loadNode, 15_000, ['bots', 'admin/nodes']));
+	const nodeId = $derived(node?.id ?? null);
+	const nodeName = $derived(node?.name ?? 'this host');
 
-	const pts = $derived<HistoryPoint[]>(hist?.points ?? []);
-	const times = $derived(pts.map((p) => p.sampled_at_ms));
+	// Recent CPU and memory for the sparklines: the last hour of the history shown below.
+	const tail = $derived.by(() => {
+		const t = series?.times ?? [];
+		const from = t.length ? t[t.length - 1] - 3600_000 : 0;
+		const lo = Math.max(0, t.findIndex((x) => x >= from));
+		const cpu = (series?.cpu ?? []).slice(lo).filter((v): v is number => v !== null);
+		const total = series?.mem_total || 1;
+		const mem = (series?.mem ?? []).slice(lo).filter((v): v is number => v !== null).map((v) => (v / total) * 100);
+		return { cpu, mem };
+	});
 	const last = $derived<Sample | undefined>(node?.latest);
 	const cores = $derived(last?.logical_cpus ?? snap?.host.cores ?? 1);
 	const memPct = $derived(last ? pct(last.memory_used_bytes, last.memory_total_bytes) : 0);
@@ -68,21 +49,26 @@
 
 	// Linear trend of disk use over the shown range: how soon the data disk fills.
 	const diskFull = $derived.by(() => {
-		if (pts.length < 8) return null;
-		const t0 = pts[0].sampled_at_ms;
-		if (pts.at(-1)!.sampled_at_ms - t0 < 6 * 3600_000) return null;
+		const ts = series?.times ?? [];
+		const du = series?.disk_used ?? [];
+		const pts: [number, number][] = [];
+		ts.forEach((t, i) => du[i] !== null && du[i] !== undefined && pts.push([t, du[i]!]));
+		const total = series?.disk_total ?? 0;
+		if (pts.length < 8 || !total) return null;
+		const t0 = pts[0][0];
+		if (pts[pts.length - 1][0] - t0 < 6 * 3600_000) return null;
 		const n = pts.length;
 		let sx = 0, sy = 0, sxx = 0, sxy = 0;
-		for (const p of pts) {
-			const xv = (p.sampled_at_ms - t0) / 86400_000; // days
-			sx += xv; sy += p.disk_used_bytes; sxx += xv * xv; sxy += xv * p.disk_used_bytes;
+		for (const [t, y] of pts) {
+			const xv = (t - t0) / 86400_000; // days
+			sx += xv; sy += y; sxx += xv * xv; sxy += xv * y;
 		}
 		const d = n * sxx - sx * sx;
 		if (d === 0) return null;
 		const slope = (n * sxy - sx * sy) / d; // bytes per day
-		const p = pts.at(-1)!;
-		if (slope <= 0 || slope * 1 < p.disk_total_bytes * 0.0005) return null; // under 0.05%/day is noise
-		return { perDay: slope, days: (p.disk_total_bytes - p.disk_used_bytes) / slope };
+		const used = pts[n - 1][1];
+		if (slope <= 0 || slope < total * 0.0005) return null; // under 0.05%/day is noise
+		return { perDay: slope, days: (total - used) / slope };
 	});
 
 	type Attn = { tone: 'warn' | 'fail'; text: string; tab?: string; label?: string };
@@ -111,12 +97,9 @@
 	});
 	const shares = (device: number) => (snap?.storage ?? []).filter((l) => l.device === device).map((l) => l.label);
 
-	const pctFmt = (n: number) => `${Math.round(n)}%`;
 	const mem = $derived(snap?.memory);
 	const dk = $derived(snap?.docker);
 </script>
-
-{#if error}<Notice tone="fail" class="mb-4">{error}</Notice>{/if}
 
 {#if attention.length}
 	<ul class="mb-5 grid gap-2" aria-label="Needs attention">
@@ -142,12 +125,12 @@
 			<div class="stat">
 				<dt class="eyebrow">CPU · {last.logical_cpus} cores</dt>
 				<dd class="mt-1 font-mono text-section font-semibold">{last.cpu_percent.toFixed(0)}%<span class="ml-2 text-small font-normal text-muted">load {last.load1.toFixed(2)}</span></dd>
-				<dd class="mt-2"><Sparkline fluid height={28} values={pts.map((p) => p.cpu_percent)} label="CPU history" /></dd>
+				<dd class="mt-2"><Sparkline fluid height={28} values={tail.cpu} label="CPU history" /></dd>
 			</div>
 			<div class="stat">
 				<dt class="eyebrow">Memory</dt>
 				<dd class="mt-1 font-mono text-section font-semibold">{memPct}%<span class="ml-2 text-small font-normal text-muted">{fmtBytes(last.memory_used_bytes)} of {fmtBytes(last.memory_total_bytes)}</span></dd>
-				<dd class="mt-2"><Sparkline fluid height={28} values={pts.map((p) => pct(p.memory_used_bytes, p.memory_total_bytes))} label="Memory history" /></dd>
+				<dd class="mt-2"><Sparkline fluid height={28} values={tail.mem} label="Memory history" /></dd>
 			</div>
 			<div class="stat">
 				<dt class="eyebrow">Disk</dt>
@@ -192,50 +175,16 @@
 	{/if}
 </section>
 
-<!-- History -->
-<section class="mt-8" aria-labelledby="hist-h">
-	<div class="flex flex-wrap items-end justify-between gap-3">
-		<div>
-			<h3 id="hist-h" class="text-title font-semibold">History</h3>
-			<p class="text-small text-muted">{hist ? `Averages over ${fmtBucket(hist.bucket_ms)} buckets` : 'Averages per time bucket'}; dashed lines show the highest reading in each bucket.</p>
-		</div>
-		<div class="seg" role="group" aria-label="Time range">
-			{#each ranges as r (r.id)}
-				<button class="seg-item" aria-pressed={range === r.id} onclick={() => (range = r.id)}>{r.label}</button>
-			{/each}
-		</div>
-	</div>
-	<div class="mt-3 grid gap-3 lg:grid-cols-2 {loading && !hist ? 'opacity-60' : ''}">
-		<div class="stat"><p class="eyebrow mb-2">CPU</p>
-			<TimeChart label="CPU use" {times} max={100} format={pctFmt} series={[{ label: 'Average', values: pts.map((p) => p.cpu_percent), area: true }, { label: 'Peak', values: pts.map((p) => p.cpu_max), dashed: true, color: 'muted' }]} />
-		</div>
-		<div class="stat"><p class="eyebrow mb-2">Memory</p>
-			<TimeChart label="Memory use" {times} max={last?.memory_total_bytes} format={fmtBytes} series={[{ label: 'Used', values: pts.map((p) => p.memory_used_bytes), area: true, color: 'run' }, { label: 'Peak', values: pts.map((p) => p.memory_max), dashed: true, color: 'muted' }]} />
-		</div>
-		<div class="stat"><p class="eyebrow mb-2">Load average (1 min) · {cores} core{cores === 1 ? '' : 's'}</p>
-			<TimeChart label="Load average" {times} format={(n) => n.toFixed(n < 10 ? 2 : 1)} series={[{ label: 'Load', values: pts.map((p) => p.load1), area: true, color: 'warn' }]} />
-			<p class="mt-1 text-small text-muted">A load above {cores} means work is waiting for a CPU.</p>
-		</div>
-		<div class="stat"><p class="eyebrow mb-2">Network throughput</p>
-			<TimeChart label="Network throughput" {times} format={fmtBps} series={[{ label: 'Received', values: pts.map((p) => p.net_rx_bps), color: 'run' }, { label: 'Sent', values: pts.map((p) => p.net_tx_bps), color: 'action' }]} />
-		</div>
-		<div class="stat"><p class="eyebrow mb-2">Disk throughput</p>
-			<TimeChart label="Disk throughput" {times} format={fmtBps} series={[{ label: 'Read', values: pts.map((p) => p.disk_read_bps), color: 'run' }, { label: 'Write', values: pts.map((p) => p.disk_write_bps), color: 'action' }]} />
-		</div>
-		<div class="stat"><p class="eyebrow mb-2">Disk space used</p>
-			<TimeChart label="Disk space used" {times} max={last?.disk_total_bytes} format={fmtBytes} series={[{ label: 'Used', values: pts.map((p) => p.disk_used_bytes), area: true, color: 'warn' }]} />
-			{#if diskFull}<p class="mt-1 text-small text-muted">Growing about {fmtBytes(diskFull.perDay)} per day.</p>{/if}
-		</div>
-	</div>
-	{#if pts.length && pts.some((p) => p.swap_total_bytes > 0)}
-		<div class="stat mt-3"><p class="eyebrow mb-2">Swap used</p>
-			<TimeChart label="Swap used" {times} max={Math.max(...pts.map((p) => p.swap_total_bytes))} format={fmtBytes} height={110} series={[{ label: 'Swap', values: pts.map((p) => p.swap_used_bytes), area: true, color: 'fail' }]} />
-		</div>
-	{/if}
-</section>
+<!-- History, spikes, processes -->
+{#if nodeId}
+	<HostMonitor {nodeId} {nodeName} {cores} bind:series />
+	{#if diskFull}<p class="mt-2 text-small text-muted">The data disk is growing about {fmtBytes(diskFull.perDay)} per day.</p>{/if}
+{:else if nodeLoaded}
+	<Notice tone="fail" class="mt-8">Host history is unavailable right now.</Notice>
+{/if}
 
 <!-- Machine, process, runtime -->
-<section class="mt-8 grid gap-3 lg:grid-cols-3" aria-label="Details">
+<section class="mt-8 grid gap-3 lg:grid-cols-3 [&>*]:min-w-0" aria-label="Details">
 	<div class="card p-4 sm:p-5">
 		<h3 class="flex items-center gap-2 text-title font-semibold"><Icon name="monitor" class="text-muted" />System</h3>
 		{#if snap}
@@ -348,11 +297,3 @@
 		</ul>
 	{/if}
 </section>
-
-<script lang="ts" module>
-	function fmtBucket(ms: number): string {
-		if (ms >= 3600_000) return `${+(ms / 3600_000).toFixed(1)} hour`;
-		if (ms >= 60_000) return `${Math.round(ms / 60_000)} minute`;
-		return `${Math.round(ms / 1000)} second`;
-	}
-</script>

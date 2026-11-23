@@ -166,3 +166,19 @@ func TestHostConfigReadOnlyMount(t *testing.T) {
 		t.Fatalf("%+v", h.Mounts)
 	}
 }
+
+func TestBlockIOAndParseTop(t *testing.T) {
+	var s container.StatsResponse
+	s.BlkioStats.IoServiceBytesRecursive = []container.BlkioStatEntry{{Op: "Read", Value: 100}, {Op: "Write", Value: 30}, {Op: "read", Value: 5}, {Op: "Total", Value: 135}}
+	if m := SampleFromStats(s); m.BlkReadBytes != 105 || m.BlkWriteBytes != 30 {
+		t.Fatalf("%+v", m)
+	}
+	got := ParseTop([]string{"PID", "CPU", "RSS", "COMM", "ARGS"}, [][]string{
+		{"4242", "12.5", "2048", "node", "node index.js --port 3000"},
+		{"x", "0", "0", "bad", "bad"},
+	})
+	if len(got) != 1 || got[0].PID != 4242 || got[0].CPUPct != 12.5 || got[0].RSSBytes != 2048*1024 || got[0].Comm != "node" ||
+		got[0].Args != "node index.js --port 3000" {
+		t.Fatalf("%+v", got)
+	}
+}

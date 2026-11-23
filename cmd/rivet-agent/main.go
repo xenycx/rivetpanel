@@ -38,6 +38,7 @@ import (
 	"github.com/xenycx/rivetpanel/internal/docker"
 	"github.com/xenycx/rivetpanel/internal/domain"
 	"github.com/xenycx/rivetpanel/internal/filesystem"
+	"github.com/xenycx/rivetpanel/internal/metrics"
 	"github.com/xenycx/rivetpanel/internal/runner"
 	"github.com/xenycx/rivetpanel/internal/runtimes"
 	"github.com/xenycx/rivetpanel/internal/telemetry"
@@ -280,7 +281,8 @@ func serve(log *slog.Logger, args []string) error {
 		return fmt.Errorf("workspace owner: %w", err)
 	}
 	node := agentnode.App(agentnode.Deps{Runner: lazy, Addons: lazy, AddonData: addons.OwnedData{DataRoot: addonData, UID: ouid, GID: ogid}, Diagnostics: diags, Telemetry: probe.read,
-		Docker: dk, Files: files, MaxUpload: 4 << 30, InstallID: installID, Log: log})
+		Processes: agentProcesses(metrics.ProcSampler{Root: env("RIVET_HOST_PROC", "/proc")}),
+		Docker:    dk, Files: files, MaxUpload: 4 << 30, InstallID: installID, Log: log})
 	agent.Handler = node.Handler()
 	agent.Hello = func() agentproto.Hello {
 		cctx, cancel := context.WithTimeout(ctx, 5*time.Second)
@@ -470,4 +472,29 @@ func doctor(args []string) error {
 		return errors.New("some checks failed")
 	}
 	return nil
+}
+
+// agentProcesses lists this node's busiest processes for the panel. Command
+// lines are cut to agentproto.MaxProcessCmd; the panel redacts them.
+func agentProcesses(p metrics.ProcSampler) func(ctx context.Context, limit int, containerID string) (agentproto.Processes, error) {
+	var mu sync.Mutex // one two-read sample at a time
+	return func(ctx context.Context, limit int, containerID string) (agentproto.Processes, error) {
+		mu.Lock()
+		defer mu.Unlock()
+		ps, err := p.Sample(ctx, metrics.Filter{Limit: limit, Container: containerID})
+		if err != nil {
+			return agentproto.Processes{}, err
+		}
+		out := agentproto.Processes{SampledAtMS: ps.At.UnixMilli(), Source: domain.ProcSourceAgent, HostCPUPct: ps.HostCPUPct,
+			Items: make([]domain.ProcessEntry, 0, len(ps.Processes))}
+		for _, r := range ps.Processes {
+			cmd := r.Cmd
+			if len(cmd) > agentproto.MaxProcessCmd {
+				cmd = cmd[:agentproto.MaxProcessCmd]
+			}
+			out.Items = append(out.Items, domain.ProcessEntry{PID: r.PID, Comm: r.Comm, Cmd: cmd, CPUPct: r.CPUPct,
+				RSSBytes: r.RSSBytes, ContainerID: r.ContainerID})
+		}
+		return out, nil
+	}
 }

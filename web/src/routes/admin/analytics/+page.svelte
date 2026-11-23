@@ -6,35 +6,56 @@
 	import { poll } from '$lib/poll';
 	import Notice from '$lib/components/ui/Notice.svelte';
 	import Sparkline from '$lib/components/Sparkline.svelte';
-	import TimeChart from '$lib/components/TimeChart.svelte';
+	import UChart from '$lib/charts/UChart.svelte';
+	import { ChartGroup } from '$lib/charts/sync.svelte';
 
 	// Panel-wide usage trends (analytics.view). The server decides what this
 	// account may see: delegated viewers get only accounts they could manage.
 	let range = $state<string>('7d');
-	let data = $state<Overview | null>(null);
+	let data = $state.raw<Overview | null>(null);
 	let error = $state('');
+	let loading = $state(false);
 
 	async function load() {
 		const asked = range;
+		loading = true;
 		try {
 			const d = await api<Overview>('GET', `/admin/analytics?range=${asked}`);
 			if (asked === range) data = d;
 			error = '';
 		} catch (e) {
 			error = e instanceof ApiError ? e.message : 'Analytics are unavailable right now.';
+		} finally {
+			if (asked === range) loading = false;
 		}
 	}
-	onMount(() => poll(load, 120_000, ['*']));
+	// Rollups change slowly: a timer is enough. (Re-fetching on every change
+	// anywhere in the panel made the page reload all the time.)
+	onMount(() => poll(load, 120_000));
+	// A new range keeps the current figures on screen until the new ones arrive.
 	let shown = '7d';
 	$effect(() => {
 		if (range === shown) return;
 		shown = range;
-		data = null;
+		group.zoom = null;
 		void load();
 	});
+	// Drag across a chart to zoom all of them; double-click to go back.
+	const group = new ChartGroup();
+	const xr = $derived(data ? { start: data.from_ms, end: data.to_ms } : null);
 
 	const pts = $derived(data?.points ?? []);
 	const times = $derived(pts.map((p) => p.t));
+	const col = (k: keyof (typeof pts)[number]) => pts.map((p) => (p[k] ?? null) as number | null);
+	const charts = $derived({
+		cpu: { times, series: [col('cpu')] },
+		mem: { times, series: [col('mem')] },
+		net: { times, series: [col('net_rx'), col('net_tx')] },
+		uptime: { times, series: [col('uptime')] },
+		deploys: { times, series: [col('deploys_ok'), col('deploys_failed')] },
+		backups: { times, series: [col('backups_ok'), col('backups_failed')] },
+		people: { times, series: [col('new_users'), ...(data?.tickets ? [pts.map((p) => p.tickets ?? 0)] : []), col('crashes')] }
+	});
 	const tot = $derived(data?.totals);
 	const per = $derived(data ? fmtResolution(data.resolution_s) : 'bucket');
 	const href = (c: OverviewConsumer) => (c.kind === 'web' ? `/sites/app/${c.bot_id}` : `${c.kind === 'game' ? '/servers' : '/bots'}/${c.bot_id}?tab=usage`);
@@ -129,27 +150,28 @@
 		{/if}
 	</dl>
 
-	<div class="mt-6 grid gap-3 lg:grid-cols-2">
+	<p class="mt-6 text-small text-muted">Drag across a chart to zoom all of them; double-click to go back.</p>
+	<div class="mt-2 grid gap-3 lg:grid-cols-2">
 		<div class="stat"><p class="eyebrow mb-2">CPU in use (cores, all apps)</p>
-			<TimeChart label="CPU in use" {times} format={fmtCores} series={[{ label: 'CPU', values: pts.map((p) => p.cpu), area: true }]} />
+			<UChart label="CPU in use" data={charts.cpu} {group} xRange={xr} {loading} format={fmtCores} series={[{ label: 'CPU', color: 'data', fill: true }]} />
 		</div>
 		<div class="stat"><p class="eyebrow mb-2">Memory in use (all apps)</p>
-			<TimeChart label="Memory in use" {times} format={fmtBytes} series={[{ label: 'Memory', values: pts.map((p) => p.mem), area: true, color: 'run' }]} />
+			<UChart label="Memory in use" data={charts.mem} {group} xRange={xr} {loading} format={fmtBytes} series={[{ label: 'Memory', color: 'run', fill: true }]} />
 		</div>
 		<div class="stat"><p class="eyebrow mb-2">Network per {per}</p>
-			<TimeChart label="Network traffic" {times} format={fmtBytes} series={[{ label: 'Received', values: pts.map((p) => p.net_rx), area: true }, { label: 'Sent', values: pts.map((p) => p.net_tx), color: 'muted' }]} />
+			<UChart label="Network traffic" data={charts.net} {group} xRange={xr} {loading} format={fmtBytes} series={[{ label: 'Received', color: 'data', fill: true }, { label: 'Sent', color: 'muted' }]} />
 		</div>
 		<div class="stat"><p class="eyebrow mb-2">Uptime</p>
-			<TimeChart label="Uptime" {times} max={100} format={fmtPct} series={[{ label: 'Uptime', values: pts.map((p) => p.uptime), area: true, color: 'run' }]} />
+			<UChart label="Uptime" data={charts.uptime} {group} xRange={xr} {loading} yMax={100} format={fmtPct} series={[{ label: 'Uptime', color: 'run', fill: true }]} />
 		</div>
 		<div class="stat"><p class="eyebrow mb-2">Deployments per {per}</p>
-			<TimeChart label="Deployments" {times} format={fmtCount} series={[{ label: 'Succeeded', values: pts.map((p) => p.deploys_ok), color: 'run' }, { label: 'Failed', values: pts.map((p) => p.deploys_failed), color: 'fail' }]} />
+			<UChart label="Deployments" data={charts.deploys} {group} xRange={xr} {loading} format={fmtCount} series={[{ label: 'Succeeded', color: 'run' }, { label: 'Failed', color: 'fail' }]} />
 		</div>
 		<div class="stat"><p class="eyebrow mb-2">Backups per {per}</p>
-			<TimeChart label="Backups" {times} format={fmtCount} series={[{ label: 'Succeeded', values: pts.map((p) => p.backups_ok), color: 'run' }, { label: 'Failed', values: pts.map((p) => p.backups_failed), color: 'fail' }]} />
+			<UChart label="Backups" data={charts.backups} {group} xRange={xr} {loading} format={fmtCount} series={[{ label: 'Succeeded', color: 'run' }, { label: 'Failed', color: 'fail' }]} />
 		</div>
 		<div class="stat"><p class="eyebrow mb-2">{data.tickets ? 'New accounts, tickets and crashes' : 'New accounts and crashes'} per {per}</p>
-			<TimeChart label="New accounts" {times} format={fmtCount} series={[{ label: 'New accounts', values: pts.map((p) => p.new_users), color: 'action' }, ...(data.tickets ? [{ label: 'Tickets opened', values: pts.map((p) => p.tickets ?? 0), color: 'muted' as const }] : []), { label: 'Crashes', values: pts.map((p) => p.crashes), color: 'fail' }]} />
+			<UChart label="New accounts" data={charts.people} {group} xRange={xr} {loading} format={fmtCount} series={[{ label: 'New accounts', color: 'action' }, ...(data.tickets ? [{ label: 'Tickets opened', color: 'muted' }] : []), { label: 'Crashes', color: 'fail' }]} />
 		</div>
 	</div>
 

@@ -6,6 +6,60 @@ authoritative current version.
 
 ## Unreleased
 
+## 1.20.0 - 2026-11-23
+
+### Added
+
+- **Find out what caused a CPU spike.** The Host page now records each app's
+  CPU, memory, network, disk I/O and process count every 15 seconds (kept 48
+  hours) and the busiest processes on the machine every minute, each tied to
+  the app it belongs to (kept 7 days). A spike, host CPU at or above
+  `RIVET_SPIKE_CPU_PCT` (80 % by default) for 10 seconds, is saved with its
+  peak and the apps and processes behind it (kept 30 days) and shaded on the
+  CPU chart. New **CPU by app** and **memory by app** stacked charts, deploy,
+  restart, crash and backup markers on every chart, a spike list, a live
+  **Processes** card, and a **What happened here?** drawer for any moment you
+  click, with a button that asks the AI assistant about it. An app's
+  Analytics tab gains the same 15-second charts and **Processes inside this
+  app**.
+- **Grafana-style charts.** Monitoring and analytics charts are drawn on
+  canvas (uPlot): one crosshair across every chart, drag to zoom all of them,
+  double-click to reset, click a legend entry to hide a series or Alt-click
+  to isolate it, ranges from 5 minutes to 30 days or an exact span, a refresh
+  picker (off to 1 minute) and a **Live** mode that streams a host point every
+  2 seconds. The range is kept in the address so links open the same view.
+- **AI assistant load debugging.** New read-only tools (`metrics_query`,
+  `list_spikes`, `explain_load`, `top_processes`, `cpu_by_app`) let the
+  assistant say which app or process caused a spike, with times and shares,
+  and answer with charts and tables through new A2UI `TimeSeries` and `Table`
+  components.
+
+### Changed
+
+- Charts no longer go blank or jump when they refresh: the previous data
+  stays while new data loads, each refresh fetches only new points, and the
+  Host page stopped reloading its history every 15 seconds and on every app
+  change. The panel Analytics page no longer reloads on every change in the
+  panel, and the Nodes strip loads nodes in parallel and pauses in hidden
+  tabs.
+- `compose.yaml` mounts the host's `/proc` and `/sys/fs/cgroup` read-only at
+  `/host/proc` and `/host/cgroup` and sets `RIVET_HOST_PROC` and
+  `RIVET_HOST_CGROUP`. Add the same to an existing compose file to see host
+  processes; without them the panel falls back to Docker's statistics and
+  per-app process lists.
+- Migration `0076` adds the `container_samples`, `process_snapshots` and
+  `load_spikes` tables. It is additive.
+- Remote nodes report their busiest processes through a new agent endpoint;
+  update `rivet-agent` to 1.20.0 for process attribution there. Spike
+  detection runs only on the panel's own machine.
+
+### Security
+
+- Process lists shorten command lines to 160 characters and replace the
+  app's environment values and anything that looks like a secret; process
+  environments are never read. Host-wide monitoring needs `system.view`; an
+  app's series and processes need console access to that app.
+
 ## 1.19.0 - 2026-11-22
 
 ### Added

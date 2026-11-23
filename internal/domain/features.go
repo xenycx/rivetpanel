@@ -143,4 +143,7 @@ type ResourceSample struct {
 	PIDs          int64   `json:"pids"`
 	NetRxBytes    int64   `json:"net_rx_bytes"`
 	NetTxBytes    int64   `json:"net_tx_bytes"`
+	// Cumulative block I/O of the container (0 when unknown).
+	BlkReadBytes  int64 `json:"blk_read_bytes,omitempty"`
+	BlkWriteBytes int64 `json:"blk_write_bytes,omitempty"`
 }

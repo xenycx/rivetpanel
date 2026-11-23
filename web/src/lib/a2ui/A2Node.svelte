@@ -16,7 +16,7 @@
 	const FIT: Record<string, string> = { contain: 'contain', cover: 'cover', fill: 'fill', none: 'none', scaleDown: 'scale-down' };
 	/** Components that travel on their own when a surface updates. */
 	const MORPH = new Set(['Card', 'Metric', 'Badge', 'Button', 'Image', 'Code']);
-	const CUSTOM = new Set(['Heading', 'Metric', 'Badge', 'Code', 'Link']);
+	const CUSTOM = new Set(['Heading', 'Metric', 'Badge', 'Code', 'Link', 'TimeSeries', 'Table']);
 	const escapeKey = (k: string) => k.replace(/~/g, '~0').replace(/\//g, '~1');
 	let radios = 0;
 </script>
@@ -29,6 +29,8 @@
 	import Icon from '$lib/components/ui/Icon.svelte';
 	import Dialog from '$lib/components/ui/Dialog.svelte';
 	import SafeMarkdown from '$lib/components/SafeMarkdown.svelte';
+	import A2Chart from './A2Chart.svelte';
+	import A2Table from './A2Table.svelte';
 	import { HOST, type Host } from './A2Surface.svelte';
 	import { PANEL_CATALOG, absolute, evaluate, failing, getAt, safeHref, samePath, setAt, truthy, type Scope } from './model.svelte';
 
@@ -311,6 +313,13 @@
 	{#if samePath(href)}<a class="a2-in link" {href} {...common}>{str(c.text)}</a>
 	{:else if safeHref(href)}<a class="a2-in link inline-flex items-center gap-1" {href} target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer" {...common}>{str(c.text)}<Icon name="external" size={11} /></a>
 	{:else}<span class="a2-in" {...common}>{str(c.text)}</span>{/if}
+{:else if c.component === 'TimeSeries'}
+	{@const lines = (Array.isArray(c.series) ? c.series : []).map((l: any) => ({ ...l, values: ev(l?.values) }))}
+	<div class="a2-in min-w-0" {...common}>
+		<A2Chart title={str(c.title)} unit={typeof c.unit === 'string' ? c.unit : 'number'} times={ev(c.times)} {lines} annotations={ev(c.annotations)} threshold={c.threshold} yMax={c.yMax} height={c.height} group={host.group} />
+	</div>
+{:else if c.component === 'Table'}
+	<div class="a2-in min-w-0" {...common}><A2Table title={str(c.title)} columns={c.columns} rows={ev(c.rows)} bar={c.bar} /></div>
 {:else}
 	<p class="a2-in text-small text-muted" {...common}>This part ({c.component}) cannot be shown here.</p>
 {/if}

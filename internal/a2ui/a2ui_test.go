@@ -143,3 +143,94 @@ func TestEnvelopeIsTheV1ActionMessage(t *testing.T) {
 		t.Fatalf("envelope: %v", m)
 	}
 }
+
+func chartCall(t *testing.T, comps ...map[string]any) []byte {
+	t.Helper()
+	list := []any{map[string]any{"id": "root", "component": "Column", "children": []any{"c"}}}
+	for _, c := range comps {
+		list = append(list, c)
+	}
+	b, _ := json.Marshal(map[string]any{"messages": []any{map[string]any{"version": "1.0", "createSurface": map[string]any{"surfaceId": "load", "components": list}}}})
+	return b
+}
+
+func TestTimeSeriesAndTable(t *testing.T) {
+	times := []any{1000, 2000, 3000}
+	ok := map[string]any{"id": "c", "component": "TimeSeries", "title": "Host CPU", "unit": "percent", "times": times, "threshold": 80, "height": 160,
+		"series":      []any{map[string]any{"label": "CPU", "values": []any{10, nil, 95.5}, "color": "action"}, map[string]any{"label": "worker", "values": []any{1, 2, 3}, "stacked": true, "color": "cat:1"}},
+		"annotations": []any{map[string]any{"t": 2000, "end": 3000, "label": "Spike 7", "kind": "spike"}, map[string]any{"t": 1500, "end": nil, "label": "ongoing"}}}
+	if _, err := NewState().Apply(chartCall(t, ok)); err != nil {
+		t.Fatal(err)
+	}
+	bound := map[string]any{"id": "c", "component": "TimeSeries", "unit": "cores", "times": map[string]any{"@path": "/cpu/times"}, "series": []any{map[string]any{"label": "a", "values": map[string]any{"@path": "/cpu/a"}}}}
+	if _, err := NewState().Apply(chartCall(t, bound)); err != nil {
+		t.Fatalf("bound chart: %v", err)
+	}
+	table := map[string]any{"id": "c", "component": "Table", "title": "Top apps", "bar": "share",
+		"columns": []any{map[string]any{"key": "app", "label": "App"}, map[string]any{"key": "cores", "label": "Cores", "format": "cores"}, map[string]any{"key": "share", "label": "Share", "format": "percent", "align": "end"}},
+		"rows":    []any{map[string]any{"app": "worker", "cores": 3, "share": 79}, map[string]any{"app": "Host / unattributed", "cores": 0.5, "share": nil}}}
+	if _, err := NewState().Apply(chartCall(t, table)); err != nil {
+		t.Fatalf("table: %v", err)
+	}
+
+	long := make([]any, MaxPoints+1)
+	for i := range long {
+		long[i] = i
+	}
+	many := []any{}
+	for i := 0; i < MaxSeries+1; i++ {
+		many = append(many, map[string]any{"label": "s", "values": times})
+	}
+	manyRows := []any{}
+	for i := 0; i < MaxRows+1; i++ {
+		manyRows = append(manyRows, map[string]any{"app": "x"})
+	}
+	with := func(base map[string]any, k string, v any) map[string]any {
+		c := map[string]any{}
+		for x, y := range base {
+			c[x] = y
+		}
+		if v == nil {
+			delete(c, k)
+		} else {
+			c[k] = v
+		}
+		return c
+	}
+	for name, c := range map[string]map[string]any{
+		"too many points":    with(ok, "times", long),
+		"mismatched length":  with(ok, "series", []any{map[string]any{"label": "CPU", "values": []any{1, 2}}}),
+		"string value":       with(ok, "series", []any{map[string]any{"label": "CPU", "values": []any{1, "2", 3}}}),
+		"too many series":    with(ok, "series", many),
+		"unknown prop":       with(ok, "colour", "red"),
+		"unknown series key": with(ok, "series", []any{map[string]any{"label": "CPU", "values": times, "fill": true}}),
+		"bad unit":           with(ok, "unit", "furlongs"),
+		"bad colour":         with(ok, "series", []any{map[string]any{"label": "CPU", "values": times, "color": "#f00"}}),
+		"unsorted times":     with(ok, "times", []any{3000, 2000, 1000}),
+		"bad annotation":     with(ok, "annotations", []any{map[string]any{"t": "noon", "label": "x"}}),
+		"no times":           with(ok, "times", nil),
+		"bad height":         with(ok, "height", 2000),
+		"too many rows":      with(table, "rows", manyRows),
+		"nested cell":        with(table, "rows", []any{map[string]any{"app": map[string]any{"x": 1}}}),
+		"bar not a column":   with(table, "bar", "nope"),
+		"duplicate column":   with(table, "columns", []any{map[string]any{"key": "a", "label": "A"}, map[string]any{"key": "a", "label": "B"}}),
+		"bad format":         with(table, "columns", []any{map[string]any{"key": "a", "label": "A", "format": "html"}}),
+	} {
+		if _, err := NewState().Apply(chartCall(t, c)); err == nil {
+			t.Fatalf("%s: accepted", name)
+		}
+	}
+	// Custom components stay out of the basic catalog.
+	b, _ := json.Marshal(map[string]any{"messages": []any{map[string]any{"createSurface": map[string]any{"surfaceId": "x", "catalogId": BasicCatalogID, "components": []any{with(table, "id", "root")}}}}})
+	if _, err := NewState().Apply(b); err == nil {
+		t.Fatal("Table accepted in the basic catalog")
+	}
+	for _, s := range []string{"TimeSeries{", "Table{", "300 points", "32 KiB"} {
+		if !strings.Contains(ToolDescription, s) {
+			t.Fatalf("tool description lacks %q", s)
+		}
+	}
+	if !strings.Contains(PromptSection, "TimeSeries") || !strings.Contains(PromptSection, "explain_load") {
+		t.Fatal("prompt section does not teach charts")
+	}
+}

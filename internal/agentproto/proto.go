@@ -327,3 +327,18 @@ type Telemetry struct {
 	DiskFreeBytes    uint64  `json:"disk_free_bytes"`
 	Load1            float64 `json:"load1"`
 }
+
+// Processes answers GET /node/v1/processes[?limit=N&container=ID]: the busiest
+// processes on the node (host process IDs), with the container each belongs
+// to. Cmd is cut to MaxProcessCmd bytes; the panel replaces secrets and
+// shortens it further before anyone sees it. An agent that predates the
+// route answers 404 and the panel reports the list as unavailable.
+type Processes struct {
+	SampledAtMS int64                 `json:"sampled_at_ms"`
+	Source      string                `json:"source"`
+	HostCPUPct  float64               `json:"host_cpu_pct"`
+	Items       []domain.ProcessEntry `json:"items"`
+}
+
+// MaxProcessCmd bounds a command line the agent sends.
+const MaxProcessCmd = 512

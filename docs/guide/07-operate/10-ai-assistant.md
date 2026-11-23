@@ -99,6 +99,24 @@ link to the page.
 | `run_diagnostic` | One allowed command in an offline container | File permission |
 | `restart_bot` | Restart | Power permission |
 
+### Debugging load
+
+Ask "why was the CPU high at 14:03?" or "what is using memory?" and the
+assistant reads the panel's monitoring data before it answers. It names the app or
+process with its share and the times, says when the rise followed a deploy or
+restart, and shows a chart of host CPU with the spike shaded, a stacked chart
+by app and a table of the top contributors. It says so when the data runs out,
+for example per-app history older than 48 hours or spikes on a remote node.
+See [Finding what caused a spike](05-host-and-logs.md#finding-what-caused-a-spike).
+
+| Tool | Reads | Needs |
+| --- | --- | --- |
+| `metrics_query` | A host's or an app's CPU, memory, network, disk and processes over a range: average, 95th percentile, peak with its time, the current value, and a chart of up to 120 points | `system.view` for a host; console permission for an app |
+| `list_spikes` | Recorded CPU spikes with duration, peak and the apps and processes behind them | `system.view` |
+| `explain_load` | One moment or spike: each app's share of host CPU, the host's own share, the busiest processes, memory use, events within 10 minutes and a likely cause | `system.view` |
+| `top_processes` | The busiest processes now, on a host or inside one app | `system.view` for a host; console permission for an app |
+| `cpu_by_app` | Stacked CPU or memory per app over a range | `system.view` |
+
 **Permissions.** Every tool, and every `panel_api` call, runs as you: the same
 role permissions, per-bot grants, validation and activity log as the page
 would. The assistant can never do more than you can. [enforced: panel]
@@ -133,8 +151,11 @@ panel's own controls, in your theme.
 The views follow [A2UI](https://a2ui.org) v1.0, an open protocol for agent
 interfaces. The catalog is the A2UI basic catalog (Text, Image, Icon, Row,
 Column, List, Card, Tabs, Modal, Divider, Button, TextField, CheckBox,
-ChoicePicker, Slider, DateTimeInput) plus Heading, Metric, Badge, Code and
-Link.
+ChoicePicker, Slider, DateTimeInput) plus Heading, Metric, Badge, Code,
+Link, TimeSeries and Table. A TimeSeries chart holds up to 8 series and 300
+points, with event markers and a threshold line; charts in one view share a
+crosshair and zoom. A Table holds up to 8 columns and 50 rows, with an
+optional share bar.
 
 | Limit | Value |
 | --- | --- |

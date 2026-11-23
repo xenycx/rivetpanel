@@ -743,6 +743,122 @@ func SampleFromStats(s container.StatsResponse) domain.ResourceSample {
 		out.NetRxBytes += int64(n.RxBytes)
 		out.NetTxBytes += int64(n.TxBytes)
 	}
+	for _, e := range s.BlkioStats.IoServiceBytesRecursive {
+		switch strings.ToLower(e.Op) {
+		case "read":
+			out.BlkReadBytes += int64(e.Value)
+		case "write":
+			out.BlkWriteBytes += int64(e.Value)
+		}
+	}
+	return out
+}
+
+// StatsCounters are a container's cumulative counters from one Docker stats
+// read (no one-second wait for a previous frame). Callers turn them into
+// rates between two reads.
+type StatsCounters struct {
+	CPUUsageNS        uint64
+	MemUsed, MemLimit int64
+	PIDs              int64
+	NetRx, NetTx      uint64
+	BlkRead, BlkWrite uint64
+}
+
+// StatsCounters reads a container's counters once.
+func (a *Adapter) StatsCounters(ctx context.Context, id string) (StatsCounters, error) {
+	ctx, cancel := within(ctx, opTimeout)
+	defer cancel()
+	resp, err := a.cli.ContainerStatsOneShot(ctx, id)
+	if err != nil {
+		if errdefs.IsNotFound(err) {
+			return StatsCounters{}, runner.ErrNoContainer
+		}
+		return StatsCounters{}, err
+	}
+	defer resp.Body.Close()
+	var s container.StatsResponse
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&s); err != nil {
+		return StatsCounters{}, err
+	}
+	m := SampleFromStats(s)
+	return StatsCounters{CPUUsageNS: s.CPUStats.CPUUsage.TotalUsage, MemUsed: m.MemUsedBytes, MemLimit: m.MemLimitBytes,
+		PIDs: m.PIDs, NetRx: uint64(max(m.NetRxBytes, 0)), NetTx: uint64(max(m.NetTxBytes, 0)),
+		BlkRead: uint64(max(m.BlkReadBytes, 0)), BlkWrite: uint64(max(m.BlkWriteBytes, 0))}, nil
+}
+
+// ContainerPID returns the host process ID of a running container's main
+// process (0 when it is not running).
+func (a *Adapter) ContainerPID(ctx context.Context, id string) (int, error) {
+	ctx, cancel := within(ctx, opTimeout)
+	defer cancel()
+	r, err := a.cli.ContainerInspect(ctx, id)
+	if err != nil {
+		if errdefs.IsNotFound(err) {
+			return 0, runner.ErrNoContainer
+		}
+		return 0, err
+	}
+	if r.State == nil {
+		return 0, nil
+	}
+	return r.State.Pid, nil
+}
+
+// TopProcess is one row of a container's process list as Docker reports it
+// (`docker top`). CPUPct is ps's lifetime average, not an instant reading.
+type TopProcess struct {
+	PID      int
+	CPUPct   float64
+	RSSBytes int64
+	Comm     string
+	Args     string
+}
+
+// ContainerTop lists the processes of a running container through Docker
+// (host process IDs). It is the fallback when the host's /proc is not
+// visible to the panel.
+func (a *Adapter) ContainerTop(ctx context.Context, id string) ([]TopProcess, error) {
+	ctx, cancel := within(ctx, opTimeout)
+	defer cancel()
+	top, err := a.cli.ContainerTop(ctx, id, []string{"-o", "pid=PID,pcpu=CPU,rss=RSS,comm=COMM,args=ARGS"})
+	if err != nil {
+		if errdefs.IsNotFound(err) {
+			return nil, runner.ErrNoContainer
+		}
+		return nil, err
+	}
+	return ParseTop(top.Titles, top.Processes), nil
+}
+
+// ParseTop reads `ps -o pid=PID,pcpu=CPU,rss=RSS,comm=COMM,args=ARGS` rows
+// (rss in KiB).
+func ParseTop(titles []string, rows [][]string) []TopProcess {
+	col := map[string]int{}
+	for i, t := range titles {
+		col[strings.ToUpper(strings.TrimSpace(t))] = i
+	}
+	get := func(r []string, names ...string) string {
+		for _, n := range names {
+			if i, ok := col[n]; ok && i < len(r) {
+				return strings.TrimSpace(r[i])
+			}
+		}
+		return ""
+	}
+	out := make([]TopProcess, 0, len(rows))
+	for _, r := range rows {
+		pid, err := strconv.Atoi(get(r, "PID"))
+		if err != nil {
+			continue
+		}
+		p := TopProcess{PID: pid, Comm: get(r, "COMM", "COMMAND"), Args: get(r, "ARGS", "CMD", "COMMAND")}
+		p.CPUPct, _ = strconv.ParseFloat(get(r, "CPU", "%CPU", "PCPU"), 64)
+		if kb, err := strconv.ParseInt(get(r, "RSS", "RSZ"), 10, 64); err == nil {
+			p.RSSBytes = kb * 1024
+		}
+		out = append(out, p)
+	}
 	return out
 }
 

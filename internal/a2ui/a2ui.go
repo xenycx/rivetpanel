@@ -24,7 +24,7 @@ const (
 	// components except Video and AudioPlayer.
 	BasicCatalogID = "https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json"
 	// CatalogID is the RivetPanel catalog: the basic catalog plus Heading,
-	// Metric, Badge, Code and Link. It is the default.
+	// Metric, Badge, Code, Link, TimeSeries and Table. It is the default.
 	CatalogID = "urn:rivetpanel:a2ui:catalog:v1"
 
 	MaxMessages   = 20       // messages in one show_ui call
@@ -64,6 +64,11 @@ const (
 	kChecks
 	kAccessibility
 	kObject
+	kTimes
+	kSeries
+	kAnnotations
+	kColumns
+	kRows
 )
 
 type prop struct {
@@ -112,7 +117,31 @@ var catalog = map[string]spec{
 	"Badge":   {custom: true, required: []string{"text"}, props: map[string]prop{"text": {k: kDynString}, "tone": {k: kDynString}}},
 	"Code":    {custom: true, required: []string{"text"}, props: map[string]prop{"text": {k: kDynString}, "language": {k: kString}}},
 	"Link":    {custom: true, required: []string{"text", "href"}, props: map[string]prop{"text": {k: kDynString}, "href": {k: kHref}}},
+	"TimeSeries": {custom: true, required: []string{"unit", "times", "series"}, props: map[string]prop{"title": {k: kDynString}, "unit": enum(Units...), "times": {k: kTimes}, "series": {k: kSeries},
+		"annotations": {k: kAnnotations}, "threshold": {k: kNumber}, "yMax": {k: kNumber}, "height": {k: kInteger}}},
+	"Table": {custom: true, required: []string{"columns", "rows"}, props: map[string]prop{"title": {k: kDynString}, "columns": {k: kColumns}, "rows": {k: kRows}, "bar": {k: kString}}},
 }
+
+// Chart and table limits.
+const (
+	MaxSeries      = 8   // lines in one TimeSeries
+	MaxPoints      = 300 // points per TimeSeries line
+	MaxAnnotations = 40
+	MaxColumns     = 8
+	MaxRows        = 50
+)
+
+// Units format a TimeSeries axis.
+var Units = []string{"percent", "bytes", "bytes_per_s", "cores", "number"}
+
+// Colors are the chart colour tokens (cat:0..7 for categorical colours).
+var Colors = []string{"action", "data", "run", "warn", "fail", "muted", "ink", "cat:0", "cat:1", "cat:2", "cat:3", "cat:4", "cat:5", "cat:6", "cat:7"}
+
+// Formats format a Table column.
+var Formats = []string{"text", "number", "percent", "bytes", "bytes_per_s", "cores", "time", "duration_s"}
+
+// EventKinds colour TimeSeries annotations.
+var EventKinds = []string{"deploy", "start", "stop", "restart", "crash", "backup", "spike", "oom", "event"}
 
 // functions are the renderer-side functions the browser implements.
 var functions = map[string]bool{"required": true, "regex": true, "length": true, "numeric": true, "email": true, "formatString": true, "formatNumber": true, "formatCurrency": true, "formatDate": true, "pluralize": true, "and": true, "or": true, "not": true, "@index": true}
@@ -489,6 +518,12 @@ func checkComponent(c map[string]any, catalogID string) error {
 			return fmt.Errorf("%s: %w", k, e)
 		}
 	}
+	switch name {
+	case "TimeSeries":
+		return checkTimeSeries(c)
+	case "Table":
+		return checkTable(c)
+	}
 	return nil
 }
 
@@ -638,6 +673,146 @@ func checkKind(v any, p prop) error {
 		return dynamic(v, "string")
 	case kAction:
 		return checkAction(v)
+	case kTimes:
+		if isBinding(v) {
+			return nil
+		}
+		list, ok := v.([]any)
+		if !ok || len(list) == 0 {
+			return fmt.Errorf("must be an array of Unix millisecond times or a binding {\"@path\": ...}")
+		}
+		if len(list) > MaxPoints {
+			return fmt.Errorf("has %d points; at most %d (downsample: average neighbouring points)", len(list), MaxPoints)
+		}
+		var prev float64
+		for i, x := range list {
+			n, ok := x.(json.Number)
+			f, e := n.Float64()
+			if !ok || e != nil {
+				return fmt.Errorf("must hold numbers (Unix milliseconds)")
+			}
+			if i > 0 && f < prev {
+				return fmt.Errorf("must be in ascending order")
+			}
+			prev = f
+		}
+	case kSeries:
+		list, ok := v.([]any)
+		if !ok || len(list) == 0 || len(list) > MaxSeries {
+			return fmt.Errorf("must list 1-%d series {label, values, color?, stacked?, dashed?}", MaxSeries)
+		}
+		for i, x := range list {
+			sr, ok := x.(map[string]any)
+			if !ok || only(sr, "label", "values", "color", "stacked", "dashed") != nil {
+				return fmt.Errorf("series %d: each series is {label, values, color?, stacked?, dashed?}", i)
+			}
+			if l, ok := sr["label"].(string); !ok || l == "" || len(l) > 80 {
+				return fmt.Errorf("series %d needs a label of at most 80 characters", i)
+			}
+			if e := checkValues(sr["values"]); e != nil {
+				return fmt.Errorf("series %d values %w", i, e)
+			}
+			if col, ok := sr["color"]; ok {
+				if e := checkKind(col, enum(Colors...)); e != nil {
+					return fmt.Errorf("series %d color %w", i, e)
+				}
+			}
+			for _, k := range []string{"stacked", "dashed"} {
+				if b, ok := sr[k]; ok {
+					if _, isBool := b.(bool); !isBool {
+						return fmt.Errorf("series %d %s must be true or false", i, k)
+					}
+				}
+			}
+		}
+	case kAnnotations:
+		if isBinding(v) {
+			return nil
+		}
+		list, ok := v.([]any)
+		if !ok || len(list) > MaxAnnotations {
+			return fmt.Errorf("must be an array of at most %d {t, end?, label, kind?}", MaxAnnotations)
+		}
+		for i, x := range list {
+			an, ok := x.(map[string]any)
+			if !ok || only(an, "t", "end", "label", "kind") != nil {
+				return fmt.Errorf("annotation %d is {t, end?, label, kind?}", i)
+			}
+			if _, ok := an["t"].(json.Number); !ok {
+				return fmt.Errorf("annotation %d needs t (Unix milliseconds)", i)
+			}
+			if e, ok := an["end"]; ok && e != nil {
+				if _, ok := e.(json.Number); !ok {
+					return fmt.Errorf("annotation %d end must be Unix milliseconds or null", i)
+				}
+			}
+			if l, ok := an["label"].(string); !ok || len(l) > 200 {
+				return fmt.Errorf("annotation %d needs a label of at most 200 characters", i)
+			}
+			if k, ok := an["kind"]; ok {
+				if e := checkKind(k, enum(EventKinds...)); e != nil {
+					return fmt.Errorf("annotation %d kind %w", i, e)
+				}
+			}
+		}
+	case kColumns:
+		list, ok := v.([]any)
+		if !ok || len(list) == 0 || len(list) > MaxColumns {
+			return fmt.Errorf("must list 1-%d columns {key, label, align?, format?}", MaxColumns)
+		}
+		seen := map[string]bool{}
+		for i, x := range list {
+			col, ok := x.(map[string]any)
+			if !ok || only(col, "key", "label", "align", "format") != nil {
+				return fmt.Errorf("column %d is {key, label, align?, format?}", i)
+			}
+			key, _ := col["key"].(string)
+			if !idRe.MatchString(key) || seen[key] {
+				return fmt.Errorf("column %d needs a unique key of 1-64 letters, digits, _ . : or -", i)
+			}
+			seen[key] = true
+			if l, ok := col["label"].(string); !ok || len(l) > 80 {
+				return fmt.Errorf("column %d needs a label of at most 80 characters", i)
+			}
+			if a, ok := col["align"]; ok {
+				if e := checkKind(a, enum("start", "end", "center")); e != nil {
+					return fmt.Errorf("column %d align %w", i, e)
+				}
+			}
+			if f, ok := col["format"]; ok {
+				if e := checkKind(f, enum(Formats...)); e != nil {
+					return fmt.Errorf("column %d format %w", i, e)
+				}
+			}
+		}
+	case kRows:
+		if isBinding(v) {
+			return nil
+		}
+		list, ok := v.([]any)
+		if !ok {
+			return fmt.Errorf("must be an array of row objects or a binding {\"@path\": ...}")
+		}
+		if len(list) > MaxRows {
+			return fmt.Errorf("has %d rows; at most %d", len(list), MaxRows)
+		}
+		for i, x := range list {
+			row, ok := x.(map[string]any)
+			if !ok || len(row) > 16 {
+				return fmt.Errorf("row %d must be an object of at most 16 cells", i)
+			}
+			for k, cell := range row {
+				switch t := cell.(type) {
+				case nil, bool, json.Number:
+				case string:
+					if len(t) > 500 {
+						return fmt.Errorf("row %d cell %s is longer than 500 characters", i, k)
+					}
+				default:
+					return fmt.Errorf("row %d cell %s must be a string, number, boolean or null", i, k)
+				}
+			}
+		}
 	case kChecks:
 		list, ok := v.([]any)
 		if !ok || len(list) > 10 {
@@ -738,6 +913,80 @@ func checkAction(v any) error {
 		return dynamic(u, "string")
 	}
 	return fmt.Errorf("must be {\"event\": {...}} or {\"functionCall\": {...}}")
+}
+
+func isBinding(v any) bool {
+	m, ok := v.(map[string]any)
+	if !ok {
+		return false
+	}
+	p, ok := m["@path"].(string)
+	return ok && len(m) == 1 && pointerOK(p, false)
+}
+
+// checkValues accepts numbers and nulls (gaps), or a binding.
+func checkValues(v any) error {
+	if isBinding(v) {
+		return nil
+	}
+	list, ok := v.([]any)
+	if !ok {
+		return fmt.Errorf("must be an array of numbers (null for gaps) or a binding {\"@path\": ...}")
+	}
+	if len(list) > MaxPoints {
+		return fmt.Errorf("has %d points; at most %d (downsample: average neighbouring points)", len(list), MaxPoints)
+	}
+	for _, x := range list {
+		if x == nil {
+			continue
+		}
+		if _, ok := x.(json.Number); !ok {
+			return fmt.Errorf("must hold only numbers or null")
+		}
+	}
+	return nil
+}
+
+// checkTimeSeries: literal value arrays match the times, and the chart
+// stays within the data size limit.
+func checkTimeSeries(c map[string]any) error {
+	if e := dataSize(c); e != nil {
+		return fmt.Errorf("the chart is too large: %w; downsample to about 120 points", e)
+	}
+	if h, ok := c["height"].(json.Number); ok {
+		if n, _ := h.Int64(); n < 80 || n > 400 {
+			return fmt.Errorf("height must be between 80 and 400")
+		}
+	}
+	times, ok := c["times"].([]any)
+	if !ok {
+		return nil
+	}
+	for i, x := range c["series"].([]any) {
+		vals, ok := x.(map[string]any)["values"].([]any)
+		if ok && len(vals) != len(times) {
+			return fmt.Errorf("series %d has %d values but times has %d; every series needs one value (or null) per time", i, len(vals), len(times))
+		}
+	}
+	return nil
+}
+
+// checkTable: the bar column exists, and the table stays within the data
+// size limit.
+func checkTable(c map[string]any) error {
+	if e := dataSize(c); e != nil {
+		return fmt.Errorf("the table is too large: %w", e)
+	}
+	bar, ok := c["bar"].(string)
+	if !ok {
+		return nil
+	}
+	for _, x := range c["columns"].([]any) {
+		if x.(map[string]any)["key"] == bar {
+			return nil
+		}
+	}
+	return fmt.Errorf("bar must be the key of one of the columns (a numeric share such as share_pct)")
 }
 
 // dynamic checks a literal of the wanted type, a {"@path"} binding or a

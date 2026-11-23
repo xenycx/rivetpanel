@@ -12,6 +12,11 @@ services:
       # - "8444:8444"
     # Start from deploy/container.env.example (not the systemd example).
     env_file: .env
+    environment:
+      # Host processes and per-app cgroup counters for the Host page's
+      # attribution (read-only mounts below).
+      RIVET_HOST_PROC: /host/proc
+      RIVET_HOST_CGROUP: /host/cgroup
     volumes:
       # Database, keys, bot workspaces, add-on data and backups. It must be a
       # HOST DIRECTORY: bot containers bind-mount their workspaces from it, and
@@ -22,3 +27,8 @@ services:
       - /var/lib/rivetpanel:/var/lib/rivetpanel
       # The in-process runner needs Docker. Treat this container as root-equivalent.
       - /var/run/docker.sock:/var/run/docker.sock
+      # Read-only views of the host, so CPU spikes can be traced to the app
+      # or process behind them. Remove both (and the two variables above) to
+      # fall back to Docker's statistics and per-app process lists.
+      - /proc:/host/proc:ro
+      - /sys/fs/cgroup:/host/cgroup:ro

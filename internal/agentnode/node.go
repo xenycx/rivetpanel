@@ -85,6 +85,9 @@ type Deps struct {
 	// Telemetry reads the node's resources; nil reports only the disk of
 	// the server directories (Files.Statfs).
 	Telemetry func() agentproto.Telemetry
+	// Processes lists the node's busiest processes (of one container when
+	// containerID is set); nil answers 503.
+	Processes func(ctx context.Context, limit int, containerID string) (agentproto.Processes, error)
 	// ProbePort tries to bind ip:port on this node; nil = BindProbe. Tests
 	// replace it.
 	ProbePort func(ip string, port int) error
@@ -289,6 +292,32 @@ func App(d Deps) *fiber.App {
 			t.SampledAtMS = time.Now().UnixMilli()
 		}
 		return c.JSON(t)
+	})
+
+	// The busiest processes on this node, for the panel's attribution of
+	// CPU use. Command lines are cut short here and redacted by the panel.
+	v1.Get("/processes", func(c fiber.Ctx) error {
+		if d.Processes == nil {
+			return fiber.ErrServiceUnavailable
+		}
+		limit, err := strconv.Atoi(c.Query("limit", "25"))
+		if err != nil || limit < 1 || limit > 100 {
+			return fiber.NewError(fiber.StatusBadRequest, "limit must be between 1 and 100")
+		}
+		cid := strings.Clone(c.Query("container"))
+		if cid != "" && !validContainerID(cid) {
+			return fiber.NewError(fiber.StatusBadRequest, "invalid container id")
+		}
+		out, err := d.Processes(c.Context(), limit, cid)
+		if err != nil {
+			return err
+		}
+		for i := range out.Items {
+			if len(out.Items[i].Cmd) > agentproto.MaxProcessCmd {
+				out.Items[i].Cmd = out.Items[i].Cmd[:agentproto.MaxProcessCmd]
+			}
+		}
+		return c.JSON(out)
 	})
 
 	// An isolated AI diagnostic for a server on this node. The panel has
@@ -719,4 +748,17 @@ func (w Workspaces) Path(botID string) (string, error) {
 func validID(id string) bool {
 	u, err := uuid.Parse(id)
 	return err == nil && u.String() == id
+}
+
+// validContainerID accepts a full Docker container ID (64 hex characters).
+func validContainerID(s string) bool {
+	if len(s) != 64 {
+		return false
+	}
+	for _, r := range s {
+		if (r < '0' || r > '9') && (r < 'a' || r > 'f') {
+			return false
+		}
+	}
+	return true
 }

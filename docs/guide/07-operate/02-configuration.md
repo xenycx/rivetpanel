@@ -141,6 +141,9 @@ These are admission rules the panel applies, not kernel limits; see
 | --- | --- | --- | --- |
 | `RIVET_TELEMETRY_INTERVAL` | `30s` | Panel or file | Host sampling interval (30 to 60 seconds) |
 | `RIVET_TELEMETRY_RETENTION` | `168h` | Managed | How long host samples are kept (1 hour to 365 days) when **Logs and retention** sets nothing |
+| `RIVET_HOST_PROC` | `/proc` | File only | Where the host's `/proc` is visible, for the busiest processes; the container deployment uses `/host/proc` |
+| `RIVET_HOST_CGROUP` | `/sys/fs/cgroup` | File only | Where the host's cgroup v2 filesystem is visible, for each app's use every 15 seconds; the container deployment uses `/host/cgroup` |
+| `RIVET_SPIKE_CPU_PCT` | `80` | Panel or file | Host CPU percent (10 to 100) that, held 10 seconds, records a CPU spike |
 | `RIVET_METRICS_TOKEN` | off | Panel or file | Bearer secret of 24 or more characters that enables `/metrics`; stored encrypted when set in the panel |
 
 ### Sign-in, address and email
