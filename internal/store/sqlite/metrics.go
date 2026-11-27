@@ -328,7 +328,8 @@ func (db *DB) OldestTelemetry(ctx context.Context, nodeID string) (int64, error)
 // fromMS <= bucket < toMS, oldest first.
 func (db *DB) ListNodeUsageRange(ctx context.Context, nodeID string, res, fromMS, toMS int64) ([]domain.NodeUsageBucket, error) {
 	rows, err := db.QueryContext(ctx, `SELECT node_id, res, bucket_ms, samples, cpu_sum, cpu_max, mem_sum, mem_max,
-		mem_total, disk_used, disk_total, net_rx_sum, net_tx_sum, running_max
+		mem_total, disk_used, disk_total, net_rx_sum, net_tx_sum, running_max, load_sum, disk_read_sum,
+		disk_write_sum, swap_max
 		FROM node_usage WHERE node_id = ? AND res = ? AND bucket_ms >= ? AND bucket_ms < ? ORDER BY bucket_ms LIMIT 20000`,
 		nodeID, res, fromMS, toMS)
 	if err != nil {
@@ -339,7 +340,8 @@ func (db *DB) ListNodeUsageRange(ctx context.Context, nodeID string, res, fromMS
 	for rows.Next() {
 		var b domain.NodeUsageBucket
 		if err := rows.Scan(&b.NodeID, &b.Res, &b.BucketMS, &b.Samples, &b.CPUSum, &b.CPUMax, &b.MemSum, &b.MemMax,
-			&b.MemTotal, &b.DiskUsed, &b.DiskTotal, &b.NetRxSum, &b.NetTxSum, &b.RunningMax); err != nil {
+			&b.MemTotal, &b.DiskUsed, &b.DiskTotal, &b.NetRxSum, &b.NetTxSum, &b.RunningMax, &b.LoadSum, &b.DiskReadSum,
+			&b.DiskWriteSum, &b.SwapMax); err != nil {
 			return nil, err
 		}
 		out = append(out, b)

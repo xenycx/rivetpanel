@@ -190,3 +190,35 @@ func TestTelemetryRangeAndMetricEvents(t *testing.T) {
 		t.Fatalf("events are per node: %+v", ev)
 	}
 }
+
+func TestNodeRollupsKeepLoadDiskIOAndSwap(t *testing.T) {
+	db := open(t)
+	seed(t, db)
+	ctx := context.Background()
+	node := domain.LocalNodeID
+	// Two samples in hour 0 and one in hour 1.
+	for i, at := range []int64{60_000, 120_000, 3_600_000 + 60_000} {
+		if err := db.InsertTelemetry(ctx, domain.Telemetry{NodeID: node, SampledAtMS: at, CPUPercent: 10, LogicalCPUs: 4,
+			MemoryUsedBytes: 10, MemoryTotalBytes: 100, DiskUsedBytes: 1, DiskTotalBytes: 2,
+			Load1: float64(i + 1), DiskReadBps: int64(100 * (i + 1)), DiskWriteBps: 7, SwapUsedBytes: int64(5 * (i + 1))}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := db.RollupNodeHours(ctx, 0); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.RollupNodeDays(ctx, 0); err != nil {
+		t.Fatal(err)
+	}
+	hours, err := db.ListNodeUsageRange(ctx, node, 3600, 0, 7_200_000)
+	if err != nil || len(hours) != 2 {
+		t.Fatalf("hours: %v %+v", err, hours)
+	}
+	if h := hours[0]; h.Samples != 2 || h.LoadSum != 3 || h.DiskReadSum != 300 || h.DiskWriteSum != 14 || h.SwapMax != 10 {
+		t.Fatalf("hour 0: %+v", h)
+	}
+	days, err := db.ListNodeUsageRange(ctx, node, 86400, 0, 86_400_000)
+	if err != nil || len(days) != 1 || days[0].LoadSum != 6 || days[0].DiskReadSum != 600 || days[0].SwapMax != 15 {
+		t.Fatalf("day: %v %+v", err, days)
+	}
+}

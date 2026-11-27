@@ -207,6 +207,24 @@ items state exactly what remains.
   the 60 s snapshots. Tests: `internal/metrics`, `internal/store/sqlite`
   metrics tests, `internal/api/metrics_test.go`,
   `internal/agentnode/processes_test.go`.
+- [x] Host chart fixes (1.21.0, migration `0077`): hourly and daily
+  `node_usage` rollups also keep load, disk read/write and swap, so ranges
+  past the raw retention draw those charts (older rollup rows are all zero
+  and drawn as gaps, not idle). The UI fits the memory and disk axes to the
+  visible data, merges event markers closer than 10 px (flags only, no
+  lines, past one marker per 28 px), keeps
+  `mem_total`/`disk_total` when an incremental answer has no buckets, aborts
+  series requests after 25 s and reloads a window whose data has slid out of
+  it [enforced: panel UI]. Tests: `TestNodeRollupsKeepLoadDiskIOAndSwap`.
+- [x] Database browser row editing (extension 1.3.0, no migration): rows of
+  PostgreSQL, MariaDB and SQLite tables with a primary key are edited in the
+  Data tab. The row is re-read exactly by key; the `UPDATE` sets only changed
+  columns and guards each with its old value; it still runs only through the
+  panel's write confirmation [enforced: panel], as the add-on's own account
+  (PostgreSQL, MariaDB) or on a writable mount (SQLite). Keys, generated
+  columns, binary values and SQLite values over 9000 characters are
+  read-only in the editor [enforced: extension page only]. Verified by hand
+  against PostgreSQL 16, MariaDB 11 and SQLite; no automated browser test.
 - [~] Game hosting (Preview 2, migration `0040`): Minecraft Java server types
   (Paper, Purpur, Vanilla, Fabric, Forge, NeoForge, Folia, Velocity) defined by
   validated YAML blueprints with immutable revisions; provider version lists;
@@ -1429,6 +1447,7 @@ Migrations added since 0.2.0 (the schema-version assertion in
 | `0074_user_domain_default.sql` | Additive: `user_domains.is_default` (0/1, default 0, so existing domains are not the default) and the partial unique index `user_domains_default_idx(user_id) WHERE is_default = 1` (one default per user). Covered by `TestMigrateIdempotentAndSchema` (75 versions) and `TestUserDomains` |
 | `0075_move_operations.sql` | Rebuilds `operations` with identical columns (as `0025` did) so `kind` may be `move`; rows, indexes and the active-status partial index are recreated. Nothing references the table. Covered by `TestMigrateIdempotentAndSchema` (76 versions) and `TestMoveBotBetweenNodes` |
 | `0076_metrics_attribution.sql` | Additive: `container_samples` (per-app 15 s samples, pruned after 48 h), `process_snapshots` (busiest processes with source, pruned after 7 d) and `load_spikes` (pruned after 30 d), each with a node/time index; JSON columns are size-capped and checked. Covered by `TestMigrateIdempotentAndSchema` (77 versions, 70 tables) and the `internal/store/sqlite` metrics tests |
+| `0077_node_usage_load_io.sql` | Additive: `node_usage.load_sum`, `disk_read_sum`, `disk_write_sum` (sums divided by `samples`) and `swap_max`, all `NOT NULL DEFAULT 0` with non-negative checks; hourly rows whose raw samples still exist are backfilled from `node_telemetry`, daily rows from the hourly ones. Covered by `TestMigrateIdempotentAndSchema` (78 versions) and `TestNodeRollupsKeepLoadDiskIOAndSwap` |
 | `0054_web_apps.sql` | Rebuilds `bots` (kind gains `web`, runtime gains `php`, new `release_command`) and `sites` (mode gains `app`; `app_id`, `framework`, `build_output_dir`, `app_port`, `health_path`, `max_body_bytes`) with explicit column lists and foreign keys off (checked with `PRAGMA foreign_key_check`; all indexes recreated); additive `site_releases.source_ref` and `bot_health_probes.target` (`host`/`app`). Covered by `apps_migration_test.go` |
 | `0030_ai_global_chat.sql` | Rebuilds `ai_conversations` so a chat may have no target; `ai_runs.bot_id`/`site_id`, `ai_messages.context_json` (the conversation subtree is stashed and restored, rows preserved) |
 

@@ -189,6 +189,7 @@ func (m *Metrics) hostSeries(ctx context.Context, node string, g Grid) (SeriesRe
 			return r, err
 		}
 		cnt := make([]float64, n)
+		ioCnt := make([]float64, n)
 		for _, b := range rows {
 			i := g.index(b.BucketMS)
 			if i < 0 || b.Samples <= 0 {
@@ -206,6 +207,17 @@ func (m *Metrics) hostSeries(ctx context.Context, node string, g Grid) (SeriesRe
 			add(r.NetRx, float64(b.NetRxSum)/s)
 			add(r.NetTx, float64(b.NetTxSum)/s)
 			add(r.DiskUsed, float64(b.DiskUsed))
+			// Rows from before load and disk I/O were rolled up have all of
+			// them zero: leave a gap rather than draw an idle host.
+			if b.LoadSum > 0 || b.DiskReadSum > 0 || b.DiskWriteSum > 0 {
+				add(r.Load1, b.LoadSum/s)
+				add(r.DiskRead, float64(b.DiskReadSum)/s)
+				add(r.DiskWrite, float64(b.DiskWriteSum)/s)
+				if math.IsNaN(r.Swap[i]) || float64(b.SwapMax) > r.Swap[i] {
+					r.Swap[i] = float64(b.SwapMax)
+				}
+				ioCnt[i]++
+			}
 			if math.IsNaN(r.CPUMax[i]) || b.CPUMax > r.CPUMax[i] {
 				r.CPUMax[i] = b.CPUMax
 			}
@@ -220,6 +232,11 @@ func (m *Metrics) hostSeries(ctx context.Context, node string, g Grid) (SeriesRe
 			if c > 1 {
 				for _, col := range []Col{r.CPU, r.Mem, r.NetRx, r.NetTx, r.DiskUsed} {
 					col[i] /= c
+				}
+			}
+			if ioCnt[i] > 1 {
+				for _, col := range []Col{r.Load1, r.DiskRead, r.DiskWrite} {
+					col[i] /= ioCnt[i]
 				}
 			}
 		}

@@ -46,6 +46,7 @@
 		yMin = 0,
 		yMax,
 		ySoftMax,
+		yFit = false,
 		xRange,
 		annotations = [],
 		threshold,
@@ -67,6 +68,12 @@
 		yMax?: number;
 		/** The y axis reaches at least this far (a limit), more if the data does. */
 		ySoftMax?: number;
+		/**
+		 * Fit the y axis to the visible data (bottom too) instead of starting at
+		 * yMin: a line that hovers far above zero (disk or memory use) then
+		 * shows its changes instead of a flat band.
+		 */
+		yFit?: boolean;
 		/** The x window to show (ms); defaults to the data's extent. */
 		xRange?: Span | null;
 		annotations?: Annotation[];
@@ -126,6 +133,40 @@
 		return [data.times, ...order.map((i) => acc[i])] as uPlot.AlignedData;
 	});
 
+	function niceFloor(v: number): number {
+		if (!(v > 0)) return 0;
+		const e = 10 ** Math.floor(Math.log10(v));
+		for (const m of [10, 8, 6, 5, 4, 3, 2.5, 2, 1.5, 1.2, 1]) if (v >= m * e) return m * e;
+		return 0;
+	}
+
+	// Point markers closer than this many CSS pixels are drawn, and hovered, as one.
+	const MERGE_PX = 10;
+	// With more markers than one per this many CSS pixels, only their flags
+	// are drawn: full-height lines would hide the data behind a barcode.
+	const LINE_SPACING_PX = 28;
+	type Cluster = { x: number; items: Annotation[] };
+	/** Point annotations in view (x in canvas pixels), merged where they would overlap. */
+	function clusters(self: uPlot): Cluster[] {
+		const dpr = devicePixelRatio || 1;
+		const { left, width: w } = self.bbox;
+		const out: Cluster[] = [];
+		const pts = annNow.filter((a) => a.end === undefined).sort((a, b) => a.t - b.t);
+		for (const a of pts) {
+			const x = self.valToPos(a.t, 'x', true);
+			if (x < left || x > left + w) continue;
+			const last = out[out.length - 1];
+			if (last && x - last.x < MERGE_PX * dpr) last.items.push(a);
+			else out.push({ x, items: [a] });
+		}
+		return out;
+	}
+	function clusterLabel(c: Annotation[]): string {
+		if (c.length === 1) return c[0].label;
+		const shown = c.slice(0, 3).map((a) => a.label);
+		return `${c.length} events\n` + shown.join('\n') + (c.length > 3 ? `\nand ${c.length - 3} more (zoom in to see them)` : '');
+	}
+
 	function niceMax(v: number): number {
 		if (!(v > 0)) return 1;
 		const e = 10 ** Math.floor(Math.log10(v));
@@ -167,8 +208,15 @@
 			scales: {
 				x: { time: true },
 				y: {
-					range: (_u, _min, max) => {
+					range: (_u, min, max) => {
 						if (yMax !== undefined) return [yMin, yMax];
+						// uPlot passes the extent of the shown series inside the x window.
+						if (yFit && min !== null && max !== null && max >= min) {
+							const pad = Math.max((max - min) * 0.12, Math.abs(max) * 0.02, 1e-9);
+							const bottom = Math.max(yMin, min - pad);
+							// A bottom close to zero reads better as zero.
+							return [bottom < (max + pad) * 0.25 ? yMin : niceFloor(bottom), max + pad];
+						}
 						const top = Math.max(max ?? 0, ySoftMax ?? 0, thrNow?.value ?? 0);
 						return [yMin, niceMax(top * 1.08)];
 					}
@@ -238,6 +286,20 @@
 							ctx.fillStyle = p.alpha(annColor(a), p.dark ? 0.14 : 0.1);
 							ctx.fillRect(x0, top, Math.max(2, x1 - x0), h);
 						}
+						// Point markers: a faint line under the data, merged when
+						// crowded, and left out (flags only) when there are too many.
+						const dpr = devicePixelRatio || 1;
+						const cs = clusters(self);
+						ctx.lineWidth = dpr;
+						ctx.setLineDash([3 * dpr, 3 * dpr]);
+						for (const c of cs.length * LINE_SPACING_PX * dpr <= w ? cs : []) {
+							const x = Math.round(c.x) + 0.5;
+							ctx.strokeStyle = p.alpha(annColor(c.items[0]), 0.45);
+							ctx.beginPath();
+							ctx.moveTo(x, top);
+							ctx.lineTo(x, top + h);
+							ctx.stroke();
+						}
 						ctx.restore();
 					}
 				],
@@ -266,22 +328,17 @@
 								}
 							}
 						}
-						ctx.setLineDash([3 * dpr, 3 * dpr]);
-						for (const a of annNow) {
-							if (a.end !== undefined) continue;
-							const x = Math.round(self.valToPos(a.t, 'x', true)) + 0.5;
-							if (x < left || x > left + w) continue;
-							ctx.strokeStyle = p.alpha(annColor(a), 0.75);
+						ctx.setLineDash([]);
+						for (const c of clusters(self)) {
+							// A small flag at the top marks where to hover; a merged
+							// group gets a wider one.
+							const x = Math.round(c.x) + 0.5;
+							const r = (c.items.length > 1 ? 5 : 4) * dpr;
+							ctx.fillStyle = p.color(annColor(c.items[0]));
 							ctx.beginPath();
-							ctx.moveTo(x, top);
-							ctx.lineTo(x, top + h);
-							ctx.stroke();
-							// A small flag at the top marks where to hover.
-							ctx.fillStyle = p.color(annColor(a));
-							ctx.beginPath();
-							ctx.moveTo(x - 4 * dpr, top);
-							ctx.lineTo(x + 4 * dpr, top);
-							ctx.lineTo(x, top + 5 * dpr);
+							ctx.moveTo(x - r, top);
+							ctx.lineTo(x + r, top);
+							ctx.lineTo(x, top + r + dpr);
 							ctx.closePath();
 							ctx.fill();
 						}
@@ -302,13 +359,20 @@
 						let best: { a: Annotation; left: number } | null = null;
 						let bestD = 6;
 						const t = self.posToVal(left, 'x');
+						const off = parseFloat(self.over.style.left) || 0;
 						for (const a of annNow) {
-							const x = self.valToPos(a.t, 'x');
-							const inRegion = a.end !== undefined && t >= a.t && t <= (a.end ?? Infinity);
-							const d = inRegion ? 5 : Math.abs(x - left);
+							if (a.end !== undefined && t >= a.t && t <= (a.end ?? Infinity) && 5 < bestD) {
+								bestD = 5;
+								best = { a, left: Math.max(self.valToPos(a.t, 'x'), 0) + off };
+							}
+						}
+						const dpr = devicePixelRatio || 1;
+						for (const c of clusters(self)) {
+							const x = (c.x - self.bbox.left) / dpr; // canvas → CSS pixels in the plot
+							const d = Math.abs(x - left);
 							if (d < bestD) {
 								bestD = d;
-								best = { a, left: Math.max(x, 0) + (parseFloat(self.over.style.left) || 0) };
+								best = { a: c.items.length === 1 ? c.items[0] : { ...c.items[0], label: clusterLabel(c.items) }, left: Math.max(x, 0) + off };
 							}
 						}
 						hoverAnn = best;
@@ -489,7 +553,7 @@
 		{#if hoverAnn}
 			<div class="pointer-events-none absolute top-1 z-10 max-w-64 -translate-x-1/2 rounded-control border border-rule bg-raised px-2 py-1 text-small shadow-overlay" style="left: clamp(4rem, {hoverAnn.left}px, calc(100% - 4rem))" aria-hidden="true">
 				<p class="font-mono text-label text-muted tabular-nums">{fmtStamp(hoverAnn.a.t, span)}{#if hoverAnn.a.end !== undefined}{' '}– {hoverAnn.a.end ? fmtStamp(hoverAnn.a.end, span) : 'now'}{/if}</p>
-				<p class="leading-snug">{hoverAnn.a.label}</p>
+				<p class="leading-snug whitespace-pre-line">{hoverAnn.a.label}</p>
 			</div>
 		{/if}
 	</div>

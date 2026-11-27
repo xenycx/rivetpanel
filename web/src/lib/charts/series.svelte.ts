@@ -42,7 +42,12 @@ export function trimLeft<T extends Columnar>(d: T, start: number): T {
 	return out as T;
 }
 
-/** prev up to and including `since`, then inc; trimmed to start. Scalars come from inc. */
+/**
+ * prev up to and including `since`, then inc; trimmed to start. Scalars come
+ * from inc, except a total the server could not know: an answer with no new
+ * buckets reports mem_total and disk_total as 0, and those must not replace
+ * the real figures.
+ */
 export function mergeAfter<T extends Columnar>(prev: T, inc: T, since: number, start: number): T {
 	// A server that ignored `since` sends everything: keep only what is new.
 	const first = inc.times.findIndex((t) => t > since);
@@ -52,6 +57,9 @@ export function mergeAfter<T extends Columnar>(prev: T, inc: T, since: number, s
 	const out = { ...prev, ...inc } as Record<string, unknown>;
 	const p = prev as unknown as Record<string, unknown[]>;
 	const q = inc as unknown as Record<string, unknown[]>;
+	const pv = prev as unknown as Record<string, unknown>;
+	for (const [k, v] of Object.entries(inc as unknown as Record<string, unknown>))
+		if ((v === 0 || v === null || v === undefined) && typeof pv[k] === 'number' && pv[k] !== 0) out[k] = pv[k];
 	for (const k of columns(prev)) out[k] = p[k].slice(0, hi).concat(Array.isArray(q[k]) ? q[k] : new Array(inc.times.length).fill(null));
 	return trimLeft(out as T, start);
 }
@@ -77,6 +85,25 @@ export function estimateStep(times: number[]): number | undefined {
 }
 
 export type Fetcher<T> = (q: SeriesQuery, signal: AbortSignal) => Promise<T>;
+
+/** How long one series request may take before it counts as failed. */
+export const REQUEST_TIMEOUT_MS = 25_000;
+
+/**
+ * An abort controller that also aborts itself after `ms`. A request that
+ * never answers (a dropped connection, a laptop waking from sleep) must not
+ * hold the store, or the poll that waits for it, forever: the window keeps
+ * moving while the data does not, until the charts are empty.
+ */
+export function timedController(ms = REQUEST_TIMEOUT_MS): { ctrl: AbortController; timedOut: () => boolean; done: () => void } {
+	const ctrl = new AbortController();
+	let late = false;
+	const timer = setTimeout(() => {
+		late = true;
+		ctrl.abort();
+	}, ms);
+	return { ctrl, timedOut: () => late, done: () => clearTimeout(timer) };
+}
 
 export class SeriesStore<T extends Columnar> {
 	data = $state.raw<T | null>(null);
@@ -119,7 +146,7 @@ export class SeriesStore<T extends Columnar> {
 	}
 
 	async #full(key: string, w: Window) {
-		const ctrl = new AbortController();
+		const { ctrl, timedOut, done } = timedController();
 		this.#ctrl = ctrl;
 		this.loading = true;
 		try {
@@ -129,9 +156,10 @@ export class SeriesStore<T extends Columnar> {
 			this.error = '';
 			remember(key, d);
 		} catch (e) {
-			if (ctrl.signal.aborted) return;
+			if (ctrl.signal.aborted && !timedOut()) return;
 			this.error = e instanceof ApiError && e.status !== 404 ? e.message : this.#errorText;
 		} finally {
+			done();
 			if (this.#ctrl === ctrl) {
 				this.#ctrl = null;
 				this.loading = false;
@@ -144,10 +172,12 @@ export class SeriesStore<T extends Columnar> {
 		if (this.#ctrl) return; // a load is running; it is newer anyway
 		const key = this.#key;
 		const prev = this.data;
-		if (!prev || !this.#incremental || prev.times.length < 3) return this.#full(key, w);
+		// Nothing to build on, or what is held has slid (almost) out of the
+		// window (a long sleep, failed refreshes): load the window again.
+		if (!prev || !this.#incremental || prev.times.length < 3 || prev.times[prev.times.length - 1] < w.start + (w.end - w.start) / 2) return this.#full(key, w);
 		const since = prev.times[prev.times.length - 2];
 		const step = prev.step_ms ?? estimateStep(prev.times);
-		const ctrl = new AbortController();
+		const { ctrl, timedOut, done } = timedController();
 		this.#ctrl = ctrl;
 		try {
 			const inc = await this.#fetch({ ...w, step, since }, ctrl.signal);
@@ -156,9 +186,10 @@ export class SeriesStore<T extends Columnar> {
 			this.error = '';
 			remember(key, this.data);
 		} catch (e) {
-			if (ctrl.signal.aborted) return;
+			if (ctrl.signal.aborted && !timedOut()) return;
 			this.error = e instanceof ApiError && e.status !== 404 ? e.message : this.#errorText;
 		} finally {
+			done();
 			if (this.#ctrl === ctrl) this.#ctrl = null;
 		}
 	}

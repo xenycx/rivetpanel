@@ -22,12 +22,17 @@ four tabs.
 
 - CPU, memory (with cache and swap), load average, disk, network and disk
   throughput, drawn on canvas charts. Charts show averages plus dashed
-  peaks.
+  peaks. The memory and disk charts fit their axis to the values in view
+  (the total is in the chart title), so a jump of a few gigabytes on a
+  large disk stays visible over 30 days.
 - **CPU by app** and **memory by app**: stacked charts of the eight busiest
   apps, the rest of the apps, and **host** (whatever no app accounts for: the
   panel, Docker and the system).
 - Deploys, starts, stops, restarts, crashes, out-of-memory kills, backups and
-  spikes are marked on every chart.
+  spikes are marked on every chart. Markers that would overlap at a long
+  range merge into one wider flag; hover it to read the first few events,
+  and zoom in to separate them. When the range holds too many to draw
+  lines through the chart, only the flags along the top are shown.
 - A disk-fill forecast from the trend.
 - Host facts, and the RivetPanel process: memory, goroutines, open files,
   requests, errors and database size.
@@ -48,13 +53,16 @@ four tabs.
 | Live | For ranges up to 1 hour, a new host point every 2 seconds (every 5 seconds on a remote node) |
 
 The range, refresh and Live choices are kept in the address, so a copied link
-opens the same view. Refreshing pauses while the tab is hidden.
+opens the same view. Refreshing pauses while the tab is hidden. A request
+that gets no answer within 25 seconds counts as failed and is retried on the
+next refresh, and when the shown data has fallen behind the range (after a
+sleep or failed refreshes) the whole range is loaded again.
 
 How far back each chart reaches:
 
 | Data | Step | Kept |
 | --- | --- | --- |
-| Host samples | `RIVET_TELEMETRY_INTERVAL` (30 seconds by default) | `RIVET_TELEMETRY_RETENTION` or **Logs and retention**, 7 days by default; older ranges use hourly and daily rollups |
+| Host samples | `RIVET_TELEMETRY_INTERVAL` (30 seconds by default) | `RIVET_TELEMETRY_RETENTION` or **Logs and retention**, 7 days by default; older ranges use hourly and daily rollups, which keep CPU, memory, disk, network, load, disk I/O and swap. Load, disk I/O and swap rollups start with 1.21.0, so hours before the upgrade whose samples had already expired show as gaps |
 | Each app's CPU, memory, network, disk I/O and processes | 15 seconds (30 seconds on remote nodes) | 48 hours; older ranges use the 5-minute, hourly and daily usage rollups |
 | Process snapshots | Every 60 seconds, and every 15 seconds during a spike | 7 days |
 | Spikes | — | 30 days |

@@ -8,7 +8,7 @@
 	import UChart, { type Annotation, type ChartData, type ChartSeries } from '$lib/charts/UChart.svelte';
 	import RangePicker from '$lib/charts/RangePicker.svelte';
 	import { ChartGroup } from '$lib/charts/sync.svelte';
-	import { SeriesStore } from '$lib/charts/series.svelte';
+	import { SeriesStore, timedController } from '$lib/charts/series.svelte';
 	import { TimeRange, fmtStamp } from '$lib/charts/timeRange.svelte';
 	import { cat } from '$lib/charts/colors';
 	import Icon from '$lib/components/ui/Icon.svelte';
@@ -53,9 +53,14 @@
 		if (!force && Date.now() - slowAt < 15_000) return;
 		slowAt = Date.now();
 		slowCtrl?.abort();
-		const c = (slowCtrl = new AbortController());
+		const t = timedController();
+		const c = (slowCtrl = t.ctrl);
 		const [ev, sp] = await Promise.allSettled([metrics.events(nodeId, w, c.signal), metrics.spikes(nodeId, w, c.signal)]);
-		if (c.signal.aborted) return;
+		t.done();
+		if (c.signal.aborted) {
+			if (t.timedOut()) slowAt = 0; // try again on the next refresh
+			return;
+		}
 		if (ev.status === 'fulfilled') events = ev.value.events ?? [];
 		if (sp.status === 'fulfilled') {
 			spikes = sp.value.spikes ?? [];
@@ -282,8 +287,8 @@
 		<div class="stat"><p class="eyebrow mb-2">CPU by app (cores)</p>
 			<UChart label="CPU by app" data={cpuByApp.data} series={cpuByApp.series} {group} xRange={xr} loading={cpuApps.loading} format={fmtCores} {annotations} onpick={pick} empty={cpuApps.error || 'No per-app samples in this range yet.'} />
 		</div>
-		<div class="stat"><p class="eyebrow mb-2">Memory</p>
-			<UChart label="Memory use" data={memData} {group} xRange={xr} {loading} yMax={h?.mem_total || undefined} format={fmtBytes} {annotations} onpick={pick}
+		<div class="stat"><p class="eyebrow mb-2">Memory{#if h?.mem_total}{' '}<span class="font-normal normal-case">of {fmtBytes(h.mem_total)}</span>{/if}</p>
+			<UChart label="Memory use" data={memData} {group} xRange={xr} {loading} yFit format={fmtBytes} {annotations} onpick={pick}
 				series={[{ label: 'Used', color: 'run', fill: true }, { label: 'Peak', color: 'muted', dashed: true }]} />
 		</div>
 		<div class="stat"><p class="eyebrow mb-2">Memory by app</p>
@@ -301,8 +306,8 @@
 			<UChart label="Disk throughput" data={ioData} {group} xRange={xr} {loading} format={fmtBps} {annotations} onpick={pick}
 				series={[{ label: 'Read', color: 'run' }, { label: 'Write', color: 'action' }]} />
 		</div>
-		<div class="stat"><p class="eyebrow mb-2">Disk space used</p>
-			<UChart label="Disk space used" data={diskData} {group} xRange={xr} {loading} yMax={h?.disk_total || undefined} format={fmtBytes} {annotations} onpick={pick}
+		<div class="stat"><p class="eyebrow mb-2">Disk space used{#if h?.disk_total}{' '}<span class="font-normal normal-case">of {fmtBytes(h.disk_total)}</span>{/if}</p>
+			<UChart label="Disk space used" data={diskData} {group} xRange={xr} {loading} yFit format={fmtBytes} {annotations} onpick={pick}
 				series={[{ label: 'Used', color: 'warn', fill: true }]} />
 		</div>
 		{#if hasSwap}

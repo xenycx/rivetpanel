@@ -156,34 +156,39 @@ func (db *DB) RollupBotDays(ctx context.Context, fromMS int64) error {
 // every hour starting at or after fromMS's hour.
 func (db *DB) RollupNodeHours(ctx context.Context, fromMS int64) error {
 	_, err := db.ExecContext(ctx, `INSERT INTO node_usage (node_id, res, bucket_ms, samples, cpu_sum, cpu_max, mem_sum,
-			mem_max, mem_total, disk_used, disk_total, net_rx_sum, net_tx_sum, running_max)
+			mem_max, mem_total, disk_used, disk_total, net_rx_sum, net_tx_sum, running_max,
+			load_sum, disk_read_sum, disk_write_sum, swap_max)
 		SELECT node_id, 3600, (sampled_at_ms / 3600000) * 3600000, count(*), sum(cpu_percent), max(cpu_percent),
 			sum(memory_used_bytes), max(memory_used_bytes), max(memory_total_bytes), max(disk_used_bytes),
-			max(disk_total_bytes), sum(net_rx_bps), sum(net_tx_bps), max(running_bots)
+			max(disk_total_bytes), sum(net_rx_bps), sum(net_tx_bps), max(running_bots),
+			sum(load1), sum(disk_read_bps), sum(disk_write_bps), max(swap_used_bytes)
 		FROM node_telemetry WHERE sampled_at_ms >= ?
 		GROUP BY node_id, sampled_at_ms / 3600000
 		ON CONFLICT(node_id, res, bucket_ms) DO UPDATE SET
 			samples = excluded.samples, cpu_sum = excluded.cpu_sum, cpu_max = excluded.cpu_max, mem_sum = excluded.mem_sum,
 			mem_max = excluded.mem_max, mem_total = excluded.mem_total, disk_used = excluded.disk_used,
 			disk_total = excluded.disk_total, net_rx_sum = excluded.net_rx_sum, net_tx_sum = excluded.net_tx_sum,
-			running_max = excluded.running_max`, fromMS-fromMS%3600000)
+			running_max = excluded.running_max, load_sum = excluded.load_sum, disk_read_sum = excluded.disk_read_sum,
+			disk_write_sum = excluded.disk_write_sum, swap_max = excluded.swap_max`, fromMS-fromMS%3600000)
 	return mapErr(err)
 }
 
 // RollupNodeDays recomputes daily node rows from hourly ones.
 func (db *DB) RollupNodeDays(ctx context.Context, fromMS int64) error {
 	_, err := db.ExecContext(ctx, `INSERT INTO node_usage (node_id, res, bucket_ms, samples, cpu_sum, cpu_max, mem_sum,
-			mem_max, mem_total, disk_used, disk_total, net_rx_sum, net_tx_sum, running_max)
+			mem_max, mem_total, disk_used, disk_total, net_rx_sum, net_tx_sum, running_max,
+			load_sum, disk_read_sum, disk_write_sum, swap_max)
 		SELECT node_id, 86400, (bucket_ms / 86400000) * 86400000, sum(samples), sum(cpu_sum), max(cpu_max),
 			sum(mem_sum), max(mem_max), max(mem_total), max(disk_used), max(disk_total), sum(net_rx_sum),
-			sum(net_tx_sum), max(running_max)
+			sum(net_tx_sum), max(running_max), sum(load_sum), sum(disk_read_sum), sum(disk_write_sum), max(swap_max)
 		FROM node_usage WHERE res = 3600 AND bucket_ms >= ?
 		GROUP BY node_id, bucket_ms / 86400000
 		ON CONFLICT(node_id, res, bucket_ms) DO UPDATE SET
 			samples = excluded.samples, cpu_sum = excluded.cpu_sum, cpu_max = excluded.cpu_max, mem_sum = excluded.mem_sum,
 			mem_max = excluded.mem_max, mem_total = excluded.mem_total, disk_used = excluded.disk_used,
 			disk_total = excluded.disk_total, net_rx_sum = excluded.net_rx_sum, net_tx_sum = excluded.net_tx_sum,
-			running_max = excluded.running_max`, fromMS-fromMS%86400000)
+			running_max = excluded.running_max, load_sum = excluded.load_sum, disk_read_sum = excluded.disk_read_sum,
+			disk_write_sum = excluded.disk_write_sum, swap_max = excluded.swap_max`, fromMS-fromMS%86400000)
 	return mapErr(err)
 }
 

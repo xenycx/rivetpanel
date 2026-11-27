@@ -23,7 +23,7 @@ administrator granted it.
 | --- | --- |
 | **Discord bot insights** | A Discord card on each bot's **Manage** tab: the bot user, application, approximate server count, invite link and token state. Keeps the bot's name and avatar current and tells the owner when Discord resets the token |
 | **Discord ChatOps** | Slash commands in your Discord server: `/status`, `/logs`, `/start`, `/stop`, `/restart`, `/deploy`, each run with the person's own panel permissions |
-| **Database browser** | A **Data** tab on bots with database services or SQLite files: browse and query PostgreSQL, MariaDB and SQLite tables, Redis keys and MongoDB collections. Reads are read-only; a change runs only after you confirm it in a panel dialog |
+| **Database browser** | A **Data** tab on bots with database services or SQLite files: browse, query and edit PostgreSQL, MariaDB and SQLite tables, Redis keys and MongoDB collections. Reads are read-only; a change, including an edited row, runs only after you confirm it in a panel dialog |
 
 ## Turn extensions on
 
@@ -185,6 +185,32 @@ is open. Click a row to read and copy every value in full; **Copy CSV** copies
 the rows shown. Redis and MongoDB open in their command and query editors.
 The full-screen button (top right) lets the tab fill the panel's window;
 **Exit full screen** or Esc brings it back.
+
+### Edit a row
+
+PostgreSQL, MariaDB and SQLite tables with a primary key can be edited
+without writing SQL.
+
+1. On **Data**, double-click the cell you want to change, or click the row
+   and press **Edit**.
+2. Change the values. A nullable column has a **NULL** box. Key columns,
+   generated columns, binary values and SQLite values over 9000 characters
+   stay read-only.
+3. Press **Save changes** (or Ctrl+Enter), then confirm the statement in the
+   panel dialog.
+
+Editing first reads the row again by its key, because the grid shows values
+as text that cannot tell `NULL` from an empty string and cuts long values
+short. Saving sends one `UPDATE` with only the columns you changed. Its
+`WHERE` names the row by its key and also requires each changed column to
+still hold the value you started from, so a row someone changed in the
+meantime is left alone and you are told to reload. In MariaDB a value with a
+backslash is sent as `FROM_BASE64('…')`, because MariaDB reads backslashes in
+quoted text as escapes. Esc leaves the editor;
+with unsaved changes, press it twice.
+
+Tables without a primary key and views stay read-only here: change them with
+**SQL** and **Run as change…**.
 
 ### How queries run
 

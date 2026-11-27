@@ -6,6 +6,41 @@ authoritative current version.
 
 ## Unreleased
 
+## 1.21.0 - 2026-11-27
+
+### Added
+
+- **Edit rows in the Data tab without writing SQL.** In the database browser
+  extension (1.3.0), double-click a cell of a PostgreSQL, MariaDB or SQLite
+  table that has a primary key, or open a row and press **Edit**, change the
+  values (with a **NULL** box for nullable columns) and save. The editor reads
+  the row again exactly, so `NULL`, empty text and long values are what they
+  really are, and saves one `UPDATE` of only the changed columns. That update
+  still runs only after you confirm it in the panel dialog, and it leaves a
+  row alone if someone changed it since you opened it. Keys, generated
+  columns, binary values and tables without a primary key stay read-only.
+
+### Fixed
+
+- **Spikes on the host charts are visible at long ranges.** The memory and
+  disk charts no longer pin their axis to the machine's total, which pressed
+  a 15 GiB line with 3 GiB jumps into a flat strip at the bottom of a 72 GiB
+  axis; they fit the values in view and name the total in the title. Event
+  markers no longer cover the 30-day charts like a barcode: markers that
+  would overlap merge into one flag that lists the events on hover, their
+  lines sit behind the data, and a crowded range shows only the flags.
+- **Host charts no longer go blank after a while.** A refresh with no new
+  samples reported the memory and disk totals as zero and replaced the real
+  ones; a request that never answered (a dropped connection, a laptop waking
+  from sleep) stopped every later refresh while the time window kept moving,
+  until the charts were empty. Requests now give up after 25 seconds and are
+  retried, and a window whose data has fallen behind is loaded again.
+- **Load average, disk I/O and swap show over long ranges.** Ranges older than
+  the raw samples (8 days and more, such as 30 days) read hourly rollups that
+  did not keep these, so those charts were empty. Rollups now keep them
+  (migration `0077`); hours still covered by raw samples are filled in at
+  upgrade, and older hours show as gaps.
+
 ## 1.20.1 - 2026-11-23
 
 ### Fixed

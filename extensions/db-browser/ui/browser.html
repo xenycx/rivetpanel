@@ -133,6 +133,21 @@ pre.text { margin: 0; padding: 14px; font: 12.5px/1.55 var(--mono); white-space:
 .detail dt span { flex: 1; font-weight: 600; color: var(--ink); }
 .detail dd { margin: 0; font: 12.5px/1.5 var(--mono); white-space: pre-wrap; word-break: break-word; max-height: 16rem; overflow: auto; }
 .detail dd.null { color: var(--muted); font-style: italic; }
+.detail .note { margin: 0; padding: 10px 14px; font-size: 12px; color: var(--muted); border-bottom: 1px solid var(--rule-soft); }
+.detail .note.fail { color: var(--fail); }
+.detail form { display: contents; }
+.detail .field.edit { display: grid; gap: 4px; border-left: 2px solid transparent; }
+.detail .field.edit.changed { border-left-color: var(--warn); background: color-mix(in srgb, var(--warn) 5%, var(--panel)); }
+.detail .field.edit textarea { min-height: 0; font-size: 12.5px; padding: 5px 8px; resize: vertical; }
+.detail .field.edit textarea:disabled { background: var(--paper); color: var(--muted); }
+.detail .field.edit .opts { display: flex; align-items: center; gap: 12px; font-size: 12px; color: var(--muted); }
+.detail .field.edit .opts label { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; }
+.detail dt label { flex: 1; min-width: 0; }
+.detail dt .type { flex: none; font-weight: 400; font-family: var(--mono); font-size: 11.5px; }
+.detail dt .badge { flex: none; font-size: 11px; padding: 0 6px; border-radius: 999px; background: var(--paper-2); color: var(--muted); }
+.detail footer { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-top: 1px solid var(--rule-soft); background: var(--panel); }
+.detail footer .grow { flex: 1; font-size: 12px; color: var(--muted); }
+td.editable { cursor: text; }
 
 @media (max-width: 720px) {
 	.app { grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr); }
@@ -267,6 +282,8 @@ pre.text { margin: 0; padding: 14px; font: 12.5px/1.55 var(--mono); white-space:
 	let tab = 'data';
 	let offset = 0, sort = null, total = null;
 	let result = null, selected = -1, busy = false, mongoDB = '';
+	let meta = null;                     // { table, cols: [{ name, type, nullable, generated, pk }], pk: [names] } of obj
+	let editing = null;                  // the row being edited in the drawer
 	const history = new Map();           // source id -> recent queries
 	const drafts = new Map();            // source id -> editor text
 
@@ -277,6 +294,17 @@ pre.text { margin: 0; padding: 14px; font: 12.5px/1.55 var(--mono); white-space:
 		: name.split('.').length === 2 && src.kind === 'postgres' ? name.split('.').map((p) => '"' + p.replace(/"/g, '""') + '"').join('.')
 		: '"' + name.replace(/"/g, '""') + '"';
 	const lit = (s) => "'" + s.replace(/'/g, "''") + "'";
+	// A column name (never schema-qualified).
+	const qcol = (name) => src.kind === 'mariadb' ? '`' + name.replace(/`/g, '``') + '`' : '"' + name.replace(/"/g, '""') + '"';
+	// A value as a SQL literal. MariaDB reads backslashes in strings as
+	// escapes, so a value that has one travels as base64 instead.
+	const val = (v) => {
+		if (v === null) return 'NULL';
+		if (src.kind === 'mariadb' && /[\\\0]/.test(v)) return 'FROM_BASE64(' + lit(b64(v)) + ')';
+		return lit(v);
+	};
+	const b64 = (s) => { let bin = ''; for (const b of new TextEncoder().encode(s)) bin += String.fromCharCode(b); return btoa(bin); };
+	const unb64 = (s) => { const bin = atob(s.replace(/\\n|\s/g, '')); const out = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i); return new TextDecoder('utf-8', { fatal: true }).decode(out); };
 
 	function state(kind, title, text, action) {
 		$('out').replaceChildren(el('div', { class: 'state' + (kind === 'fail' ? ' fail' : '') },
@@ -316,7 +344,7 @@ pre.text { margin: 0; padding: 14px; font: 12.5px/1.55 var(--mono); white-space:
 
 	function choose(s) {
 		if (src) drafts.set(src.id, $('q') ? $('q').value : '');
-		src = s; obj = ''; objects = []; result = null; offset = 0; sort = null; total = null;
+		src = s; obj = ''; objects = []; result = null; offset = 0; sort = null; total = null; meta = null;
 		tab = SQL[s.kind] ? 'data' : 'query';
 		renderSources(); closeDetail();
 		$('filter').value = '';
@@ -391,9 +419,10 @@ pre.text { margin: 0; padding: 14px; font: 12.5px/1.55 var(--mono); white-space:
 	$('filter').addEventListener('input', renderObjects);
 
 	function pick(n) {
-		obj = n; offset = 0; sort = null; total = null;
+		obj = n; offset = 0; sort = null; total = null; meta = null;
 		renderObjects();
 		if (SQL[src.kind]) {
+			loadMeta(n);
 			if (tab === 'query') { setQ(`SELECT * FROM ${qid(n)} LIMIT ${PAGE}`); render(); return go('read'); }
 			render(); return tab === 'data' ? browse() : columns();
 		}
@@ -604,7 +633,7 @@ pre.text { margin: 0; padding: 14px; font: 12.5px/1.55 var(--mono); white-space:
 			el('span', { text: `${r.ms ?? 0} ms` }),
 			r.truncated ? el('span', { class: 'pill warn', text: 'Showing the first rows only' }) : null,
 			el('span', { class: 'grow' }),
-			rows.length && noun === 'row' ? el('span', { class: 'hint-row', text: 'Click a row to see every value' }) : null,
+			rows.length && noun === 'row' ? el('span', { class: 'hint-row', text: browsing && !notEditable() ? 'Click a row to see every value · double-click a cell to edit it' : 'Click a row to see every value' }) : null,
 			r.columns && r.columns.length && !browsing ? el('button', { class: 'btn ghost', type: 'button', on: { click: copyCSV } }, icon('copy'), el('span', { class: 'lbl', text: 'Copy CSV' })) : null].filter(Boolean));
 		meta.hidden = false;
 		if (!(r.columns && r.columns.length)) {
@@ -617,6 +646,7 @@ pre.text { margin: 0; padding: 14px; font: 12.5px/1.55 var(--mono); white-space:
 			return;
 		}
 		const num = r.columns.map((_, i) => numeric(rows, i));
+		const canEdit = browsing && !notEditable();
 		const head = el('tr', {}, el('th', { class: 'idx', scope: 'col' }, el('span', { class: 'sr', text: 'Row' }), '#'),
 			...r.columns.map((c, i) => {
 				const cls = (num[i] ? 'n' : '') + (sort && sort.col === c ? ' sorted' : '');
@@ -628,17 +658,230 @@ pre.text { margin: 0; padding: 14px; font: 12.5px/1.55 var(--mono); white-space:
 			}));
 		const body = el('tbody');
 		rows.forEach((row, ri) => {
-			const tr = el('tr', { 'aria-selected': 'false', tabindex: '0', on: { click: () => openDetail(ri), keydown: (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openDetail(ri); } } } },
+			// With editing on, a click waits a moment so a double-click (edit this
+			// cell) is not swallowed by the drawer the first click opens over it.
+			let clickTimer = 0;
+			const tr = el('tr', { 'aria-selected': 'false', tabindex: '0', on: { click: (e) => { if (!canEdit) return openDetail(ri); clearTimeout(clickTimer); if (e.detail < 2) clickTimer = setTimeout(() => openDetail(ri), 230); }, keydown: (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openDetail(ri); } } } },
 				el('td', { class: 'idx', text: String((browsing ? offset : 0) + ri + 1) }),
-				...row.map((v, i) => v === 'NULL' || v === '' ? el('td', { class: 'null' + (num[i] ? ' n' : ''), text: v === '' ? '' : 'NULL' }) : el('td', { class: num[i] ? 'n' : undefined, text: v })));
+				...row.map((v, i) => {
+					const cls = [v === 'NULL' || v === '' ? 'null' : '', num[i] ? 'n' : '', canEdit ? 'editable' : ''].filter(Boolean).join(' ') || undefined;
+					const td = el('td', { class: cls, text: v === 'NULL' ? 'NULL' : v });
+					if (canEdit) td.addEventListener('dblclick', (e) => { e.preventDefault(); clearTimeout(clickTimer); openDetail(ri, r.columns[i]); });
+					return td;
+				}));
 			body.append(tr);
 		});
 		$('out').replaceChildren(el('table', { 'aria-label': obj && browsing ? `Rows of ${obj}` : 'Query result' }, el('thead', {}, head), body));
 	}
 
+	// ---- Editing rows -------------------------------------------------
+	// A row can be edited when its table has a primary key. The grid shows
+	// values as text that cannot tell NULL from an empty string and cuts
+	// long values short, so editing first reads the row again, exactly, by
+	// its key. Saving sends one UPDATE of the changed columns only, guarded by
+	// their old values (a row someone changed meanwhile is left alone), and
+	// it runs after the panel's confirmation like every other change.
+	async function loadMeta(t) {
+		const mine = src;
+		let q;
+		if (mine.kind === 'postgres') {
+			const [s, n] = t.includes('.') ? t.split('.') : ['public', t];
+			q = `select c.column_name, c.is_nullable, c.data_type, (c.is_generated <> 'NEVER' or c.identity_generation = 'ALWAYS')::int, coalesce((select k.n from unnest(i.indkey) with ordinality as k(attnum, n) where k.attnum = a.attnum), 0)
+				from information_schema.columns c
+				join pg_attribute a on a.attrelid = to_regclass(${lit(qid(t))}) and a.attname = c.column_name
+				left join pg_index i on i.indrelid = a.attrelid and i.indisprimary and a.attnum = any(i.indkey)
+				where c.table_schema = ${lit(s)} and c.table_name = ${lit(n)} order by c.ordinal_position`;
+		} else if (mine.kind === 'mariadb') {
+			q = `SELECT c.COLUMN_NAME, c.IS_NULLABLE, c.COLUMN_TYPE, c.EXTRA LIKE '%GENERATED%' AND c.EXTRA NOT LIKE '%DEFAULT_GENERATED%', COALESCE(k.ORDINAL_POSITION, 0)
+				FROM information_schema.COLUMNS c LEFT JOIN information_schema.KEY_COLUMN_USAGE k
+				ON k.TABLE_SCHEMA = c.TABLE_SCHEMA AND k.TABLE_NAME = c.TABLE_NAME AND k.COLUMN_NAME = c.COLUMN_NAME AND k.CONSTRAINT_NAME = 'PRIMARY'
+				WHERE c.TABLE_SCHEMA = DATABASE() AND c.TABLE_NAME = ${lit(t)} ORDER BY c.ORDINAL_POSITION`;
+		} else {
+			q = `SELECT name, CASE WHEN "notnull" THEN 'NO' ELSE 'YES' END, type, hidden IN (2, 3), pk FROM pragma_table_xinfo(${lit(t)}) WHERE hidden <> 1 AND (SELECT type FROM sqlite_master WHERE name = ${lit(t)}) = 'table'`;
+		}
+		try {
+			const r = await query({ query: q });
+			if (mine !== src || t !== obj) return;
+			const cols = (r.rows || []).map((x) => ({ name: x[0], nullable: /^yes$/i.test(x[1]), type: x[2], generated: x[3] === '1' || x[3] === 't', pk: Number(x[4]) || 0 }));
+			const pk = cols.filter((c) => c.pk > 0).sort((a, b) => a.pk - b.pk).map((c) => c.name);
+			meta = { table: t, cols, pk };
+		} catch (e) {
+			if (mine === src && t === obj) meta = { table: t, cols: [], pk: [], error: e.message };
+		}
+		if (mine === src && t === obj && tab === 'data' && result && !result.forQuery && !editing) { const sel = selected; show(result, true); pager(); if (sel >= 0) openDetail(sel); }
+	}
+
+	/** Why rows of the shown table cannot be edited, or '' when they can. */
+	function notEditable() {
+		if (!SQL[src.kind] || tab !== 'data' || !obj || !result || result.forQuery) return 'Edit rows from the Data tab.';
+		if (!meta || meta.table !== obj) return 'Checking whether this table can be edited…';
+		if (meta.error) return 'The table’s columns could not be read: ' + meta.error;
+		if (!meta.cols.length) return 'Views cannot be edited here. Use SQL.';
+		if (!meta.pk.length) return 'This table has no primary key, so a row cannot be picked out safely. Use SQL to change it.';
+		if (meta.pk.some((k) => !result.columns.includes(k))) return 'The key columns are not shown, so rows cannot be edited here.';
+		return '';
+	}
+
+	/** Reads row i of the grid again, exactly, by its primary key. */
+	async function readRow(i) {
+		const row = result.rows[i];
+		const where = meta.pk.map((k) => `${qcol(k)} = ${val(row[result.columns.indexOf(k)])}`).join(' AND ');
+		const cols = meta.cols;
+		let sel;
+		if (src.kind === 'postgres') sel = cols.map((c) => `${qcol(c.name)}::text, (${qcol(c.name)} IS NULL)::int`);
+		else if (src.kind === 'mariadb') sel = cols.map((c) => `TO_BASE64(${qcol(c.name)}), ${qcol(c.name)} IS NULL`);
+		else sel = cols.map((c) => {
+			const q = qcol(c.name), fits = `typeof(${q}) IN ('text', 'integer', 'real') AND length(CAST(${q} AS TEXT)) <= 9000`;
+			return `CASE WHEN ${fits} OR typeof(${q}) IN ('null', 'blob') THEN typeof(${q}) ELSE 'long' END, CASE WHEN ${fits} THEN CAST(${q} AS TEXT) END`;
+		});
+		const r = await query({ query: `SELECT ${sel.join(', ')} FROM ${qid(obj)} WHERE ${where} LIMIT 2` });
+		const rows = r.rows || [];
+		if (r.truncated) throw new Error('The row is too large to edit here. Use SQL.');
+		if (rows.length !== 1) throw new Error(rows.length ? 'More than one row has this key.' : 'The row is gone: it was changed or deleted since the page was loaded. Reload the table.');
+		const x = rows[0];
+		return cols.map((c, ci) => {
+			const a = x[2 * ci], b = x[2 * ci + 1];
+			const f = { col: c, value: null, why: '' };
+			if (src.kind === 'postgres') f.value = b === '1' ? null : a;
+			else if (src.kind === 'mariadb') {
+				if (b !== '1') { try { f.value = unb64(a === 'NULL' ? '' : a); } catch { f.value = ''; f.why = 'Binary data cannot be edited here.'; } }
+			} else if (a === 'null') f.value = null;
+			else if (a === 'blob') { f.value = ''; f.why = 'Binary data cannot be edited here.'; }
+			else if (a === 'long') { f.value = ''; f.why = 'Values over 9000 characters cannot be edited here. Use SQL.'; }
+			else f.value = b;
+			if (c.pk) f.why = f.why || 'Part of the primary key.';
+			else if (c.generated) f.why = f.why || 'Generated by the database.';
+			return f;
+		});
+	}
+
+	// A value compared exactly as it was read (its text form).
+	function same(name, v) {
+		const c = qcol(name);
+		if (v === null) return `${c} IS NULL`;
+		if (src.kind === 'postgres') return `${c}::text = ${lit(v)}`;
+		if (src.kind === 'mariadb') return `REPLACE(TO_BASE64(${c}), CHAR(10), '') = ${lit(b64(v))}`;
+		return `CAST(${c} AS TEXT) IS ${lit(v)}`;
+	}
+
+	function updateSQL(fields, changes) {
+		const key = fields.filter((f) => f.col.pk);
+		const set = changes.map((f) => `${qcol(f.col.name)} = ${val(f.next)}`).join(', ');
+		const where = [...key.map((f) => `${qcol(f.col.name)} = ${val(f.value)}`), ...changes.map((f) => same(f.col.name, f.value))].join('\n  AND ');
+		const ret = key.map((f) => qcol(f.col.name)).join(', ');
+		if (src.kind === 'mariadb') return `UPDATE ${qid(obj)}\nSET ${set}\nWHERE ${where}\nLIMIT 1;\nSELECT ROW_COUNT() AS changed;`;
+		return `UPDATE ${qid(obj)}\nSET ${set}\nWHERE ${where}\nRETURNING ${ret}`;
+	}
+
+	async function startEdit(i, focusCol) {
+		const why = notEditable();
+		if (why) { say(why); toast(why, 'fail'); return; }
+		const panel = $('detail');
+		if (!panel) return;
+		const mine = src, t = obj;
+		editing = { i, fields: null, discard: false };
+		panel.querySelector('dl').replaceWith(el('p', { class: 'note', text: 'Reading the row…' }));
+		let fields;
+		try {
+			fields = await readRow(i);
+		} catch (e) {
+			if (mine !== src || t !== obj || !editing || editing.i !== i) return;
+			editing = null;
+			const n = $('detail') && $('detail').querySelector('.note');
+			if (n) { n.classList.add('fail'); n.textContent = 'This row cannot be edited: ' + e.message; }
+			return;
+		}
+		if (mine !== src || t !== obj || !editing || editing.i !== i || !$('detail')) return;
+		for (const f of fields) f.next = f.value;
+		editing.fields = fields;
+		renderEdit(focusCol);
+	}
+
+	function renderEdit(focusCol) {
+		const panel = $('detail');
+		const fields = editing.fields;
+		const count = el('span', { class: 'grow', 'aria-live': 'polite' });
+		const saveBtn = el('button', { class: 'btn primary', type: 'submit', disabled: true }, 'Save changes');
+		const refresh = () => {
+			const n = fields.filter((f) => f.next !== f.value).length;
+			saveBtn.disabled = n === 0;
+			count.textContent = n ? `${n} field${n === 1 ? '' : 's'} changed` : 'No changes';
+			editing.discard = false;
+		};
+		const items = fields.map((f) => {
+			const c = f.col;
+			const id = 'f-' + fields.indexOf(f);
+			const ro = !!f.why;
+			const area = el('textarea', { id, spellcheck: 'false', rows: String(Math.min(8, Math.max(1, (f.value || '').split('\n').length, Math.ceil((f.value || '').length / 44)))), disabled: ro || f.next === null, 'aria-describedby': ro ? id + '-why' : undefined });
+			area.value = f.next === null ? '' : f.next;
+			const box = el('div', { class: 'field edit' });
+			const mark = () => box.classList.toggle('changed', f.next !== f.value);
+			area.addEventListener('input', () => { f.next = area.value; mark(); refresh(); });
+			let nul = null;
+			if (c.nullable && !ro) {
+				nul = el('input', { type: 'checkbox', checked: f.next === null });
+				nul.addEventListener('change', () => {
+					f.next = nul.checked ? null : (f.value === null ? '' : f.value);
+					area.disabled = nul.checked; area.value = f.next === null ? '' : f.next;
+					if (!nul.checked) area.focus();
+					mark(); refresh();
+				});
+			}
+			box.append(...[
+				el('dt', {}, el('label', { for: id }, el('span', { text: c.name })), c.pk ? el('span', { class: 'badge', text: 'key' }) : null, el('span', { class: 'type muted', text: c.type || '' })),
+				area,
+				nul || ro ? el('div', { class: 'opts' },
+					nul ? el('label', {}, nul, 'NULL') : null,
+					ro ? el('span', { id: id + '-why', text: f.why }) : null,
+					ro && f.value === null ? el('span', { text: 'NULL' }) : null) : null].filter(Boolean));
+			return box;
+		});
+		const form = el('form', { on: { submit: (e) => { e.preventDefault(); save(); }, keydown: (e) => { if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); if (!saveBtn.disabled) save(); } } } },
+			el('dl', {}, ...items),
+			el('footer', {}, count, el('button', { class: 'btn', type: 'button', on: { click: () => cancelEdit() } }, 'Cancel'), saveBtn));
+		const old = panel.querySelector('.note') || panel.querySelector('dl');
+		if (old) old.replaceWith(form);
+		refresh();
+		const k = focusCol ? fields.findIndex((f) => f.col.name === focusCol && !f.why) : -1;
+		const target = panel.querySelector('#f-' + (k >= 0 ? k : fields.findIndex((f) => !f.why && f.next !== null)));
+		if (target) { target.focus(); target.select(); }
+	}
+
+	function cancelEdit() {
+		const i = editing ? editing.i : selected;
+		editing = null;
+		openDetail(i);
+	}
+
+	async function save() {
+		if (!editing || !editing.fields || busy) return;
+		const changes = editing.fields.filter((f) => f.next !== f.value);
+		if (!changes.length) return;
+		const mine = src, t = obj;
+		busy = true;
+		say('Waiting for confirmation in the panel…');
+		try {
+			let r = await query({ mode: 'write', query: updateSQL(editing.fields, changes) });
+			if (r && r.confirm) r = await call('confirm-write', { token: r.confirm });
+			if (!r) { say('Cancelled'); return; }
+			const n = src.kind === 'mariadb' ? Number(r.rows && r.rows[0] && r.rows[0][0]) : (r.rows || []).length;
+			if (!(n > 0)) throw new Error('Nothing was saved: the row was changed or deleted since you opened it. Reload the table and try again.');
+			editing = null;
+			toast('Row saved', 'success');
+			say('Row saved');
+			if (mine === src && t === obj && tab === 'data') { closeDetail(); browse(); }
+		} catch (e) {
+			const n = $('detail') && $('detail').querySelector('footer .grow');
+			if (n) { n.textContent = e.message; n.style.color = 'var(--fail)'; }
+			toast(e.message, 'fail');
+			say(e.message);
+		} finally { busy = false; }
+	}
+
 	// Row inspector: the full value of every column.
-	function openDetail(i) {
+	function openDetail(i, edit) {
 		if (!result || !result.rows || !result.rows[i]) return;
+		editing = null;
 		selected = i;
 		for (const tr of $('out').querySelectorAll('tbody tr')) tr.setAttribute('aria-selected', 'false');
 		const tr = $('out').querySelectorAll('tbody tr')[i];
@@ -646,10 +889,11 @@ pre.text { margin: 0; padding: 14px; font: 12.5px/1.55 var(--mono); white-space:
 		closeDetail(true);
 		const row = result.rows[i];
 		const n = (tab === 'data' ? offset : 0) + i + 1;
-		const panel = el('aside', { class: 'detail', id: 'detail', 'aria-label': `Row ${n}`, on: { keydown: (e) => { if (e.key === 'Escape') closeDetail(); } } },
+		const panel = el('aside', { class: 'detail', id: 'detail', 'aria-label': `Row ${n}` },
 			el('header', {}, el('h3', { text: `Row ${n}` }),
 				el('button', { class: 'btn ghost icon', type: 'button', 'aria-label': 'Previous row', disabled: i === 0, on: { click: () => openDetail(i - 1) } }, icon('up')),
 				el('button', { class: 'btn ghost icon', type: 'button', 'aria-label': 'Next row', disabled: i >= result.rows.length - 1, on: { click: () => openDetail(i + 1) } }, icon('down')),
+				SQL[src.kind] && tab === 'data' ? el('button', { class: 'btn ghost', type: 'button', id: 'editRow', disabled: !!notEditable(), title: notEditable() || 'Edit this row (or double-click a cell)', on: { click: () => startEdit(i) } }, icon('edit'), 'Edit') : null,
 				el('button', { class: 'btn ghost icon', type: 'button', id: 'closeDetail', 'aria-label': 'Close', on: { click: () => closeDetail() } }, icon('x'))),
 			el('dl', {}, ...result.columns.map((c, ci) => {
 				const v = row[ci];
@@ -660,15 +904,24 @@ pre.text { margin: 0; padding: 14px; font: 12.5px/1.55 var(--mono); white-space:
 			})));
 		document.querySelector('.main').append(panel);
 		$('closeDetail').focus();
+		if (edit) startEdit(i, edit === true ? null : edit);
 	}
 	function closeDetail(keepSel) {
+		editing = null;
 		const d = $('detail');
 		if (d) d.remove();
 		if (!keepSel) { selected = -1; for (const tr of $('out').querySelectorAll('tbody tr[aria-selected="true"]')) { tr.setAttribute('aria-selected', 'false'); tr.focus(); } }
 	}
 	document.addEventListener('keydown', (e) => {
 		if (e.key !== 'Escape') return;
-		if ($('detail')) closeDetail();
+		if (editing && editing.fields && editing.fields.some((f) => f.next !== f.value) && !editing.discard) {
+			editing.discard = true;
+			const n = $('detail') && $('detail').querySelector('footer .grow');
+			if (n) n.textContent = 'Unsaved changes. Press Esc again to discard them.';
+			return;
+		}
+		if (editing) cancelEdit();
+		else if ($('detail')) closeDetail();
 		else if (full) window.parent.postMessage({ rivet: 1, nonce, type: 'expand', on: false }, '*');
 	});
 	const pretty = (v) => {

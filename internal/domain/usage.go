@@ -91,6 +91,12 @@ type NodeUsageBucket struct {
 	NetRxSum   int64
 	NetTxSum   int64
 	RunningMax int64
+	// Load, disk I/O and swap (migration 0077). Rows written before it
+	// have all of them zero: not recorded rather than idle.
+	LoadSum      float64
+	DiskReadSum  int64
+	DiskWriteSum int64
+	SwapMax      int64
 }
 
 // UsageAggregate is one bucket summed over many bots (admin overview):
