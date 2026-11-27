@@ -135,7 +135,7 @@ pre.text { margin: 0; padding: 14px; font: 12.5px/1.55 var(--mono); white-space:
 .detail dd.null { color: var(--muted); font-style: italic; }
 .detail .note { margin: 0; padding: 10px 14px; font-size: 12px; color: var(--muted); border-bottom: 1px solid var(--rule-soft); }
 .detail .note.fail { color: var(--fail); }
-.detail form { display: contents; }
+.detail .editform { display: contents; }
 .detail .field.edit { display: grid; gap: 4px; border-left: 2px solid transparent; }
 .detail .field.edit.changed { border-left-color: var(--warn); background: color-mix(in srgb, var(--warn) 5%, var(--panel)); }
 .detail .field.edit textarea { min-height: 0; font-size: 12.5px; padding: 5px 8px; resize: vertical; }
@@ -509,6 +509,7 @@ td.editable { cursor: text; }
 			const r = await query({ query: browseSQL() });
 			if (mine !== src || t !== obj || tab !== 'data') return;
 			r.forQuery = false;
+			r.table = t;
 			show(r, true);
 			if (total === null) {
 				query({ query: `SELECT count(*) FROM ${qid(t)}` }).then((c) => {
@@ -708,12 +709,14 @@ td.editable { cursor: text; }
 		} catch (e) {
 			if (mine === src && t === obj) meta = { table: t, cols: [], pk: [], error: e.message };
 		}
-		if (mine === src && t === obj && tab === 'data' && result && !result.forQuery && !editing) { const sel = selected; show(result, true); pager(); if (sel >= 0) openDetail(sel); }
+		// Only the rows of this same table: the previous table's answer may
+		// still be the current one while this table's rows load.
+		if (mine === src && t === obj && tab === 'data' && result && !result.forQuery && result.table === t && !editing) { const sel = selected; show(result, true); pager(); if (sel >= 0) openDetail(sel); }
 	}
 
 	/** Why rows of the shown table cannot be edited, or '' when they can. */
 	function notEditable() {
-		if (!SQL[src.kind] || tab !== 'data' || !obj || !result || result.forQuery) return 'Edit rows from the Data tab.';
+		if (!SQL[src.kind] || tab !== 'data' || !obj || !result || result.forQuery || result.table !== obj) return 'Edit rows from the Data tab.';
 		if (!meta || meta.table !== obj) return 'Checking whether this table can be edited…';
 		if (meta.error) return 'The table’s columns could not be read: ' + meta.error;
 		if (!meta.cols.length) return 'Views cannot be edited here. Use SQL.';
@@ -801,7 +804,9 @@ td.editable { cursor: text; }
 		const panel = $('detail');
 		const fields = editing.fields;
 		const count = el('span', { class: 'grow', 'aria-live': 'polite' });
-		const saveBtn = el('button', { class: 'btn primary', type: 'submit', disabled: true }, 'Save changes');
+		// Not a <form>: the panel frames this page with sandbox="allow-scripts",
+		// which blocks form submission, so a submit event would never fire.
+		const saveBtn = el('button', { class: 'btn primary', type: 'button', disabled: true, on: { click: () => save() } }, 'Save changes');
 		const refresh = () => {
 			const n = fields.filter((f) => f.next !== f.value).length;
 			saveBtn.disabled = n === 0;
@@ -836,7 +841,7 @@ td.editable { cursor: text; }
 					ro && f.value === null ? el('span', { text: 'NULL' }) : null) : null].filter(Boolean));
 			return box;
 		});
-		const form = el('form', { on: { submit: (e) => { e.preventDefault(); save(); }, keydown: (e) => { if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); if (!saveBtn.disabled) save(); } } } },
+		const form = el('div', { class: 'editform', on: { keydown: (e) => { if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); if (!saveBtn.disabled) save(); } } } },
 			el('dl', {}, ...items),
 			el('footer', {}, count, el('button', { class: 'btn', type: 'button', on: { click: () => cancelEdit() } }, 'Cancel'), saveBtn));
 		const old = panel.querySelector('.note') || panel.querySelector('dl');

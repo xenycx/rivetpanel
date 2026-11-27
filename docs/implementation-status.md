@@ -216,7 +216,8 @@ items state exactly what remains.
   `mem_total`/`disk_total` when an incremental answer has no buckets, aborts
   series requests after 25 s and reloads a window whose data has slid out of
   it [enforced: panel UI]. Tests: `TestNodeRollupsKeepLoadDiskIOAndSwap`.
-- [x] Database browser row editing (extension 1.3.0, no migration): rows of
+- [x] Database browser row editing (extension 1.3.0, fixed in 1.3.1 to save
+  without a form, which the `allow-scripts` sandbox blocks; no migration): rows of
   PostgreSQL, MariaDB and SQLite tables with a primary key are edited in the
   Data tab. The row is re-read exactly by key; the `UPDATE` sets only changed
   columns and guards each with its old value; it still runs only through the
@@ -224,7 +225,8 @@ items state exactly what remains.
   (PostgreSQL, MariaDB) or on a writable mount (SQLite). Keys, generated
   columns, binary values and SQLite values over 9000 characters are
   read-only in the editor [enforced: extension page only]. Verified by hand
-  against PostgreSQL 16, MariaDB 11 and SQLite; no automated browser test.
+  against PostgreSQL 16, MariaDB 11 and SQLite, and in a frame with the
+  panel's `sandbox="allow-scripts"`; no automated browser test.
 - [~] Game hosting (Preview 2, migration `0040`): Minecraft Java server types
   (Paper, Purpur, Vanilla, Fabric, Forge, NeoForge, Folia, Velocity) defined by
   validated YAML blueprints with immutable revisions; provider version lists;

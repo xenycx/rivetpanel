@@ -6,6 +6,21 @@ authoritative current version.
 
 ## Unreleased
 
+## 1.21.1 - 2026-11-27
+
+### Fixed
+
+- **Save changes in the Data tab's row editor now saves.** The editor was a
+  form, and the panel frames extension pages in a sandbox that blocks form
+  submission, so pressing **Save changes** did nothing. It is now a plain
+  button (database browser 1.3.1).
+- **A table no longer opens as "This table has no rows" while its rows
+  load.** Opening a table reads its rows and its columns at the same time;
+  when the columns answered first, the grid was redrawn with the previous
+  table's answer, which showed "no rows" (or the previous table's rows) for
+  several seconds. The grid and the row editor now use only the answer that
+  belongs to the open table.
+
 ## 1.21.0 - 2026-11-27
 
 ### Added
