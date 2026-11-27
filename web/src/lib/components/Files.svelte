@@ -111,6 +111,8 @@
 	let uploads = $state<Upload[]>([]);
 
 	const base = (id: string) => basePath || `/bots/${id}/files`;
+	// The server streams the zip; the browser saves it as an attachment.
+	const downloadZip = (p: string) => window.open(`/api/v1${base(botId)}/zip?path=${q(p || '.')}`, '_self');
 	const isArchive = (name: string) => /\.(zip|tar\.gz|tgz|tar|mrpack)$/i.test(name);
 	async function compress(p: string) {
 		try {
@@ -516,6 +518,7 @@
 				<button class="btn btn-sm btn-quiet btn-icon" onclick={newFolder} aria-label="New folder" title="New folder"><Icon name="folder" size={15} /></button>
 				<label class="btn btn-sm btn-quiet btn-icon cursor-pointer focus-within:outline-2 focus-within:outline-action" title="Upload files"><Icon name="upload" size={15} /><span class="sr-only">Upload files</span><input type="file" multiple class="sr-only" onchange={uploadFiles} /></label>
 				<label class="btn btn-sm btn-quiet btn-icon cursor-pointer focus-within:outline-2 focus-within:outline-action" title="Upload a zip and extract it into this folder"><Icon name="archive" size={15} /><span class="sr-only">Upload a zip</span><input type="file" accept=".zip,application/zip" class="sr-only" onchange={uploadZip} /></label>
+				<button class="btn btn-sm btn-quiet btn-icon" onclick={() => downloadZip(cwd)} aria-label="Download {cwd ? shown(cwd) : `the ${rootLabel}`} as a zip" title="Download this folder as a zip"><Icon name="download" size={15} /></button>
 			</div>
 
 			<nav class="flex min-w-0 flex-wrap items-center gap-0.5 px-2 pt-2 text-small" aria-label="Folder">
@@ -576,7 +579,7 @@
 								fixed
 								items={[
 									...(en.type === 'file' ? [{ label: 'Download', onselect: () => window.open(`/api/v1${base(botId)}/content?path=${q(p)}&download=1`, '_self') }] : []),
-									...(!basePath && en.type === 'dir' ? [{ label: 'Download as zip', onselect: () => window.open(`/api/v1/bots/${botId}/files/zip?path=${q(p)}`, '_self') }] : []),
+									...(en.type !== 'symlink' ? [{ label: 'Download as zip', onselect: () => downloadZip(p) }] : []),
 									...(!basePath && en.type !== 'symlink' ? [{ label: 'Compress to zip', onselect: () => compress(p) }] : []),
 									...(!basePath && en.type === 'file' && isArchive(en.name) ? [{ label: 'Extract here', onselect: () => extractHere(p) }] : []),
 									{ label: 'Rename', onselect: () => rename(en) },

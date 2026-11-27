@@ -91,6 +91,9 @@ func (w *Workspace) WriteZip(dst io.Writer, paths []string, lim ZipLimits) (int,
 			if d.Type()&fs.ModeSymlink != 0 {
 				return nil
 			}
+			if q == "." {
+				return nil // the workspace root itself: its contents go in at the top
+			}
 			// The panel's own in-progress files (including the archive being
 			// written) are never archived.
 			if b := path.Base(q); strings.HasPrefix(b, ".tmp-") || strings.HasPrefix(b, ".extract-") || strings.HasPrefix(b, ".upload-") {

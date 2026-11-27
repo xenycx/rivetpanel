@@ -15,6 +15,15 @@ The **Files** tab is a web file manager for the app's workspace:
 breadcrumbs, a filter, uploads with progress and cancel, zip extraction, and
 a code editor that loads when you open a file.
 
+### Download as zip
+
+The download button in the explorer toolbar saves the folder you are in as
+one zip; at the root it saves the whole workspace. **Download as zip** in a
+row's menu does the same for one file or folder. The zip is built while it
+downloads, skips links and the panel's own temporary files, and stops at
+200,000 entries or 16 GiB. Site drafts download the same
+way.
+
 ### Sorting
 
 Sort by name, size, date modified or type, ascending or descending, with

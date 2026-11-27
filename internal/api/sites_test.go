@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -275,6 +276,22 @@ func TestBotSitePageAndEditableDraft(t *testing.T) {
 	resp, body := c.raw("PUT", "/api/v1/sites/"+detail.Site.ID+"/files/content?path=index.html", []byte("<!doctype html><title>Hand made</title><h1>Custom site</h1>"), "text/html")
 	if resp.StatusCode != 204 {
 		t.Fatalf("write draft: %d %s", resp.StatusCode, body)
+	}
+	// The whole draft downloads as a zip, its files at the top level.
+	resp, body = c.raw("GET", "/api/v1/sites/"+detail.Site.ID+"/files/zip?path=.", nil, "")
+	if resp.StatusCode != 200 || resp.Header.Get("Content-Type") != "application/zip" {
+		t.Fatalf("draft zip: %d %s", resp.StatusCode, body)
+	}
+	zr, err := zip.NewReader(bytes.NewReader(body), int64(len(body)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var names []string
+	for _, f := range zr.File {
+		names = append(names, f.Name)
+	}
+	if !slices.Contains(names, "index.html") || slices.ContainsFunc(names, func(n string) bool { return strings.HasPrefix(n, "./") }) {
+		t.Fatalf("draft zip entries %v", names)
 	}
 	c.mustStatus(201, "POST", "/api/v1/sites/"+detail.Site.ID+"/files/publish", nil)
 	c.mustStatus(200, "PATCH", "/api/v1/sites/"+detail.Site.ID, map[string]string{"mode": "files"})

@@ -119,3 +119,24 @@ func TestZipBombRatio(t *testing.T) {
 		t.Fatal("non-archive accepted")
 	}
 }
+
+func TestWriteZipRootHasNoDotEntry(t *testing.T) {
+	w, _ := setup(t)
+	putFile(t, w, "index.js", "1")
+	putFile(t, w, "src/a.js", "2")
+	var buf bytes.Buffer
+	if _, err := w.WriteZip(&buf, []string{"."}, DefaultZipLimits); err != nil {
+		t.Fatal(err)
+	}
+	zr, err := zip.NewReader(bytes.NewReader(buf.Bytes()), int64(buf.Len()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var names []string
+	for _, f := range zr.File {
+		names = append(names, f.Name)
+	}
+	if strings.Join(names, ",") != "index.js,src/,src/a.js" {
+		t.Fatalf("entries %v", names)
+	}
+}

@@ -328,7 +328,9 @@ items state exactly what remains.
   field), path-aware **Rename**, drag and drop onto folders and breadcrumbs,
   and Undo. `POST …/files/move` creates missing parent folders and refuses an
   existing destination with 409 (application level; SFTP rename unchanged).
-- [x] File-manager archives: folder download as zip, compress to zip, and
+- [x] File-manager archives: download as zip (the current folder or the whole
+  workspace from the explorer toolbar, any file or folder from its menu, in
+  app and site-draft file managers; 1.22.0), compress to zip, and
   staged extraction of zip/mrpack/tar.gz/tgz/tar already in the workspace with
   entry, size and compression-ratio limits (application level, descriptor-
   relative writes inside the workspace).

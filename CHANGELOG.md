@@ -6,6 +6,16 @@ authoritative current version.
 
 ## Unreleased
 
+## 1.22.0 - 2026-11-28
+
+### Added
+
+- **Download as zip in the file manager.** A new download button in the
+  explorer toolbar saves the folder you are in (the whole workspace at the
+  root) as one zip. Every file and folder's menu now has **Download as zip**,
+  and site drafts in Bot Sites can be downloaded the same way. Zips of the
+  workspace root put its files at the top level of the archive.
+
 ## 1.21.1 - 2026-11-27
 
 ### Fixed
